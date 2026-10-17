@@ -1,18 +1,92 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://rfmap.local/schemas/library/antenna.schema.json",
   "title": "Antenna",
   "type": "object",
-  "allOf": [{ "$ref": "common.schema.json#/$defs/entryMeta" }],
-  "required": ["type", "gainDbi", "polarization", "bandHz", "source"],
+  "required": [
+    "id",
+    "name",
+    "version",
+    "verified",
+    "type",
+    "gainDbi",
+    "polarization",
+    "bandHz",
+    "source"
+  ],
   "properties": {
-    "type": { "enum": ["dipole", "monopole", "patch", "helical", "yagi", "omni-collinear", "other"] },
-    "gainDbi": { "type": "number" },
-    "polarization": { "enum": ["linear-vertical", "linear-horizontal", "rhcp", "lhcp"] },
-    "bandHz": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
-    "beamwidthDeg": { "type": "object", "properties": { "horizontal": { "type": "number" }, "vertical": { "type": "number" } } },
-    "feederLossDb": { "type": "number", "minimum": 0, "default": 0 },
-    "source": { "$ref": "common.schema.json#/$defs/source" }
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "vendor": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Bumped on every edit; results record the version they used."
+    },
+    "verified": {
+      "type": "boolean",
+      "description": "Set by an admin after checking sources. User libraries (later) are never verified."
+    },
+    "notes": {
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "dipole",
+        "monopole",
+        "patch",
+        "helical",
+        "yagi",
+        "omni-collinear",
+        "other"
+      ]
+    },
+    "gainDbi": {
+      "type": "number"
+    },
+    "polarization": {
+      "enum": [
+        "linear-vertical",
+        "linear-horizontal",
+        "rhcp",
+        "lhcp"
+      ]
+    },
+    "bandHz": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "beamwidthDeg": {
+      "type": "object",
+      "properties": {
+        "horizontal": {
+          "type": "number"
+        },
+        "vertical": {
+          "type": "number"
+        }
+      }
+    },
+    "feederLossDb": {
+      "type": "number",
+      "minimum": 0,
+      "default": 0
+    },
+    "source": {
+      "$ref": "common.schema.json#/$defs/source"
+    }
   },
-  "unevaluatedProperties": false
+  "additionalProperties": false
 }

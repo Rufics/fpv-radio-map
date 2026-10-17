@@ -1,67 +1,165 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://rfmap.local/schemas/mission.schema.json",
   "title": "Mission",
   "type": "object",
-  "required": ["schema", "name", "time", "pilot", "waypoints", "links", "evaluate"],
+  "required": [
+    "schema",
+    "name",
+    "time",
+    "pilot",
+    "waypoints",
+    "links",
+    "evaluate"
+  ],
   "properties": {
-    "schema": { "const": "mission/v1" },
-    "name": { "type": "string", "maxLength": 120 },
+    "schema": {
+      "const": "mission/v1"
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 120
+    },
     "time": {
       "type": "object",
-      "required": ["mode"],
+      "required": [
+        "mode"
+      ],
       "properties": {
-        "mode": { "enum": ["now", "planned"] },
-        "utc": { "type": "string", "format": "date-time" }
+        "mode": {
+          "enum": [
+            "now",
+            "planned"
+          ]
+        },
+        "utc": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
-    "pilot": { "$ref": "#/$defs/point" },
-    "waypoints": { "type": "array", "items": { "$ref": "#/$defs/point" }, "minItems": 1, "description": "Route in flight order; the last point is the target." },
-    "returnToPilot": { "type": "boolean", "default": true },
+    "pilot": {
+      "$ref": "#/$defs/point"
+    },
+    "waypoints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/point"
+      },
+      "minItems": 1,
+      "description": "Route in flight order; the last point is the target."
+    },
+    "returnToPilot": {
+      "type": "boolean",
+      "default": true
+    },
     "links": {
       "type": "object",
       "properties": {
-        "control": { "$ref": "#/$defs/linkSetup" },
-        "video": { "$ref": "#/$defs/linkSetup" }
+        "control": {
+          "$ref": "#/$defs/linkSetup"
+        },
+        "video": {
+          "$ref": "#/$defs/linkSetup"
+        }
       }
     },
-    "evaluate": { "enum": ["both", "control", "video"] },
-    "drone": { "type": "string", "description": "Drone profile id" },
-    "battery": { "type": "string", "description": "Battery id" },
+    "evaluate": {
+      "enum": [
+        "both",
+        "control",
+        "video"
+      ]
+    },
+    "drone": {
+      "type": "string",
+      "description": "Drone profile id"
+    },
+    "battery": {
+      "type": "string",
+      "description": "Battery id"
+    },
     "modules": {
       "type": "object",
       "description": "Opt-in modules for this mission, with their options.",
-      "additionalProperties": { "type": "object" }
+      "additionalProperties": {
+        "type": "object"
+      }
     },
     "coverage": {
       "type": "object",
       "properties": {
-        "radiusM": { "type": "number", "exclusiveMinimum": 0, "maximum": 50000 },
-        "cellM": { "type": "number", "minimum": 10 },
-        "droneAglM": { "type": "number", "exclusiveMinimum": 0 }
+        "radiusM": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 50000
+        },
+        "cellM": {
+          "type": "number",
+          "minimum": 10
+        },
+        "droneAglM": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
       }
     }
   },
   "$defs": {
     "point": {
       "type": "object",
-      "required": ["lat", "lon", "aglM"],
+      "required": [
+        "lat",
+        "lon",
+        "aglM"
+      ],
       "properties": {
-        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
-        "lon": { "type": "number", "minimum": -180, "maximum": 180 },
-        "aglM": { "type": "number", "minimum": 0, "description": "Height above ground; MSL is computed from the DEM." },
-        "label": { "type": "string" }
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lon": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "aglM": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Height above ground; MSL is computed from the DEM."
+        },
+        "label": {
+          "type": "string"
+        }
       }
     },
     "linkSetup": {
       "type": "object",
-      "required": ["radio", "txPowerDbm", "groundAntenna", "airAntenna", "requiredMarginDb"],
+      "required": [
+        "radio",
+        "txPowerDbm",
+        "groundAntenna",
+        "airAntenna",
+        "requiredMarginDb"
+      ],
       "properties": {
-        "radio": { "type": "string" },
-        "txPowerDbm": { "type": "number" },
-        "groundAntenna": { "type": "string" },
-        "airAntenna": { "type": "string" },
-        "requiredMarginDb": { "type": "number", "minimum": 0 }
+        "radio": {
+          "type": "string"
+        },
+        "txPowerDbm": {
+          "type": "number"
+        },
+        "groundAntenna": {
+          "type": "string"
+        },
+        "airAntenna": {
+          "type": "string"
+        },
+        "requiredMarginDb": {
+          "type": "number",
+          "minimum": 0
+        }
       }
     }
   }

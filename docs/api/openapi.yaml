@@ -1,4 +1,5 @@
 openapi: 3.1.0
+# Schemas under schemas/ are JSON Schema draft-07 so the C++ server and ajv validate them the same way.
 info:
   title: FPV Radio Map API
   version: 1.0.0
