@@ -6,6 +6,19 @@ name: Main
 on:
   push:
     branches: [main]
+    # Changes that cannot alter the images or the tests publish nothing new.
+    paths-ignore:
+      - docs/**
+      - "**.md"
+      - LICENSE
+      - .github/ISSUE_TEMPLATE/**
+      - .github/DISCUSSION_TEMPLATE/**
+      - .github/dependabot.yml
+      - .github/workflows/pr-title.yml
+      - .github/workflows/wiki.yml
+      - .github/workflows/release.yml
+      - tools/wiki/**
+      - .githooks/**
 
 permissions:
   contents: read
