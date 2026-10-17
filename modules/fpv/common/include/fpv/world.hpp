@@ -37,6 +37,8 @@ struct DirectResult {
 struct GroundSample {
     double distanceM;
     double groundMslM;
+    double obstacleM = 0.0;  ///< clutter on top of the ground, when rf.clutter is on
+    LatLon position{0.0, 0.0};
 };
 
 /// Thrown when terrain data is missing; modules report it instead of guessing.
@@ -84,7 +86,10 @@ public:
             throw MissingTerrain("no terrain data on part of the path from " + describe(a) + " to " + describe(b));
         }
         std::vector<GroundSample> out;
-        for (const json& s : r.at("samples")) out.push_back({s.at("distanceM").get<double>(), s.at("groundMslM").get<double>()});
+        for (const json& s : r.at("samples")) {
+            out.push_back({s.at("distanceM").get<double>(), s.at("groundMslM").get<double>(), s.value("obstacleM", 0.0),
+                           {s.value("lat", 0.0), s.value("lon", 0.0)}});
+        }
         return out;
     }
 
@@ -102,12 +107,12 @@ public:
     LocalWorld(Terrain terrain, double stepM) : terrain_(std::move(terrain)), step_(stepM) {}
 
     InverseResult inverse(const LatLon& a, const LatLon& b) const override {
-        const auto r = geodesy_.inverse({a.lat, a.lon}, {b.lat, b.lon});
+        const auto r = rfcore::Geodesy().inverse({a.lat, a.lon}, {b.lat, b.lon});
         return {r.distance.value(), r.azimuthStartDeg, r.azimuthEndDeg};
     }
 
     DirectResult direct(const LatLon& a, double azimuthDeg, double distanceM) const override {
-        const auto r = geodesy_.directWithAzimuth({a.lat, a.lon}, azimuthDeg, rfcore::Metres(distanceM));
+        const auto r = rfcore::Geodesy().directWithAzimuth({a.lat, a.lon}, azimuthDeg, rfcore::Metres(distanceM));
         return {{r.point.latitudeDeg, r.point.longitudeDeg}, r.azimuthEndDeg};
     }
 
@@ -119,12 +124,12 @@ public:
 
     std::vector<GroundSample> groundProfile(const LatLon& a, const LatLon& b) const override {
         std::vector<GroundSample> out;
-        const auto pts = geodesy_.sample({a.lat, a.lon}, {b.lat, b.lon}, rfcore::Metres(step_));
+        const auto pts = rfcore::Geodesy().sample({a.lat, a.lon}, {b.lat, b.lon}, rfcore::Metres(step_));
         const double total = inverse(a, b).distanceM;
         for (std::size_t i = 0; i < pts.size(); ++i) {
             const LatLon p{pts[i].latitudeDeg, pts[i].longitudeDeg};
             const double d = pts.size() == 1 ? 0.0 : total * static_cast<double>(i) / static_cast<double>(pts.size() - 1);
-            out.push_back({d, groundMsl(p)});
+            out.push_back({d, groundMsl(p), 0.0, p});
         }
         return out;
     }
@@ -132,7 +137,6 @@ public:
 private:
     Terrain terrain_;
     double step_;
-    rfcore::Geodesy geodesy_;
 };
 
 }  // namespace fpv

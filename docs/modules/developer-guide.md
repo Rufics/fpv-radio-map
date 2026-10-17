@@ -180,7 +180,7 @@ From `init` or `invoke`: `host().call("method", request)`. Each call returns JSO
 | `profile.get` | `{from:{lat,lon}, to:{lat,lon}, stepM?}` | `{source, stepM, samples:[{distanceM, lat, lon, groundMslM, obstacleM, uncertaintyM}], missing:[{fromM, toM}]}` |
 | `link.evaluate` | `{frequencyHz, txPowerDbm, tx:{lat, lon, aglM, gainDbi, feederLossDb}, rx:{lat, lon, aglM, gainDbi, feederLossDb, sensitivityDbm, requiredMarginDb}, time?}` | `LinkResult` from the OpenAPI file, including every term from other modules |
 | `weather.point` | `{lat, lon, time}` | `WeatherPoint` |
-| `library.get` | `{kind, id}` | the library item (radio profile, antenna, battery, drone) |
+| `library.get` | `{kind, id}` with kind `radio-profiles`, `antennas`, `batteries` or `drones` | the library item, including its `version` |
 
 The server never fills missing terrain. `profile.get` reports gaps in `missing`, and
 `link.evaluate` fails on a path with gaps; tell the user rather than guessing.

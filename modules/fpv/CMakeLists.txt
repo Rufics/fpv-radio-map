@@ -44,3 +44,7 @@ endfunction()
 fpv_module(battery fpv_battery
   SOURCES battery/src/energy_model.cpp battery/src/analysis.cpp
   TESTS battery/tests/energy_model_test.cpp)
+
+fpv_module(min-altitude fpv_min_altitude
+  SOURCES min-altitude/src/clearance.cpp min-altitude/src/analysis.cpp
+  TESTS min-altitude/tests/clearance_test.cpp)

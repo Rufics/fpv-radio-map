@@ -21,8 +21,8 @@ public:
             return {{"reasons", {reason(kId, "info", "Pick a drone and a battery to check the energy for this route.")}},
                     {"data", json::object()}};
         }
-        const json drone = host().call("library.get", {{"kind", "drone"}, {"id", m.droneId}});
-        const json battery = host().call("library.get", {{"kind", "battery"}, {"id", m.batteryId}});
+        const json drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
+        const json battery = host().call("library.get", {{"kind", "batteries"}, {"id", m.batteryId}});
         json req = request;
         if (!req.contains("weather") || req.at("weather").is_null()) {
             try {
