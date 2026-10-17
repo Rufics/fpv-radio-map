@@ -74,3 +74,7 @@ fpv_module(failsafe fpv_failsafe
   USES fpv_battery
   DEPENDS_ON fpv_battery fpv_min_altitude
   TESTS failsafe/tests/failsafe_test.cpp)
+
+fpv_module(best-launch fpv_best_launch
+  SOURCES best-launch/src/best_launch.cpp
+  TESTS best-launch/tests/best_launch_test.cpp)
