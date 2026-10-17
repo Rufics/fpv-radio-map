@@ -1,0 +1,8 @@
+build/
+build-*/
+node_modules/
+dist/
+.angular/
+*.rfmod
+*.pmtiles
+*.tif
