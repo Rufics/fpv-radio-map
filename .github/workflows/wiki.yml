@@ -1,0 +1,46 @@
+# Publishes docs/ to the wiki after every change on main. The wiki is a generated mirror:
+# edit docs/ in a pull request, never the wiki pages.
+name: Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - tools/wiki/**
+      - .github/workflows/wiki.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish docs to the wiki
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The wiki repository exists only after its first page was created in the web UI.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository }}.wiki
+          path: wiki
+      - name: Generate pages
+        run: python3 -I tools/wiki/publish.py docs wiki "$GITHUB_REPOSITORY"
+      - name: Commit and push
+        working-directory: wiki
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The wiki is already up to date."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "Publish docs from ${GITHUB_SHA::7}"
+          git push

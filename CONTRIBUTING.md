@@ -16,6 +16,14 @@ welcome. By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 All documentation, UI text, code comments, commit messages, issues and pull requests are in English.
 
+## Documentation
+
+Documentation lives in `docs/`. After every change on `main` it is published to the
+[wiki](https://github.com/Rufics/fpv-radio-map/wiki) by `tools/wiki/publish.py`: each file becomes
+the page named after its first heading, `docs/README.md` becomes Home and `docs/_Sidebar.md` the
+sidebar. Edit `docs/`, not the wiki; wiki edits are overwritten. Link to other docs with relative
+paths, and the publisher turns them into wiki links.
+
 ## Commit messages: Conventional Commits
 
 Releases are made by [semantic-release](https://semantic-release.gitbook.io) from the commit
