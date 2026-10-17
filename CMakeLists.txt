@@ -24,5 +24,6 @@ if(RFMAP_BUILD_TESTS)
 endif()
 
 add_subdirectory(core/rf-core)
+add_subdirectory(core/rf-ext)
 add_subdirectory(platform/rfmod)
 add_subdirectory(examples/modules/body-shadow)

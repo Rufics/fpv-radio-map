@@ -35,6 +35,9 @@ struct ProfileSample {
     Metres obstacleHeight;  ///< Clutter (trees, buildings) on top of the ground; 0 without rf.clutter.
     Metres uncertainty;     ///< Source vertical error at this sample.
     GeoPoint position;
+    /// Land cover class code from the configured land cover layer (ESA WorldCover codes in
+    /// rfmap), or nothing where no layer is loaded. The core never reads it; rf.clutter does.
+    std::optional<int> landCover = std::nullopt;
 
     [[nodiscard]] Metres topMsl() const { return groundMsl + obstacleHeight; }
 };
