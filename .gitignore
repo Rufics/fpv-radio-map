@@ -9,3 +9,4 @@ dist/
 *.secret
 !platform/rfmod/keys/dev-*.secret
 .env
+test-results/

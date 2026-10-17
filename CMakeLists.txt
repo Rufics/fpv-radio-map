@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
-project(fpv_radio_map VERSION 0.1.0 LANGUAGES CXX)
+# The release workflow passes the version semantic-release computed from the commits.
+set(RFMAP_VERSION "0.1.0" CACHE STRING "Version of this build (X.Y.Z)")
+project(fpv_radio_map VERSION ${RFMAP_VERSION} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

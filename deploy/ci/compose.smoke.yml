@@ -1,0 +1,12 @@
+# Overrides for the CI smoke test (main.yml): run the images CI just built, without the
+# Open-Meteo services. Used as: docker compose -f docker-compose.yml -f ci/compose.smoke.yml
+services:
+  rfmap-server:
+    image: ${RFMAP_SERVER_IMAGE:?}
+    build: !reset null
+    depends_on: !override
+      postgis:
+        condition: service_healthy
+  web:
+    image: ${RFMAP_WEB_IMAGE:?}
+    build: !reset null

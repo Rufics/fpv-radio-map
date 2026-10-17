@@ -27,13 +27,14 @@ COPY schemas/ schemas/
 COPY data/library/ data/library/
 
 ARG RFMAP_OWNER_PUBKEY=""
+ARG RFMAP_VERSION=0.1.0
 # Tests are built and run in CI, not in the image. CMake fetches json-schema-validator 2.4.1 from
 # GitHub; behind a TLS-intercepting proxy pass its CA: --secret id=build_ca,src=/path/ca.crt
 RUN --mount=type=secret,id=build_ca,required=false \
     if [ -s /run/secrets/build_ca ]; then export GIT_SSL_CAINFO=/run/secrets/build_ca; fi \
     && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
         -DRFMAP_BUILD_TESTS=OFF -DRFMAP_BUILD_SERVER=ON \
-        -DRFMAP_OWNER_PUBKEY="${RFMAP_OWNER_PUBKEY}" \
+        -DRFMAP_OWNER_PUBKEY="${RFMAP_OWNER_PUBKEY}" -DRFMAP_VERSION="${RFMAP_VERSION}" \
     && cmake --build build --target rfmap-server rfmod-worker rfmod \
     && DESTDIR=/out cmake --install build/server \
     && install -D -m 0755 build/platform/rfmod/rfmod /out/usr/bin/rfmod

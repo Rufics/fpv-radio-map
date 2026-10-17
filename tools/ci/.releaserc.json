@@ -1,0 +1,19 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    ["@semantic-release/exec", { "verifyReleaseCmd": "echo ${nextRelease.version} > \"$RELEASE_VERSION_FILE\"" }],
+    ["@semantic-release/github", {
+      "assets": [
+        { "path": "../../dist/release/*.rfmod" },
+        { "path": "../../dist/release/SHA256SUMS", "label": "SHA256SUMS (FPV modules)" },
+        { "path": "../../dist/release/rfmod-linux-x86_64", "label": "rfmod CLI (linux-x86_64)" }
+      ],
+      "successComment": false,
+      "failComment": false,
+      "releasedLabels": false
+    }]
+  ]
+}
