@@ -1,5 +1,6 @@
 # Every push to main: the full CI, then the Docker images are built, started together with
-# PostGIS and checked end to end, and published to GHCR as :edge and :sha-<commit>.
+# PostGIS and checked end to end, and published to GHCR as :edge. Only :edge is pushed and the
+# version it replaces is deleted, so main never piles up images in package storage.
 name: Main
 
 on:
@@ -45,7 +46,11 @@ jobs:
           context: .
           file: deploy/server.Dockerfile
           load: true
-          tags: ${{ env.SERVER_IMAGE }}:sha-${{ github.sha }}
+          tags: ${{ env.SERVER_IMAGE }}:edge
+          # The source label links the package to this repository, which lets GITHUB_TOKEN delete old versions.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           # Empty variable = the public development key; the image logs a warning about it.
           build-args: |
             RFMAP_OWNER_PUBKEY=${{ vars.RFMAP_OWNER_PUBKEY }}
@@ -57,28 +62,45 @@ jobs:
           context: .
           file: deploy/web.Dockerfile
           load: true
-          tags: ${{ env.WEB_IMAGE }}:sha-${{ github.sha }}
+          tags: ${{ env.WEB_IMAGE }}:edge
+          # The source label links the package to this repository, which lets GITHUB_TOKEN delete old versions.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
       - name: Smoke test (PostGIS + server + web)
         env:
-          RFMAP_SERVER_IMAGE: ${{ env.SERVER_IMAGE }}:sha-${{ github.sha }}
-          RFMAP_WEB_IMAGE: ${{ env.WEB_IMAGE }}:sha-${{ github.sha }}
+          RFMAP_SERVER_IMAGE: ${{ env.SERVER_IMAGE }}:edge
+          RFMAP_WEB_IMAGE: ${{ env.WEB_IMAGE }}:edge
         run: deploy/ci/smoke.sh
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish :edge and :sha-<commit>
+      - name: Publish :edge
         run: |
           for img in "$SERVER_IMAGE" "$WEB_IMAGE"; do
-            docker tag "$img:sha-$GITHUB_SHA" "$img:edge"
-            docker push "$img:sha-$GITHUB_SHA"
             docker push "$img:edge"
           done
           {
-            echo "### Published images"
-            echo "- \`$SERVER_IMAGE:edge\` (\`sha-$GITHUB_SHA\`)"
-            echo "- \`$WEB_IMAGE:edge\` (\`sha-$GITHUB_SHA\`)"
+            echo "### Published images (commit \`$GITHUB_SHA\`)"
+            echo "- \`$SERVER_IMAGE:edge\`"
+            echo "- \`$WEB_IMAGE:edge\`"
           } >> "$GITHUB_STEP_SUMMARY"
+      # The previous :edge is left untagged by the push. Release tags are never touched.
+      - name: Delete untagged server images
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
+        with:
+          package-name: fpv-radio-map-server
+          package-type: container
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: "true"
+      - name: Delete untagged web images
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5.0.0
+        with:
+          package-name: fpv-radio-map-web
+          package-type: container
+          min-versions-to-keep: 0
+          delete-only-untagged-versions: "true"
