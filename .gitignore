@@ -8,3 +8,4 @@ dist/
 *.tif
 *.secret
 !platform/rfmod/keys/dev-*.secret
+.env

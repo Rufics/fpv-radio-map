@@ -30,7 +30,7 @@ out of git: whoever has it can sign as you.
 
 The server has one key built in, the owner's. Modules signed with it run inside the server
 process. Modules signed with any other key run in a separate worker process (section 8).
-The admin can remove a key at any time; modules signed with it stop loading on the next start.
+The admin can remove a key at any time; modules signed with it stop loading at once.
 
 ## 3. Start a project
 
@@ -101,9 +101,16 @@ note rather than folding a guess into the number.
 
 ## 5. Contracts
 
+A module runs for a mission only when the mission opts into it: `mission.modules["<id>"]`
+holds the per-mission options (`{}` for none). The built-in extensions follow the same rule:
+`rf.weather` (forecast refraction and rain) and `rf.clutter` (land cover heights; per-mission
+`{"disabledClasses": [50, 80]}` turns WorldCover classes off by code) run only when listed. `rf.uncertainty`
+always runs unless the admin disables it. Every module, built-in or installed, can be disabled
+by the admin under **Admin → Modules**.
+
 ### loss.contributor → `loss.contribute`
 
-Called once per evaluated path. The request:
+Called once per evaluated path, from the transmitter (`tx`) to the receiver (`rx`). The request:
 
 ```json
 {
@@ -116,14 +123,16 @@ Called once per evaluated path. The request:
   "diffraction": { "lineOfSight": true, "nu": -1.31, "lossDb": 0.0, "minFresnelClearance": 0.72 },
   "profile": {
     "source": "Copernicus GLO-30",
-    "samples": [ { "distanceM": 0, "groundMslM": 182.0, "obstacleM": 0.0, "landCover": "grass" } ]
+    "samples": [ { "distanceM": 0, "lat": 50.45, "lon": 30.52, "groundMslM": 182.0, "obstacleM": 0.0,
+                   "uncertaintyM": 4.0, "landCover": "Grassland", "landCoverCode": 30 } ]
   },
   "options": { }
 }
 ```
 
-`options` holds the per-mission settings the user chose for your module, if your UI offers any.
-`landCover` appears only when a land cover layer is configured.
+`options` is `mission.modules["<your id>"]`. `landCover` (the WorldCover class name) and
+`landCoverCode` appear only when a land cover layer is configured. `obstacleM` already holds the
+clutter height when `rf.clutter` is on; `uncertaintyM` is the DEM's stated vertical error.
 
 The response:
 
@@ -136,13 +145,36 @@ The response:
 
 Positive `valueDb` is a loss, negative a gain. Every term `id` must start with your module id
 and a slash; the server drops terms that do not. Terms appear in the "why" breakdown in the
-order you return them.
+order you return them. Your `notes` go to `LinkResult.uncertainty`, along with a note for each
+dropped term. A failure (an error, a timeout, a malformed response) never fails the
+calculation: the path is evaluated without your terms, and the failure is listed in
+`moduleFailures`.
 
 ### route.analysis → `route.analyze`
 
-Called after the core has evaluated every leg of a route.
+Called after the core has evaluated every leg of a route. The legs are pilot → wp1 → … → last,
+plus last → pilot when `returnToPilot` is true (the default). The core samples each leg at the
+DEM's native step. Along a leg the drone's AGL is interpolated linearly between the two
+waypoints' `aglM`, and its MSL is the DEM ground plus that AGL. The pilot's antenna is at
+`pilot.aglM`. `LegResult.worst` holds the worst sample per link, with `sample` saying where it was.
 
-Request: `{ "mission": <mission.schema.json>, "legs": [<LegResult>], "options": {} }`.
+Modules run in dependency order (a module after those it requires or optionally uses), and
+each request carries what the earlier ones returned:
+
+```json
+{
+  "mission": { },
+  "legs": [ ],
+  "options": { },
+  "modules": { "fpv.core": { } },
+  "weather": { },
+  "time": "2026-10-18T14:00:00Z"
+}
+```
+
+`options` is `mission.modules["<your id>"]`. `modules` maps the ids of modules that already ran
+to their `data`. `weather` is the `WeatherPoint` at the pilot, or null when the mission does not
+opt into `rf.weather`. `time` is the time the calculation is for.
 
 Response:
 
@@ -159,13 +191,22 @@ Response:
 `LegResult`, `Reason` and `Fix` are defined in [`docs/api/openapi.yaml`](../api/openapi.yaml).
 `patch` is a JSON merge patch to the mission. The client always shows the preview and applies
 the patch only when the user confirms, so describe the change completely in `preview`.
-`data` is shown under your module id in `RouteResult.modules`.
+
+- `data` appears under your module id in `RouteResult.modules`.
+- A reason with `"leg": <index>` is attached to that leg's reasons. A reason without `leg` is
+  route-wide and goes to `RouteResult.reasons`. The server fills in `module` with your id.
+- A top-level `battery` object (a `BatteryResult`) next to `data` becomes
+  `RouteResult.battery`; the first module to return one wins.
+- An error or a malformed response is listed in `RouteResult.moduleFailures`; the legs and
+  every other module's output are still returned. A route with failures is not cached.
 
 ### coverage.analysis → `coverage.analyze`
 
-Request: `{ "mission": ..., "grid": <CoverageGrid>, "options": {} }`. Response: `{ "reasons": [...],
-"layers": [ { "id": "acme.x/layer", "title": "...", "values": [...] } ] }`, with `values` laid
-out like the grid's margins.
+Request: `{ "mission": ..., "grid": <CoverageGrid>, "options": {}, "link": "control", "time": "..." }`,
+called once per link grid. Response: `{ "reasons": [...], "layers": [ { "id": "acme.x/layer",
+"title": "...", "values": [...] } ], "data": {} }`, with `values` laid out like the grid's
+`marginDb` (row-major from the north-west corner `origin`, `cellLatDeg` × `cellLonDeg` cells).
+The server stores `{layers, data}` under your id in `CoverageGrid.modules`.
 
 ## 6. Host calls
 
@@ -177,15 +218,25 @@ From `init` or `invoke`: `host().call("method", request)`. Each call returns JSO
 | `geodesy.inverse` | `{from:{lat,lon}, to:{lat,lon}}` | `{distanceM, azimuth1Deg, azimuth2Deg}` on WGS84 (Karney) |
 | `geodesy.direct` | `{from:{lat,lon}, azimuthDeg, distanceM}` | `{lat, lon, azimuthDeg}` |
 | `elevation.point` | `{lat, lon}` | `{groundMslM, uncertaintyM, source}`; `groundMslM` is null where there is no data |
-| `profile.get` | `{from:{lat,lon}, to:{lat,lon}, stepM?}` | `{source, stepM, samples:[{distanceM, lat, lon, groundMslM, obstacleM, uncertaintyM}], missing:[{fromM, toM}]}` |
-| `link.evaluate` | `{frequencyHz, txPowerDbm, tx:{lat, lon, aglM, gainDbi, feederLossDb}, rx:{lat, lon, aglM, gainDbi, feederLossDb, sensitivityDbm, requiredMarginDb}, time?}` | `LinkResult` from the OpenAPI file, including every term from other modules |
+| `profile.get` | `{from:{lat,lon}, to:{lat,lon}, stepM?}` (default: the DEM's native step) | `{source, stepM, samples:[{distanceM, lat, lon, groundMslM, obstacleM, uncertaintyM?}], missing:[{fromM, toM}]}`; `groundMslM` is null on samples without data |
+| `link.evaluate` (mission form) | `{mission, link: "control" \| "video", drone:{lat, lon, aglM}, ground?:{lat, lon, aglM}}` | `LinkResult` for that link of the mission, between `ground` (default `mission.pilot`) and `drone` |
+| `link.evaluate` (raw form) | `{frequencyHz, txPowerDbm, tx:{lat, lon, aglM, gainDbi, feederLossDb}, rx:{lat, lon, aglM, gainDbi, feederLossDb, sensitivityDbm, requiredMarginDb}, time?}` | `LinkResult` from the OpenAPI file, including every term from other modules |
 | `weather.point` | `{lat, lon, time}` | `WeatherPoint` |
 | `library.get` | `{kind, id}` with kind `radio-profiles`, `antennas`, `batteries` or `drones` | the library item, including its `version` |
 
 The server never fills missing terrain. `profile.get` reports gaps in `missing`, and
-`link.evaluate` fails on a path with gaps; tell the user rather than guessing.
+`link.evaluate` fails on a path with gaps with an error starting `missing-data:`; tell the user
+rather than guessing.
 
-`link.evaluate` from inside `loss.contribute` would recurse and is refused.
+The mission form of `link.evaluate` takes the mission document itself, which need not be
+saved: send a patched copy to try a change before you propose it as a `Fix`. The server
+validates it against `mission.schema.json` (an error starting `bad_request:` names the first
+problem), resolves `links[link]` and the library items from the document, and uses its
+`time`, `modules` and options, exactly as `/calc/route` would. During a calculation, the raw
+form uses that calculation's time and opted-in modules unless you pass `time`.
+
+`link.evaluate` from inside `loss.contribute` would recurse and is refused, and host calls
+nest at most four deep.
 
 ## 7. UI bundles
 
@@ -213,8 +264,10 @@ export function register(api) {
 
 The full contract is `web/projects/ui-kit/src/lib/modules/module-api.ts`. A bundle that throws
 is unloaded and its slots are cleared; the rest of the page carries on. Alpha modules' bundles
-load only for the admin. Bundles are served from `/api/v1/modules/<id>/ui/...`; `lib/` is never
-served.
+load only for the admin: `GET /modules` omits their `ui` for everyone else, and the admin's
+listing carries a signed `?grant=` (valid 12 h) on the bundle URL, since a browser imports
+bundles without an Authorization header. Bundles are served from `/api/v1/modules/<id>/ui/...`
+through the registry's public-file lookup; `lib/` is never served.
 
 ## 8. Isolation
 
@@ -229,7 +282,8 @@ can also run first-party modules this way (`isolateAll`):
   kernel allows unprivileged namespaces. The upload report says which of these took effect on
   that server; it is not assumed;
 - a call that runs past `limits.timeoutMs` kills the worker; a crash kills only the worker.
-  The next call starts a fresh one.
+  The next call starts a fresh one. The time limit applies to isolated modules only: an
+  owner-signed module running in-process cannot be stopped mid-call, so keep its calls short.
 
 This is a sandbox against mistakes and against greedy code, not a guarantee against a
 determined attacker: the module still runs as the server's user and can read what that user

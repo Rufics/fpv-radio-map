@@ -1,0 +1,107 @@
+# FPV Radio Map: PostGIS, a self-hosted Open-Meteo, rfmap-server and the web container.
+# See docs/admin/deploy.md. Run from this directory:
+#   cp .env.example .env   # then fill it in
+#   docker compose up -d --build
+#
+# Base images are pinned by digest (multi-arch index), read from the registries on 2026-10-17.
+
+name: rfmap
+
+services:
+  postgis:
+    image: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
+    environment:
+      POSTGRES_DB: rfmap
+      POSTGRES_USER: rfmap
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rfmap -d rfmap"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Open-Meteo API, answering from the data the sync service keeps fresh.
+  open-meteo:
+    image: ghcr.io/open-meteo/open-meteo:1.7.0@sha256:64039ca2e6a18e6917cdc0cb1bf8cff5f2fbd8d67b7ca29b5364fab486e1f154
+    command: ["serve", "--env", "production", "--hostname", "0.0.0.0", "--port", "8080"]
+    volumes:
+      - open-meteo-data:/app/data
+    networks: [backend]
+    restart: unless-stopped
+
+  # Downloads model runs. The model and the variable list must match what rfmap-server asks for
+  # (weather.tiers[].models, and the hourly variables in docs/admin/deploy.md).
+  open-meteo-sync:
+    image: ghcr.io/open-meteo/open-meteo:1.7.0@sha256:64039ca2e6a18e6917cdc0cb1bf8cff5f2fbd8d67b7ca29b5364fab486e1f154
+    command:
+      - sync
+      - ${OPEN_METEO_MODELS:-dwd_icon}
+      - ${OPEN_METEO_VARIABLES:-temperature_2m,relative_humidity_2m,surface_pressure,precipitation,wind_speed_10m,wind_direction_10m,temperature_1000hPa,relative_humidity_1000hPa,geopotential_height_1000hPa,temperature_975hPa,relative_humidity_975hPa,geopotential_height_975hPa,temperature_950hPa,relative_humidity_950hPa,geopotential_height_950hPa,temperature_925hPa,relative_humidity_925hPa,geopotential_height_925hPa,temperature_900hPa,relative_humidity_900hPa,geopotential_height_900hPa,temperature_850hPa,relative_humidity_850hPa,geopotential_height_850hPa}
+      - --past-days
+      - "1"
+      - --repeat-interval
+      - "5"
+    volumes:
+      - open-meteo-data:/app/data
+    networks: [backend, egress]
+    restart: unless-stopped
+
+  rfmap-server:
+    build:
+      context: ..
+      dockerfile: deploy/server.Dockerfile
+      args:
+        # Your owner public key (rfmod keygen). Empty = public development key, with a warning.
+        RFMAP_OWNER_PUBKEY: ${RFMAP_OWNER_PUBKEY:-}
+    image: rfmap-server:local
+    depends_on:
+      postgis:
+        condition: service_healthy
+      open-meteo:
+        condition: service_started
+    environment:
+      RFMAP_DATABASE_URL: postgresql://rfmap:${POSTGRES_PASSWORD}@postgis:5432/rfmap
+      RFMAP_ADMIN_TOKEN: ${RFMAP_ADMIN_TOKEN:?set RFMAP_ADMIN_TOKEN in .env}
+      RFMAP_OPEN_METEO_URL: http://open-meteo:8080
+      RFMAP__WEATHER__TIERS: '[{"name": "hourly", "models": "${OPEN_METEO_MODELS:-dwd_icon}"}]'
+      RFMAP__DATA__DEMSTATEDERRORM: ${RFMAP_DEM_STATED_ERROR_M:-null}
+      RFMAP__DATA__DEMSTATEDERRORSOURCE: ${RFMAP_DEM_STATED_ERROR_SOURCE:-}
+    volumes:
+      - ../server/config/server.example.json:/etc/rfmap/rfmap.json:ro
+      - ${RFMAP_TILES_DIR:?set RFMAP_TILES_DIR in .env}:/data:ro
+      - rfmap-state:/var/lib/rfmap
+    networks: [backend, frontend]
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    image: rfmap-web:local
+    depends_on: [rfmap-server]
+    ports:
+      - "${RFMAP_HTTP_PORT:-8088}:80"
+    volumes:
+      - ${RFMAP_TILES_DIR}:/tiles:ro
+    networks: [frontend, public]
+    restart: unless-stopped
+
+networks:
+  # No route out for PostGIS, the Open-Meteo API and rfmap-server (and with it every module
+  # worker): both of its networks are internal. Only web publishes a port.
+  backend:
+    internal: true
+  frontend:
+    internal: true
+  public: {}
+  # Only the sync service downloads from the model providers.
+  egress: {}
+
+volumes:
+  pgdata:
+  open-meteo-data:
+  rfmap-state:

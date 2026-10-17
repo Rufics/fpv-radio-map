@@ -1,0 +1,86 @@
+{
+  // rfmap-server configuration. Comments are allowed. Every key can be overridden from the
+  // environment: RFMAP__<SECTION>__<KEY>=value (for example RFMAP__CACHE__DEMBLOCKSMB=512),
+  // plus the short forms RFMAP_DATABASE_URL, RFMAP_ADMIN_TOKEN, RFMAP_PORT,
+  // RFMAP_OPEN_METEO_URL, RFMAP_DEM and RFMAP_LANDCOVER.
+  "server": {
+    "listen": "0.0.0.0",
+    "port": 8080,
+    "threads": 16,
+    // true only behind a reverse proxy you run: the last X-Forwarded-For hop becomes the
+    // client address for rate limits and logs.
+    "trustProxy": true,
+    "maxBodyBytes": 1048576,
+    "maxUploadBytes": 67108864
+  },
+  "database": {
+    // Prefer RFMAP_DATABASE_URL so the password stays out of the file.
+    "url": "postgresql://rfmap@postgis:5432/rfmap",
+    "poolSize": 8
+  },
+  "admin": {
+    // At least 24 random characters, compared in constant time. Prefer RFMAP_ADMIN_TOKEN.
+    // Empty disables the admin API.
+    "token": ""
+  },
+  "data": {
+    "dem": "/data/dem.cog.tif",
+    "landcover": "/data/landcover.cog.tif",
+    // The vertical error your DEM provider states. Results carry no terrain error without it.
+    // Copy the figure and its source from the provider's documentation; do not estimate it.
+    "demStatedErrorM": null,
+    "demStatedErrorSource": ""
+  },
+  "schemasDir": "/usr/share/rfmap/schemas",
+  "seedDir": "/usr/share/rfmap/library",
+  "modules": {
+    "root": "/var/lib/rfmap/modules",
+    "worker": "/usr/lib/rfmap/rfmod-worker",
+    "trustStore": "/var/lib/rfmap/keys.json",
+    "isolateAll": false
+  },
+  "weather": {
+    // Your own Open-Meteo instance. Empty = no forecasts (k = 4/3, results say so).
+    "baseUrl": "http://open-meteo:8080",
+    // Open-Meteo `models` parameter per tier; empty = the instance's default.
+    "tiers": [ { "name": "hourly", "models": "" } ],
+    "forecastDays": 16,
+    "timeoutMs": 8000,
+    "cacheMinutes": 30,
+    // Optional: the synced model's meta.json, which gives the run time (runUtc).
+    "metaUrl": "",
+    "staleAfterHours": 12
+  },
+  "cache": {
+    "demBlocksMb": 256,
+    "resultMemoryMb": 64,
+    "resultTableRows": 20000,
+    "resultTableMb": 1024
+  },
+  "auth": {
+    "sessionTtlHours": 168,
+    "pinMaxAttempts": 5,
+    "pinLockoutMinutes": 15,
+    // interactive | moderate | sensitive (libsodium argon2id limits)
+    "argon2Cost": "moderate"
+  },
+  // Token buckets per client address and class.
+  "rateLimits": {
+    "default":  { "perMinute": 600, "burst": 120 },
+    "open":     { "perMinute": 10,  "burst": 5 },
+    "create":   { "perMinute": 20,  "burst": 10 },
+    "calc":     { "perMinute": 120, "burst": 30 },
+    "coverage": { "perMinute": 6,   "burst": 3 },
+    "admin":    { "perMinute": 60,  "burst": 20 }
+  },
+  "coverage": {
+    "threads": 4,
+    "maxCells": 250000,
+    "maxJobs": 4,
+    "keepMinutes": 120
+  },
+  // Merged over the defaults GET /api/v1/config/map returns (tiles-builder names under /tiles).
+  "map": {
+    "zoom": 11
+  }
+}
