@@ -1,5 +1,6 @@
 # Overrides for the CI smoke test (main.yml): run the images CI just built, without the
-# Open-Meteo services. Used as: docker compose -f docker-compose.yml -f ci/compose.smoke.yml
+# Open-Meteo services and without terrain data: no DEM means calculations answer 503, which
+# the smoke test does not call. Used as: docker compose -f docker-compose.yml -f ci/compose.smoke.yml
 services:
   rfmap-server:
     image: ${RFMAP_SERVER_IMAGE:?}
@@ -7,6 +8,8 @@ services:
     depends_on: !override
       postgis:
         condition: service_healthy
+    environment:
+      RFMAP_DEM: ""
   web:
     image: ${RFMAP_WEB_IMAGE:?}
     build: !reset null
