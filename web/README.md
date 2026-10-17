@@ -13,11 +13,10 @@ web/
 
 ## Requirements
 
-Node ≥ 22.22.3 or ≥ 24.15 (Angular CLI 22). This was built with Node 24.22.0 in `/opt/node24`:
+Node ≥ 22.22.3 or ≥ 24.15 (Angular CLI 22). CI uses Node 24.
 
 ```sh
-export PATH=/opt/node24/bin:$PATH
-npm install
+npm ci
 ```
 
 `npm run sync-schemas` runs before start, build and test. It copies `../schemas/mission.schema.json` and `../schemas/library/*.schema.json` into `projects/ui-kit/src/lib/schemas/schemas.generated.ts`, so the browser validates with the same JSON Schemas (draft-07, ajv strict) as the server.
