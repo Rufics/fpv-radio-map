@@ -10,19 +10,16 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import hashlib
-import ipaddress
 import json
 import math
 import os
 import re
-import socket
 import shlex
 import shutil
 import subprocess
 import sys
 import time
 import urllib.error
-import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -64,60 +61,40 @@ def run(cmd: list[str], *, capture: bool = False, env: dict | None = None, cwd: 
 
 
 # --------------------------------------------------------------------------- command-line values
-# Everything the operator passes is checked here, at the argparse boundary, before it reaches a
-# path, a URL or a command line.
+# The build reads and writes only under DATA (the container's /data volume) and downloads only
+# from the fixed URLs in sources.py. A value from the command line never becomes a path, a URL
+# or a command argument itself: it only selects one of those trusted values.
 
-def existing_file(text: str) -> Path:
-    """argparse type: an existing regular file, as an absolute path (so never read as an option)."""
-    path = Path(text).expanduser().resolve()
-    if not path.is_file():
-        raise argparse_error(f"not a file: {text}")
-    return path
+DATA = Path("/data")
+INPUTS_DIR = "inputs"
 
-
-def directory(text: str) -> Path:
-    """argparse type: a directory to create or reuse, as an absolute path."""
-    path = Path(text).expanduser().resolve()
-    if path.exists() and not path.is_dir():
-        raise argparse_error(f"not a directory: {text}")
-    return path
+_HEAP_UNITS = {"k": "k", "m": "m", "g": "g"}
 
 
-def https_url(text: str) -> str:
-    """argparse type: an https URL with a host. Placeholders such as {z} may appear in the path."""
-    parts = urllib.parse.urlsplit(text)
-    if parts.scheme != "https" or not parts.hostname:
-        raise argparse_error(f"must be an https:// URL: {text}")
-    return text
+def input_file(text: str) -> Path:
+    """argparse type: a file in /data/inputs, given by name or by its path in the container.
+    Returns that directory's own entry, so the path used later is never the text typed."""
+    inputs = DATA / INPUTS_DIR
+    given = Path(text)
+    if "/" in text and given.parent.resolve() != inputs.resolve():
+        raise argparse_error(f"{text}: input files must be in {inputs}")
+    if inputs.is_dir():
+        for entry in inputs.iterdir():
+            if entry.name == given.name and entry.is_file():
+                return entry
+    raise argparse_error(f"{text}: no such file in {inputs} (put input files in <data>/inputs/)")
 
 
 def heap_size(text: str) -> str:
     """argparse type: a JVM heap size such as 4g or 2048m."""
-    if not re.fullmatch(r"[1-9]\d{0,6}[kKmMgG]", text):
+    m = re.fullmatch(r"([1-9]\d{0,6})([kKmMgG])", text)
+    if not m:
         raise argparse_error(f"must be a size such as 4g or 2048m: {text}")
-    return text
+    return f"{int(m.group(1))}{_HEAP_UNITS[m.group(2).lower()]}"
 
 
 def argparse_error(message: str) -> argparse.ArgumentTypeError:
     return argparse.ArgumentTypeError(message)
-
-
-def public_host(url: str) -> str:
-    """The URL's host, if every address it resolves to is public; the build fetches whatever URL
-    it is given, so it refuses loopback, private and link-local targets."""
-    host = urllib.parse.urlsplit(url).hostname or ""
-    try:
-        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
-    except socket.gaierror as e:
-        if os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY"):
-            warn(f"cannot resolve {host} here ({e}); the https proxy resolves and reaches it")
-            return host
-        raise BuildError(f"cannot resolve {host}: {e}")
-    for info in infos:
-        address = ipaddress.ip_address(info[4][0])
-        if not address.is_global:
-            raise BuildError(f"{host} resolves to {address}, which is not a public address")
-    return host
 
 
 # --------------------------------------------------------------------------- bbox
@@ -194,9 +171,9 @@ class Dirs:
         return self.out / ".meta"
 
     @classmethod
-    def make(cls, data: str, out: str | None = None) -> "Dirs":
-        d = Path(data)
-        dirs = cls(data=d, out=Path(out) if out else d / "out", cache=d / "cache", work=d / "work")
+    def make(cls) -> "Dirs":
+        d = DATA
+        dirs = cls(data=d, out=d / "out", cache=d / "cache", work=d / "work")
         for p in (dirs.out, dirs.cache, dirs.work, dirs.meta):
             p.mkdir(parents=True, exist_ok=True)
         return dirs

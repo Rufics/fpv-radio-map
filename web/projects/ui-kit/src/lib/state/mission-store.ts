@@ -195,7 +195,7 @@ export class MissionStore {
       const job = await this.api.startCoverage(id, mission);
       if (run !== this.runId) return;
       this.job.set(job);
-      await this.poll(run, job, () => {
+      this.poll(run, job, () => {
         jobDone = true;
         finish();
       });
@@ -208,9 +208,9 @@ export class MissionStore {
     }
   }
 
-  private async poll(run: number, job: Job, onDone: () => void): Promise<void> {
+  private poll(run: number, job: Job, onDone: () => void): void {
     const fetched = new Set<LinkKind>();
-    const step = async (j: Job) => {
+    const step = (j: Job): void => {
       if (run !== this.runId) return;
       this.job.set(j);
       for (const part of j.parts ?? []) {
@@ -233,7 +233,7 @@ export class MissionStore {
       this.pollTimer = setTimeout(async () => {
         try {
           if (!j.jobId) return;
-          await step(await this.api.getJob(this.missionId(), j.jobId));
+          step(await this.api.getJob(this.missionId(), j.jobId));
         } catch (e) {
           if (run === this.runId) {
             this.error.set(`Coverage: ${ApiError.from(e).message}`);
@@ -242,7 +242,7 @@ export class MissionStore {
         }
       }, this.pollIntervalMs);
     };
-    await step(job);
+    step(job);
   }
 
   /** Cancel the running calculation (route request and coverage job). */

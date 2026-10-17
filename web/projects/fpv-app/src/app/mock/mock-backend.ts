@@ -134,12 +134,15 @@ export class MockBackend {
   }
 
   /** Route a request under the API base. Returns null if no mock route matches. */
-  async handle(req: HttpRequest<unknown>, path: string): Promise<HttpResponse<unknown>> {
-    for (const [method, re, h] of this.routes) {
-      const m = path.match(re);
-      if (m && method === req.method) return h(req, m);
-    }
-    throw this.error(404, `No mock for ${req.method} ${path}`);
+  /** Always settles asynchronously: a handler that throws gives a rejected promise. */
+  handle(req: HttpRequest<unknown>, path: string): Promise<HttpResponse<unknown>> {
+    return Promise.resolve().then(() => {
+      for (const [method, re, h] of this.routes) {
+        const m = re.exec(path);
+        if (m && method === req.method) return h(req, m);
+      }
+      throw this.error(404, `No mock for ${req.method} ${path}`);
+    });
   }
 
   /** Simulated latency per endpoint, ms. */
@@ -225,7 +228,7 @@ export class MockBackend {
     const sess = this.sessionOf(req);
     if (!s) throw this.error(404, 'No such mission');
     if (!sess || sess.missionId !== id || sess.role !== 'edit') throw this.error(403, 'Edit session required');
-    const ifMatch = Number((req.headers.get('If-Match') ?? '').replace(/"/g, ''));
+    const ifMatch = Number((req.headers.get('If-Match') ?? '').replaceAll('"', ''));
     if (ifMatch !== s.revision) throw this.error(409, 'Someone saved in between');
     const v = this.validator.validateMission(req.body);
     if (!v.ok) throw this.error(422, 'Mission does not match mission.schema.json', { issues: v.issues });

@@ -18,7 +18,7 @@ TEST(Semver, ParsesAndOrders) {
 }
 
 TEST(Semver, RejectsInvalid) {
-    for (const char* bad : {"1.2", "01.2.3", "1.2.3-", "1.2.3-01", "a.b.c", "1.2.3.4", "1.2.99999999999"}) {
+    for (const char* bad : {"1.2", "01.2.3", "1.2.3-", "1.2.3-01", "a.b.c", "1.2.3.4.5", "1.2.99999999999"}) {
         EXPECT_THROW((void)Version::parse(bad), std::invalid_argument) << bad;
     }
 }

@@ -3,7 +3,7 @@ import { Mission, MissionPoint } from '../models/mission.models';
 import { RfFormat } from '../format/rf-format';
 
 export function xmlEscape(s: string): string {
-  return s.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] as string);
+  return s.replaceAll(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] as string);
 }
 
 const n = (v: number) => RfFormat.exportNumber(v);
@@ -27,7 +27,12 @@ export class MissionExporter {
   }
 
   private safeFileName(name: string): string {
-    return (name.trim() || 'mission').replace(/[^\p{L}\p{N}._-]+/gu, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'mission';
+    const dashed = (name.trim() || 'mission').replaceAll(/[^\p{L}\p{N}._-]+/gu, '-');
+    let start = 0;
+    let end = dashed.length;
+    while (start < end && dashed[start] === '-') start++;
+    while (end > start && dashed[end - 1] === '-') end--;
+    return dashed.slice(start, end).toLowerCase() || 'mission';
   }
 
   toKml(mission: Mission, result?: RouteResult | null): ExportedFile {

@@ -3,29 +3,26 @@
   rfmap-tiles basemap   --region europe/monaco [--bbox ...]
   rfmap-tiles dem       --bbox minLon,minLat,maxLon,maxLat
   rfmap-tiles landcover --bbox ...
-  rfmap-tiles satellite --bbox ... --sat-source TEMPLATE_OR_RASTER --sat-licence ... --sat-attribution ...
-  rfmap-tiles all       --bbox ... [--region ...] [--sat-source ...]
+  rfmap-tiles satellite --bbox ... --sat-provider NAME | --sat-file FILE --sat-licence ... --sat-attribution ...
+  rfmap-tiles all       --bbox ... [--region ...] [--sat-provider ... | --sat-file ...]
   rfmap-tiles style | manifest | verify
 
-Outputs go to /data/out; downloads are cached in /data/cache.
+Everything lives in the /data volume: input files in /data/inputs, downloads cached in
+/data/cache, outputs in /data/out.
 """
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 
 from . import basemap, dem, landcover, manifest, satellite, style
-from .common import BBox, BuildError, Dirs, directory, log, run, warn
+from .common import BBox, BuildError, Dirs, log, run, warn
 
 
 def _common(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("common")
     g.add_argument("--bbox", help="minLon,minLat,maxLon,maxLat (WGS84 degrees)")
-    g.add_argument("--data", type=directory, default=os.environ.get("RFMAP_DATA", "/data"),
-                   help="data directory (default /data): cache/, work/ and out/ live here")
-    g.add_argument("--out", type=directory, default=None, help="output directory (default <data>/out)")
     g.add_argument("--force", action="store_true", help="rebuild even if the output is up to date")
     g.add_argument("--threads", type=int, default=None, help="worker threads for Planetiler (default: all CPUs)")
 
@@ -86,13 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.bbox:
             BBox.parse(args.bbox)  # fail early on a malformed bbox
-        dirs = Dirs.make(args.data, args.out)
+        dirs = Dirs.make()
         cmd = args.command
         if cmd == "verify":
             return 0 if verify(dirs) else 1
         if cmd in ("basemap", "all"):
-            if cmd == "all" and not (args.region or args.osm_url or args.osm_file):
-                warn("all: no --region/--osm-url/--osm-file given; skipping basemap")
+            if cmd == "all" and not (args.region or args.osm_file):
+                warn("all: no --region/--osm-file given; skipping basemap")
             else:
                 basemap.build(args, dirs)
         if cmd in ("dem", "all"):
@@ -100,8 +97,9 @@ def main(argv: list[str] | None = None) -> int:
         if cmd in ("landcover", "all"):
             landcover.build(args, dirs)
         if cmd in ("satellite", "all"):
-            if cmd == "all" and not args.sat_source:
-                warn("all: no --sat-source given; skipping satellite (choose a mosaic and check its licence)")
+            if cmd == "all" and not (args.sat_provider or args.sat_file):
+                warn("all: no --sat-provider/--sat-file given; skipping satellite "
+                     "(choose a mosaic and check its licence)")
             else:
                 satellite.build(args, dirs)
         style.build(args, dirs)

@@ -70,3 +70,22 @@ WORLDCOVER = {
 SATELLITE_UNVERIFIED = ("UNVERIFIED: the operator must check the licence and the tile-service terms of "
                         "the chosen mosaic before publishing (non-commercial use) and pass "
                         "--sat-licence / --sat-attribution.")
+
+# XYZ mosaics the satellite step may download from. The licence notes are what EOX publishes;
+# the operator still checks the current licence and terms and passes --sat-licence / --sat-attribution.
+_EOX = "https://tiles.maps.eox.at/wmts/1.0.0/{layer}/default/g/{{z}}/{{y}}/{{x}}.jpg"
+SATELLITE_PROVIDERS = {
+    "eox-s2cloudless-2016": {
+        "name": "Sentinel-2 cloudless 2016 by EOX",
+        "template": _EOX.format(layer="s2cloudless_3857"),
+        "licence_note": "CC BY 4.0",
+    },
+    **{
+        f"eox-s2cloudless-{year}": {
+            "name": f"Sentinel-2 cloudless {year} by EOX",
+            "template": _EOX.format(layer=f"s2cloudless-{year}_3857"),
+            "licence_note": "CC BY-NC-SA 4.0 (non-commercial)",
+        }
+        for year in range(2018, 2024)
+    },
+}

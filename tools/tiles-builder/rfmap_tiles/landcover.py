@@ -29,8 +29,8 @@ def build(args, dirs: Dirs) -> None:
     if not args.bbox:
         raise BuildError("landcover needs --bbox")
     bbox = BBox.parse(args.bbox)
-    year = args.worldcover_year
-    version = sources.WORLDCOVER_VERSIONS[year]
+    # The year and version come from the table, not from the command line.
+    year, version = next((y, v) for y, v in sources.WORLDCOVER_VERSIONS.items() if y == args.worldcover_year)
     params = {"bbox": str(bbox), "year": year, "version": version}
     if is_up_to_date(dirs, OUT_NAME, params, args.force):
         return

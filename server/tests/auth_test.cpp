@@ -173,15 +173,16 @@ TEST(SecretsTest, ConstantTimeEqualComparesContent) {
 TEST(RateLimiterTest, BurstThenRefillAtTheConfiguredRate) {
     FakeClock clock;
     RateLimiter limiter({{"open", {6.0, 3.0}}}, clock);
-    for (int i = 0; i < 3; ++i) EXPECT_NO_THROW(limiter.take("open", "10.0.0.1"));
+    // Client addresses from the RFC 5737 documentation range.
+    for (int i = 0; i < 3; ++i) EXPECT_NO_THROW(limiter.take("open", "192.0.2.1"));
     try {
-        limiter.take("open", "10.0.0.1");
+        limiter.take("open", "192.0.2.1");
         FAIL() << "expected 429";
     } catch (const HttpError& e) {
         EXPECT_EQ(e.status(), 429);
         EXPECT_EQ(e.body().at("retryAfterS").get<long long>(), 10);  // 6 per minute
     }
-    EXPECT_NO_THROW(limiter.take("open", "10.0.0.2"));  // per client
+    EXPECT_NO_THROW(limiter.take("open", "192.0.2.2"));  // per client
     clock.advance(std::chrono::seconds(10));
-    EXPECT_NO_THROW(limiter.take("open", "10.0.0.1"));
+    EXPECT_NO_THROW(limiter.take("open", "192.0.2.1"));
 }

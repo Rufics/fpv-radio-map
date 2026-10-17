@@ -18,7 +18,7 @@ const attr = (tag, name) => {
   return m ? Number(m[1]) : 0;
 };
 
-const unescape = (s) => s.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+const unescape = (s) => s.replaceAll('&quot;', '"').replaceAll('&apos;', "'").replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
 
 /** Totals and failed test names of one JUnit file. */
 export function parseJunit(xml) {
