@@ -474,8 +474,7 @@ TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
     ASSERT_TRUE(g.body.contains("lastResult"));
     EXPECT_EQ(g.body["lastResult"]["inputHash"], r.body["inputHash"]);
 
-    // Same inputs, same hash: served from the result cache. The time is fixed here because with
-    // time.mode "now" the hash changes when the two requests fall on either side of a second.
+    // Same inputs, same hash: served from the result cache.
     json planned = m;
     planned["time"] = {{"mode", "planned"}, {"utc", isoUtc(Clock::now())}};
     const auto first = call("POST", "/calc/route", planned, bearer(env->editSession));
