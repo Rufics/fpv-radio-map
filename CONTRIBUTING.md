@@ -1,5 +1,21 @@
 # Contributing
 
+Thank you for helping. Code, verified equipment data with sources, modules, documentation and bug reports are all
+welcome. By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Workflow
+
+1. For anything bigger than a small fix, open an issue first so we can agree on the approach.
+2. Fork the repository and create a branch from `main`.
+3. Make the change with tests. Radio maths changes need a test against an exact or published value, not a
+   snapshot of the current output.
+4. Open a pull request with a Conventional Commits title. CI must be green and a maintainer must approve.
+5. New features that fit as a module are better as a module: see [the developer guide](docs/modules/developer-guide.md).
+
+## Language
+
+All documentation, UI text, code comments, commit messages, issues and pull requests are in English.
+
 ## Commit messages: Conventional Commits
 
 Releases are made by [semantic-release](https://semantic-release.gitbook.io) from the commit
@@ -56,7 +72,16 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
 - the pull request title against Conventional Commits (its own check, re-run when the title is edited).
 
-Run the same locally:
+Run the same locally. On Ubuntu 24.04 the build needs:
+
+```
+sudo apt-get install -y build-essential cmake ninja-build pkg-config \
+  libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
+  libpqxx-dev libgdal-dev gdal-bin libcpp-httplib-dev libgtest-dev \
+  postgresql-16 postgresql-16-postgis-3
+```
+
+Then:
 
 ```
 cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build

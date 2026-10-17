@@ -1,0 +1,30 @@
+name: Equipment data
+description: Add or correct a radio profile, antenna, battery or drone in the reference library
+labels: [data]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Library values are only marked verified when they come from a published source. Please link the datasheet,
+        manual or measurement report for every number.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options: [Radio profile, Antenna, Battery, Drone]
+    validations:
+      required: true
+  - type: textarea
+    id: values
+    attributes:
+      label: Values
+      description: Name, model, mode, and each value with its unit (for example sensitivity −105 dBm at 250 Hz).
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source for each value
+      description: Links, document titles, versions and page numbers.
+    validations:
+      required: true

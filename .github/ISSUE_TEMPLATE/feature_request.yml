@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest something the project should do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do as a pilot, admin or module author, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How you'd like it to work. If it involves maths or data, link the source (an ITU recommendation, a datasheet, a paper).
+  - type: dropdown
+    id: module
+    attributes:
+      label: Could it be a module?
+      description: Many features fit as a separately installed module. See docs/modules/developer-guide.md.
+      options:
+        - Not sure
+        - Yes, I could write it as a module
+        - No, it needs changes to the core

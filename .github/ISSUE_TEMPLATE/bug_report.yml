@@ -1,0 +1,47 @@
+name: Bug report
+description: Something gives a wrong result, crashes, or doesn't work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: >
+        Steps, and if you can, the mission JSON (export it or copy it from the API). For a wrong radio result,
+        include both ends (lat, lon, height above ground), frequency and the numbers you expected, with where they come from.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v0.2.0, or the image tag, or a commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Radio calculation (rf-core / rf-ext)
+        - FPV modules
+        - Module platform (rfmod)
+        - Server / API
+        - Web app
+        - Tiles builder
+        - Deployment
+        - Documentation
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      render: shell

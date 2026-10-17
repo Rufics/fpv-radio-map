@@ -1,0 +1,27 @@
+# Weekly dependency updates. Titles follow Conventional Commits ("build(deps): ..."), so they pass the
+# PR title check and don't trigger a release on their own.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    commit-message: { prefix: build, include: scope }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: weekly }
+    commit-message: { prefix: build, include: scope }
+    groups:
+      angular: { patterns: ["@angular/*", "@angular-devkit/*", "ng-packagr"] }
+      dev-tools: { dependency-type: development }
+  - package-ecosystem: npm
+    directory: /tools/ci
+    schedule: { interval: monthly }
+    commit-message: { prefix: build, include: scope }
+    groups:
+      release-tooling: { patterns: ["*"] }
+  - package-ecosystem: docker
+    directories: [/deploy, /tools/tiles-builder]
+    schedule: { interval: weekly }
+    commit-message: { prefix: build, include: scope }
