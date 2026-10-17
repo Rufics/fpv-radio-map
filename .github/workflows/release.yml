@@ -51,6 +51,14 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Baseline tag v0.1.0 when the repository has no release yet
+        # Without any tag semantic-release would start at 1.0.0, and the FPV modules accept hosts
+        # <1.0.0 only. The first release therefore counts from v0.1.0 on the first commit.
+        run: |
+          if [ -z "$(git tag -l 'v*')" ]; then
+            git tag v0.1.0 "$(git rev-list --max-parents=0 HEAD | tail -1)"
+            echo "BASELINE_CREATED=1" >> "$GITHUB_ENV"
+          fi
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
@@ -130,6 +138,19 @@ jobs:
           cache-dependency-path: tools/ci/package-lock.json
       - run: npm ci --no-audit --no-fund
         working-directory: tools/ci
+      - name: Baseline tag v0.1.0 when the repository has no release yet
+        # Without any tag semantic-release would start at 1.0.0, and the FPV modules accept hosts
+        # <1.0.0 only. The first release therefore counts from v0.1.0 on the first commit.
+        run: |
+          if [ -z "$(git tag -l 'v*')" ]; then
+            git tag v0.1.0 "$(git rev-list --max-parents=0 HEAD | tail -1)"
+            echo "BASELINE_CREATED=1" >> "$GITHUB_ENV"
+          fi
+      - name: Push the baseline tag
+        if: env.BASELINE_CREATED == '1'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" refs/tags/v0.1.0
       - name: Tag and publish the GitHub release
         working-directory: tools/ci
         env:

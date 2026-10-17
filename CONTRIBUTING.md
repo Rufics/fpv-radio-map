@@ -83,3 +83,7 @@ notes. A release:
 It needs the repository variable `RFMAP_OWNER_PUBKEY` (contents of `owner.pub`) and the secret
 `RFMAP_OWNER_SECRET_KEY` (contents of `owner.secret`), both made with `rfmod keygen --out owner`.
 A release never signs with the public development key.
+
+The first release counts from a `v0.1.0` tag that the workflow puts on the first commit when the
+repository has no tag yet, so a `feat` gives 0.2.0, not semantic-release's default 1.0.0. That keeps
+the host version inside the FPV modules' `<1.0.0` range.
