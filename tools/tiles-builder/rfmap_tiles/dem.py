@@ -14,8 +14,8 @@ import shutil
 from pathlib import Path
 
 from . import raster, sources
-from .common import (BBox, BuildError, Dirs, download, existing_file, fresh_dir, http_status, install, is_up_to_date,
-                     log, mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors, pmtiles_header,
+from .common import (BBox, BuildError, Dirs, download, fresh_dir, http_status, input_file, install, is_up_to_date,
+                     mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors, pmtiles_header,
                      read_meta, run, tile_aligned_extent, warn, write_meta, zoom_resolution)
 
 DEM_OUT = "dem.cog.tif"
@@ -28,9 +28,9 @@ def add_arguments(p) -> None:
     g = p.add_argument_group("dem (elevation)")
     g.add_argument("--dem-source", choices=["copernicus", "srtm", "file"], default="copernicus",
                    help="copernicus = Copernicus DEM GLO-30 from AWS (default); srtm = AWS Terrain Tiles "
-                        "1\" HGT (fallback); file = local rasters given with --dem-file")
-    g.add_argument("--dem-file", type=existing_file, action="append", default=[],
-                   help="local DEM raster(s) on one shared grid (repeatable); implies --dem-source file")
+                        "1\" HGT (fallback); file = rasters in /data/inputs given with --dem-file")
+    g.add_argument("--dem-file", type=input_file, action="append", default=[],
+                   help="DEM raster(s) in /data/inputs on one shared grid (repeatable); implies --dem-source file")
     g.add_argument("--allow-dem-resample", action="store_true",
                    help="allow mosaicking tiles of different pixel size (e.g. Copernicus across 50°N) by "
                         "nearest-neighbour duplication onto the finest grid. Off by default.")
@@ -119,7 +119,7 @@ def build(args, dirs: Dirs) -> None:
         warn(f"bbox is {bbox.area_km2():,.0f} km²; this will need a lot of disk and time")
 
     params = {"bbox": str(bbox), "source": source,
-              "files": sorted(str(f) for f in args.dem_file), "allow_resample": args.allow_dem_resample}
+              "files": sorted(f.name for f in args.dem_file), "allow_resample": args.allow_dem_resample}
     if not is_up_to_date(dirs, DEM_OUT, params, args.force):
         _build_cog(args, dirs, bbox, source, params)
     dem = dirs.out / DEM_OUT
@@ -140,10 +140,7 @@ def _build_cog(args, dirs: Dirs, bbox: BBox, source: str, params: dict) -> None:
         files, missing, urls = _fetch_srtm(bbox, dirs)
         src_info = sources.SRTM
     else:
-        files = [Path(f) for f in args.dem_file]
-        for f in files:
-            if not f.is_file():
-                raise BuildError(f"--dem-file not found: {f}")
+        files = list(args.dem_file)
         missing, urls = [], [f"file:{f.name}" for f in files]
         src_info = {"source": "operator-supplied DEM files", "licence": "as supplied by the operator",
                     "attribution": "set by the operator", "vertical_datum": "as supplied"}

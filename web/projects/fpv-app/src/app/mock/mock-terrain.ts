@@ -90,7 +90,7 @@ function forEachPixel(z: number, tx: number, ty: number, size: number, fn: (i: n
 }
 
 /** Terrarium-encoded DEM tile. */
-export async function demTile(url: string): Promise<ArrayBuffer> {
+export function demTile(url: string): Promise<ArrayBuffer> {
   const [z, x, y] = parseZxy(url);
   const size = 256;
   const c = new OffscreenCanvas(size, size);
@@ -113,7 +113,7 @@ function hash(x: number, y: number): number {
 }
 
 /** Muted fake "satellite" imagery: fields, forest on slopes, the river. */
-export async function satelliteTile(url: string): Promise<ArrayBuffer> {
+export function satelliteTile(url: string): Promise<ArrayBuffer> {
   const [z, x, y] = parseZxy(url);
   const size = 256;
   const c = new OffscreenCanvas(size, size);
@@ -147,7 +147,7 @@ export async function satelliteTile(url: string): Promise<ArrayBuffer> {
 }
 
 /** Weather tiles: wind arrows, precipitation blobs, temperature tint; time shifts the field. */
-export async function weatherTile(url: string): Promise<ArrayBuffer> {
+export function weatherTile(url: string): Promise<ArrayBuffer> {
   const [z, x, y] = parseZxy(url);
   const kind = url.match(/mockwx:\/\/(\w+)/)?.[1] ?? 'wind';
   const timeMatch = decodeURIComponent(url).match(/(\d{4}-\d{2}-\d{2}T\d{2})/);

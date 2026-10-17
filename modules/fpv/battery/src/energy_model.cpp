@@ -208,7 +208,8 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
     };
     const double out = route.outboundLength();
     double lastOk = -1.0, firstBad = -1.0;
-    for (double s = 0.0;; s = std::min(out, s + step_)) {
+    for (std::size_t i = 0;; ++i) {
+        const double s = std::min(out, static_cast<double>(i) * step_);
         if (costAt(s) <= p.usableWh) {
             lastOk = s;
             firstBad = -1.0;

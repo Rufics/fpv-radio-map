@@ -46,7 +46,7 @@ You can also run the steps one at a time with the same options: `basemap`, `dem`
 | `--contour-interval 10` | contour spacing in m (default 20) |
 | `--basemap-maxzoom 14` | much smaller basemap that looks the same (the map over-zooms) |
 | `--dem-source srtm` | fallback DEM (AWS Terrain Tiles, SRTM-based) if Copernicus is not reachable |
-| `--dem-file my.tif` | use your own DEM files (repeatable) |
+| `--dem-file my.tif` | use your own DEM files from `data/inputs/` (repeatable) |
 | `--java-heap 6g` | memory for the basemap step |
 | `--public-base-url https://maps.example.org/tiles` | URL written into the style (default `/tiles`) |
 | `--force` | rebuild even if nothing changed |
@@ -56,14 +56,14 @@ You can also run the steps one at a time with the same options: `basemap`, `dem`
 ```bash
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder satellite \
     --bbox 34.8,48.3,35.4,48.7 \
-    --sat-source 'https://<provider>/<layer>/{z}/{y}/{x}.jpg' \
-    --sat-name 'Sentinel-2 cloudless <year> (<provider>)' \
+    --sat-provider eox-s2cloudless-2023 \
     --sat-licence '<licence you checked>' \
     --sat-attribution '<exact attribution text the licence requires>'
 ```
 
-- **Check the licence yourself before publishing.** Sentinel-2 cloudless mosaics are published under different licences per provider and per year. Some allow only non-commercial use; some tile services forbid bulk downloading altogether. Read the provider's licence and terms of service. If they offer the mosaic as a downloadable GeoTIFF, prefer that and pass the file path or URL as `--sat-source`.
-- We could not verify any provider's terms while writing this tool, so it names no recommended mosaic. If you leave out `--sat-licence` or `--sat-attribution`, the manifest records the licence as `UNVERIFIED`.
+- `--sat-provider` takes one of the built-in mosaics: `eox-s2cloudless-2016` and `eox-s2cloudless-2018` to `eox-s2cloudless-2023` (Sentinel-2 cloudless by EOX). The build downloads tiles only from this list, never from a URL you type.
+- For any other mosaic, download it as a GeoTIFF/COG into `data/inputs/` and pass `--sat-file <name>` instead of `--sat-provider`.
+- **Check the licence yourself before publishing.** Sentinel-2 cloudless mosaics are published under different licences per provider and per year. EOX lists the 2016 mosaic as CC BY 4.0 and the later years as CC BY-NC-SA 4.0 (non-commercial); some tile services forbid bulk downloading altogether. Read the provider's current licence and terms of service. If you leave out `--sat-licence` or `--sat-attribution`, the manifest records the licence as `UNVERIFIED`.
 - The download is rate-limited (`--sat-rate`, default 4 requests/s) and refuses jobs above `--sat-max-tiles`.
 
 Running the same command again is safe. Finished outputs with unchanged inputs are skipped. Interrupted downloads resume from `data/cache`.
@@ -138,8 +138,8 @@ Before going public, check the current licence pages of Copernicus DEM, ESA Worl
 
 ## 10. Known limitations and honest notes
 
-- **Geofabrik** (OSM extracts), **osmdata.openstreetmap.de** (water polygons) and **naciscdn.org** (Natural Earth) need direct internet access. They require no credentials. If your network blocks them, download the files elsewhere and pass `--osm-file`, `--water-polygons-file` and `--natural-earth-file`.
+- **Geofabrik** (OSM extracts), **osmdata.openstreetmap.de** (water polygons) and **naciscdn.org** (Natural Earth) need direct internet access. They require no credentials. If your network blocks them, download the files elsewhere into `data/inputs/` and pass their names with `--osm-file`, `--water-polygons-file` and `--natural-earth-file`.
 - **Copernicus DEM** comes from the public AWS bucket, with no account needed. Some tiles are missing from the public GLO-30 release: open ocean, and a few countries the provider withholds. Missing tiles become NoData, never invented heights, and are listed under `missing_tiles` in the manifest.
 - **Copernicus is a surface model.** It includes buildings and tree canopy. Heights are relative to the EGM2008 geoid.
-- **The SRTM fallback** uses AWS Terrain Tiles, a blend based mostly on SRTM. The original NASA SRTMGL1 tiles need a free NASA Earthdata login. Download those yourself and use `--dem-file`.
+- **The SRTM fallback** uses AWS Terrain Tiles, a blend based mostly on SRTM. The original NASA SRTMGL1 tiles need a free NASA Earthdata login. Download those yourself into `data/inputs/` and use `--dem-file`.
 - **Hillshade and satellite at low zoom:** for very small areas they start at a higher zoom, because the lowest levels would be smaller than one tile.

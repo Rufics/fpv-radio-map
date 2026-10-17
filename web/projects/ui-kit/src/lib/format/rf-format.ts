@@ -68,7 +68,7 @@ export class RfFormat {
 
   /** Replace ASCII hyphen-minus in a number string with U+2212. */
   static minus(text: string): string {
-    return text.replace(/^-/, MINUS).replace(/([\s(])-(?=\d)/g, `$1${MINUS}`);
+    return text.replace(/^-/, MINUS).replaceAll(/([\s(])-(?=\d)/g, `$1${MINUS}`);
   }
 
   /** Round for display. Returns an em dash for missing values. */

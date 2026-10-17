@@ -124,7 +124,9 @@ std::vector<RoutePoint> exportVertices(const Route& route, double stepM) {
     for (const Leg& leg : route.legs()) {
         const RoutePoint start = route.at(leg.startM);
         out.push_back({leg.from.position, leg.from.aglM, leg.index, start.courseDeg});
-        for (double s = stepM; s < leg.lengthM; s += stepM) out.push_back(route.at(leg.startM + s));
+        for (std::size_t i = 1; static_cast<double>(i) * stepM < leg.lengthM; ++i) {
+            out.push_back(route.at(leg.startM + static_cast<double>(i) * stepM));
+        }
     }
     if (!route.legs().empty()) {
         const Leg& last = route.legs().back();

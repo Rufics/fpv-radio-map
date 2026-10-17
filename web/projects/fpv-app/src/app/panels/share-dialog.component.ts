@@ -215,7 +215,7 @@ export class ShareDialogComponent implements OnInit {
   }
 
   protected setPin(role: Role, v: string): void {
-    this.pins.update((p) => ({ ...p, [role]: v.replace(/\D/g, '').slice(0, 6) }));
+    this.pins.update((p) => ({ ...p, [role]: v.replaceAll(/\D/g, '').slice(0, 6) }));
     this.pinError.update((e) => ({ ...e, [role]: undefined }));
   }
 

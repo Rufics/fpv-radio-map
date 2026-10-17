@@ -20,7 +20,8 @@ inline TerrainProfile makeProfile(const std::vector<std::pair<double, double>>& 
 /// Flat ground at `ground` with one spike of height `top` at distance `at`, length `length`.
 inline TerrainProfile spikeProfile(double length, double at, double ground, double top, double step = 30.0) {
     std::vector<std::pair<double, double>> pts;
-    for (double d = 0.0; d < length; d += step) {
+    for (std::size_t i = 0; static_cast<double>(i) * step < length; ++i) {
+        const double d = static_cast<double>(i) * step;
         if (d < at && d + step > at) {
             pts.push_back({d, ground});
             pts.push_back({at, top});

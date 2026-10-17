@@ -26,7 +26,8 @@ std::optional<double> ClearanceSolver::requiredAgl(const rfcore::TerrainProfile&
     if (profile.samples().size() < 3) return 0.0;  // no interior point can obstruct
     double prev = 0.0;
     if (clearance(profile, pilotAgl, 0.0) >= fraction_) return 0.0;
-    for (double h = step_; h <= maxAgl + 1e-9; h += step_) {
+    for (std::size_t i = 1; static_cast<double>(i) * step_ <= maxAgl + 1e-9; ++i) {
+        const double h = static_cast<double>(i) * step_;
         if (clearance(profile, pilotAgl, h) >= fraction_) {
             double lo = prev, hi = h;
             while (hi - lo > 1e-3) {

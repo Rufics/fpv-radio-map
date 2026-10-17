@@ -169,7 +169,7 @@ export class PinEntryPage implements OnInit {
   }
 
   protected onType(v: string): void {
-    this.pin.set(v.replace(/\D/g, '').slice(0, 6));
+    this.pin.set(v.replaceAll(/\D/g, '').slice(0, 6));
     this.error.set(null);
     const el = this.pinInput()?.nativeElement;
     if (el && el.value !== this.pin()) el.value = this.pin();

@@ -37,7 +37,7 @@ json analyze(const json& request, const IWorld& world, const std::map<std::strin
         const Route route(mission, world);
         // Sample points: regular spacing plus every leg end, skipping the pilot's own position.
         std::vector<double> at;
-        for (double s = stepM; s < route.length(); s += stepM) at.push_back(s);
+        for (std::size_t i = 1; static_cast<double>(i) * stepM < route.length(); ++i) at.push_back(static_cast<double>(i) * stepM);
         for (const Leg& leg : route.legs()) at.push_back(leg.startM + leg.lengthM);
         std::sort(at.begin(), at.end());
         at.erase(std::unique(at.begin(), at.end(), [](double a, double b) { return std::abs(a - b) < 1e-6; }), at.end());

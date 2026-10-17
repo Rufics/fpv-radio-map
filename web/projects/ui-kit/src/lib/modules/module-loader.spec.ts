@@ -24,12 +24,12 @@ describe('ModuleUiLoader', () => {
   beforeEach(() => {
     bundles = {};
     imported = [];
-    const importer: ModuleImporter = async (url) => {
+    const importer: ModuleImporter = (url) => {
       imported.push(url);
       const b = bundles[new URL(url).pathname];
-      if (!b) throw new Error(`404 ${url}`);
-      if (b instanceof Error) throw b;
-      return b;
+      if (!b) return Promise.reject(new Error(`404 ${url}`));
+      if (b instanceof Error) return Promise.reject(b);
+      return Promise.resolve(b);
     };
     TestBed.configureTestingModule({
       providers: [

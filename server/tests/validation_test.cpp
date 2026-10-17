@@ -113,11 +113,11 @@ TEST(ConfigTest, EnvironmentOverridesTheFile) {
     }
     const Config c = Config::load(file, {{"RFMAP_ADMIN_TOKEN", "from-env"},
                                          {"RFMAP__CACHE__DEMBLOCKSMB", "32"},
-                                         {"RFMAP__WEATHER__BASEURL", "http://open-meteo:8080"},
+                                         {"RFMAP__WEATHER__BASEURL", "https://weather.example"},
                                          {"RFMAP_PORT", "8181"}});
     EXPECT_EQ(c.adminToken, "from-env");
     EXPECT_EQ(c.cache.demBlocksMb, 32u);
-    EXPECT_EQ(c.weather.baseUrl, "http://open-meteo:8080");
+    EXPECT_EQ(c.weather.baseUrl, "https://weather.example");
     EXPECT_EQ(c.server.port, 8181);
     EXPECT_EQ(c.raw["admin"]["token"], "(set)");  // never echoed
     std::filesystem::remove(file);

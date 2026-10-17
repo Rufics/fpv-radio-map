@@ -1,10 +1,10 @@
 """satellite: a Sentinel-2 cloudless mosaic -> raster PMTiles.
 
-The source is configurable because licences differ between mosaics:
-  * an XYZ/WMTS tile URL template containing {z} {x} {y} (or {-y} for TMS rows):
-    tiles are copied byte-for-byte into the archive (no re-encoding);
-  * any GDAL-readable raster (local path, or http(s) URL of a GeoTIFF/COG/VRT):
-    reprojected to Web Mercator and cut into JPEG tiles.
+The source is chosen by the operator because licences differ between mosaics:
+  * --sat-provider: one of the XYZ mosaics in sources.SATELLITE_PROVIDERS; tiles are copied
+    byte-for-byte into the archive (no re-encoding);
+  * --sat-file: a GDAL-readable raster (GeoTIFF/COG/VRT) in /data/inputs, reprojected to Web
+    Mercator and cut into JPEG tiles. Any other mosaic is downloaded into /data/inputs first.
 No source is enabled by default: the operator must pick one, check its licence
 and terms of use (bulk tile downloading is forbidden by many tile services),
 and pass --sat-licence / --sat-attribution.
@@ -21,19 +21,20 @@ import urllib.request
 from pathlib import Path
 
 from . import sources
-from .common import (USER_AGENT, BBox, BuildError, Dirs, existing_file, fresh_dir, https_url, install,
-                     is_up_to_date, log, mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors,
-                     pmtiles_header, public_host, run, tile_aligned_extent, warn, write_meta, zoom_resolution)
+from .common import (USER_AGENT, BBox, BuildError, Dirs, fresh_dir, input_file, install, is_up_to_date, log,
+                     mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors, pmtiles_header, run,
+                     tile_aligned_extent, warn, write_meta, zoom_resolution)
 
 OUT_NAME = "satellite.pmtiles"
 
 
 def add_arguments(p) -> None:
     g = p.add_argument_group("satellite")
-    g.add_argument("--sat-source", type=satellite_source,
-                   help="XYZ template, e.g. 'https://host/path/{z}/{y}/{x}.jpg', or a GDAL raster "
-                        "path/URL (GeoTIFF/COG/VRT). Required for the satellite step.")
-    g.add_argument("--sat-name", default="Sentinel-2 cloudless mosaic", help="human-readable source name")
+    g.add_argument("--sat-provider", choices=sorted(sources.SATELLITE_PROVIDERS),
+                   help="XYZ mosaic to download tiles from (see README for each one's licence)")
+    g.add_argument("--sat-file", type=input_file,
+                   help="a GDAL raster (GeoTIFF/COG/VRT) in /data/inputs, for any other mosaic")
+    g.add_argument("--sat-name", default=None, help="human-readable source name (default: the provider's)")
     g.add_argument("--sat-licence", default=None, help="licence of the chosen mosaic, as verified by you")
     g.add_argument("--sat-attribution", default=None, help="attribution text required by the mosaic licence")
     g.add_argument("--sat-minzoom", type=int, default=6)
@@ -41,13 +42,6 @@ def add_arguments(p) -> None:
     g.add_argument("--sat-rate", type=float, default=4.0, help="XYZ mode: max requests per second (default 4)")
     g.add_argument("--sat-max-tiles", type=int, default=50000, help="XYZ mode: refuse jobs above this tile count")
     g.add_argument("--sat-jpeg-quality", type=int, default=85, help="raster mode: JPEG quality")
-
-
-def satellite_source(text: str) -> str:
-    """argparse type: an https URL (XYZ template or raster), or an existing local raster file."""
-    if "://" in text:
-        return https_url(text)
-    return str(existing_file(text))
 
 
 def _tile_range(bbox: BBox, z: int) -> tuple[int, int, int, int]:
@@ -79,8 +73,7 @@ def _open_mbtiles(path: Path) -> sqlite3.Connection:
 
 
 def _xyz(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
-    tpl = args.sat_source
-    log(f"XYZ: tiles come from {public_host(tpl)}")
+    tpl = _provider(args)["template"]
     zmin, zmax = args.sat_minzoom, args.sat_maxzoom
     jobs = []
     for z in range(zmin, zmax + 1):
@@ -150,10 +143,7 @@ def _xyz(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
 
 
 def _raster(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
-    src = args.sat_source
-    if src.startswith("https://"):
-        public_host(src)
-        src = "/vsicurl/" + src
+    src = str(args.sat_file)
     from . import raster
     i = raster.info(src)
     bands = i["bands"]
@@ -166,8 +156,7 @@ def _raster(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
     merc = work / "sat3857.tif"
     run(["gdalwarp", "-t_srs", "EPSG:3857", "-r", "cubic", "-tr", repr(res), repr(res), "-te", *map(repr, te),
          "-multi", "-wo", "NUM_THREADS=ALL_CPUS", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE",
-         "-co", "BIGTIFF=IF_SAFER", src, str(merc)],
-        env={"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR", "GDAL_HTTP_MAX_RETRY": "5"})
+         "-co", "BIGTIFF=IF_SAFER", src, str(merc)])
     rgb = work / "sat-rgb.vrt"
     tr = ["gdal_translate", "-of", "VRT", "-b", "1", "-b", "2", "-b", "3"]
     if bands[0]["type"] != "Byte":
@@ -181,23 +170,31 @@ def _raster(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
     return {"mode": "raster", "format": "jpg", "resampling": "cubic (display only)"}
 
 
+def _provider(args) -> dict:
+    """The provider entry the operator chose; the template is the table's, never the typed text."""
+    return next(p for key, p in sources.SATELLITE_PROVIDERS.items() if key == args.sat_provider)
+
+
 def build(args, dirs: Dirs) -> None:
     if not args.bbox:
         raise BuildError("satellite needs --bbox")
-    if not args.sat_source:
-        raise BuildError("satellite needs --sat-source (see README: pick a mosaic and check its licence)")
+    if bool(args.sat_provider) == bool(args.sat_file):
+        raise BuildError("satellite needs exactly one of --sat-provider or --sat-file "
+                         "(see README: pick a mosaic and check its licence)")
     bbox = BBox.parse(args.bbox)
     if not (0 <= args.sat_minzoom <= args.sat_maxzoom <= 18):
         raise BuildError("need 0 <= --sat-minzoom <= --sat-maxzoom <= 18")
-    xyz = "{z}" in args.sat_source
-    params = {"bbox": str(bbox), "source": args.sat_source, "zoom": [args.sat_minzoom, args.sat_maxzoom],
+    xyz = bool(args.sat_provider)
+    source = _provider(args)["template"] if xyz else f"file:{args.sat_file.name}"
+    sat_name = args.sat_name or (_provider(args)["name"] if xyz else args.sat_file.name)
+    params = {"bbox": str(bbox), "source": source, "zoom": [args.sat_minzoom, args.sat_maxzoom],
               "licence": args.sat_licence, "attribution": args.sat_attribution}
     if is_up_to_date(dirs, OUT_NAME, params, args.force):
         return
     if not args.sat_licence or not args.sat_attribution:
         warn(sources.SATELLITE_UNVERIFIED)
 
-    key = hashlib.sha256(f"{args.sat_source}|{bbox}|{args.sat_minzoom}|{args.sat_maxzoom}".encode()).hexdigest()[:12]
+    key = hashlib.sha256(f"{source}|{bbox}|{args.sat_minzoom}|{args.sat_maxzoom}".encode()).hexdigest()[:12]
     if xyz:
         # Kept between runs so an interrupted download resumes.
         work = dirs.cache / "satellite-xyz" / key
@@ -209,15 +206,15 @@ def build(args, dirs: Dirs) -> None:
         mb = work / "satellite.mbtiles"
         detail = _raster(args, dirs, bbox, mb)
 
-    attribution = args.sat_attribution or f"{args.sat_name} (attribution not set)"
-    mbtiles_set_metadata(mb, {"attribution": attribution, "description": args.sat_name})
+    attribution = args.sat_attribution or f"{sat_name} (attribution not set)"
+    mbtiles_set_metadata(mb, {"attribution": attribution, "description": sat_name})
     tmp = dirs.out / f".tmp-{OUT_NAME}"
     mbtiles_to_pmtiles(mb, tmp)
     install(tmp, dirs, OUT_NAME)
     h = pmtiles_header(dirs.out / OUT_NAME)
     write_meta(dirs, OUT_NAME, params, {
         "kind": "raster-tiles",
-        "source": f"{args.sat_name}: {args.sat_source}",
+        "source": f"{sat_name}: {source}",
         "licence": args.sat_licence or sources.SATELLITE_UNVERIFIED,
         "attribution": attribution,
         "licence_verified_by_operator": bool(args.sat_licence and args.sat_attribution),

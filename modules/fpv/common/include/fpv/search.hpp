@@ -79,10 +79,12 @@ public:
         const LatLon sw{s, w};
         const double height = world.inverse(sw, {n, w}).distanceM;
         std::vector<LatLon> out;
-        for (double dy = cellM / 2.0; dy < height; dy += cellM) {
+        for (std::size_t row = 0; (static_cast<double>(row) + 0.5) * cellM < height; ++row) {
+            const double dy = (static_cast<double>(row) + 0.5) * cellM;
             const LatLon rowStart = world.direct(sw, 0.0, dy).point;
             const double width = world.inverse(rowStart, {rowStart.lat, e}).distanceM;
-            for (double dx = cellM / 2.0; dx < width; dx += cellM) {
+            for (std::size_t col = 0; (static_cast<double>(col) + 0.5) * cellM < width; ++col) {
+                const double dx = (static_cast<double>(col) + 0.5) * cellM;
                 const LatLon p = world.direct(rowStart, 90.0, dx).point;
                 if (contains(p)) {
                     out.push_back(p);
@@ -106,7 +108,7 @@ private:
 inline std::vector<RoutePoint> routeSamples(const Route& route, double stepM) {
     std::vector<RoutePoint> out;
     const double outLen = route.outboundLength();
-    for (double s = stepM; s < outLen; s += stepM) out.push_back(route.at(s));
+    for (std::size_t i = 1; static_cast<double>(i) * stepM < outLen; ++i) out.push_back(route.at(static_cast<double>(i) * stepM));
     out.push_back(route.at(outLen));
     return out;
 }

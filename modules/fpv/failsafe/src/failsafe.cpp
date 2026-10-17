@@ -22,7 +22,8 @@ std::optional<LossPoint> FailsafeAnalyzer::firstLoss(const Route& route) const {
     // Outbound only: on the way back the drone is coming home anyway.
     const double out = route.outboundLength();
     double good = 0.0;
-    for (double s = std::min(s_.stepM, out);; s = std::min(out, s + s_.stepM)) {
+    for (std::size_t i = 1;; ++i) {
+        const double s = std::min(out, static_cast<double>(i) * s_.stepM);
         const RoutePoint p = route.at(s);
         if (link_.marginDb(p.position, p.aglM) < 0.0) {
             double lo = good, hi = s;
@@ -61,7 +62,8 @@ RthPlan FailsafeAnalyzer::planRth(const Mission& mission, const Route& route, co
     }
 
     // Where control comes back on the way home.
-    for (double d = 0.0; d <= home.distanceM; d += s_.stepM) {
+    for (std::size_t i = 0; static_cast<double>(i) * s_.stepM <= home.distanceM; ++i) {
+        const double d = static_cast<double>(i) * s_.stepM;
         const LatLon p = world_.direct(loss.point.position, home.azimuth1Deg, d).point;
         const double agl = plan.cruiseMslM - world_.groundMsl(p);
         if (agl > 0.0 && link_.marginDb(p, agl) >= 0.0) {

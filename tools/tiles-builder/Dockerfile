@@ -91,12 +91,10 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     cp -r fonts/* /opt/fonts/; cd /; rm -rf /tmp/fonts; \
     ls /opt/fonts
 
-ENV RFMAP_PLANETILER_JAR=/opt/planetiler/planetiler.jar \
-    RFMAP_FONTS_DIR=/opt/fonts \
+ENV RFMAP_FONTS_DIR=/opt/fonts \
     RFMAP_PLANETILER_VERSION=${PLANETILER_VERSION} \
     RFMAP_PMTILES_VERSION=${PMTILES_VERSION} \
     RFMAP_FONTS_COMMIT=${FONTS_COMMIT} \
-    RFMAP_DATA=/data \
     PYTHONPATH=/opt/rfmap
 
 COPY rfmap_tiles /opt/rfmap/rfmap_tiles
