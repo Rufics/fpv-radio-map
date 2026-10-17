@@ -176,7 +176,12 @@ registry on 2026-10-17:
 | `postgis/postgis` | `16-3.4` |
 | `ghcr.io/open-meteo/open-meteo` | `1.7.0` |
 
-To update one, resolve the tag's current digest yourself, for example with
+Dependabot (`.github/dependabot.yml`) opens pull requests for new digests and for minor and
+patch tags. For base images it stays on long-term-support lines: Ubuntu LTS, Node.js LTS (even
+majors) and nginx stable (even minors). Other major updates are not proposed; move to them by
+hand.
+
+To update one by hand, resolve the tag's current digest yourself, for example with
 `docker buildx imagetools inspect node:24-bookworm-slim`. Replace the digest, rebuild, and run
 the test suite (`ctest` in a build tree) before you deploy.
 
