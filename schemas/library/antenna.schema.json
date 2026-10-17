@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfmap.local/schemas/library/antenna.schema.json",
+  "title": "Antenna",
+  "type": "object",
+  "allOf": [{ "$ref": "common.schema.json#/$defs/entryMeta" }],
+  "required": ["type", "gainDbi", "polarization", "bandHz", "source"],
+  "properties": {
+    "type": { "enum": ["dipole", "monopole", "patch", "helical", "yagi", "omni-collinear", "other"] },
+    "gainDbi": { "type": "number" },
+    "polarization": { "enum": ["linear-vertical", "linear-horizontal", "rhcp", "lhcp"] },
+    "bandHz": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+    "beamwidthDeg": { "type": "object", "properties": { "horizontal": { "type": "number" }, "vertical": { "type": "number" } } },
+    "feederLossDb": { "type": "number", "minimum": 0, "default": 0 },
+    "source": { "$ref": "common.schema.json#/$defs/source" }
+  },
+  "unevaluatedProperties": false
+}

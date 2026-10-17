@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfmap.local/schemas/library/battery.schema.json",
+  "title": "Battery pack",
+  "type": "object",
+  "allOf": [{ "$ref": "common.schema.json#/$defs/entryMeta" }],
+  "required": ["chemistry", "cellsSeries", "capacityAh", "nominalCellVoltage", "usableFraction", "source"],
+  "properties": {
+    "chemistry": { "enum": ["lipo", "li-ion", "lihv"] },
+    "cellsSeries": { "type": "integer", "minimum": 1 },
+    "capacityAh": { "type": "number", "exclusiveMinimum": 0 },
+    "nominalCellVoltage": { "type": "number", "exclusiveMinimum": 0 },
+    "usableFraction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "Share of nominal energy the pilot plans to use; the rest is the reserve." },
+    "temperatureDerating": {
+      "description": "Measured capacity factor by cell temperature. Values between points are interpolated linearly and the result says so.",
+      "type": "array",
+      "items": { "type": "object", "required": ["celsius", "factor"], "properties": { "celsius": { "type": "number" }, "factor": { "type": "number", "exclusiveMinimum": 0, "maximum": 1.2 } } }
+    },
+    "source": { "$ref": "common.schema.json#/$defs/source" }
+  },
+  "unevaluatedProperties": false
+}

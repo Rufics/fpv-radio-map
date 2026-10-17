@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rfmap.local/schemas/library/drone.schema.json",
+  "title": "Drone flight profile",
+  "type": "object",
+  "allOf": [{ "$ref": "common.schema.json#/$defs/entryMeta" }],
+  "required": ["massKg", "cruiseAirspeedMps", "cruisePowerW", "climb", "source"],
+  "properties": {
+    "massKg": { "type": "number", "exclusiveMinimum": 0 },
+    "cruiseAirspeedMps": { "type": "number", "exclusiveMinimum": 0 },
+    "cruisePowerW": { "type": "number", "exclusiveMinimum": 0, "description": "Measured electrical power at cruise airspeed, sea-level ISA density." },
+    "powerDensityExponent": { "type": "number", "default": 0, "description": "Measured exponent n in P = P0 (rho0/rho)^n; 0 means density is not applied. Never assumed." },
+    "climb": {
+      "type": "object",
+      "required": ["method"],
+      "properties": {
+        "method": { "enum": ["potential-energy", "measured"] },
+        "efficiency": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "description": "potential-energy: electrical-to-lift efficiency, measured." },
+        "climbPowerW": { "type": "number", "description": "measured: power during climb at climbRateMps." },
+        "climbRateMps": { "type": "number" }
+      }
+    },
+    "defaultRadios": { "type": "object", "properties": { "control": { "type": "string" }, "video": { "type": "string" } } },
+    "source": { "$ref": "common.schema.json#/$defs/source" }
+  },
+  "unevaluatedProperties": false
+}
