@@ -38,7 +38,9 @@ export function parseJunit(xml) {
   return { total, failed, skipped, passed: total - failed.length - skipped };
 }
 
-export function buildReport(dir, jobs, context = {}) {
+export function buildReport(dir, allJobs, context = {}) {
+  // "changes" only decides which jobs run; it is not a result worth a row.
+  const jobs = Object.fromEntries(Object.entries(allJobs).filter(([name]) => name !== 'changes'));
   const lines = [MARKER, '## Test report', ''];
   const files = (() => {
     try {
@@ -56,6 +58,8 @@ export function buildReport(dir, jobs, context = {}) {
       failures.push(...r.failed.map((n) => `${LABELS[f] ?? f}: ${n}`));
     }
     lines.push('');
+  } else if (Object.values(jobs).length && Object.values(jobs).every((v) => v?.result === 'skipped')) {
+    lines.push('Nothing to build: this change touches only files the tests do not cover, such as docs.', '');
   } else {
     lines.push('No test results were uploaded; see the jobs below.', '');
   }

@@ -1,5 +1,7 @@
 # Tests every pull request and posts the results to it. main.yml (every push to main) and
 # release.yml (the release button) call this same workflow, so they run exactly these checks.
+# On a pull request only the parts its files can affect are built: a change to docs alone builds
+# nothing. Skipped jobs still report, so the required checks pass without running.
 name: CI
 
 on:
@@ -14,8 +16,48 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: Changed parts
+    runs-on: ubuntu-24.04
+    outputs:
+      cpp: ${{ steps.scope.outputs.cpp }}
+      web: ${{ steps.scope.outputs.web }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # A file outside the known lists builds everything, so a new folder is never left untested.
+      - id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
+            echo "cpp=true" >> "$GITHUB_OUTPUT"; echo "web=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          cpp=false; web=false
+          for f in $(git diff --name-only "$BASE...$HEAD"); do
+            case "$f" in
+              docs/*|*.md|LICENSE|.github/ISSUE_TEMPLATE/*|.github/DISCUSSION_TEMPLATE/*|.github/dependabot.yml) ;;
+              .github/workflows/pr-title.yml|.github/workflows/wiki.yml|tools/wiki/*|.githooks/*) ;;
+              .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*) ;;
+              .dockerignore|.gitignore) ;;
+              web/*) web=true ;;
+              schemas/*|.github/workflows/ci.yml) cpp=true; web=true ;;
+              core/*|platform/*|modules/*|server/*|examples/*|data/*|CMakeLists.txt) cpp=true ;;
+              *) echo "No rule for $f: building everything."; cpp=true; web=true ;;
+            esac
+          done
+          echo "C++: $cpp, web: $web"
+          echo "cpp=$cpp" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+
   cpp:
     name: C++ build and tests
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,6 +89,8 @@ jobs:
 
   web:
     name: Web build and tests
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -81,7 +125,7 @@ jobs:
   report:
     name: Test report
     if: always()
-    needs: [cpp, web]
+    needs: [changes, cpp, web]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

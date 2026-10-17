@@ -80,6 +80,10 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
 - the pull request title against Conventional Commits (its own check, re-run when the title is edited).
 
+Only the parts a pull request can affect are built: changes to `web/` run the web job, changes to
+the C++ tree run the C++ job, and changes to docs alone run neither. A file the rules in `ci.yml`
+do not know builds everything. Pushes to `main` that only touch docs skip the image build.
+
 Run the same locally. On Ubuntu 24.04 the build needs:
 
 ```
