@@ -79,6 +79,10 @@ fpv_module(best-launch fpv_best_launch
   SOURCES best-launch/src/best_launch.cpp
   TESTS best-launch/tests/best_launch_test.cpp)
 
+fpv_module(core fpv_core
+  SOURCES core/src/core.cpp
+  TESTS core/tests/core_test.cpp)
+
 fpv_module(relay fpv_relay
   SOURCES relay/src/relay.cpp
   TESTS relay/tests/relay_test.cpp)

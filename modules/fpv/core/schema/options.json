@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FPV core options (per mission)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "compare": {
+      "type": "object",
+      "required": ["patch"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "maxLength": 60 },
+        "patch": { "type": "object", "description": "JSON merge patch (RFC 7396) applied to the mission to make scenario B." }
+      }
+    },
+    "stepM": { "type": "number", "minimum": 20, "maximum": 5000, "default": 100 },
+    "export": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "enum": ["kml", "gpx"] }
+    },
+    "exportStepM": { "type": "number", "minimum": 1, "maximum": 5000, "default": 50 },
+    "kmlAltitude": { "enum": ["relativeToGround", "absolute"], "default": "relativeToGround" }
+  }
+}
