@@ -50,6 +50,13 @@ SRTM = {
              "files with --dem-file instead.",
 }
 
+DEM_FILE = {
+    "source": "operator-supplied DEM files",
+    "licence": "as supplied by the operator",
+    "attribution": "set by the operator",
+    "vertical_datum": "as supplied",
+}
+
 # --- ESA WorldCover 10 m (clutter) -------------------------------------------
 WORLDCOVER_URL = ("https://esa-worldcover.s3.eu-central-1.amazonaws.com/{version}/{year}/map/"
                   "ESA_WorldCover_10m_{year}_{version}_{tile}_Map.tif")
@@ -68,24 +75,37 @@ WORLDCOVER = {
 
 # --- Satellite ----------------------------------------------------------------
 SATELLITE_UNVERIFIED = ("UNVERIFIED: the operator must check the licence and the tile-service terms of "
-                        "the chosen mosaic before publishing (non-commercial use) and pass "
-                        "--sat-licence / --sat-attribution.")
+                        "the chosen mosaic before publishing (non-commercial use) and confirm it with "
+                        "--sat-licence-checked.")
 
-# XYZ mosaics the satellite step may download from. The licence notes are what EOX publishes;
-# the operator still checks the current licence and terms and passes --sat-licence / --sat-attribution.
+# The mosaics the satellite step knows. Name, licence and attribution always come from this table,
+# never from the command line; a mosaic that is not listed here is added here. Entries with a
+# template are XYZ services the step may download from (--sat-provider); every entry can also
+# describe a raster the operator put in /data/inputs (--sat-file with --sat-mosaic).
+# The licence notes are what the publishers state; the operator still checks the current terms.
 _EOX = "https://tiles.maps.eox.at/wmts/1.0.0/{layer}/default/g/{{z}}/{{y}}/{{x}}.jpg"
-SATELLITE_PROVIDERS = {
+_EOX_ATTRIBUTION = ("Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH "
+                    "(Contains modified Copernicus Sentinel data {data})")
+SATELLITE_MOSAICS = {
     "eox-s2cloudless-2016": {
         "name": "Sentinel-2 cloudless 2016 by EOX",
         "template": _EOX.format(layer="s2cloudless_3857"),
-        "licence_note": "CC BY 4.0",
+        "licence": "CC BY 4.0",
+        "attribution": _EOX_ATTRIBUTION.format(data="2016 & 2017"),
     },
     **{
         f"eox-s2cloudless-{year}": {
             "name": f"Sentinel-2 cloudless {year} by EOX",
             "template": _EOX.format(layer=f"s2cloudless-{year}_3857"),
-            "licence_note": "CC BY-NC-SA 4.0 (non-commercial)",
+            "licence": "CC BY-NC-SA 4.0 (non-commercial)",
+            "attribution": _EOX_ATTRIBUTION.format(data=year),
         }
         for year in range(2018, 2024)
     },
+    "copernicus-sentinel-2": {
+        "name": "Copernicus Sentinel-2 imagery",
+        "licence": "Copernicus Sentinel data terms: free, full and open access; attribution required",
+        "attribution": "Contains modified Copernicus Sentinel data {year}",
+    },
 }
+SATELLITE_PROVIDERS = {key: m for key, m in SATELLITE_MOSAICS.items() if "template" in m}

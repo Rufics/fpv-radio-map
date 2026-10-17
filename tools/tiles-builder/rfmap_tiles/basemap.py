@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 
 from . import sources
-from .common import (BBox, BuildError, Dirs, download, fetch_text, fresh_dir, heap_size, input_file, install,
+from .common import (BBox, BuildError, Dirs, download, fetch_text, fresh_dir, heap_size, input_file, inputs_entry, install,
                      is_up_to_date, log, pmtiles_header, run, write_meta, warn)
 
 OUT_NAME = "basemap.pmtiles"
@@ -70,7 +70,8 @@ def _geofabrik_url(region: str) -> str:
 def _resolve_osm(args, dirs: Dirs) -> tuple[Path, str]:
     """Return (local pbf path, source description)."""
     if args.osm_file:
-        return args.osm_file, f"file:{args.osm_file.name}"
+        pbf = inputs_entry(args.osm_file.name)
+        return pbf, f"file:{pbf.name}"
     if not args.region:
         raise BuildError("basemap needs --region or --osm-file")
     url = _geofabrik_url(args.region.strip("/"))
@@ -96,15 +97,17 @@ def _resolve_osm(args, dirs: Dirs) -> tuple[Path, str]:
 def build(args, dirs: Dirs) -> None:
     pbf, osm_source = _resolve_osm(args, dirs)
     bbox: BBox | None = None if args.basemap_full_extract or not args.bbox else BBox.parse(args.bbox)
-    if not 0 <= args.basemap_maxzoom <= 16:
+    maxzoom = int(args.basemap_maxzoom)
+    if not 0 <= maxzoom <= 16:
         raise BuildError("--basemap-maxzoom must be 0..16")
+    threads = int(args.threads) if args.threads else None
 
     params = {
         "osm_source": osm_source,
         "osm_size": pbf.stat().st_size,
         "osm_mtime": int(pbf.stat().st_mtime),
         "bounds": str(bbox) if bbox else "extract",
-        "maxzoom": args.basemap_maxzoom,
+        "maxzoom": maxzoom,
     }
     if is_up_to_date(dirs, OUT_NAME, params, args.force):
         return
@@ -117,7 +120,7 @@ def build(args, dirs: Dirs) -> None:
             ("natural_earth", args.natural_earth_file, "--natural-earth-file", sources.NATURAL_EARTH_URL),
             ("lake_centerlines", args.lake_centerlines_file, "--lake-centerlines-file", sources.LAKE_CENTERLINES_URL)):
         if given:
-            aux[key] = given
+            aux[key] = inputs_entry(given.name)
         else:
             try:
                 aux[key] = download(url, src_dir / url.rsplit("/", 1)[1])
@@ -140,14 +143,14 @@ def build(args, dirs: Dirs) -> None:
         f"--lake-centerlines-path={lakes}",
         f"--tmpdir={work}",
         f"--output={tmp_out}",
-        f"--maxzoom={args.basemap_maxzoom}",
-        f"--render-maxzoom={args.basemap_maxzoom}",
+        f"--maxzoom={maxzoom}",
+        f"--render-maxzoom={maxzoom}",
         "--force",
     ]
     if bbox:
         cmd.append(f"--bounds={bbox}")
-    if args.threads:
-        cmd.append(f"--threads={args.threads}")
+    if threads:
+        cmd.append(f"--threads={threads}")
     run(cmd)
     install(tmp_out, dirs, OUT_NAME)
     header = pmtiles_header(dirs.out / OUT_NAME)
@@ -159,8 +162,8 @@ def build(args, dirs: Dirs) -> None:
         "attribution": sources.OSM["attribution"],
         "attribution_html": sources.OSM["attribution_html"],
         "bbox": bbox.as_list() if bbox else _header_bbox(header),
-        "zoom": [header.get("minzoom", 0), header.get("maxzoom", args.basemap_maxzoom)],
-        "resolution": f"vector tiles z{header.get('minzoom', 0)}-{header.get('maxzoom', args.basemap_maxzoom)}",
+        "zoom": [header.get("minzoom", 0), header.get("maxzoom", maxzoom)],
+        "resolution": f"vector tiles z{header.get('minzoom', 0)}-{header.get('maxzoom', maxzoom)}",
     })
     shutil.rmtree(work, ignore_errors=True)
 

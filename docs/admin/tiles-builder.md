@@ -57,13 +57,12 @@ You can also run the steps one at a time with the same options: `basemap`, `dem`
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder satellite \
     --bbox 34.8,48.3,35.4,48.7 \
     --sat-provider eox-s2cloudless-2023 \
-    --sat-licence '<licence you checked>' \
-    --sat-attribution '<exact attribution text the licence requires>'
+    --sat-licence-checked
 ```
 
 - `--sat-provider` takes one of the built-in mosaics: `eox-s2cloudless-2016` and `eox-s2cloudless-2018` to `eox-s2cloudless-2023` (Sentinel-2 cloudless by EOX). The build downloads tiles only from this list, never from a URL you type.
-- For any other mosaic, download it as a GeoTIFF/COG into `data/inputs/` and pass `--sat-file <name>` instead of `--sat-provider`.
-- **Check the licence yourself before publishing.** Sentinel-2 cloudless mosaics are published under different licences per provider and per year. EOX lists the 2016 mosaic as CC BY 4.0 and the later years as CC BY-NC-SA 4.0 (non-commercial); some tile services forbid bulk downloading altogether. Read the provider's current licence and terms of service. If you leave out `--sat-licence` or `--sat-attribution`, the manifest records the licence as `UNVERIFIED`.
+- For a mosaic you downloaded yourself, put the GeoTIFF/COG in `data/inputs/` and pass `--sat-file <name> --sat-mosaic <mosaic>` instead of `--sat-provider`. `--sat-mosaic` takes one of the EOX names above or `copernicus-sentinel-2` (any Sentinel-2 imagery, together with `--sat-data-year <year>`). The name, licence note and attribution come from the mosaic table in `rfmap_tiles/sources.py`; to use a mosaic that is not listed, add it there.
+- **Check the licence yourself before publishing.** Sentinel-2 cloudless mosaics are published under different licences per provider and per year. EOX lists the 2016 mosaic as CC BY 4.0 and the later years as CC BY-NC-SA 4.0 (non-commercial); some tile services forbid bulk downloading altogether. Read the provider's current licence and terms of service, then pass `--sat-licence-checked`. Without it the manifest records the licence as `UNVERIFIED`.
 - The download is rate-limited (`--sat-rate`, default 4 requests/s) and refuses jobs above `--sat-max-tiles`.
 
 Running the same command again is safe. Finished outputs with unchanged inputs are skipped. Interrupted downloads resume from `data/cache`.
@@ -122,7 +121,7 @@ These are required by the data licences. The style already sets each one on its 
 - **© OpenMapTiles © OpenStreetMap contributors**: OSM data under ODbL 1.0, linked to <https://www.openstreetmap.org/copyright>; OpenMapTiles schema under CC BY 4.0.
 - **Copernicus DEM GLO-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved**
 - **© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium** (CC BY 4.0). The clutter layer comes from this data.
-- **Satellite:** exactly the text you passed with `--sat-attribution`.
+- **Satellite:** the attribution of the chosen mosaic, for example *Sentinel-2 cloudless - https://s2maps.eu by EOX IT Services GmbH (Contains modified Copernicus Sentinel data 2023)*.
 - SRTM fallback, if used: *Elevation: SRTM (NASA/USGS) and other sources via Mapzen Terrain Tiles*. See <https://github.com/tilezen/joerd/blob/master/docs/attribution.md>.
 - Fonts: Noto Sans, SIL Open Font License 1.1. No on-map credit is needed; keep `fonts/OFL.txt` with the files.
 

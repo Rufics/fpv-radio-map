@@ -37,9 +37,7 @@ run all --bbox "$BBOX" \
   --natural-earth-file natural_earth_vector.sqlite.zip \
   --java-heap 2g \
   --sat-file s2-test-scene.tif \
-  --sat-name "Sentinel-2 L2A TCI, single scene S2C_36UXU_20250813 (TEST ONLY, not a cloudless mosaic)" \
-  --sat-licence "Copernicus Sentinel data, free and open (test build)" \
-  --sat-attribution "Contains modified Copernicus Sentinel data 2025"
+  --sat-mosaic copernicus-sentinel-2 --sat-data-year 2025 --sat-licence-checked
 
 # Second run must be a no-op (idempotency)
 run all --bbox "$BBOX" \
@@ -47,9 +45,7 @@ run all --bbox "$BBOX" \
   --water-polygons-file water-polygons-split-3857.zip \
   --natural-earth-file natural_earth_vector.sqlite.zip \
   --sat-file s2-test-scene.tif \
-  --sat-name "Sentinel-2 L2A TCI, single scene S2C_36UXU_20250813 (TEST ONLY, not a cloudless mosaic)" \
-  --sat-licence "Copernicus Sentinel data, free and open (test build)" \
-  --sat-attribution "Contains modified Copernicus Sentinel data 2025" 2>&1 | grep -E "up to date|ERROR"
+  --sat-mosaic copernicus-sentinel-2 --sat-data-year 2025 --sat-licence-checked 2>&1 | grep -E "up to date|ERROR"
 
 run verify
 ls -la "$DATA/out"

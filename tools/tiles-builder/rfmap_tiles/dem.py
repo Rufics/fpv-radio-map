@@ -14,9 +14,9 @@ import shutil
 from pathlib import Path
 
 from . import raster, sources
-from .common import (BBox, BuildError, Dirs, download, fresh_dir, http_status, input_file, install, is_up_to_date,
+from .common import (BBox, BuildError, Dirs, download, fresh_dir, http_status, input_file, inputs_entry, install, is_up_to_date,
                      mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors, pmtiles_header,
-                     read_meta, run, tile_aligned_extent, warn, write_meta, zoom_resolution)
+                     run, sha256_file, tile_aligned_extent, warn, write_meta, zoom_resolution)
 
 DEM_OUT = "dem.cog.tif"
 HILLSHADE_OUT = "hillshade.pmtiles"
@@ -123,27 +123,36 @@ def build(args, dirs: Dirs) -> None:
     if not is_up_to_date(dirs, DEM_OUT, params, args.force):
         _build_cog(args, dirs, bbox, source, params)
     dem = dirs.out / DEM_OUT
-    dem_meta = read_meta(dirs, DEM_OUT) or {}
+    if args.no_hillshade and args.no_contours:
+        return
+    # The derived layers take their source and licence from the table and their checksum from the
+    # COG itself, never from the .meta file written earlier.
+    derived = {"sha256": sha256_file(dem), **_source_info(source)}
 
     if not args.no_hillshade:
-        _build_hillshade(args, dirs, bbox, dem, dem_meta)
+        _build_hillshade(args, dirs, bbox, dem, derived)
     if not args.no_contours:
-        _build_contours(args, dirs, bbox, dem, dem_meta)
+        _build_contours(args, dirs, bbox, dem, derived)
+
+
+def _source_info(source: str) -> dict:
+    if source == "copernicus":
+        return sources.COPERNICUS_DEM
+    if source == "srtm":
+        return sources.SRTM
+    return sources.DEM_FILE
 
 
 def _build_cog(args, dirs: Dirs, bbox: BBox, source: str, params: dict) -> None:
     work = fresh_dir(dirs.work / "dem")
+    src_info = _source_info(source)
     if source == "copernicus":
         files, missing, urls = _fetch_copernicus(bbox, dirs)
-        src_info = sources.COPERNICUS_DEM
     elif source == "srtm":
         files, missing, urls = _fetch_srtm(bbox, dirs)
-        src_info = sources.SRTM
     else:
-        files = list(args.dem_file)
+        files = [inputs_entry(f.name) for f in args.dem_file]
         missing, urls = [], [f"file:{f.name}" for f in files]
-        src_info = {"source": "operator-supplied DEM files", "licence": "as supplied by the operator",
-                    "attribution": "set by the operator", "vertical_datum": "as supplied"}
     if not files:
         raise BuildError("no elevation tiles found for this bbox")
 
@@ -197,14 +206,15 @@ def _build_cog(args, dirs: Dirs, bbox: BBox, source: str, params: dict) -> None:
     shutil.rmtree(work, ignore_errors=True)
 
 
-def _derived_params(dem_meta: dict, extra: dict) -> dict:
-    return {"dem_sha256": dem_meta.get("sha256"), **extra}
+def _derived_params(derived: dict, extra: dict) -> dict:
+    return {"dem_sha256": derived["sha256"], **extra}
 
 
-def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, dem_meta: dict) -> None:
-    zmin, zmax = args.hillshade_minzoom, args.hillshade_maxzoom
-    params = _derived_params(dem_meta, {"zoom": [zmin, zmax], "style": args.hillshade_style,
-                                        "z": args.hillshade_exaggeration})
+def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, derived: dict) -> None:
+    zmin, zmax = int(args.hillshade_minzoom), int(args.hillshade_maxzoom)
+    style = "alpha" if args.hillshade_style == "alpha" else "gray"
+    exaggeration = float(args.hillshade_exaggeration)
+    params = _derived_params(derived, {"zoom": [zmin, zmax], "style": style, "z": exaggeration})
     if is_up_to_date(dirs, HILLSHADE_OUT, params, args.force):
         return
     work = fresh_dir(dirs.work / "hillshade")
@@ -219,10 +229,10 @@ def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, dem_meta: dict) ->
     hs = work / "hillshade.tif"
     # 1 EPSG:3857 unit is cos(lat) metres on the ground at the bbox centre.
     scale = math.cos(math.radians(bbox.center_lat))
-    run(["gdaldem", "hillshade", "-multidirectional", "-compute_edges", "-z", repr(args.hillshade_exaggeration),
+    run(["gdaldem", "hillshade", "-multidirectional", "-compute_edges", "-z", repr(exaggeration),
          "-s", repr(scale), "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", "-co", "BIGTIFF=IF_SAFER",
          str(merc), str(hs)])
-    if args.hillshade_style == "alpha":
+    if style == "alpha":
         rgba = work / "hillshade-rgba.tif"
         _shade_to_rgba(hs, rgba)
         hs = rgba
@@ -232,7 +242,7 @@ def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, dem_meta: dict) ->
          str(hs), str(mb)])
     if zmax > zmin:
         run(["gdaladdo", "-r", "average", str(mb), *overview_factors(zmin, zmax)])
-    mbtiles_set_metadata(mb, {"attribution": dem_meta.get("attribution", "")})
+    mbtiles_set_metadata(mb, {"attribution": derived["attribution"]})
     tmp = dirs.out / f".tmp-{HILLSHADE_OUT}"
     mbtiles_to_pmtiles(mb, tmp)
     install(tmp, dirs, HILLSHADE_OUT)
@@ -240,12 +250,12 @@ def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, dem_meta: dict) ->
     write_meta(dirs, HILLSHADE_OUT, params, {
         "kind": "raster-tiles", "role": "display only (calculations read dem.cog.tif)",
         "derived_from": DEM_OUT,
-        "source": f"hillshade of {DEM_OUT} ({dem_meta.get('source', '')})",
-        "licence": dem_meta.get("licence"), "attribution": dem_meta.get("attribution"),
+        "source": f"hillshade of {DEM_OUT} ({derived['source']})",
+        "licence": derived["licence"], "attribution": derived["attribution"],
         "bbox": bbox.as_list(), "zoom": [h.get("minzoom", zmin), h.get("maxzoom", zmax)],
         "resolution": f"z{zmax} = {res:.1f} m/px (EPSG:3857 units), 256 px PNG tiles",
-        "hillshade": {"style": args.hillshade_style, "multidirectional": True,
-                      "exaggeration": args.hillshade_exaggeration, "scale": scale},
+        "hillshade": {"style": style, "multidirectional": True,
+                      "exaggeration": exaggeration, "scale": scale},
     })
     shutil.rmtree(work, ignore_errors=True)
 
@@ -277,13 +287,13 @@ def _shade_to_rgba(src: Path, dst: Path) -> None:
     d_ds = None
 
 
-def _build_contours(args, dirs: Dirs, bbox: BBox, dem: Path, dem_meta: dict) -> None:
-    interval = args.contour_interval
+def _build_contours(args, dirs: Dirs, bbox: BBox, dem: Path, derived: dict) -> None:
+    interval = float(args.contour_interval)
     if interval <= 0:
         raise BuildError("--contour-interval must be > 0")
-    index_every = max(1, args.contour_index_every)
-    zmin, zmax = args.contours_minzoom, args.contours_maxzoom
-    params = _derived_params(dem_meta, {"interval": interval, "index_every": index_every, "zoom": [zmin, zmax]})
+    index_every = max(1, int(args.contour_index_every))
+    zmin, zmax = int(args.contours_minzoom), int(args.contours_maxzoom)
+    params = _derived_params(derived, {"interval": interval, "index_every": index_every, "zoom": [zmin, zmax]})
     if is_up_to_date(dirs, CONTOURS_OUT, params, args.force):
         return
     work = fresh_dir(dirs.work / "contours")
@@ -306,7 +316,7 @@ def _build_contours(args, dirs: Dirs, bbox: BBox, dem: Path, dem_meta: dict) -> 
          "-dsco", f"MINZOOM={zmin}", "-dsco", f"MAXZOOM={zmax}", "-dsco", f"CONF={conf}",
          "-dsco", "NAME=contours", "-dsco", f"DESCRIPTION=Contours every {interval:g} m (display only)",
          "-dsco", "MAX_SIZE=1000000"])
-    mbtiles_set_metadata(mb, {"attribution": dem_meta.get("attribution", "")})
+    mbtiles_set_metadata(mb, {"attribution": derived["attribution"]})
     tmp = dirs.out / f".tmp-{CONTOURS_OUT}"
     mbtiles_to_pmtiles(mb, tmp)
     install(tmp, dirs, CONTOURS_OUT)
@@ -314,8 +324,8 @@ def _build_contours(args, dirs: Dirs, bbox: BBox, dem: Path, dem_meta: dict) -> 
     write_meta(dirs, CONTOURS_OUT, params, {
         "kind": "vector-tiles", "role": "display only (calculations read dem.cog.tif)",
         "derived_from": DEM_OUT,
-        "source": f"contours of {DEM_OUT} ({dem_meta.get('source', '')})",
-        "licence": dem_meta.get("licence"), "attribution": dem_meta.get("attribution"),
+        "source": f"contours of {DEM_OUT} ({derived['source']})",
+        "licence": derived["licence"], "attribution": derived["attribution"],
         "bbox": bbox.as_list(), "zoom": [h.get("minzoom", zmin), h.get("maxzoom", zmax)],
         "resolution": f"interval {interval:g} m, index every {idx:g} m",
         "layers": {"contours": f"all contours (from z{max(zmin, min(zmax, 12))}), attribute ele (m)",
