@@ -1,5 +1,5 @@
 import type { Feature, FeatureCollection } from 'geojson';
-import maplibregl, { GeoJSONSource, LayerSpecification, Map as MlMap, Marker, SourceSpecification } from 'maplibre-gl';
+import { GeoJSONSource, LayerSpecification, Map as MlMap, Marker, SourceSpecification } from 'maplibre-gl';
 import { StyleLayerSet } from '../layers/layer-definition';
 import { LayerRegistry } from '../layers/layer-registry';
 import { MapContext } from '../map/map-context';
@@ -181,7 +181,7 @@ export class RouteTool {
       cap.setAttribute('aria-hidden', 'true');
       el.appendChild(cap);
     }
-    const marker = new maplibregl.Marker({ element: el, draggable, anchor: 'center' }).setLngLat([p.lon, p.lat]).addTo(map);
+    const marker = new Marker({ element: el, draggable, anchor: 'center' }).setLngLat([p.lon, p.lat]).addTo(map);
     if (draggable) {
       marker.on('dragend', () => {
         const ll = marker.getLngLat();
@@ -202,7 +202,7 @@ export class RouteTool {
         onClick();
       });
     }
-    this.markers.push(new maplibregl.Marker({ element: el, anchor: 'center' }).setLngLat([p.lon, p.lat]).addTo(map));
+    this.markers.push(new Marker({ element: el, anchor: 'center' }).setLngLat([p.lon, p.lat]).addTo(map));
   }
 
   private clearMarkers(): void {

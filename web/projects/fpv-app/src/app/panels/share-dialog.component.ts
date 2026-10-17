@@ -3,6 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiError, CredentialStore, Mission, MissionExporter, RfmapApiClient, Role, ShareLink } from '@rfmap/ui-kit';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { CompareService, FPV_CORE, FpvCoreOptions, fpvCoreData, fpvCoreOptions } from '../core/fpv-core';
+import { randomPin } from './random-pin';
 
 interface LinkCard {
   role: Role;
@@ -66,7 +67,7 @@ const EXPIRY_CHOICES: { label: string; days: number | null }[] = [
                 <label class="rf-field grow">6-digit PIN for this link
                   <input class="rf-input rf-mono pin" inputmode="numeric" autocomplete="off" maxlength="6" [value]="pins()[c.role]" (input)="setPin(c.role, $any($event.target).value)" [class.is-invalid]="pinError()[c.role]" [attr.aria-invalid]="!!pinError()[c.role]" />
                 </label>
-                <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="randomPin(c.role)">Random</button>
+                <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="newPin(c.role)">Random</button>
               </div>
               <div class="row gap">
                 <label class="rf-field grow">Link works
@@ -218,9 +219,8 @@ export class ShareDialogComponent implements OnInit {
     this.pinError.update((e) => ({ ...e, [role]: undefined }));
   }
 
-  protected randomPin(role: Role): void {
-    const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000;
-    this.setPin(role, String(n).padStart(6, '0'));
+  protected newPin(role: Role): void {
+    this.setPin(role, randomPin());
   }
 
   protected async create(role: Role): Promise<void> {

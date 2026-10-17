@@ -9,7 +9,7 @@
 # The satellite step uses ONE Sentinel-2 L2A scene (true colour) from the public
 # sentinel-cogs bucket — a stand-in for a real cloudless mosaic, for testing only.
 #
-# Extra `docker run` arguments (e.g. proxy settings) can be passed in DOCKER_ARGS.
+# Extra `docker run` arguments (e.g. proxy settings) can be passed in DOCKER_ARGS, separated by spaces.
 set -euo pipefail
 
 IMAGE="${IMAGE:-rfmap/tiles-builder}"
@@ -23,8 +23,8 @@ for f in monaco-latest.osm.pbf natural_earth_vector.sqlite.zip water-polygons-sp
   [[ -s "$DATA/inputs/$f" ]] || curl -fsSL --proto =https --proto-redir =https -o "$DATA/inputs/$f" "$FIXTURES/$f"
 done
 
-# shellcheck disable=SC2086
-run() { docker run --rm --user "$(id -u):$(id -g)" ${DOCKER_ARGS:-} -v "$DATA:/data" "$IMAGE" "$@"; }
+read -r -a docker_args <<< "${DOCKER_ARGS:-}"
+run() { docker run --rm --user "$(id -u):$(id -g)" "${docker_args[@]}" -v "$DATA:/data" "$IMAGE" "$@"; }
 
 run all --bbox "$BBOX" \
   --osm-file /data/inputs/monaco-latest.osm.pbf --basemap-full-extract \

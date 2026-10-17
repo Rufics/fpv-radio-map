@@ -2,6 +2,17 @@
 
 This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.2.0.
 
+## MapLibre worker
+
+The map view needs `maplibre-gl` 6.14 or newer. MapLibre 6 runs its worker from a separate module,
+`maplibre-gl-worker.mjs`, so an app that uses this library must serve that file and point MapLibre
+at it before the first map is created. `fpv-app` does both:
+
+- `angular.json` copies `node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs` to `maplibre/`;
+- `main.ts` calls `setWorkerUrl(new URL('maplibre/maplibre-gl-worker.mjs', document.baseURI).href)`.
+
+The web server must send the file as `text/javascript`; `deploy/nginx.conf` does that for `/maplibre/`.
+
 ## Code scaffolding
 
 Angular CLI includes powerful code scaffolding tools. To generate a new component, run:

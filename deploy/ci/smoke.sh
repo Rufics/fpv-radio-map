@@ -20,11 +20,13 @@ compose up -d --wait --wait-timeout 180 postgis rfmap-server web
 base=http://127.0.0.1:18088
 check() {  # check NAME URL [curl args...]
   name=$1; url=$2; shift 2
-  code=$(curl -s -o "$work/body" -w '%{http_code}' "$@" "$url")
+  code=$(curl -s -o "$work/body" -D "$work/headers" -w '%{http_code}' "$@" "$url")
   if [ "$code" != 200 ]; then echo "FAIL $name: HTTP $code"; cat "$work/body"; echo; exit 1; fi
   echo "ok   $name"
 }
 check "web app"            "$base/"
+check "map worker"         "$base/maplibre/maplibre-gl-worker.mjs"
+grep -qi '^content-type: text/javascript' "$work/headers" || { echo "FAIL map worker: not served as text/javascript"; cat "$work/headers"; exit 1; }
 check "server health"      "$base/api/v1/health"
 check "module list"        "$base/api/v1/modules"
 check "radio profiles"     "$base/api/v1/library/radio-profiles"

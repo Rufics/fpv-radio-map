@@ -49,9 +49,13 @@ for stage in "$build"/modules/fpv/*/stage; do
   for dep in $(deps_in_order "$build/modules/fpv" "$id"); do
     set -- "$@" --with "$out/$dep"
   done
-  "$rfmod" test "$pkg" --trust "$pub" "$@" > "$pkg.check.txt" || true
+  status=0
+  "$rfmod" test "$pkg" --trust "$pub" "$@" > "$pkg.check.txt" || status=$?
   cat "$pkg.check.txt"
-  grep -q "All checks passed" "$pkg.check.txt" || { echo "upload checks failed for $pkg" >&2; exit 1; }
+  if [ "$status" -ne 0 ] || ! grep -q "All checks passed" "$pkg.check.txt"; then
+    echo "upload checks failed for $pkg (exit $status)" >&2
+    exit 1
+  fi
   rm "$pkg.check.txt"
 done
 ( cd "$out" && sha256sum *.rfmod > SHA256SUMS )

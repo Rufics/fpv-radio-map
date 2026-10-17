@@ -1,5 +1,5 @@
 import { Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import maplibregl, { Map as MlMap, Marker } from 'maplibre-gl';
+import { Map as MlMap, Marker } from 'maplibre-gl';
 import type { Geometry, Position } from 'geojson';
 import {
   CoverageDeltaLayer,
@@ -380,7 +380,7 @@ export class MapStageComponent {
       const el = document.createElement('div');
       el.className = `rf-map-tag ${cls}`;
       el.textContent = text;
-      this.tags.push(new maplibregl.Marker({ element: el, anchor }).setLngLat([lon, lat]).addTo(map));
+      this.tags.push(new Marker({ element: el, anchor }).setLngLat([lon, lat]).addTo(map));
     };
     if (s.radioLabel && s.radioAnchor && this.layers.isVisible('results-limits')) tag(s.radioLabel, '', s.radioAnchor[0], s.radioAnchor[1], 'right');
     if (s.battery && this.layers.isVisible('results-limits')) {

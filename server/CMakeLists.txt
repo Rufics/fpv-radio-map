@@ -42,12 +42,6 @@ if(_gdal_inc)
   target_include_directories(rfmap_server_lib SYSTEM PUBLIC ${_gdal_inc})
 endif()
 
-# GCC 13 reports a false maybe-uninitialized inside std::variant when pqxx::params moves its
-# nullptr_t alternative (both in system headers, inlined into this file only).
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  set_source_files_properties(src/library.cpp PROPERTIES COMPILE_OPTIONS "-Wno-maybe-uninitialized")
-endif()
-
 add_executable(rfmap-server src/main.cpp)
 target_link_libraries(rfmap-server PRIVATE rfmap_server_lib)
 target_compile_definitions(rfmap-server PRIVATE RFMAP_DEFAULT_SQL_DIR="${CMAKE_INSTALL_PREFIX}/share/rfmap/sql")
