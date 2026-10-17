@@ -475,8 +475,12 @@ TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
     EXPECT_EQ(g.body["lastResult"]["inputHash"], r.body["inputHash"]);
 
     // Same inputs, same hash: served from the result cache.
-    const auto again = call("POST", "/calc/route", m, bearer(env->editSession));
-    EXPECT_EQ(again.body["inputHash"], r.body["inputHash"]);
+    json planned = m;
+    planned["time"] = {{"mode", "planned"}, {"utc", isoUtc(Clock::now())}};
+    const auto first = call("POST", "/calc/route", planned, bearer(env->editSession));
+    ASSERT_EQ(first.status, 200) << first.body;
+    const auto again = call("POST", "/calc/route", planned, bearer(env->editSession));
+    EXPECT_EQ(again.body["inputHash"], first.body["inputHash"]);
     const auto tiers = call("GET", "/admin/cache", nullptr, admin());
     ASSERT_EQ(tiers.status, 200);
     EXPECT_GT(tiers.body[1]["hits"].get<int>(), 0);
