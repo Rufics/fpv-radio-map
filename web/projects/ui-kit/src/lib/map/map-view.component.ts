@@ -10,7 +10,7 @@ import {
   output,
   viewChild,
 } from '@angular/core';
-import maplibregl, { Map as MlMap } from 'maplibre-gl';
+import { addProtocol, Map as MlMap, NavigationControl } from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 import { MapSourcesConfig } from '../models/api.models';
 import { LayerRegistry } from '../layers/layer-registry';
@@ -24,7 +24,7 @@ let pmtilesRegistered = false;
 export function ensurePmtilesProtocol(): void {
   if (pmtilesRegistered) return;
   const protocol = new Protocol();
-  maplibregl.addProtocol('pmtiles', protocol.tile);
+  addProtocol('pmtiles', protocol.tile);
   pmtilesRegistered = true;
 }
 
@@ -106,7 +106,7 @@ export class MapViewComponent {
   private create(): void {
     ensurePmtilesProtocol();
     const cfg = this.config();
-    const map = new maplibregl.Map({
+    const map = new MlMap({
       container: this.container().nativeElement,
       style: { version: 8, sources: {}, layers: [], ...(cfg?.glyphs ? { glyphs: cfg.glyphs } : {}) },
       center: cfg?.center ?? [35.2, 48.53],
@@ -118,7 +118,7 @@ export class MapViewComponent {
       fadeDuration: 0,
     });
     map.touchZoomRotate.disableRotation();
-    if (this.interactive()) map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'bottom-right');
+    if (this.interactive()) map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
     map.on('click', (e) => {
       const p = { lat: e.lngLat.lat, lon: e.lngLat.lng };
       this.ctx.emitClick(p);

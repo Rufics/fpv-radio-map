@@ -56,7 +56,19 @@ interface StoredJob {
 
 type Handler = (req: HttpRequest<unknown>, m: RegExpMatchArray) => HttpResponse<unknown> | Promise<HttpResponse<unknown>>;
 
-const rnd = (n = 20) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 57]).join('');
+const ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+// Uniform over the 57 symbols: take 6 random bits (0–63) and skip the values above the alphabet.
+const rnd = (n = 20) => {
+  let out = '';
+  const bytes = new Uint8Array(n);
+  while (out.length < n) {
+    for (const b of crypto.getRandomValues(bytes)) {
+      const i = b >>> 2;
+      if (i < ALPHABET.length && out.length < n) out += ALPHABET[i];
+    }
+  }
+  return out;
+};
 
 export class MockBackend {
   private missions = new Map<string, StoredMission>();

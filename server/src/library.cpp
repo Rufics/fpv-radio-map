@@ -9,6 +9,23 @@ namespace rfmap {
 
 namespace {
 void checkKind(const std::string& kind) { (void)SchemaRegistry::libraryFile(kind); }
+
+/** Writes `doc` as the current item and as its history row `version`. */
+void storeVersion(pqxx::work& w, const std::string& kind, const std::string& id, int version, const json& doc,
+                  const std::string& by) {
+    // Non-string parameters go in as the text pqxx itself would send: passing the int and bool
+    // directly makes GCC 13 warn maybe-uninitialized inside pqxx::params' std::variant.
+    const std::string verified = pqxx::to_string(doc.at("verified").get<bool>());
+    const std::string next = pqxx::to_string(version);
+    const std::string body = doc.dump();
+    w.exec_params(
+        "update library_items set version = $3, verified = $4, doc = $5::jsonb, updated_at = now(), updated_by = $6 "
+        "where kind = $1 and id = $2",
+        kind, id, next, verified, body, by);
+    w.exec_params(
+        "insert into library_history(kind, id, version, verified, doc, changed_by) values ($1, $2, $3, $4, $5::jsonb, $6)",
+        kind, id, next, verified, body, by);
+}
 }  // namespace
 
 std::vector<json> Library::list(const std::string& kind) const {
@@ -56,15 +73,16 @@ json Library::add(const std::string& kind, json doc, const std::string& by) {
     doc["version"] = 1;
     schemas_.require(kind, doc);
     const std::string id = doc.at("id").get<std::string>();
+    const std::string verified = pqxx::to_string(doc.at("verified").get<bool>());
     db_.tx([&](pqxx::work& w) {
         const auto r = w.exec_params(
             "insert into library_items(kind, id, version, verified, doc, updated_by) values ($1, $2, 1, $3, $4::jsonb, $5) "
             "on conflict do nothing returning id",
-            kind, id, doc.at("verified").get<bool>(), doc.dump(), by);
+            kind, id, verified, doc.dump(), by);
         if (r.empty()) throw HttpError(409, kind + "/" + id + " exists; edit it with PUT instead");
         w.exec_params(
             "insert into library_history(kind, id, version, verified, doc, changed_by) values ($1, $2, 1, $3, $4::jsonb, $5)",
-            kind, id, doc.at("verified").get<bool>(), doc.dump(), by);
+            kind, id, verified, doc.dump(), by);
     });
     return doc;
 }
@@ -87,14 +105,7 @@ json Library::update(const std::string& kind, const std::string& id, json doc, c
         }
         doc["version"] = current + 1;
         schemas_.require(kind, doc);
-        const bool verified = doc.at("verified").get<bool>();
-        w.exec_params(
-            "update library_items set version = $3, verified = $4, doc = $5::jsonb, updated_at = now(), updated_by = $6 "
-            "where kind = $1 and id = $2",
-            kind, id, current + 1, verified, doc.dump(), by);
-        w.exec_params(
-            "insert into library_history(kind, id, version, verified, doc, changed_by) values ($1, $2, $3, $4, $5::jsonb, $6)",
-            kind, id, current + 1, verified, doc.dump(), by);
+        storeVersion(w, kind, id, current + 1, doc, by);
         return doc;
     });
 }

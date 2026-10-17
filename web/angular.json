@@ -48,6 +48,11 @@
               {
                 "glob": "**/*",
                 "input": "projects/fpv-app/public"
+              },
+              {
+                "glob": "maplibre-gl-worker.mjs",
+                "input": "node_modules/maplibre-gl/dist",
+                "output": "maplibre"
               }
             ],
             "styles": [
