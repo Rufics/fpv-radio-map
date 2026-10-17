@@ -447,9 +447,6 @@ TEST_F(Integration, BothLinksAndWeather) {
 TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
     json m = mission();
     m["name"] = "Ridge test 2";
-    // "now" is part of the input hash to the second, so the cache check below would miss when the
-    // two requests fall on either side of a second. A fixed planned time keeps the inputs equal.
-    m["time"] = {{"mode", "planned"}, {"utc", isoUtc(Clock::now())}};
     const auto r = call("POST", "/calc/route", m, bearer(env->editSession));
     ASSERT_EQ(r.status, 200) << r.body;
     dump("calc-route", r.body);
@@ -477,9 +474,14 @@ TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
     ASSERT_TRUE(g.body.contains("lastResult"));
     EXPECT_EQ(g.body["lastResult"]["inputHash"], r.body["inputHash"]);
 
-    // Same inputs, same hash: served from the result cache.
-    const auto again = call("POST", "/calc/route", m, bearer(env->editSession));
-    EXPECT_EQ(again.body["inputHash"], r.body["inputHash"]);
+    // Same inputs, same hash: served from the result cache. The time is fixed here because with
+    // time.mode "now" the hash changes when the two requests fall on either side of a second.
+    json planned = m;
+    planned["time"] = {{"mode", "planned"}, {"utc", isoUtc(Clock::now())}};
+    const auto first = call("POST", "/calc/route", planned, bearer(env->editSession));
+    ASSERT_EQ(first.status, 200) << first.body;
+    const auto again = call("POST", "/calc/route", planned, bearer(env->editSession));
+    EXPECT_EQ(again.body["inputHash"], first.body["inputHash"]);
     const auto tiers = call("GET", "/admin/cache", nullptr, admin());
     ASSERT_EQ(tiers.status, 200);
     EXPECT_GT(tiers.body[1]["hits"].get<int>(), 0);
