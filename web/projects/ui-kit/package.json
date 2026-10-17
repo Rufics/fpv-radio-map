@@ -1,0 +1,18 @@
+{
+  "name": "@rfmap/ui-kit",
+  "version": "1.0.0",
+  "description": "Reusable map UI for rfmap apps: map view, layer registry, slots, coverage, profile and budget charts, route tools, state and API client.",
+  "peerDependencies": {
+    "@angular/common": "^22.2.0",
+    "@angular/core": "^22.2.0",
+    "maplibre-gl": "^5.0.0",
+    "pmtiles": "^4.0.0",
+    "rxjs": "^7.8.0"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "tslib": "^2.3.0"
+  },
+  "sideEffects": ["*.css"]
+}

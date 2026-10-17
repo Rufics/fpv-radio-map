@@ -1,0 +1,469 @@
+/**
+ * DEV MOCK ONLY. The reference case "North ridge recon": leg 3 WP2 → B, A → drone 5.280 km,
+ * 915 MHz video blocked by the 622 m ridge (−3.74 dB), 433 MHz control +6.01 dB, battery short.
+ * Every number here is the full-precision value the server would send; the UI rounds.
+ */
+import { contours } from 'd3-contour';
+import type { MultiPolygon } from 'geojson';
+import {
+  Antenna,
+  Battery,
+  BudgetTerm,
+  CoverageGrid,
+  Drone,
+  Fix,
+  LegResult,
+  LinkKind,
+  LinkResult,
+  Mission,
+  MissionPoint,
+  Profile,
+  RadioProfile,
+  RouteResult,
+  WeatherPoint,
+  ForecastHorizon,
+  ForecastTier,
+  linksEvaluated,
+} from '@rfmap/ui-kit';
+import { LOCAL, RIDGE_FRACTION, elevation, elevationLocal, toLatLon, toLocal } from './mock-terrain';
+
+const M = '−';
+const pt = (p: { x: number; y: number }, aglM: number, label?: string): MissionPoint => ({ ...toLatLon(p.x, p.y), aglM, ...(label ? { label } : {}) });
+
+export const PILOT = pt(LOCAL.A, 2, 'A');
+export const WP1 = pt(LOCAL.WP1, 120);
+export const WP2 = pt(LOCAL.WP2, 120);
+export const TARGET = pt(LOCAL.B, 120, 'B');
+const T_FRACTION = 2.32 / 3.295;
+export const TURN_BACK = pt({ x: LOCAL.WP1.x + (LOCAL.WP2.x - LOCAL.WP1.x) * T_FRACTION, y: LOCAL.WP1.y + (LOCAL.WP2.y - LOCAL.WP1.y) * T_FRACTION }, 120, 'T');
+export const RIDGE_POINT = toLatLon(LOCAL.B.x * RIDGE_FRACTION, LOCAL.B.y * RIDGE_FRACTION);
+
+export const LEG_LENGTHS = [3683.11, 3295.02, 3866.47];
+export const A_TO_B_M = 5280.37;
+const ROUTE_M = LEG_LENGTHS.reduce((a, b) => a + b, 0); // 10 844.6
+const NEEDED_M = ROUTE_M + A_TO_B_M; // 16 125.0
+const RANGE_M = 10198.3;
+
+// ---------------- library ----------------
+const ds = (reference: string) => ({ kind: 'datasheet' as const, reference });
+
+export const LIBRARY: { radios: RadioProfile[]; antennas: Antenna[]; batteries: Battery[]; drones: Drone[] } = {
+  radios: [
+    { id: 'elrs-433-50hz', name: 'ELRS 433 MHz', vendor: 'ExpressLRS', version: 2, verified: true, kind: 'control', frequencyHz: 433e6, txPowerDbm: [20, 27, 30], sensitivity: { method: 'datasheet', dBm: -105, source: ds('ExpressLRS 3.x, 50 Hz LoRa mode') }, latencyMs: { typical: 20, max: 40 } },
+    { id: 'elrs-915-100hz', name: 'ELRS 915 MHz', vendor: 'ExpressLRS', version: 2, verified: true, kind: 'control', frequencyHz: 915e6, txPowerDbm: [20, 27, 30], sensitivity: { method: 'datasheet', dBm: -105, source: ds('ExpressLRS 3.x, 100 Hz LoRa mode') }, latencyMs: { typical: 10, max: 20 } },
+    { id: 'digital-915-20mhz', name: 'digital 915 MHz', vendor: 'Generic', version: 2, verified: true, kind: 'video-digital', frequencyHz: 915e6, txPowerDbm: [27, 30], sensitivity: { method: 'datasheet', dBm: -105, source: ds('Vendor datasheet v1.2, p. 14') }, latencyMs: { typical: 40, max: 80 } },
+    { id: 'analog-5800', name: 'Analog 5.8 · 25–1000 mW', vendor: 'Generic', version: 1, verified: true, kind: 'video-analog', frequencyHz: 5.8e9, txPowerDbm: [14, 23, 27, 30], sensitivity: { method: 'computed', bandwidthHz: 18e6, noiseFigureDb: 8, requiredSnrDb: 6, source: ds('Receiver datasheet') }, latencyMs: { typical: 1 }, analogGrades: [{ label: 'clear', requiredSnrDb: 18 }, { label: 'noisy', requiredSnrDb: 10 }, { label: 'lost', requiredSnrDb: 4 }], extraNoiseDb: 2 },
+  ],
+  antennas: [
+    { id: 'ground-dipole-5dbi', name: 'Ground dipole · 5.00 dBi', version: 1, verified: true, type: 'dipole', gainDbi: 5, polarization: 'linear-vertical', bandHz: [400e6, 960e6], source: ds('Antenna datasheet') },
+    { id: 'air-dipole-2dbi', name: 'Drone dipole · 2.00 dBi', version: 1, verified: true, type: 'dipole', gainDbi: 2, polarization: 'linear-vertical', bandHz: [400e6, 960e6], source: ds('Antenna datasheet') },
+    { id: 'patch-8dbi-915', name: 'Patch 915 · 8.00 dBi', version: 1, verified: false, type: 'patch', gainDbi: 8, polarization: 'linear-vertical', bandHz: [902e6, 928e6], beamwidthDeg: { horizontal: 70, vertical: 65 }, source: ds('Antenna datasheet') },
+  ],
+  batteries: [
+    { id: 'liion-6s-6000', name: '6S Li-ion 6000 mAh', version: 1, verified: true, chemistry: 'li-ion', cellsSeries: 6, capacityAh: 6, nominalCellVoltage: 3.6, usableFraction: 0.8, temperatureDerating: [{ celsius: -10, factor: 0.78 }, { celsius: 0, factor: 0.88 }, { celsius: 20, factor: 1 }], source: ds('Cell datasheet, 21700 6S2P') },
+    { id: 'lipo-6s-3300', name: '6S LiPo 3300 mAh', version: 1, verified: false, chemistry: 'lipo', cellsSeries: 6, capacityAh: 3.3, nominalCellVoltage: 3.7, usableFraction: 0.8, notes: 'Capacity from the pack label; not yet checked on the bench.', source: { kind: 'measurement', reference: 'Pack label, field test by a user' } },
+  ],
+  drones: [
+    { id: 'fpv-10in-recon', name: '10-inch recon quad', version: 1, verified: true, massKg: 1.9, cruiseAirspeedMps: 10, cruisePowerW: 366, powerDensityExponent: 0, climb: { method: 'potential-energy', efficiency: 0.6 }, defaultRadios: { control: 'elrs-433-50hz', video: 'digital-915-20mhz' }, source: { kind: 'measurement', reference: 'Bench and flight log 2026-09' } },
+  ],
+};
+
+export function exampleMission(): Mission {
+  return {
+    schema: 'mission/v1',
+    name: 'North ridge recon',
+    time: { mode: 'now' },
+    pilot: { ...PILOT },
+    waypoints: [{ ...WP1 }, { ...WP2 }, { ...TARGET }],
+    returnToPilot: true,
+    links: {
+      control: { radio: 'elrs-433-50hz', txPowerDbm: 30, groundAntenna: 'ground-dipole-5dbi', airAntenna: 'air-dipole-2dbi', requiredMarginDb: 10 },
+      video: { radio: 'digital-915-20mhz', txPowerDbm: 30, groundAntenna: 'ground-dipole-5dbi', airAntenna: 'air-dipole-2dbi', requiredMarginDb: 10 },
+    },
+    evaluate: 'both',
+    drone: 'fpv-10in-recon',
+    battery: 'liion-6s-6000',
+    modules: { 'fpv.battery': {}, 'rf.weather': {}, 'fpv.example': {} },
+    coverage: { radiusM: 8000, cellM: 100, droneAglM: 120 },
+  };
+}
+
+// ---------------- weather ----------------
+export function horizon(now = new Date()): ForecastHorizon {
+  const run = new Date(now);
+  run.setUTCMinutes(0, 0, 0);
+  run.setUTCHours(Math.floor(run.getUTCHours() / 6) * 6);
+  return {
+    runUtc: run.toISOString(),
+    hourlyUntilUtc: new Date(run.getTime() + 7 * 86400e3).toISOString(),
+    longRangeUntilUtc: new Date(run.getTime() + 16 * 86400e3).toISOString(),
+  };
+}
+
+export function tierFor(timeUtc: string | undefined, h = horizon()): ForecastTier {
+  const t = timeUtc ? new Date(timeUtc).getTime() : Date.now();
+  if (t <= new Date(h.hourlyUntilUtc!).getTime()) return 'hourly';
+  if (t <= new Date(h.longRangeUntilUtc!).getTime()) return 'long-range';
+  return 'none';
+}
+
+export function weatherAt(timeUtc: string | undefined, stale: boolean): WeatherPoint {
+  const h = horizon();
+  const tier = tierFor(timeUtc, h);
+  const valid = timeUtc ?? new Date().toISOString();
+  if (tier === 'none') {
+    return { model: 'ISA standard atmosphere', tier, validUtc: valid, temperatureC: 15, pressureHpa: 1013.25, effectiveEarthFactor: 4 / 3, airDensityKgM3: 1.225, refractivityGradientPerKm: -39.2 };
+  }
+  const runUtc = stale ? new Date(Date.now() - 6.2 * 3600e3).toISOString() : h.runUtc;
+  return {
+    model: tier === 'hourly' ? 'ICON-D2 + GFS (Open-Meteo, self-hosted)' : 'ECMWF IFS open data (long-range)',
+    runUtc,
+    validUtc: valid,
+    tier,
+    temperatureC: 4.2,
+    pressureHpa: 1009.6,
+    relativeHumidity: 0.81,
+    windSpeedMps: 7.4,
+    windFromDeg: 292,
+    refractivityGradientPerKm: -41.7,
+    effectiveEarthFactor: 1.3617,
+    airDensityKgM3: 1.18312,
+    stale,
+  };
+}
+
+// ---------------- link results ----------------
+function profileBetween(a: MissionPoint, b: MissionPoint, n = 160): Profile {
+  const la = toLocal(a.lat, a.lon);
+  const lb = toLocal(b.lat, b.lon);
+  const L = Math.hypot(lb.x - la.x, lb.y - la.y) * 1000;
+  const points = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = la.x + (lb.x - la.x) * t;
+    const y = la.y + (lb.y - la.y) * t;
+    const ll = toLatLon(x, y);
+    points.push({ distanceM: L * t, groundMslM: elevationLocal(x, y), lat: ll.lat, lon: ll.lon });
+  }
+  return { source: 'Copernicus DEM GLO-30 (mock)', lengthM: L, points };
+}
+
+function fspl(distanceM: number, f: number): number {
+  return 20 * Math.log10(distanceM / 1000) + 20 * Math.log10(f / 1e6) + 32.44778;
+}
+
+const TERMS_FIXED = (radio: string): BudgetTerm[] => [
+  { id: 'tx-power', label: 'TX power', valueDb: -30, source: `radio profile ${radio} rev 2` },
+  { id: 'ground-antenna', label: 'Ground antenna', valueDb: -5, source: 'antenna ground-dipole-5dbi rev 1' },
+  { id: 'air-antenna', label: 'Drone antenna', valueDb: -2, source: 'antenna air-dipole-2dbi rev 1' },
+];
+
+interface LinkSpec {
+  kind: LinkKind;
+  f: number;
+  rayM: number;
+  fsplDb: number;
+  diffDb: number;
+  nu: number;
+  r1: number;
+  los: boolean;
+  clearanceM: number;
+  profile: Profile;
+  extraNotes?: { what: string; detail: string }[];
+}
+
+function link(spec: LinkSpec, tier: ForecastTier): LinkResult {
+  const radio = spec.kind === 'video' ? 'digital-915-20mhz' : 'elrs-433-50hz';
+  const terms: BudgetTerm[] = [
+    ...TERMS_FIXED(radio),
+    { id: 'fspl', label: 'Free space', valueDb: spec.fsplDb, source: 'ITU-R P.525 · geodesic distance on WGS84' },
+  ];
+  if (spec.diffDb > 0) terms.push({ id: 'diffraction', label: 'Diffraction', valueDb: spec.diffDb, source: 'ITU-R P.526 · Bullington, exact Fresnel integrals' });
+  const received = -terms.reduce((s, t) => s + t.valueDb, 0);
+  const required = -95;
+  const margin = received - required;
+  const ridgeD = spec.rayM * RIDGE_FRACTION;
+  const notes = [
+    { what: 'Input data error (not ours)', detail: `Elevation ±4 m (Copernicus GLO-30, LE90). Worst case ridge 4 m lower: ${margin < 0 ? 'still blocked' : 'still clear'}. Verdict: certain.` },
+    ...(tier === 'none' ? [{ what: 'Beyond the forecast horizon', detail: 'No forecast exists for this time. Standard atmosphere (ISA, k = 4/3) is used; we do not invent weather.' }] : []),
+    ...(tier === 'long-range' ? [{ what: 'Long-range forecast', detail: 'Refraction and air density come from coarser long-range models.' }] : []),
+    ...(spec.extraNotes ?? []),
+  ];
+  return {
+    kind: spec.kind,
+    frequencyHz: spec.f,
+    rayLengthM: spec.rayM,
+    terms,
+    receivedDbm: received,
+    requiredDbm: required,
+    marginDb: margin,
+    reachable: margin >= 0,
+    latencyMs: spec.kind === 'video' ? 40 : 20,
+    diffraction: {
+      lineOfSight: spec.los,
+      nu: spec.nu,
+      edgeHeightM: 622,
+      d1M: ridgeD,
+      d2M: spec.rayM - ridgeD,
+      lossDb: spec.diffDb,
+      minFresnelClearance: spec.clearanceM / spec.r1,
+      firstFresnelRadiusM: spec.r1,
+      dominant: { distanceM: ridgeD, groundMslM: 622, lat: RIDGE_POINT.lat, lon: RIDGE_POINT.lon },
+    },
+    uncertainty: notes,
+    profile: spec.profile,
+    model: 'rf-core 1.3.0 · ITU-R P.526 single edge (Bullington) · k = 4/3 · forest off',
+  };
+}
+
+function clearLink(kind: LinkKind, from: MissionPoint, to: MissionPoint, tier: ForecastTier): LinkResult {
+  const f = kind === 'video' ? 915e6 : 433e6;
+  const profile = profileBetween(from, to);
+  const d = profile.lengthM ?? 1;
+  const r = link({ kind, f, rayM: d, fsplDb: fspl(d, f), diffDb: 0, nu: -2.1, r1: Math.sqrt(((299792458 / f) * d) / 4), los: true, clearanceM: 60, profile }, tier);
+  if (r.diffraction) r.diffraction = { lineOfSight: true, lossDb: 0, minFresnelClearance: 1.4, nu: -2.1 };
+  return r;
+}
+
+// ---------------- fixes ----------------
+export function fixAltitude(mission: Mission): Fix & { note: string } {
+  const wps = mission.waypoints.map((w, i, arr) => (i === arr.length - 1 ? { ...w, aglM: 345 } : w));
+  return {
+    id: 'leg3-345m-agl',
+    title: 'Fly leg 3 at 345 m AGL',
+    patch: { waypoints: wps },
+    preview: [
+      { label: 'Leg 3 height', now: '120 m', after: '345 m', trend: 'neutral' },
+      { label: 'Line of sight at ridge', now: `${M}100 m`, after: '+10 m', trend: 'better' },
+      { label: 'Ridge diffraction', now: '29.61 dB', after: '0.55 dB', trend: 'better' },
+      { label: 'Video margin', now: `${M}3.74 dB`, after: '+25.32 dB', trend: 'better' },
+      { label: 'Battery need', now: '16.1 km', after: 'with climb, after Apply', trend: 'caution' },
+    ],
+    note: 'The ridge is cleared by 10 m; part of the Fresnel zone still touches it, so a small diffraction loss stays. The battery estimate for the climb comes from the battery module after Apply.',
+  };
+}
+
+export function fixTurnBack(mission: Mission): Fix & { note: string } {
+  return {
+    id: 'turn-back-t',
+    title: 'Turn back at T',
+    patch: { waypoints: [mission.waypoints[0], { ...TURN_BACK }] },
+    preview: [
+      { label: 'Out along route', now: '10.8 km', after: '6.0 km', trend: 'neutral' },
+      { label: 'Back to pilot', now: '5.3 km', after: '4.2 km', trend: 'neutral' },
+      { label: 'Total', now: '16.1 km', after: '10.2 km', trend: 'better' },
+      { label: 'Reaches B', now: 'yes', after: 'no', trend: 'worse' },
+    ],
+    note: 'T is 2.3 km into leg 2. The return fits the 10.2 km range exactly; leg 3 and target B are dropped from this flight.',
+  };
+}
+
+export type MockScenario = 'normal' | 'missing-elevation' | 'module-failed' | 'stale-forecast';
+
+/** The /calc/route answer for the reference mission and its fixed / turn-back variants. */
+export function routeResult(mission: Mission, scenario: MockScenario): RouteResult {
+  const evaluated = linksEvaluated(mission.evaluate);
+  const last = mission.waypoints[mission.waypoints.length - 1];
+  const turnback = last?.label === 'T';
+  const fixed = !turnback && (last?.aglM ?? 0) >= 345;
+  const tier = tierFor(mission.time.mode === 'planned' ? mission.time.utc : undefined);
+  const weather = weatherAt(mission.time.mode === 'planned' ? mission.time.utc : undefined, scenario === 'stale-forecast');
+  if (tier === 'none') {
+    // ISA instead of the forecast: refraction changes very little at 5 km
+  }
+  const pick = (kinds: Partial<Record<LinkKind, LinkResult>>) => Object.fromEntries(evaluated.map((k) => [k, kinds[k]]).filter(([, v]) => v));
+  const pts = [mission.pilot, ...mission.waypoints];
+  const legs: LegResult[] = [];
+  const names = ['A', ...mission.waypoints.map((w, i, arr) => w.label ?? (i === arr.length - 1 ? 'B' : `WP${i + 1}`))];
+
+  for (let i = 0; i < mission.waypoints.length; i++) {
+    const idx = i + 1;
+    const to = mission.waypoints[i];
+    const isRidgeLeg = !turnback && i === 2;
+    const lengthM = turnback && i === 1 ? 2320.04 : (LEG_LENGTHS[i] ?? Math.hypot(1, 1));
+    if (isRidgeLeg && scenario === 'missing-elevation') {
+      legs.push({
+        index: idx, from: names[i], to: names[i + 1], lengthM, status: 'missing-data',
+        reasons: [{ module: 'rf-core', severity: 'blocked', text: 'No elevation data past WP2: the last 2.4 km of the route are outside the loaded region. That part is not calculated: we do not guess the terrain.' }],
+      });
+      continue;
+    }
+    if (!isRidgeLeg) {
+      const worst = pick({ control: clearLink('control', pts[0], to, tier), video: clearLink('video', pts[0], to, tier) });
+      const reasons = turnback && i === mission.waypoints.length - 1
+        ? [{ module: 'fpv.core', severity: 'info' as const, text: 'The flight ends at T and returns; leg 3 is not flown, so the ridge no longer matters.' }]
+        : [];
+      legs.push({ index: idx, from: names[i], to: names[i + 1], lengthM, worst, status: 'ok', reasons });
+      continue;
+    }
+    const profile = profileBetween(mission.pilot, to);
+    profile.lengthM = A_TO_B_M;
+    const video = fixed
+      ? link({ kind: 'video', f: 915e6, rayM: A_TO_B_M, fsplDb: 106.12874, diffDb: 0.54891, nu: -0.6814, r1: 20.7934, los: true, clearanceM: 10.21, profile }, tier)
+      : link({ kind: 'video', f: 915e6, rayM: A_TO_B_M, fsplDb: 106.12874, diffDb: 29.61391, nu: 6.8013, r1: 20.7934, los: false, clearanceM: -99.86, profile }, tier);
+    const control = fixed
+      ? link({ kind: 'control', f: 433e6, rayM: A_TO_B_M, fsplDb: 99.63112, diffDb: 0.31107, nu: -0.4689, r1: 30.2214, los: true, clearanceM: 10.21, profile }, tier)
+      : link({ kind: 'control', f: 433e6, rayM: A_TO_B_M, fsplDb: 99.63112, diffDb: 26.35847, nu: 4.6795, r1: 30.2214, los: false, clearanceM: -99.86, profile }, tier);
+    const worst = pick({ control, video });
+    const videoBlocked = !!worst['video'] && !worst['video'].reachable;
+    const reasons = videoBlocked
+      ? [{ module: 'rf-core', severity: 'blocked' as const, text: 'Ridge 622 m blocks the video link by 100 m.', fix: fixAltitude(mission) }]
+      : fixed
+        ? [{ module: 'rf-core', severity: 'info' as const, text: 'At 345 m AGL the line of sight passes 10 m over the ridge: diffraction 0.55 dB, video margin +25.32 dB.' }]
+        : [];
+    legs.push({ index: idx, from: names[i], to: names[i + 1], lengthM, worst, status: videoBlocked ? 'blocked' : 'ok', reasons });
+  }
+
+  const result: RouteResult = {
+    missionRevision: 1,
+    inputHash: `mock-${turnback ? 't' : fixed ? 'f' : 'b'}-${mission.evaluate}`,
+    legs,
+    weather,
+    modules: {},
+    moduleFailures: [],
+  };
+
+  if (scenario === 'module-failed') {
+    result.moduleFailures = [{ module: 'fpv.battery 1.0.4', error: 'hit its memory limit (1 GB)' }];
+  } else {
+    const usableWh = 103.68;
+    const whPerM = usableWh / RANGE_M;
+    if (turnback) {
+      const out = 6003.13;
+      const back = 4195.17;
+      result.battery = { energyWh: 129.6, usableWh, neededWh: (out + back) * whPerM, rangeM: RANGE_M, neededM: out + back, shortfallM: 0, turnBack: { distanceAlongRouteM: out, returnM: back, lat: TURN_BACK.lat, lon: TURN_BACK.lon } };
+      result.modules = { 'fpv.battery': { reasons: [{ module: 'fpv.battery', severity: 'info', text: 'Turn back at T: 6.0 km out and 4.2 km back fit the 10.2 km range.' }] } };
+    } else {
+      const climbM = fixed ? 196.4 : 0;
+      const needed = NEEDED_M + climbM;
+      const out = 6003.13;
+      result.battery = {
+        energyWh: 129.6,
+        usableWh,
+        neededWh: needed * whPerM,
+        rangeM: RANGE_M,
+        neededM: needed,
+        shortfallM: needed - RANGE_M,
+        turnBack: { distanceAlongRouteM: out, returnM: 4195.17, lat: TURN_BACK.lat, lon: TURN_BACK.lon },
+      };
+      result.modules = {
+        'fpv.battery': {
+          reasons: [
+            {
+              module: 'fpv.battery',
+              severity: 'warn',
+              text: fixed
+                ? `Route plus return with the climb to 345 m needs ${(needed / 1000).toFixed(1)} km; the pack gives 10.2 km at 36 km/h.`
+                : 'Route 10.8 km plus 5.3 km back to the pilot needs 16.1 km; the pack gives 10.2 km at 36 km/h.',
+              fix: fixTurnBack(mission),
+            },
+          ],
+        },
+      };
+    }
+  }
+  return result;
+}
+
+// ---------------- coverage ----------------
+function knifeEdgeLossDb(nu: number): number {
+  if (nu <= -0.78) return 0;
+  return 6.9 + 20 * Math.log10(Math.sqrt((nu - 0.1) ** 2 + 1) + nu - 0.1);
+}
+
+const gridCache = new Map<string, CoverageGrid>();
+
+function sensitivityDbm(r: RadioProfile | undefined): number {
+  if (!r) return -105;
+  const s = r.sensitivity;
+  return s.method === 'datasheet' ? s.dBm : -174 + 10 * Math.log10(s.bandwidthHz) + s.noiseFigureDb + s.requiredSnrDb;
+}
+
+/**
+ * How much better (+) or worse (−) a link setup is than the reference setup, in dB, and its frequency.
+ * Lets the mock coverage react to scenario B (other radio, power or antenna) without a real model.
+ */
+export function linkBudgetDelta(mission: Mission, kind: LinkKind): { frequencyHz: number; biasDb: number } {
+  const ref = exampleMission().links[kind]!;
+  const cur = mission.links[kind] ?? ref;
+  const radio = (id: string) => LIBRARY.radios.find((r) => r.id === id);
+  const gain = (id: string) => LIBRARY.antennas.find((a) => a.id === id)?.gainDbi ?? 0;
+  const refRadio = radio(ref.radio);
+  const curRadio = radio(cur.radio) ?? refRadio;
+  const frequencyHz = curRadio?.frequencyHz ?? (kind === 'video' ? 915e6 : 433e6);
+  const biasDb =
+    cur.txPowerDbm - ref.txPowerDbm +
+    gain(cur.groundAntenna) - gain(ref.groundAntenna) +
+    gain(cur.airAntenna) - gain(ref.airAntenna) +
+    sensitivityDbm(refRadio) - sensitivityDbm(curRadio);
+  return { frequencyHz, biasDb: Math.round(biasDb * 1000) / 1000 };
+}
+
+/** Margin grid around the pilot for one link, row-major north to south, null = below threshold handled by the client. */
+export function coverageGrid(mission: Mission, kind: LinkKind): CoverageGrid {
+  const link = linkBudgetDelta(mission, kind);
+  const key = `${kind}:${mission.pilot.lat.toFixed(5)},${mission.pilot.lon.toFixed(5)}:${mission.coverage?.droneAglM ?? 120}:${link.frequencyHz}:${link.biasDb}`;
+  const hit = gridCache.get(key);
+  if (hit) return hit;
+  const f = link.frequencyHz;
+  const lambda = 299792458 / f;
+  const radiusKm = (mission.coverage?.radiusM ?? 8000) / 1000;
+  const cellKm = Math.max(0.05, (mission.coverage?.cellM ?? 100) / 1000);
+  const n = Math.round((2 * radiusKm) / cellKm);
+  const p0 = toLocal(mission.pilot.lat, mission.pilot.lon);
+  const hA = elevationLocal(p0.x, p0.y) + mission.pilot.aglM;
+  const droneAgl = mission.coverage?.droneAglM ?? 120;
+  const margins: (number | null)[] = new Array(n * n);
+  const samples = 48;
+  for (let r = 0; r < n; r++) {
+    const y = p0.y + radiusKm - (r + 0.5) * cellKm;
+    for (let c = 0; c < n; c++) {
+      const x = p0.x - radiusKm + (c + 0.5) * cellKm;
+      const dKm = Math.hypot(x - p0.x, y - p0.y);
+      if (dKm > radiusKm) {
+        margins[r * n + c] = null;
+        continue;
+      }
+      const dM = Math.max(30, dKm * 1000);
+      const hB = elevationLocal(x, y) + droneAgl;
+      let worstNu = -10;
+      for (let s = 1; s < samples; s++) {
+        const t = s / samples;
+        const g = elevationLocal(p0.x + (x - p0.x) * t, p0.y + (y - p0.y) * t);
+        const ray = hA + (hB - hA) * t;
+        const d1 = dM * t;
+        const d2 = dM - d1;
+        const nu = (g - ray) * Math.sqrt((2 * dM) / (lambda * d1 * d2));
+        if (nu > worstNu) worstNu = nu;
+      }
+      const extra = 30.7 * (dKm / 6.4) ** 2; // stands in for clutter / multipath in the mock
+      const margin = 37 - fspl(dM, f) - knifeEdgeLossDb(worstNu) - extra + 95 + link.biasDb;
+      margins[r * n + c] = margin;
+    }
+  }
+  const nw = toLatLon(p0.x - radiusKm, p0.y + radiusKm);
+  const se = toLatLon(p0.x + radiusKm, p0.y - radiusKm);
+  const values = margins.map((m) => (m === null ? -999 : m));
+  const [zero] = contours().size([n, n]).thresholds([0])(values);
+  const geo = zero as unknown as MultiPolygon;
+  const limit: MultiPolygon = {
+    type: 'MultiPolygon',
+    coordinates: geo.coordinates.map((poly) =>
+      poly.map((ring) =>
+        ring.map(([cx, cy]) => {
+          const ll = toLatLon(p0.x - radiusKm + cx * cellKm, p0.y + radiusKm - cy * cellKm);
+          return [ll.lon, ll.lat];
+        }),
+      ),
+    ),
+  };
+  const grid: CoverageGrid = { origin: { lat: nw.lat, lon: nw.lon }, cellM: cellKm * 1000, cols: n, rows: n, bbox: [nw.lon, se.lat, se.lon, nw.lat], marginDb: margins, limitPolygon: limit };
+  gridCache.set(key, grid);
+  return grid;
+}
+
+export function elevationProfile(from: { lat: number; lon: number }, to: { lat: number; lon: number }): Profile {
+  return profileBetween({ ...from, aglM: 0 }, { ...to, aglM: 0 });
+}
+
+export { elevation };
