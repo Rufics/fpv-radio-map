@@ -67,10 +67,11 @@ function tileToLonLat(z: number, x: number, y: number): { lon: number; lat: numb
   return { lon, lat };
 }
 
+/** z, x and y are the last three path segments of every mock tile URL. */
 function parseZxy(url: string): [number, number, number] {
-  const m = url.match(/(\d+)\/(\d+)\/(\d+)/);
-  if (!m) throw new Error(`bad tile url ${url}`);
-  return [Number(m[1]), Number(m[2]), Number(m[3])];
+  const zxy = url.split('/').slice(-3);
+  if (zxy.length !== 3 || !zxy.every((s) => /^\d+$/.test(s))) throw new Error(`bad tile url ${url}`);
+  return [Number(zxy[0]), Number(zxy[1]), Number(zxy[2])];
 }
 
 async function canvasToBuffer(c: OffscreenCanvas): Promise<ArrayBuffer> {

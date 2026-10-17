@@ -8,7 +8,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
-#include <random>
+#include <vector>
 
 using namespace rfext;
 using namespace rfcore;
@@ -34,10 +34,33 @@ ReceiverEnd rxEnd(double agl) {
     return rx;
 }
 
-TerrainProfile hills(std::mt19937& rng, double length, double step) {
-    std::uniform_real_distribution<double> h(0.0, 60.0);
+/// A deterministic quasi-Monte Carlo sweep (a Kronecker sequence): point n of dimension k is
+/// frac(n * sqrt(q_k)), q_k the k-th integer that is not a perfect square. Every dimension fills
+/// [0, 1) evenly and the dimensions do not line up, so it stands in for independent uniform draws,
+/// and every run checks the same points.
+class Sweep {
+public:
+    explicit Sweep(int dimensions) {
+        for (int q = 2; static_cast<int>(steps_.size()) < dimensions; ++q) {
+            const double root = std::sqrt(static_cast<double>(q));
+            if (root != std::floor(root)) steps_.push_back(root - std::floor(root));
+        }
+    }
+    /// In [0, 1); n counts from 1.
+    [[nodiscard]] double at(long n, int dimension) const {
+        const double x = static_cast<double>(n) * steps_.at(static_cast<std::size_t>(dimension));
+        return x - std::floor(x);
+    }
+
+private:
+    std::vector<double> steps_;
+};
+
+TerrainProfile hills(const Sweep& sweep, long n, double length, double step) {
     std::vector<std::pair<double, double>> pts;
-    const double a = h(rng), b = h(rng), c = h(rng);
+    const double a = 60.0 * sweep.at(n, 0);
+    const double b = 60.0 * sweep.at(n, 1);
+    const double c = 60.0 * sweep.at(n, 2);
     for (double d = 0.0; d <= length; d += step) {
         const double x = d / length;
         pts.push_back({d, 150.0 + a * std::sin(3.1 * x) + b * std::sin(7.3 * x + 1.0) + c * x * x});
@@ -70,20 +93,25 @@ TEST(Uncertainty, VerdictFollowsTheBand) {
 
 TEST(Uncertainty, BandContainsEveryPerturbationWithinTheStatedError) {
     // The band is exact only if the margin is monotone in each sample height. Check that against
-    // independent random perturbations of every sample, on random hilly paths.
-    std::mt19937 rng(20261017);
-    std::uniform_real_distribution<double> unit(-1.0, 1.0);
+    // perturbations of every sample spread evenly over the stated error, on varied hilly paths.
+    constexpr int kSamples = 201;  // 6000 m at 30 m steps
+    const Sweep sweep(3 + kSamples);
     LinkEvaluator eval(EarthModel(4.0 / 3.0), BullingtonDiffraction());
     const UncertaintyAnalyzer an(eval);
     int checked = 0;
     for (int path = 0; path < 100; ++path) {
-        const TerrainProfile p = hills(rng, 6000.0, 30.0);
+        const TerrainProfile p = hills(sweep, path + 1, 6000.0, 30.0);
+        ASSERT_EQ(p.samples().size(), static_cast<std::size_t>(kSamples));
         const auto tx = txEnd(1.5);
         const auto rx = rxEnd(5.0 + 2.5 * path);
         const auto band = an.analyze(p, Hertz(5.8e9), tx, rx);
         for (int trial = 0; trial < 40; ++trial) {
             std::vector<ProfileSample> s = p.samples();
-            for (auto& x : s) x.groundMsl = x.groundMsl + Metres(unit(rng) * x.uncertainty.value());
+            const long n = 40L * path + trial + 1;
+            for (std::size_t k = 0; k < s.size(); ++k) {
+                const double unit = 2.0 * sweep.at(n, 3 + static_cast<int>(k)) - 1.0;
+                s[k].groundMsl = s[k].groundMsl + Metres(unit * s[k].uncertainty.value());
+            }
             const TerrainProfile q(std::move(s), p.sourceName(), p.azimuthDeg(), p.midLatitudeDeg());
             const auto r = eval.evaluate(q, Hertz(5.8e9), tx, rx);
             const double m = r.margin.value();

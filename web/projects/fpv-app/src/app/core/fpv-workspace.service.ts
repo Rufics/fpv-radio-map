@@ -88,7 +88,7 @@ export class FpvWorkspace {
 
   readonly mission = this.store.mission;
   readonly shown = this.store.shownMission;
-  readonly result = computed(() => (this.store.preview() ? this.store.result() : this.store.result()));
+  readonly result = this.store.result;
   readonly calculated = computed(() => !!this.store.result());
   readonly evaluated = computed(() => linksEvaluated(this.mission()?.evaluate ?? 'both'));
 

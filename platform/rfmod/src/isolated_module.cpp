@@ -24,8 +24,11 @@ long long nowMs() {
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
 }
 
-[[noreturn]] void childFail(int errPipe, const char* what) {
-    (void)!write(errPipe, what, std::strlen(what));
+// Runs between fork and exec, so it takes only string literals: their length is known at compile
+// time and nothing has to scan memory.
+template <std::size_t N>
+[[noreturn]] void childFail(int errPipe, const char (&what)[N]) {
+    (void)!write(errPipe, what, N - 1);
     _exit(127);
 }
 

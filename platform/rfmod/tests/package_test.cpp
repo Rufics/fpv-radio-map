@@ -87,7 +87,7 @@ TEST(Package, UntrustedKeyIsRefused) {
 }
 
 TEST(Package, ThirdPartyKeyIsNotFirstParty) {
-    const auto path = std::filesystem::temp_directory_path() / "rfmod-trust-test.json";
+    const auto path = scratchDir("package") / "rfmod-trust-test.json";
     std::filesystem::remove(path);
     {
         TrustStore trust(ownerPublicText(), path);

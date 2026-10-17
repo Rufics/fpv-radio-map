@@ -69,7 +69,16 @@ public:
 private:
     std::unique_ptr<IModuleInstance> load(const Manifest& m, const TrustedKey& signer,
                                           const std::filesystem::path& dir, const json& options, bool forceIsolated);
+    /// reload() for callers that already hold adminMutex_.
+    void reloadLocked();
+    /// Shuts every loaded module down, in reverse dependency order, and forgets all entries.
+    void shutdownAll();
+    /// The module installed in `dir`, re-verified; nullopt (with a notice) if it fails verification.
+    [[nodiscard]] std::optional<Entry> readInstalled(const std::filesystem::path& dir,
+                                                     std::vector<std::string>& notices) const;
     void resolve();
+    /// Takes the instance out of the entry, then shuts it down outside mutex_.
+    void retire(Entry& e);
     void writeState(const Entry& e) const;
     [[nodiscard]] std::vector<std::string> dependentsOf(const std::string& id) const;
     static void unpack(const PackageFiles& files, const std::filesystem::path& dir);
@@ -77,8 +86,12 @@ private:
     RegistryConfig config_;
     const TrustStore& trust_;
     IHostServices& services_;
-    mutable std::recursive_mutex mutex_;
-    std::map<std::string, Entry> entries_;
+    /// Serialises the mutating calls. Module code (init, self-test, shutdown) runs while only this
+    /// one is held, so a module that calls back into the host can still read the registry.
+    std::mutex adminMutex_;
+    /// Guards entries_, order_ and notices_: readers hold it to read, the admin caller to change them.
+    mutable std::mutex mutex_;
+    std::map<std::string, Entry, std::less<>> entries_;
     std::vector<std::string> order_;  ///< load order of active modules
     std::vector<std::string> notices_;
 };

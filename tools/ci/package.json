@@ -3,6 +3,10 @@
   "private": true,
   "description": "Commit linting and release tooling used by .github/workflows. Not part of the product.",
   "type": "module",
+  "scripts": {
+    "commitlint": "commitlint --config commitlint.config.mjs --verbose",
+    "semantic-release": "semantic-release"
+  },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",
     "@commitlint/config-conventional": "21.2.3",

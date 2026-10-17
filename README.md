@@ -147,7 +147,7 @@ flowchart LR
 
 ```sh
 cd web
-npm ci
+npm ci --ignore-scripts
 npm run start:mock-prod      # then open http://localhost:4200
 ```
 

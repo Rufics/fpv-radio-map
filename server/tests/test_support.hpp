@@ -9,9 +9,18 @@
 #include <filesystem>
 #include <functional>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace rfmap::test {
+
+/// A directory for a test's files in the build tree (the tests run there), never in the shared,
+/// world-writable temp directory.
+inline std::filesystem::path scratchDir(const std::string& name) {
+    const std::filesystem::path dir = std::filesystem::current_path() / "test-scratch" / name;
+    std::filesystem::create_directories(dir);
+    return dir;
+}
 
 class FakeClock final : public IClock {
 public:

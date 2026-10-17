@@ -84,7 +84,7 @@ services:
     image: rfmap-web:local
     depends_on: [rfmap-server]
     ports:
-      - "${RFMAP_HTTP_PORT:-8088}:80"
+      - "${RFMAP_HTTP_PORT:-8088}:8080"
     volumes:
       - ${RFMAP_TILES_DIR}:/tiles:ro
     networks: [frontend, public]

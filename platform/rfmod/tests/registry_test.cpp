@@ -26,8 +26,8 @@ public:
 class RegistryTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        root = fs::temp_directory_path() / ("rfmod-registry-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
-                                            "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
+        root = scratchDir("registry") / ("rfmod-registry-" + std::to_string(::testing::UnitTest::GetInstance()->random_seed()) +
+                                         "-" + ::testing::UnitTest::GetInstance()->current_test_info()->name());
         fs::remove_all(root);
         trust = std::make_unique<TrustStore>(ownerPublicText(), root / "keys.json");
         trust->add(thirdPartySecret().publicKey(), "Test vendor");

@@ -4,7 +4,7 @@ This Docker image builds all the map data FPV Radio Map serves from its own serv
 
 ```
 docker build -t rfmap/tiles-builder tools/tiles-builder
-docker run --rm -v "$PWD/data:/data" rfmap/tiles-builder all \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder all \
     --bbox 34.8,48.3,35.4,48.7 --region europe/ukraine
 ```
 
@@ -26,6 +26,8 @@ Admin step-by-step guide: [`docs/admin/tiles-builder.md`](../../docs/admin/tiles
 `style-dark.json` and `manifest.json` are rewritten after every command. Run `rfmap-tiles <command> --help` to see all options.
 
 Directory layout: `/data/cache` holds downloads and is reused between runs. `/data/work` holds temporary files. `/data/out` holds the results.
+
+**Checked inputs:** URLs must be `https://` (redirects too), and a satellite source must resolve to public addresses only. Local files must exist and are passed on as absolute paths. `--java-heap` takes a size such as `4g`.
 
 **Idempotent:** every output is written under a temporary name and renamed into place only when it is finished. A step whose output already exists, was built with the same parameters and has the same sha256 is skipped. `--force` rebuilds it.
 

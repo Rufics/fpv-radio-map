@@ -14,7 +14,7 @@ import shutil
 from pathlib import Path
 
 from . import raster, sources
-from .common import (BBox, BuildError, Dirs, download, fresh_dir, http_status, install, is_up_to_date,
+from .common import (BBox, BuildError, Dirs, download, existing_file, fresh_dir, http_status, install, is_up_to_date,
                      log, mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors, pmtiles_header,
                      read_meta, run, tile_aligned_extent, warn, write_meta, zoom_resolution)
 
@@ -29,7 +29,7 @@ def add_arguments(p) -> None:
     g.add_argument("--dem-source", choices=["copernicus", "srtm", "file"], default="copernicus",
                    help="copernicus = Copernicus DEM GLO-30 from AWS (default); srtm = AWS Terrain Tiles "
                         "1\" HGT (fallback); file = local rasters given with --dem-file")
-    g.add_argument("--dem-file", action="append", default=[],
+    g.add_argument("--dem-file", type=existing_file, action="append", default=[],
                    help="local DEM raster(s) on one shared grid (repeatable); implies --dem-source file")
     g.add_argument("--allow-dem-resample", action="store_true",
                    help="allow mosaicking tiles of different pixel size (e.g. Copernicus across 50°N) by "

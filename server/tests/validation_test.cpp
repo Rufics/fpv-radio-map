@@ -1,5 +1,6 @@
 #include "config.hpp"
 #include "schemas.hpp"
+#include "test_support.hpp"
 
 #include <gtest/gtest.h>
 
@@ -105,7 +106,7 @@ TEST_F(ValidationTest, InlineRequestSchemaCanReferToTheMissionFile) {
 }
 
 TEST(ConfigTest, EnvironmentOverridesTheFile) {
-    const auto file = std::filesystem::temp_directory_path() / "rfmap-config-test.json";
+    const auto file = rfmap::test::scratchDir("config") / "rfmap-config-test.json";
     {
         std::ofstream out(file);
         out << R"({"server": {"port": 9000}, "cache": {"demBlocksMb": 8}, "admin": {"token": "from-file"}})";

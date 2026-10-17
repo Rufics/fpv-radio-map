@@ -19,22 +19,22 @@ describe('mock reference case', () => {
   it('video 915 MHz on leg 3 is blocked by the ridge', () => {
     const v = leg3?.worst?.video;
     expect(v?.reachable).toBe(false);
-    const fspl = v?.terms?.find((t) => t.id === 'fspl')?.valueDb ?? NaN;
+    const fspl = v?.terms?.find((t) => t.id === 'fspl')?.valueDb ?? Number.NaN;
     expect(RfFormat.format(fspl, 'db')).toBe('106.13 dB');
-    expect(RfFormat.format(v?.diffraction?.lossDb ?? NaN, 'db')).toBe('29.61 dB');
-    expect(RfFormat.format(v?.receivedDbm ?? NaN, 'dbm')).toBe('−98.74 dBm');
-    expect(RfFormat.format(v?.requiredDbm ?? NaN, 'dbm')).toBe('−95.00 dBm');
-    expect(RfFormat.format(v?.marginDb ?? NaN, 'db+')).toBe('−3.74 dB');
-    expect(RfFormat.format(v?.diffraction?.firstFresnelRadiusM ?? NaN, 'm2')).toBe('20.79 m');
-    expect(RfFormat.format(v?.diffraction?.nu ?? NaN, 'n2')).toBe('6.80');
+    expect(RfFormat.format(v?.diffraction?.lossDb ?? Number.NaN, 'db')).toBe('29.61 dB');
+    expect(RfFormat.format(v?.receivedDbm ?? Number.NaN, 'dbm')).toBe('−98.74 dBm');
+    expect(RfFormat.format(v?.requiredDbm ?? Number.NaN, 'dbm')).toBe('−95.00 dBm');
+    expect(RfFormat.format(v?.marginDb ?? Number.NaN, 'db+')).toBe('−3.74 dB');
+    expect(RfFormat.format(v?.diffraction?.firstFresnelRadiusM ?? Number.NaN, 'm2')).toBe('20.79 m');
+    expect(RfFormat.format(v?.diffraction?.nu ?? Number.NaN, 'n2')).toBe('6.80');
   });
 
   it('control 433 MHz on leg 3 still works', () => {
     const c = leg3?.worst?.control;
     expect(c?.reachable).toBe(true);
-    expect(RfFormat.format(c?.diffraction?.lossDb ?? NaN, 'db')).toBe('26.36 dB');
-    expect(RfFormat.format(c?.marginDb ?? NaN, 'db+')).toBe('+6.01 dB');
-    expect(RfFormat.format(c?.diffraction?.firstFresnelRadiusM ?? NaN, 'm2')).toBe('30.22 m');
+    expect(RfFormat.format(c?.diffraction?.lossDb ?? Number.NaN, 'db')).toBe('26.36 dB');
+    expect(RfFormat.format(c?.marginDb ?? Number.NaN, 'db+')).toBe('+6.01 dB');
+    expect(RfFormat.format(c?.diffraction?.firstFresnelRadiusM ?? Number.NaN, 'm2')).toBe('30.22 m');
   });
 
   it('the altitude fix gives +25.32 dB video margin', () => {
@@ -42,16 +42,16 @@ describe('mock reference case', () => {
     expect(fix.title).toContain('345 m');
     const fixed = routeResult({ ...mission, waypoints: mission.waypoints.map((w, i) => (i === 2 ? { ...w, aglM: 345 } : w)) }, 'normal');
     const v = fixed.legs?.[2]?.worst?.video;
-    expect(RfFormat.format(v?.diffraction?.lossDb ?? NaN, 'db')).toBe('0.55 dB');
-    expect(RfFormat.format(v?.marginDb ?? NaN, 'db+')).toBe('+25.32 dB');
+    expect(RfFormat.format(v?.diffraction?.lossDb ?? Number.NaN, 'db')).toBe('0.55 dB');
+    expect(RfFormat.format(v?.marginDb ?? Number.NaN, 'db+')).toBe('+25.32 dB');
   });
 
   it('battery: needs 16.1 km, has 10.2 km, turn back at 6.0 km', () => {
     const b = base.battery;
-    expect(RfFormat.format(b?.rangeM ?? NaN, 'km1')).toBe('10.2 km');
-    expect(RfFormat.format(b?.neededM ?? NaN, 'km1')).toBe('16.1 km');
-    expect(RfFormat.format(b?.turnBack?.distanceAlongRouteM ?? NaN, 'km1')).toBe('6.0 km');
-    expect(RfFormat.format(b?.turnBack?.returnM ?? NaN, 'km1')).toBe('4.2 km');
+    expect(RfFormat.format(b?.rangeM ?? Number.NaN, 'km1')).toBe('10.2 km');
+    expect(RfFormat.format(b?.neededM ?? Number.NaN, 'km1')).toBe('16.1 km');
+    expect(RfFormat.format(b?.turnBack?.distanceAlongRouteM ?? Number.NaN, 'km1')).toBe('6.0 km');
+    expect(RfFormat.format(b?.turnBack?.returnM ?? Number.NaN, 'km1')).toBe('4.2 km');
   });
 
   it('uses the server shapes: 0-based legs, return leg last, reasons with link', () => {

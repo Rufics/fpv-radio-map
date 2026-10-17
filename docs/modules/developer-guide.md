@@ -320,6 +320,8 @@ rfmod test  acme.rain-0.1.0.rfmod --trust acme.pub  # also runs the self-test in
 ```
 
 `rfmod test` answers host calls only from `--fixtures calls.json` (`{"method": response}`).
+It installs the packages into a private directory (`.rfmod-test-XXXXXX`, mode 0700) under the
+current directory and removes it when it finishes.
 `rfmod inspect` lists what is inside a package.
 
 Packing is reproducible: the same files and key give the same bytes.

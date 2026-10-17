@@ -20,11 +20,11 @@ S2_SCENE="https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/
 
 mkdir -p "$DATA/inputs"
 for f in monaco-latest.osm.pbf natural_earth_vector.sqlite.zip water-polygons-split-3857.zip; do
-  [ -s "$DATA/inputs/$f" ] || curl -fsSL -o "$DATA/inputs/$f" "$FIXTURES/$f"
+  [[ -s "$DATA/inputs/$f" ]] || curl -fsSL --proto =https --proto-redir =https -o "$DATA/inputs/$f" "$FIXTURES/$f"
 done
 
 # shellcheck disable=SC2086
-run() { docker run --rm ${DOCKER_ARGS:-} -v "$DATA:/data" "$IMAGE" "$@"; }
+run() { docker run --rm --user "$(id -u):$(id -g)" ${DOCKER_ARGS:-} -v "$DATA:/data" "$IMAGE" "$@"; }
 
 run all --bbox "$BBOX" \
   --osm-file /data/inputs/monaco-latest.osm.pbf --basemap-full-extract \
