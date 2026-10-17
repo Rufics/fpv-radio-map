@@ -54,7 +54,7 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
 - C++: everything under `ctest`, including the server integration test against PostgreSQL 16 + PostGIS
   and the signed-package upload checks of every FPV module;
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
-- the pull request title against Conventional Commits.
+- the pull request title against Conventional Commits (its own check, re-run when the title is edited).
 
 Run the same locally:
 
