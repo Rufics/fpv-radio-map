@@ -78,6 +78,13 @@ public:
     /// Energy for the geodesic from `a` (at aglA) to `b` (at aglB), the AGL changing linearly.
     [[nodiscard]] double segmentWh(const LatLon& a, double aglA, const LatLon& b, double aglB) const;
 
+    /// Cruise energy for the geodesic a→b at constant altitude (no climbing).
+    [[nodiscard]] double levelWh(const LatLon& a, const LatLon& b) const;
+
+    /// Energy to climb straight up by `riseM` before flying on: m g Δh / η, or for a measured
+    /// climb the climb power for Δh / climb rate (no forward flight during it).
+    [[nodiscard]] double verticalClimbWh(double riseM) const;
+
     /// Energy along the route from its start to distance s.
     [[nodiscard]] double routeWh(const Route& route, double s) const;
 

@@ -149,6 +149,17 @@ double EnergyModel::segmentWh(const LatLon& a, double aglA, const LatLon& b, dou
     return cruiseWh(a, inv.azimuth1Deg, inv.distanceM) + climbWh(a, aglA, b, aglB);
 }
 
+double EnergyModel::levelWh(const LatLon& a, const LatLon& b) const {
+    const InverseResult inv = world_.inverse(a, b);
+    return cruiseWh(a, inv.azimuth1Deg, inv.distanceM);
+}
+
+double EnergyModel::verticalClimbWh(double riseM) const {
+    if (riseM <= 0.0) return 0.0;
+    if (drone_.climbMethod == "measured") return drone_.climbPowerW * (riseM / drone_.climbRateMps) / 3600.0;
+    return drone_.massKg * kGravity * riseM / drone_.climbEfficiency / 3600.0;
+}
+
 double EnergyModel::routeWh(const Route& route, double s) const {
     double e = 0.0;
     for (const Leg& leg : route.legs()) {

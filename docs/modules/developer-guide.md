@@ -262,6 +262,7 @@ mkdir -p stage/lib && cp manifest.json stage/ && cp -r schema stage/ && cp build
 rfmod pack stage --key acme.secret                  # → acme.rain-0.1.0.rfmod
 rfmod check acme.rain-0.1.0.rfmod --trust acme.pub  # every upload check except the self-test
 rfmod test  acme.rain-0.1.0.rfmod --trust acme.pub  # also runs the self-test in a worker
+# add --with dep-1.0.0.rfmod for each required module
 ```
 
 `rfmod test` answers host calls only from `--fixtures calls.json` (`{"method": response}`).

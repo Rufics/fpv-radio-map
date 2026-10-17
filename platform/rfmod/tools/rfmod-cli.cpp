@@ -5,7 +5,7 @@
 //   rfmod pack DIR --key NAME.secret [-o FILE.rfmod]
 //   rfmod inspect FILE.rfmod
 //   rfmod check FILE.rfmod --trust KEY.pub [--trust ...] [--host-version X.Y.Z]
-//   rfmod test FILE.rfmod --trust KEY.pub [--worker PATH] [--fixtures FILE.json]
+//   rfmod test FILE.rfmod --trust KEY.pub [--with DEP.rfmod ...] [--worker PATH] [--fixtures FILE.json]
 //
 // "check" runs every upload check except the self-test; "test" also runs the self-test in a
 // worker exactly as the server does. Host calls are answered from --fixtures
@@ -173,6 +173,16 @@ int cmdTest(const Args& a, const char* argv0) {
     int rc = 1;
     {
         rfmod::ModuleRegistry registry(cfg, trust, host);
+        // Dependencies are installed first, as an admin would.
+        for (const std::string& dep : a.all("--with")) {
+            const rfmod::ValidationReport r = registry.upload(readFile(dep), true);
+            if (!r.ok()) {
+                std::cout << "Dependency " << dep << " was refused:\n";
+                printReport(r);
+                fs::remove_all(tmp);
+                return 1;
+            }
+        }
         rc = printReport(registry.upload(readFile(a.positional[0]), false));
     }
     fs::remove_all(tmp);
@@ -278,7 +288,7 @@ void usage() {
                  "  rfmod pack DIR --key NAME.secret [-o FILE.rfmod]\n"
                  "  rfmod inspect FILE.rfmod\n"
                  "  rfmod check FILE.rfmod --trust KEY.pub [--host-version X.Y.Z]\n"
-                 "  rfmod test FILE.rfmod --trust KEY.pub [--worker PATH] [--fixtures FILE.json]\n";
+                 "  rfmod test FILE.rfmod --trust KEY.pub [--with DEP.rfmod ...] [--worker PATH] [--fixtures FILE.json]\n";
 }
 
 }  // namespace

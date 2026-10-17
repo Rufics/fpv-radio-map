@@ -9,12 +9,23 @@ get_filename_component(FPV_KEYS "${CMAKE_CURRENT_SOURCE_DIR}/../../platform/rfmo
 
 # fpv_module(<dir> <lib name> SOURCES ... [TESTS ...])
 function(fpv_module dir lib)
-  cmake_parse_arguments(M "" "" "SOURCES;TESTS" ${ARGN})
+  cmake_parse_arguments(M "" "" "SOURCES;TESTS;USES;DEPENDS_ON" ${ARGN})
   set(core ${lib}_core)
   add_library(${core} OBJECT ${M_SOURCES})
   target_link_libraries(${core} PUBLIC fpv_common)
-  add_library(${lib} SHARED ${dir}/src/module.cpp $<TARGET_OBJECTS:${core}>)
+  # USES: other modules' cores compiled in (code reuse only; the runtime dependency is in the manifest).
+  set(extra "")
+  set(incs ${CMAKE_CURRENT_SOURCE_DIR}/${dir}/src)
+  foreach(u ${M_USES})
+    list(APPEND extra $<TARGET_OBJECTS:${u}_core>)
+    get_target_property(udir ${u}_core FPV_SRC_DIR)
+    list(APPEND incs ${udir})
+  endforeach()
+  target_include_directories(${core} PUBLIC ${incs})
+  set_target_properties(${core} PROPERTIES FPV_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${dir}/src)
+  add_library(${lib} SHARED ${dir}/src/module.cpp $<TARGET_OBJECTS:${core}> ${extra})
   target_link_libraries(${lib} PRIVATE fpv_common)
+  target_include_directories(${lib} PRIVATE ${incs})
   set_target_properties(${lib} PROPERTIES CXX_VISIBILITY_PRESET hidden PREFIX "lib")
   set(stage ${CMAKE_CURRENT_BINARY_DIR}/${dir}/stage)
   add_custom_command(TARGET ${lib} POST_BUILD
@@ -28,12 +39,21 @@ function(fpv_module dir lib)
   endif()
   if(RFMAP_BUILD_TESTS)
     set(pkg ${CMAKE_CURRENT_BINARY_DIR}/${dir}.rfmod)
+    set_target_properties(${lib} PROPERTIES FPV_PACKAGE ${pkg})
     add_test(NAME ${lib}_pack COMMAND $<TARGET_FILE:rfmod> pack ${stage} --key ${FPV_KEYS}/dev-owner.secret -o ${pkg})
-    add_test(NAME ${lib}_upload_checks COMMAND $<TARGET_FILE:rfmod> test ${pkg} --trust ${FPV_KEYS}/dev-owner.pub)
-    set_tests_properties(${lib}_upload_checks PROPERTIES DEPENDS ${lib}_pack PASS_REGULAR_EXPRESSION "All checks passed")
+    # DEPENDS_ON: modules this one requires at run time; installed first in the test registry.
+    set(with "")
+    set(deps ${lib}_pack)
+    foreach(d ${M_DEPENDS_ON})
+      get_target_property(dpkg ${d} FPV_PACKAGE)
+      list(APPEND with --with ${dpkg})
+      list(APPEND deps ${d}_pack)
+    endforeach()
+    add_test(NAME ${lib}_upload_checks COMMAND $<TARGET_FILE:rfmod> test ${pkg} --trust ${FPV_KEYS}/dev-owner.pub ${with})
+    set_tests_properties(${lib}_upload_checks PROPERTIES DEPENDS "${deps}" PASS_REGULAR_EXPRESSION "All checks passed")
     if(M_TESTS)
-      add_executable(${lib}_tests ${M_TESTS} $<TARGET_OBJECTS:${core}>)
-      target_include_directories(${lib}_tests PRIVATE ${dir}/src)
+      add_executable(${lib}_tests ${M_TESTS} $<TARGET_OBJECTS:${core}> ${extra})
+      target_include_directories(${lib}_tests PRIVATE ${incs})
       target_link_libraries(${lib}_tests PRIVATE fpv_common GTest::gtest_main)
       include(GoogleTest)
       gtest_discover_tests(${lib}_tests)
@@ -48,3 +68,9 @@ fpv_module(battery fpv_battery
 fpv_module(min-altitude fpv_min_altitude
   SOURCES min-altitude/src/clearance.cpp min-altitude/src/analysis.cpp
   TESTS min-altitude/tests/clearance_test.cpp)
+
+fpv_module(failsafe fpv_failsafe
+  SOURCES failsafe/src/failsafe.cpp
+  USES fpv_battery
+  DEPENDS_ON fpv_battery fpv_min_altitude
+  TESTS failsafe/tests/failsafe_test.cpp)
