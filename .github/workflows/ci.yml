@@ -43,6 +43,7 @@ jobs:
           name: test-results-cpp
           path: test-results/
           if-no-files-found: ignore
+          retention-days: 7
 
   web:
     name: Web build and tests
@@ -75,6 +76,7 @@ jobs:
           name: test-results-web
           path: test-results/
           if-no-files-found: ignore
+          retention-days: 7
 
   report:
     name: Test report

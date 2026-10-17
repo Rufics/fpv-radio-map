@@ -90,7 +90,8 @@ cd web && npm ci && npm run build && npm test
 
 Every push to `main` runs the CI again, builds the server and web Docker images, starts them with
 PostGIS and checks the stack end to end (`deploy/ci/smoke.sh`), then publishes them to GHCR as
-`:edge` and `:sha-<commit>`.
+`:edge`. The previous `:edge` is deleted, so only `:edge` and the release tags take package storage.
+CI test results are kept as workflow artifacts for 7 days.
 
 ## Releases
 

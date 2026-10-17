@@ -197,6 +197,9 @@ jobs:
           context: .
           file: deploy/server.Dockerfile
           push: true
+          # No attestation manifests: GHCR lists them as untagged versions, which the cleanup on main would delete.
+          provenance: false
+          sbom: false
           build-args: |
             RFMAP_OWNER_PUBKEY=${{ vars.RFMAP_OWNER_PUBKEY }}
             RFMAP_VERSION=${{ env.VERSION }}
@@ -214,6 +217,9 @@ jobs:
           context: .
           file: deploy/web.Dockerfile
           push: true
+          # No attestation manifests: GHCR lists them as untagged versions, which the cleanup on main would delete.
+          provenance: false
+          sbom: false
           tags: |
             ${{ env.WEB_IMAGE }}:${{ env.VERSION }}
             ${{ env.WEB_IMAGE }}:${{ env.MINOR }}
