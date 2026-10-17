@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "fpv.relay",
+  "version": "1.0.0",
+  "title": "Relay planner",
+  "description": "Link budget for each hop through a relay (pilot to relay, relay to drone along the route), and the best relay spot inside a drawn area.",
+  "author": "rfmap",
+  "license": "MIT",
+  "lifecycle": "beta",
+  "abi": 1,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["route.analysis"],
+  "methods": ["route.analyze"],
+  "entry": { "linux-x86_64": "lib/libfpv_relay.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 256, "timeoutMs": 600000 }
+}
