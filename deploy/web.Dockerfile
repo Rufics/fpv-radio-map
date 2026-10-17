@@ -3,11 +3,9 @@
 #   docker build -f deploy/web.Dockerfile -t rfmap-web .
 #
 # Base images are pinned by digest (multi-arch index), read from Docker Hub on 2026-10-17.
+# They are written into FROM directly so Dependabot can update them.
 
-ARG NODE_IMAGE=node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5
-ARG NGINX_IMAGE=nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
-
-FROM ${NODE_IMAGE} AS build
+FROM node:24-bookworm-slim@sha256:a5f4366e834695d5f363b920c104953a535d3a9864d1bdf74566a0ebe01daee5 AS build
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 # Behind a TLS-intercepting proxy pass its CA: --secret id=build_ca,src=/path/ca.crt
@@ -19,7 +17,7 @@ COPY schemas/ /src/schemas/
 COPY web/ ./
 RUN npm run build
 
-FROM ${NGINX_IMAGE}
+FROM nginx:1.27-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/web/dist/fpv-app/browser/ /usr/share/nginx/html/
 # Tile archives are mounted here read-only (tools/tiles-builder output).

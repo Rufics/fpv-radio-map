@@ -3,12 +3,11 @@
 # Without RFMAP_OWNER_PUBKEY the public development key is built in and the server warns at start.
 #
 # Base images are pinned by digest (multi-arch index). The digests were read from Docker Hub on
-# 2026-10-17; refresh them deliberately (docs/admin/deploy.md, "Updating base images").
-
-ARG UBUNTU_IMAGE=ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+# 2026-10-17. The image is written into FROM directly so Dependabot can update it; keep both
+# stages on the same reference (docs/admin/deploy.md, "Updating base images").
 
 # ---- build ----
-FROM ${UBUNTU_IMAGE} AS build
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac AS build
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential cmake ninja-build pkg-config git ca-certificates \
@@ -40,7 +39,7 @@ RUN --mount=type=secret,id=build_ca,required=false \
     && install -D -m 0755 build/platform/rfmod/rfmod /out/usr/bin/rfmod
 
 # ---- runtime ----
-FROM ${UBUNTU_IMAGE}
+FROM ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates libgeographiclib26 libarchive13t64 libsodium23 \
