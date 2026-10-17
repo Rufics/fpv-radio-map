@@ -132,6 +132,18 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
                                     : "version " + m.version.str() + " is not newer than installed " + have.str());
     }
 
+    // An upgrade must not leave an enabled dependent outside the range it asked for.
+    std::string stranded;
+    for (const auto& [otherId, other] : entries_) {
+        if (!other.enabled || otherId == m.id) continue;
+        for (const Dependency& d : other.manifest.dependencies) {
+            if (d.id == m.id && !d.range.contains(m.version)) {
+                stranded += (stranded.empty() ? "" : "; ") + otherId + " needs " + d.range.str();
+            }
+        }
+    }
+    if (!stranded.empty()) report.fail("dependents", m.version.str() + " breaks enabled modules: " + stranded);
+
     // Required dependencies must already be installed, in range and loadable.
     std::vector<std::string> problems;
     for (const Dependency& d : m.dependencies) {

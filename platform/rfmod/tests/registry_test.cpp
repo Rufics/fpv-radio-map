@@ -158,6 +158,11 @@ TEST_F(RegistryTest, DependenciesAndUpgrade) {
     r = registry->upload(pack(baseManifest("test.alpha", "1.0.0"), RFMOD_LIB_ALPHA, ownerSecret()), true);
     EXPECT_EQ(failed(r).substr(0, 15), "version.upgrade");
 
+    // A major upgrade that leaves test.beta out of range is refused (lib content does not matter:
+    // the check runs before the self-test).
+    r = registry->upload(pack(baseManifest("test.alpha", "2.0.0"), RFMOD_LIB_ALPHA2, ownerSecret()), true);
+    EXPECT_EQ(failed(r).substr(0, 10), "dependents");
+
     // Disabling the dependent first, then the dependency, works.
     registry->setEnabled("test.beta", false);
     registry->setEnabled("test.alpha", false);
