@@ -165,6 +165,10 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
 
     std::unique_ptr<archive, ArchiveWriteDeleter> a(archive_write_new());
     archive_write_add_filter_gzip(a.get());
+    // The gzip header stores the current time unless told not to, which makes packing depend on the clock.
+    if (archive_write_set_filter_option(a.get(), "gzip", "timestamp", nullptr) != ARCHIVE_OK) {
+        throw std::runtime_error(std::string("archive: ") + archive_error_string(a.get()));
+    }
     archive_write_set_format_pax_restricted(a.get());
     std::string out;
     auto openCb = [](archive*, void*) -> int { return ARCHIVE_OK; };

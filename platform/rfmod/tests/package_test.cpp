@@ -72,6 +72,9 @@ TEST(Package, SignedPackageVerifies) {
     EXPECT_TRUE(v->signer.firstParty());
     // Packing is reproducible.
     EXPECT_EQ(pkg, PackageWriter::pack(packageWith(baseManifest("test.alpha", "1.0.0"), RFMOD_LIB_ALPHA), ownerSecret()));
+    // The gzip header carries no timestamp (bytes 4..7 are MTIME), so packs made in different seconds match too.
+    ASSERT_GE(pkg.size(), 8u);
+    EXPECT_EQ(pkg.substr(4, 4), std::string(4, '\0'));
 }
 
 TEST(Package, UntrustedKeyIsRefused) {
