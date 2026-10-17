@@ -18,12 +18,19 @@ struct GeodesicInverse {
     double azimuthEndDeg;     ///< Forward azimuth at the end point.
 };
 
+struct GeodesicDirect {
+    GeoPoint point;
+    double azimuthEndDeg;  ///< Forward azimuth at the reached point.
+};
+
 /// Geodesics on WGS84 using Karney's algorithm (GeographicLib), accurate to about
 /// 15 nanometres. No spherical approximation is used anywhere in the core.
 class Geodesy {
 public:
     [[nodiscard]] GeodesicInverse inverse(const GeoPoint& from, const GeoPoint& to) const;
     [[nodiscard]] GeoPoint direct(const GeoPoint& from, double azimuthDeg, Metres distance) const;
+    /// Same, also returning the forward azimuth at the end.
+    [[nodiscard]] GeodesicDirect directWithAzimuth(const GeoPoint& from, double azimuthDeg, Metres distance) const;
 
     /// Points along the geodesic from `from` to `to`, both ends included, spaced no more
     /// than `maxStep` apart (equal spacing).

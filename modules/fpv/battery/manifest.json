@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "fpv.battery",
+  "version": "1.0.0",
+  "title": "Battery, wind and temperature",
+  "description": "Energy needed for the route at cruise airspeed in the forecast wind, the battery's usable energy at the forecast temperature, the point of no return and a suggested turn-back point.",
+  "author": "rfmap",
+  "license": "MIT",
+  "lifecycle": "beta",
+  "abi": 1,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["route.analysis"],
+  "methods": ["route.analyze"],
+  "entry": { "linux-x86_64": "lib/libfpv_battery.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 256, "timeoutMs": 60000 }
+}

@@ -25,6 +25,14 @@ GeoPoint Geodesy::direct(const GeoPoint& from, double azimuthDeg, Metres distanc
     return out;
 }
 
+GeodesicDirect Geodesy::directWithAzimuth(const GeoPoint& from, double azimuthDeg, Metres distance) const {
+    const auto& geod = GeographicLib::Geodesic::WGS84();
+    GeodesicDirect out{};
+    geod.Direct(from.latitudeDeg, from.longitudeDeg, azimuthDeg, distance.value(), out.point.latitudeDeg,
+                out.point.longitudeDeg, out.azimuthEndDeg);
+    return out;
+}
+
 std::vector<GeoPoint> Geodesy::sample(const GeoPoint& from, const GeoPoint& to, Metres maxStep) const {
     if (!(maxStep.value() > 0.0)) {
         throw std::invalid_argument("Geodesy::sample: maxStep must be positive");
