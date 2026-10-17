@@ -1,5 +1,8 @@
 # Deploying FPV Radio Map
 
+For a first install, follow [Production server, step by step](production-setup.md). This page is
+the reference for each part.
+
 The stack has four parts, described in [`deploy/docker-compose.yml`](../../deploy/docker-compose.yml):
 
 | Service | What it does |

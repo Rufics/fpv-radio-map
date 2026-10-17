@@ -9,6 +9,12 @@ dist/
 *.secret
 !platform/rfmod/keys/dev-*.secret
 .env
+# Local operator files: tiles-builder data under data/ and a Compose override in deploy/.
+/data/inputs/
+/data/cache/
+/data/work/
+/data/out/
+/deploy/docker-compose.override.yml
 test-results/
 test-scratch/
 .rfmod-test-*/
