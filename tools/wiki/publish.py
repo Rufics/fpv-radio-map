@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Publishes docs/ to the GitHub wiki checkout given as the second argument.
+"""Publishes docs/ to the GitHub wiki checked out in wiki/ at the repository root.
 
-    python3 tools/wiki/publish.py docs path/to/repo.wiki Rufics/fpv-radio-map
+    git clone https://github.com/Rufics/fpv-radio-map.wiki.git wiki
+    GITHUB_REPOSITORY=Rufics/fpv-radio-map python3 tools/wiki/publish.py
+
+The script takes no arguments: both folders are fixed relative to the repository, so it can read
+and write nothing else. GITHUB_REPOSITORY (set by GitHub Actions) names the repository for links.
 
 The wiki becomes a mirror of docs/: every Markdown file is one page, named after its first
 heading (docs/README.md is Home, docs/_Sidebar.md is the sidebar). Links between docs point to
 the wiki pages, images under docs/ are copied, and every other relative link points to the file
 on main. Pages that no longer exist in docs/ are removed.
 """
+import os
 import re
 import shutil
 import sys
@@ -17,6 +22,7 @@ SPECIAL = {"README.md": "Home", "_Sidebar.md": "_Sidebar"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 # ](target) in Markdown and src="target" in inline HTML.
 LINK = re.compile(r'(\]\(|src=")([^)"\s]+)([)"])')
+REPO_ROOT = Path(__file__).resolve().parents[2]
 EXTERNAL = re.compile(r"^[a-z][a-z0-9+.-]*:")
 REPO_NAME = re.compile(r"^[\w.-]+/[\w.-]+$")
 
@@ -57,6 +63,8 @@ class Publisher:
             raise PublishError(f"not an owner/name repository: {repo}")
         self.docs = docs.resolve()
         self.wiki = wiki.resolve()
+        if not self.wiki.is_dir():
+            raise PublishError(f"no wiki checkout at {self.wiki}; clone the wiki repository there first")
         self.repo_root = self.docs.parent
         self.blob = f"https://github.com/{repo}/blob/main"
         self.tree = f"https://github.com/{repo}/tree/main"
@@ -108,11 +116,11 @@ class Publisher:
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 1:
         print(__doc__, file=sys.stderr)
         return 2
     try:
-        count = Publisher(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]).publish()
+        count = Publisher(REPO_ROOT / "docs", REPO_ROOT / "wiki", os.environ.get("GITHUB_REPOSITORY", "")).publish()
     except PublishError as e:
         print(e, file=sys.stderr)
         return 1

@@ -19,10 +19,12 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #ifndef RFMAP_HOST_VERSION
@@ -159,13 +161,40 @@ int cmdCheck(const Args& a) {
     return printReport(r);
 }
 
+/// The private work directory could not be created.
+class PrivateDirError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+/// A new directory only this user can open (mkdtemp: mode 0700, unguessable name), removed with
+/// everything in it when it goes out of scope.
+class PrivateDir {
+public:
+    explicit PrivateDir(const fs::path& prefix) {
+        std::string name = prefix.string() + "XXXXXX";
+        if (!mkdtemp(name.data())) throw PrivateDirError("cannot create a directory next to " + prefix.string());
+        path_ = name;
+    }
+    ~PrivateDir() {
+        std::error_code ignored;
+        fs::remove_all(path_, ignored);
+    }
+    PrivateDir(const PrivateDir&) = delete;
+    PrivateDir& operator=(const PrivateDir&) = delete;
+    [[nodiscard]] const fs::path& path() const { return path_; }
+
+private:
+    fs::path path_;
+};
+
 int cmdTest(const Args& a, const char* argv0) {
     if (a.positional.size() != 1) throw std::invalid_argument("rfmod test FILE.rfmod --trust KEY.pub");
     const rfmod::TrustStore trust = trustFrom(a);
     FixtureHost host(a.get("--fixtures").empty() ? json::object() : json::parse(readFile(a.get("--fixtures"))));
-    const fs::path tmp = fs::temp_directory_path() / ("rfmod-test-" + std::to_string(getpid()));
+    const PrivateDir tmp(fs::current_path() / ".rfmod-test-");
     rfmod::RegistryConfig cfg;
-    cfg.root = tmp;
+    cfg.root = tmp.path();
     cfg.workerExecutable =
         a.get("--worker", (fs::canonical("/proc/self/exe").parent_path() / "rfmod-worker").string());
     (void)argv0;
@@ -179,13 +208,11 @@ int cmdTest(const Args& a, const char* argv0) {
             if (!r.ok()) {
                 std::cout << "Dependency " << dep << " was refused:\n";
                 printReport(r);
-                fs::remove_all(tmp);
                 return 1;
             }
         }
         rc = printReport(registry.upload(readFile(a.positional[0]), false));
     }
-    fs::remove_all(tmp);
     return rc;
 }
 

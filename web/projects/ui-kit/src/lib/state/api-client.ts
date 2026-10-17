@@ -50,7 +50,7 @@ export class ApiError extends Error {
     if (e instanceof HttpErrorResponse) {
       const body = e.error;
       // 429 and 503 carry retryAfterS in the body and Retry-After in the header
-      const fromBody = body && typeof body === 'object' ? Number((body as { retryAfterS?: unknown }).retryAfterS) : NaN;
+      const fromBody = body && typeof body === 'object' ? Number((body as { retryAfterS?: unknown }).retryAfterS) : Number.NaN;
       const retry = Number.isFinite(fromBody) && fromBody > 0 ? fromBody : Number(e.headers?.get('Retry-After'));
       const msg = (body && typeof body === 'object' && 'message' in body && String((body as { message: unknown }).message)) || e.message;
       return new ApiError(e.status, msg, body, Number.isFinite(retry) && retry > 0 ? retry : undefined);

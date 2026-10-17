@@ -14,7 +14,8 @@ LossContributionScope::LossContributionScope(std::string moduleId) : previous_(a
     activeContributor = std::move(moduleId);
 }
 
-LossContributionScope::~LossContributionScope() { activeContributor = previous_; }
+// swap, not assignment: it cannot throw, and this runs in a destructor.
+LossContributionScope::~LossContributionScope() { activeContributor.swap(previous_); }
 
 const std::string& LossContributionScope::active() { return activeContributor; }
 
@@ -92,31 +93,35 @@ json ModuleLossContributor::request(const rfcore::PathContext& ctx) const {
 }
 
 std::vector<rfcore::BudgetTerm> ModuleLossContributor::contribute(const rfcore::PathContext& ctx) const {
-    lastProfile_ = &ctx.profile;
-    lastNotes_.clear();
-    json response;
+    std::vector<rfcore::UncertaintyNote> notes;
+    std::vector<rfcore::BudgetTerm> terms;
     try {
-        const LossContributionScope scope(id_);
-        response = module_.invoke("loss.contribute", request(ctx));
+        json response;
+        {
+            const LossContributionScope scope(id_);
+            response = module_.invoke("loss.contribute", request(ctx));
+        }
+        std::vector<std::string> dropped;
+        terms = acceptTerms(id_, response.value("terms", json()), dropped);
+        for (const auto& d : dropped) notes.emplace_back(id_, "dropped: " + d);
+        if (response.contains("notes") && response.at("notes").is_array()) {
+            for (const json& n : response.at("notes")) {
+                if (n.is_object()) notes.emplace_back(n.value("what", id_), n.value("detail", ""));
+            }
+        }
     } catch (const rfmod::ModuleError& e) {
         failures_.push_back({id_, e.code() + ": " + e.what()});
-        return {};
     } catch (const std::exception& e) {
         failures_.push_back({id_, e.what()});
-        return {};
     }
-    std::vector<std::string> dropped;
-    auto terms = acceptTerms(id_, response.value("terms", json()), dropped);
-    for (const auto& d : dropped) lastNotes_.push_back({id_, "dropped: " + d});
-    if (response.contains("notes") && response.at("notes").is_array()) {
-        for (const json& n : response.at("notes")) {
-            if (n.is_object()) lastNotes_.push_back({n.value("what", id_), n.value("detail", "")});
-        }
-    }
+    const std::scoped_lock lock(lastMutex_);
+    lastProfile_ = &ctx.profile;
+    lastNotes_ = std::move(notes);
     return terms;
 }
 
 std::vector<rfcore::UncertaintyNote> ModuleLossContributor::notes(const rfcore::PathContext& ctx) const {
+    const std::scoped_lock lock(lastMutex_);
     return &ctx.profile == lastProfile_ ? lastNotes_ : std::vector<rfcore::UncertaintyNote>{};
 }
 

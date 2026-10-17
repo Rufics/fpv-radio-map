@@ -17,15 +17,15 @@ import sys
 import time
 
 from . import basemap, dem, landcover, manifest, satellite, style
-from .common import BBox, BuildError, Dirs, log, run, warn
+from .common import BBox, BuildError, Dirs, directory, log, run, warn
 
 
 def _common(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("common")
     g.add_argument("--bbox", help="minLon,minLat,maxLon,maxLat (WGS84 degrees)")
-    g.add_argument("--data", default=os.environ.get("RFMAP_DATA", "/data"),
+    g.add_argument("--data", type=directory, default=os.environ.get("RFMAP_DATA", "/data"),
                    help="data directory (default /data): cache/, work/ and out/ live here")
-    g.add_argument("--out", default=None, help="output directory (default <data>/out)")
+    g.add_argument("--out", type=directory, default=None, help="output directory (default <data>/out)")
     g.add_argument("--force", action="store_true", help="rebuild even if the output is up to date")
     g.add_argument("--threads", type=int, default=None, help="worker threads for Planetiler (default: all CPUs)")
 

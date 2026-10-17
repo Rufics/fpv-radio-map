@@ -64,7 +64,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: tools/ci/package-lock.json
-      - run: npm ci --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: tools/ci
       - id: version
         name: Ask semantic-release for the next version
@@ -73,7 +73,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_VERSION_FILE: ${{ runner.temp }}/next-version
         run: |
-          npx semantic-release --dry-run --no-ci --branches main | tee "$RUNNER_TEMP/plan.log"
+          npm run --silent semantic-release -- --dry-run --no-ci --branches main | tee "$RUNNER_TEMP/plan.log"
           if [ -s "$RELEASE_VERSION_FILE" ]; then
             v=$(cat "$RELEASE_VERSION_FILE")
             echo "version=$v" >> "$GITHUB_OUTPUT"
@@ -136,7 +136,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: tools/ci/package-lock.json
-      - run: npm ci --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: tools/ci
       - name: Baseline tag v0.1.0 when the repository has no release yet
         # Without any tag semantic-release would start at 1.0.0, and the FPV modules accept hosts
@@ -157,7 +157,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           RELEASE_VERSION_FILE: ${{ runner.temp }}/released-version
         run: |
-          npx semantic-release --no-ci --branches main
+          npm run --silent semantic-release -- --no-ci --branches main
           released=$(cat "$RELEASE_VERSION_FILE" 2>/dev/null || true)
           if [ "$released" != "$VERSION" ]; then
             echo "::error::semantic-release released '$released', expected '$VERSION' (did main move during the run?)"

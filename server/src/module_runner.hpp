@@ -59,6 +59,8 @@ private:
     TimePoint time_;
     const LandCoverSource* landcover_;
     std::vector<ModuleFailure>& failures_;
+    // What the last contribute() returned, for notes(); both are const calls from rf-core.
+    mutable std::mutex lastMutex_;
     mutable const rfcore::TerrainProfile* lastProfile_ = nullptr;
     mutable std::vector<rfcore::UncertaintyNote> lastNotes_;
 };

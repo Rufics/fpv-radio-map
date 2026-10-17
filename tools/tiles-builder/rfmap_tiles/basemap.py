@@ -9,8 +9,8 @@ import shutil
 from pathlib import Path
 
 from . import sources
-from .common import (BBox, BuildError, Dirs, download, fetch_text, fresh_dir, install,
-                     is_up_to_date, log, pmtiles_header, run, write_meta, warn)
+from .common import (BBox, BuildError, Dirs, download, existing_file, fetch_text, fresh_dir, heap_size, https_url,
+                     install, is_up_to_date, log, pmtiles_header, run, write_meta, warn)
 
 OUT_NAME = "basemap.pmtiles"
 
@@ -19,22 +19,32 @@ def add_arguments(p) -> None:
     g = p.add_argument_group("basemap (OpenStreetMap)")
     g.add_argument("--region", help="Geofabrik region: an id such as 'monaco' / 'ukraine', or a path "
                                     "such as 'europe/ukraine' (download.geofabrik.de/<path>-latest.osm.pbf)")
-    g.add_argument("--osm-url", help="URL of an .osm.pbf extract (overrides --region)")
-    g.add_argument("--osm-file", help="local .osm.pbf file (overrides --region/--osm-url)")
+    g.add_argument("--osm-url", type=https_url, help="URL of an .osm.pbf extract (overrides --region)")
+    g.add_argument("--osm-file", type=existing_file, help="local .osm.pbf file (overrides --region/--osm-url)")
     g.add_argument("--basemap-maxzoom", type=int, default=16,
                    help="highest zoom stored in basemap.pmtiles (default 16, Planetiler allows up to 16; "
                         "14 is ~4-10x smaller and MapLibre over-zooms it fine)")
     g.add_argument("--basemap-full-extract", action="store_true",
                    help="do not clip the basemap to --bbox; render the whole extract")
-    g.add_argument("--water-polygons-file", help="local water-polygons-split-3857.zip "
-                                                 f"(default: downloaded from {sources.WATER_POLYGONS_URL})")
-    g.add_argument("--natural-earth-file", help="local natural_earth_vector.sqlite.zip "
-                                                f"(default: downloaded from {sources.NATURAL_EARTH_URL})")
-    g.add_argument("--lake-centerlines-file", help="local lake_centerline.shp.zip "
-                                                   f"(default: downloaded from {sources.LAKE_CENTERLINES_URL})")
-    g.add_argument("--java-heap", default=None,
+    g.add_argument("--water-polygons-file", type=existing_file,
+                   help=f"local water-polygons-split-3857.zip (default: downloaded from {sources.WATER_POLYGONS_URL})")
+    g.add_argument("--natural-earth-file", type=existing_file,
+                   help=f"local natural_earth_vector.sqlite.zip (default: downloaded from {sources.NATURAL_EARTH_URL})")
+    g.add_argument("--lake-centerlines-file", type=existing_file,
+                   help=f"local lake_centerline.shp.zip (default: downloaded from {sources.LAKE_CENTERLINES_URL})")
+    g.add_argument("--java-heap", type=heap_size, default=None,
                    help="Java max heap for Planetiler, e.g. 4g (default: 75%% of container RAM)")
     g.add_argument("--refresh-osm", action="store_true", help="re-download the OSM extract even if cached")
+
+
+def md5_file(path: Path) -> str:
+    """MD5 of a file, read in chunks. Geofabrik publishes only MD5 sums, so this checks the
+    download for corruption; it is not a security check (the download itself is https)."""
+    h = hashlib.md5(usedforsecurity=False)
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def _resolve_osm(args, dirs: Dirs) -> tuple[Path, str]:
@@ -64,8 +74,8 @@ def _resolve_osm(args, dirs: Dirs) -> tuple[Path, str]:
             if not match:
                 raise BuildError(f"no Geofabrik region with id '{region}'")
             url = match[0]["urls"]["pbf"]
-    if not url.startswith("https://") and not url.startswith("http://"):
-        raise BuildError(f"--osm-url must be http(s): {url}")
+    if not url.startswith("https://"):
+        raise BuildError(f"the OSM extract URL must be https: {url}")
     name = re.sub(r"[^A-Za-z0-9._-]", "_", url.split("/")[-1]) or "extract.osm.pbf"
     key = hashlib.sha256(url.encode()).hexdigest()[:10]
     dest = dirs.cache / "osm" / f"{key}-{name}"
@@ -74,7 +84,7 @@ def _resolve_osm(args, dirs: Dirs) -> tuple[Path, str]:
     if "geofabrik.de" in url:
         try:
             expected = fetch_text(url + ".md5").split()[0]
-            got = hashlib.md5(dest.read_bytes()).hexdigest()
+            got = md5_file(dest)
             if expected != got:
                 dest.unlink()
                 raise BuildError(f"MD5 mismatch for {url} (expected {expected}, got {got}); deleted, retry")

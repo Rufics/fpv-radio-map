@@ -67,7 +67,7 @@ checks that title with commitlint. Commits inside a pull request may be informal
 To check messages locally:
 
 ```
-cd tools/ci && npm ci
+cd tools/ci && npm ci --ignore-scripts
 git config core.hooksPath .githooks      # once per clone
 ```
 
@@ -97,8 +97,11 @@ Then:
 
 ```
 cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
-cd web && npm ci && npm run build && npm test
+cd web && npm ci --ignore-scripts && npm run build && npm test
 ```
+
+npm dependencies are always installed with `--ignore-scripts`, so no package runs code at install
+time. The native parts the build needs (esbuild and the like) come as prebuilt platform packages.
 
 Every push to `main` runs the CI again, builds the server and web Docker images, starts them with
 PostGIS and checks the stack end to end (`deploy/ci/smoke.sh`), then publishes them to GHCR as

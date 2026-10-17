@@ -119,7 +119,7 @@ std::unique_ptr<IModuleInstance> ModuleRegistry::load(const Manifest& m, const T
 }
 
 ValidationReport ModuleRegistry::upload(const std::string& archive, bool install) {
-    std::lock_guard lock(mutex_);
+    std::lock_guard admin(adminMutex_);
     ValidationReport report;
     auto pkg = PackageVerifier::verify(archive, trust_, config_.hostVersion, report, config_.limits);
     if (!pkg) return report;
@@ -222,8 +222,7 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
     writeFileAtomic(staging / kPackageFile, archive);
     Entry fresh{m, pkg->signer, target, true, json::object(), ModuleState::Disabled, {}, nullptr};
     if (auto existing = entries_.find(m.id); existing != entries_.end()) {
-        if (existing->second.instance) existing->second.instance->shutdown();
-        existing->second.instance.reset();
+        retire(existing->second);
         fresh.enabled = existing->second.enabled;
         if (!validateOptions(staging, m, existing->second.options)) fresh.options = existing->second.options;
     }
@@ -234,7 +233,7 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
     writeState(fresh);
     report.pass("installed", m.id + " " + m.version.str() + " at " + isoNow());
 
-    reload();
+    reloadLocked();
     return report;
 }
 
@@ -256,7 +255,7 @@ std::vector<std::string> ModuleRegistry::dependentsOf(const std::string& id) con
 }
 
 void ModuleRegistry::remove(const std::string& id) {
-    std::lock_guard lock(mutex_);
+    std::lock_guard admin(adminMutex_);
     const auto it = entries_.find(id);
     if (it == entries_.end()) throw std::invalid_argument("unknown module " + id);
     if (const auto deps = dependentsOf(id); !deps.empty()) {
@@ -264,14 +263,17 @@ void ModuleRegistry::remove(const std::string& id) {
         for (const auto& d : deps) list += (list.empty() ? "" : ", ") + d;
         throw std::invalid_argument(id + " is required by " + list + "; disable or remove those first");
     }
-    if (it->second.instance) it->second.instance->shutdown();
+    retire(it->second);
     fs::remove_all(it->second.dir);
-    entries_.erase(it);
-    reload();
+    {
+        std::lock_guard lock(mutex_);
+        entries_.erase(it);
+    }
+    reloadLocked();
 }
 
 void ModuleRegistry::setEnabled(const std::string& id, bool enabled) {
-    std::lock_guard lock(mutex_);
+    std::lock_guard admin(adminMutex_);
     const auto it = entries_.find(id);
     if (it == entries_.end()) throw std::invalid_argument("unknown module " + id);
     if (!enabled) {
@@ -279,75 +281,119 @@ void ModuleRegistry::setEnabled(const std::string& id, bool enabled) {
             throw std::invalid_argument(id + " is required by " + deps.front() + "; disable that first");
         }
     }
-    it->second.enabled = enabled;
+    {
+        std::lock_guard lock(mutex_);
+        it->second.enabled = enabled;
+    }
     writeState(it->second);
-    reload();
+    reloadLocked();
 }
 
 void ModuleRegistry::setOptions(const std::string& id, const json& options) {
-    std::lock_guard lock(mutex_);
+    std::lock_guard admin(adminMutex_);
     const auto it = entries_.find(id);
     if (it == entries_.end()) throw std::invalid_argument("unknown module " + id);
     if (auto err = validateOptions(it->second.dir, it->second.manifest, options)) throw std::invalid_argument(*err);
-    it->second.options = options;
+    {
+        std::lock_guard lock(mutex_);
+        it->second.options = options;
+    }
     writeState(it->second);
-    reload();
+    reloadLocked();
 }
 
 void ModuleRegistry::reload() {
-    std::lock_guard lock(mutex_);
-    for (auto it = order_.rbegin(); it != order_.rend(); ++it) {
-        auto e = entries_.find(*it);
-        if (e != entries_.end() && e->second.instance) {
-            try {
-                e->second.instance->shutdown();
-            } catch (...) {
-            }
+    std::lock_guard admin(adminMutex_);
+    reloadLocked();
+}
+
+void ModuleRegistry::retire(Entry& e) {
+    std::unique_ptr<IModuleInstance> instance;
+    {
+        std::lock_guard lock(mutex_);
+        instance = std::move(e.instance);
+    }
+    if (instance) instance->shutdown();
+}
+
+void ModuleRegistry::shutdownAll() {
+    std::vector<std::unique_ptr<IModuleInstance>> retired;
+    {
+        std::lock_guard lock(mutex_);
+        for (auto it = order_.rbegin(); it != order_.rend(); ++it) {
+            auto e = entries_.find(*it);
+            if (e != entries_.end() && e->second.instance) retired.push_back(std::move(e->second.instance));
+        }
+        entries_.clear();
+        order_.clear();
+        notices_.clear();
+    }
+    // In reverse dependency order, outside mutex_: shutdown is module code.
+    for (const auto& instance : retired) {
+        try {
+            instance->shutdown();
+        } catch (...) {
         }
     }
-    entries_.clear();
-    order_.clear();
-    notices_.clear();
+}
 
+std::optional<ModuleRegistry::Entry> ModuleRegistry::readInstalled(const fs::path& dir,
+                                                                   std::vector<std::string>& notices) const {
+    ValidationReport report;
+    // Re-verify on every start: a removed key or a changed byte disables the module.
+    auto pkg = PackageVerifier::verify(readFile(dir / kPackageFile), trust_, config_.hostVersion, report,
+                                       config_.limits);
+    if (!pkg) {
+        std::string why;
+        for (const auto& c : report.checks()) {
+            if (!c.ok) why = c.name + ": " + c.detail;
+        }
+        notices.push_back("Module in " + dir.filename().string() + " was not loaded. " + why);
+        return std::nullopt;
+    }
+    Entry e{pkg->manifest, pkg->signer, dir, true, json::object(), ModuleState::Disabled, {}, nullptr};
+    if (fs::exists(dir / kStateFile)) {
+        const json state = json::parse(readFile(dir / kStateFile));
+        e.enabled = state.value("enabled", true);
+        e.options = state.value("options", json::object());
+    }
+    // The files on disk must be the signed ones.
+    if (const bool intact = std::ranges::all_of(pkg->files.files,
+                                                [&](const auto& file) {
+                                                    return fs::exists(dir / file.first) &&
+                                                           readFile(dir / file.first) == file.second;
+                                                });
+        !intact) {
+        unpack(pkg->files, dir);
+        notices.push_back(e.manifest.id + ": unpacked files differed from the signed package and were restored");
+    }
+    return e;
+}
+
+void ModuleRegistry::reloadLocked() {
+    shutdownAll();
+    std::map<std::string, Entry, std::less<>> entries;
+    std::vector<std::string> notices;
     for (const auto& item : fs::directory_iterator(config_.root / "installed")) {
         if (!item.is_directory()) continue;
-        const fs::path dir = item.path();
-        const std::string name = dir.filename().string();
-        ValidationReport report;
-        // Re-verify on every start: a removed key or a changed byte disables the module.
-        auto pkg = PackageVerifier::verify(readFile(dir / kPackageFile), trust_, config_.hostVersion, report,
-                                           config_.limits);
-        if (!pkg) {
-            std::string why;
-            for (const auto& c : report.checks()) {
-                if (!c.ok) why = c.name + ": " + c.detail;
-            }
-            notices_.push_back("Module in " + name + " was not loaded. " + why);
-            continue;
+        if (auto e = readInstalled(item.path(), notices)) {
+            const std::string id = e->manifest.id;
+            entries.try_emplace(id, std::move(*e));
         }
-        Entry e{pkg->manifest, pkg->signer, dir, true, json::object(), ModuleState::Disabled, {}, nullptr};
-        if (fs::exists(dir / kStateFile)) {
-            const json state = json::parse(readFile(dir / kStateFile));
-            e.enabled = state.value("enabled", true);
-            e.options = state.value("options", json::object());
-        }
-        // The files on disk must be the signed ones.
-        bool intact = true;
-        for (const auto& [path, content] : pkg->files.files) {
-            if (!fs::exists(dir / path) || readFile(dir / path) != content) intact = false;
-        }
-        if (!intact) {
-            unpack(pkg->files, dir);
-            notices_.push_back(e.manifest.id + ": unpacked files differed from the signed package and were restored");
-        }
-        entries_.emplace(e.manifest.id, std::move(e));
+    }
+    {
+        std::lock_guard lock(mutex_);
+        entries_ = std::move(entries);
+        notices_ = std::move(notices);
     }
     resolve();
 }
 
 void ModuleRegistry::resolve() {
     // Depth-first over required and optional dependencies; required failures propagate.
-    std::map<std::string, int> mark;  // 0 = new, 1 = visiting, 2 = done
+    // mutex_ is released only while a module loads: its init is module code and may read the registry.
+    std::unique_lock lock(mutex_);
+    std::map<std::string, int, std::less<>> mark;  // 0 = new, 1 = visiting, 2 = done
     std::function<bool(const std::string&)> visit = [&](const std::string& id) -> bool {
         Entry& e = entries_.at(id);
         if (mark[id] == 2) return e.state == ModuleState::Active;
@@ -384,14 +430,23 @@ void ModuleRegistry::resolve() {
             if (entries_.count(d.id) && d.range.contains(entries_.at(d.id).manifest.version)) (void)visit(d.id);
         }
         if (ok) {
+            std::unique_ptr<IModuleInstance> instance;
+            std::string error;
+            lock.unlock();
             try {
-                e.instance = load(e.manifest, e.signer, e.dir, e.options, false);
+                instance = load(e.manifest, e.signer, e.dir, e.options, false);
+            } catch (const std::exception& ex) {
+                error = ex.what();
+            }
+            lock.lock();
+            if (instance) {
+                e.instance = std::move(instance);
                 e.state = ModuleState::Active;
                 e.stateDetail.clear();
                 order_.push_back(id);
-            } catch (const std::exception& ex) {
+            } else {
                 e.state = ModuleState::Failed;
-                e.stateDetail = ex.what();
+                e.stateDetail = error;
                 ok = false;
             }
         }

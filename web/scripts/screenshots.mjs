@@ -4,7 +4,8 @@ import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
 import { serve } from './serve-dist.mjs';
 
-const DIST = process.env.DIST ?? 'dist/fpv-app-mock/browser';
+// A build folder inside web/dist.
+const DIST = process.env.DIST ?? 'fpv-app-mock/browser';
 const OUT = 'screenshots';
 const PORT = 4300;
 const BASE = `http://127.0.0.1:${PORT}`;

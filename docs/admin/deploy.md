@@ -165,25 +165,25 @@ not time-limited.
 
 ## 7. Updating base images
 
-Every `FROM` and `image:` is pinned by the digest of its multi-arch index, read from the
-registry on 2026-10-17:
+Each `FROM` in the Dockerfiles is pinned by its version tag. Each `image:` in the compose file is
+pinned by tag and by the digest of its multi-arch index, read from the registry on 2026-10-17:
 
 | Image | Tag |
 |---|---|
 | `ubuntu` | `24.04` (build and runtime of rfmap-server; it matches the GDAL 3.8, libpqxx 7.8 and cpp-httplib 0.14 the code is tested with) |
 | `node` | `24-bookworm-slim` (client build) |
-| `nginx` | `1.27-alpine` |
-| `postgis/postgis` | `16-3.4` |
+| `nginx` | `1.28-alpine` |
+| `postgis/postgis` | `16-3.5` |
 | `ghcr.io/open-meteo/open-meteo` | `1.7.0` |
 
-Dependabot (`.github/dependabot.yml`) opens pull requests for new digests and for minor and
-patch tags. For base images it stays on long-term-support lines: Ubuntu LTS, Node.js LTS (even
+Dependabot (`.github/dependabot.yml`) opens pull requests for new minor and patch tags of the
+Dockerfile base images. It stays on long-term-support lines: Ubuntu LTS, Node.js LTS (even
 majors) and nginx stable (even minors). Other major updates are not proposed; move to them by
-hand.
+hand. A tag can be republished with security fixes, so a rebuild picks up the current image for
+that tag; rebuild, and run the test suite (`ctest` in a build tree) before you deploy.
 
-To update one by hand, resolve the tag's current digest yourself, for example with
-`docker buildx imagetools inspect node:24-bookworm-slim`. Replace the digest, rebuild, and run
-the test suite (`ctest` in a build tree) before you deploy.
+To update a compose image by hand, resolve the tag's current digest yourself, for example with
+`docker buildx imagetools inspect postgis/postgis:16-3.5`, replace the digest, and restart.
 
 The server image and an API smoke test (missions, share link and PIN, `/calc/route`, module
 upload) were run against these pins on 2026-10-17. The web image could not be built then

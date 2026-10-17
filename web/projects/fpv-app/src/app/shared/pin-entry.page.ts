@@ -132,7 +132,7 @@ export class PinEntryPage implements OnInit {
       this.missionName.set(info.missionName ?? null);
       this.infoRole.set(info.role ?? null);
       this.expiresAt.set(info.expiresAt ?? null);
-      const paused = info.pausedUntil ? Date.parse(info.pausedUntil) : NaN;
+      const paused = info.pausedUntil ? Date.parse(info.pausedUntil) : Number.NaN;
       if (Number.isFinite(paused) && paused > Date.now()) {
         this.pausedByRate.set(false);
         this.pausedUntil.set(paused);

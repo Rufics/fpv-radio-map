@@ -110,7 +110,7 @@ protected:
         const char* url = std::getenv("RFMAP_TEST_DATABASE_URL");
         if (!url) return;
         env = new Env;
-        env->dir = fs::temp_directory_path() / ("rfmap-it-" + std::to_string(::getpid()));
+        env->dir = rfmap::test::scratchDir("integration") / ("rfmap-it-" + std::to_string(::getpid()));
         fs::remove_all(env->dir);
         fs::create_directories(env->dir);
         rfmap::test::writeCog(env->dir / "dem.cog.tif", kWest, kNorth, kPx, kCols, kRows, terrain);

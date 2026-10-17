@@ -10,3 +10,7 @@ dist/
 !platform/rfmod/keys/dev-*.secret
 .env
 test-results/
+test-scratch/
+.rfmod-test-*/
+wiki/
+__pycache__/

@@ -34,7 +34,7 @@ Rules:
 
 ```bash
 mkdir -p data
-docker run --rm -v "$PWD/data:/data" rfmap/tiles-builder all \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder all \
     --bbox 34.8,48.3,35.4,48.7 \
     --region europe/ukraine
 ```
@@ -54,7 +54,7 @@ You can also run the steps one at a time with the same options: `basemap`, `dem`
 **Satellite** is not built unless you choose a source:
 
 ```bash
-docker run --rm -v "$PWD/data:/data" rfmap/tiles-builder satellite \
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder satellite \
     --bbox 34.8,48.3,35.4,48.7 \
     --sat-source 'https://<provider>/<layer>/{z}/{y}/{x}.jpg' \
     --sat-name 'Sentinel-2 cloudless <year> (<provider>)' \
@@ -71,7 +71,7 @@ Running the same command again is safe. Finished outputs with unchanged inputs a
 ## 5. Check the result
 
 ```bash
-docker run --rm -v "$PWD/data:/data" rfmap/tiles-builder verify
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder verify
 ```
 
 Expect `OK` for every file. In `data/out` you get:

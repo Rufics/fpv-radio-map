@@ -21,16 +21,16 @@ import urllib.request
 from pathlib import Path
 
 from . import sources
-from .common import (USER_AGENT, BBox, BuildError, Dirs, fresh_dir, install, is_up_to_date, log,
-                     mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors, pmtiles_header, run,
-                     tile_aligned_extent, warn, write_meta, zoom_resolution)
+from .common import (USER_AGENT, BBox, BuildError, Dirs, existing_file, fresh_dir, https_url, install,
+                     is_up_to_date, log, mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors,
+                     pmtiles_header, public_host, run, tile_aligned_extent, warn, write_meta, zoom_resolution)
 
 OUT_NAME = "satellite.pmtiles"
 
 
 def add_arguments(p) -> None:
     g = p.add_argument_group("satellite")
-    g.add_argument("--sat-source",
+    g.add_argument("--sat-source", type=satellite_source,
                    help="XYZ template, e.g. 'https://host/path/{z}/{y}/{x}.jpg', or a GDAL raster "
                         "path/URL (GeoTIFF/COG/VRT). Required for the satellite step.")
     g.add_argument("--sat-name", default="Sentinel-2 cloudless mosaic", help="human-readable source name")
@@ -41,6 +41,13 @@ def add_arguments(p) -> None:
     g.add_argument("--sat-rate", type=float, default=4.0, help="XYZ mode: max requests per second (default 4)")
     g.add_argument("--sat-max-tiles", type=int, default=50000, help="XYZ mode: refuse jobs above this tile count")
     g.add_argument("--sat-jpeg-quality", type=int, default=85, help="raster mode: JPEG quality")
+
+
+def satellite_source(text: str) -> str:
+    """argparse type: an https URL (XYZ template or raster), or an existing local raster file."""
+    if "://" in text:
+        return https_url(text)
+    return str(existing_file(text))
 
 
 def _tile_range(bbox: BBox, z: int) -> tuple[int, int, int, int]:
@@ -73,6 +80,7 @@ def _open_mbtiles(path: Path) -> sqlite3.Connection:
 
 def _xyz(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
     tpl = args.sat_source
+    log(f"XYZ: tiles come from {public_host(tpl)}")
     zmin, zmax = args.sat_minzoom, args.sat_maxzoom
     jobs = []
     for z in range(zmin, zmax + 1):
@@ -143,7 +151,8 @@ def _xyz(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
 
 def _raster(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
     src = args.sat_source
-    if src.startswith(("http://", "https://")):
+    if src.startswith("https://"):
+        public_host(src)
         src = "/vsicurl/" + src
     from . import raster
     i = raster.info(src)

@@ -7,17 +7,22 @@ so re-running any command is safe (idempotent); --force rebuilds.
 """
 from __future__ import annotations
 
+import argparse
 import datetime as _dt
 import hashlib
+import ipaddress
 import json
 import math
 import os
+import re
+import socket
 import shlex
 import shutil
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -56,6 +61,63 @@ def run(cmd: list[str], *, capture: bool = False, env: dict | None = None, cwd: 
     if res.returncode != 0:
         raise BuildError(f"command failed (exit {res.returncode}): {cmd[0]}")
     return res.stdout if capture else ""
+
+
+# --------------------------------------------------------------------------- command-line values
+# Everything the operator passes is checked here, at the argparse boundary, before it reaches a
+# path, a URL or a command line.
+
+def existing_file(text: str) -> Path:
+    """argparse type: an existing regular file, as an absolute path (so never read as an option)."""
+    path = Path(text).expanduser().resolve()
+    if not path.is_file():
+        raise argparse_error(f"not a file: {text}")
+    return path
+
+
+def directory(text: str) -> Path:
+    """argparse type: a directory to create or reuse, as an absolute path."""
+    path = Path(text).expanduser().resolve()
+    if path.exists() and not path.is_dir():
+        raise argparse_error(f"not a directory: {text}")
+    return path
+
+
+def https_url(text: str) -> str:
+    """argparse type: an https URL with a host. Placeholders such as {z} may appear in the path."""
+    parts = urllib.parse.urlsplit(text)
+    if parts.scheme != "https" or not parts.hostname:
+        raise argparse_error(f"must be an https:// URL: {text}")
+    return text
+
+
+def heap_size(text: str) -> str:
+    """argparse type: a JVM heap size such as 4g or 2048m."""
+    if not re.fullmatch(r"[1-9]\d{0,6}[kKmMgG]", text):
+        raise argparse_error(f"must be a size such as 4g or 2048m: {text}")
+    return text
+
+
+def argparse_error(message: str) -> argparse.ArgumentTypeError:
+    return argparse.ArgumentTypeError(message)
+
+
+def public_host(url: str) -> str:
+    """The URL's host, if every address it resolves to is public; the build fetches whatever URL
+    it is given, so it refuses loopback, private and link-local targets."""
+    host = urllib.parse.urlsplit(url).hostname or ""
+    try:
+        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as e:
+        if os.environ.get("https_proxy") or os.environ.get("HTTPS_PROXY"):
+            warn(f"cannot resolve {host} here ({e}); the https proxy resolves and reaches it")
+            return host
+        raise BuildError(f"cannot resolve {host}: {e}")
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if not address.is_global:
+            raise BuildError(f"{host} resolves to {address}, which is not a public address")
+    return host
 
 
 # --------------------------------------------------------------------------- bbox
@@ -177,8 +239,9 @@ def download(url: str, dest: Path, *, refresh: bool = False) -> Path:
     part = dest.with_name(dest.name + ".part")
     if refresh and part.exists():
         part.unlink()
-    run(["curl", "-fL", "--retry", "5", "--retry-delay", "5", "--retry-all-errors",
-         "-C", "-", "-A", USER_AGENT, "-o", str(part), url])
+    # https only, redirects included.
+    run(["curl", "-fL", "--proto", "=https", "--proto-redir", "=https", "--retry", "5", "--retry-delay", "5",
+         "--retry-all-errors", "-C", "-", "-A", USER_AGENT, "-o", str(part), "--url", url])
     os.replace(part, dest)
     return dest
 

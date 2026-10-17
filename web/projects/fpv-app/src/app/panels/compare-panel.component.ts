@@ -196,8 +196,8 @@ export class ComparePanelComponent {
     const links = this.res()?.links ?? {};
     return (Object.keys(links) as LinkKind[]).map((kind) => {
       const l = links[kind]!;
-      const a = l.a?.worstMarginDb ?? NaN;
-      const b = l.b?.worstMarginDb ?? NaN;
+      const a = l.a?.worstMarginDb ?? Number.NaN;
+      const b = l.b?.worstMarginDb ?? Number.NaN;
       const d = l.deltaWorstDb ?? b - a;
       return {
         kind,
