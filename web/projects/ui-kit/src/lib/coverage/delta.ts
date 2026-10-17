@@ -41,15 +41,21 @@ export class DeltaScale {
   }
 }
 
-/** Where a grid cell (row, col) lies, and the reverse lookup. */
-function cellCenter(grid: CoverageGrid, bounds: [number, number, number, number], r: number, c: number): [number, number] {
-  const [w, s, e, n] = bounds;
-  const cols = grid.cols ?? 1;
-  const rows = grid.rows ?? 1;
-  return [w + ((c + 0.5) / cols) * (e - w), n - ((r + 0.5) / rows) * (n - s)];
+/** Cell size in degrees: the grid's cellLatDeg/cellLonDeg, else derived from its bbox. */
+function cellDeg(g: CoverageGrid): { dLat: number; dLon: number } | null {
+  if (g.cellLatDeg && g.cellLonDeg) return { dLat: g.cellLatDeg, dLon: g.cellLonDeg };
+  const b = gridBounds(g);
+  if (!b || !g.cols || !g.rows) return null;
+  return { dLat: (b[3] - b[1]) / g.rows, dLon: (b[2] - b[0]) / g.cols };
 }
 
-/** Margin of `grid` at lon/lat (nearest cell), or null outside / no data. */
+function northWest(g: CoverageGrid): { lat: number; lon: number } | null {
+  if (g.origin?.lat !== undefined && g.origin?.lon !== undefined) return { lat: g.origin.lat, lon: g.origin.lon };
+  const b = gridBounds(g);
+  return b ? { lat: b[3], lon: b[0] } : null;
+}
+
+/** Margin of `grid` in the cell that contains lon/lat, or null outside / no data. */
 export function sampleGrid(grid: CoverageGrid, lon: number, lat: number): number | null {
   const b = gridBounds(grid);
   if (!b || !grid.marginDb || !grid.cols || !grid.rows) return null;
@@ -60,31 +66,64 @@ export function sampleGrid(grid: CoverageGrid, lon: number, lat: number): number
   return grid.marginDb[r * grid.cols + c] ?? null;
 }
 
+/** B − A on A's cells, with which cells could be compared at all. */
+export interface CoverageDelta {
+  /** A's geometry; marginDb holds B − A, null where a side has no value or the cell is not comparable */
+  grid: CoverageGrid;
+  /** per A cell: B has exactly the same cell */
+  comparable: boolean[];
+  notComparableCells: number;
+  /** same = identical geometry; shifted = same cell size, origin offset by whole cells; none = nothing coincides */
+  alignment: 'same' | 'shifted' | 'none';
+}
+
+const EPS = 1e-9;
+
 /**
- * B − A on A's cells. When both grids have the same geometry this is a cell-by-cell subtraction;
- * otherwise B is sampled at A's cell centres (nearest cell). A cell is null when either side has no value.
- * A cell where one side is below threshold still counts: the margins are the server's numbers either way.
+ * B − A where the cells coincide exactly, and nothing else: no resampling, no nearest cell.
+ * Cells coincide when both grids use the same cell size in degrees and B's origin is offset from A's by a
+ * whole number of cells (same pilot latitude and cell size, e.g. another radius or radio). Any other cell
+ * is "not comparable". A cell where either side is null (beyond the radius, at the pilot, no DEM data)
+ * is comparable but has no difference.
  */
-export function subtractGrids(a: CoverageGrid, b: CoverageGrid): CoverageGrid | null {
-  const ba = gridBounds(a);
-  if (!ba || !a.marginDb || !b.marginDb || !a.cols || !a.rows) return null;
-  const bb = gridBounds(b);
-  const same = !!bb && a.cols === b.cols && a.rows === b.rows && ba.every((v, i) => Math.abs(v - bb[i]) < 1e-9);
-  const out: (number | null)[] = new Array(a.cols * a.rows);
-  for (let r = 0; r < a.rows; r++) {
-    for (let c = 0; c < a.cols; c++) {
-      const i = r * a.cols + c;
-      const va = a.marginDb[i];
-      let vb: number | null | undefined;
-      if (same) vb = b.marginDb[i];
-      else {
-        const [lon, lat] = cellCenter(a, ba, r, c);
-        vb = sampleGrid(b, lon, lat);
-      }
-      out[i] = va === null || va === undefined || vb === null || vb === undefined ? null : vb - va;
+export function subtractGrids(a: CoverageGrid, b: CoverageGrid): CoverageDelta | null {
+  if (!a.marginDb || !b.marginDb || !a.cols || !a.rows || !b.cols || !b.rows) return null;
+  const n = a.cols * a.rows;
+  const out: (number | null)[] = new Array(n).fill(null);
+  const comparable: boolean[] = new Array(n).fill(false);
+  const ca = cellDeg(a);
+  const cb = cellDeg(b);
+  const oa = northWest(a);
+  const ob = northWest(b);
+  let alignment: CoverageDelta['alignment'] = 'none';
+  let dr = 0;
+  let dc = 0;
+  if (ca && cb && oa && ob && Math.abs(ca.dLat - cb.dLat) <= EPS * ca.dLat && Math.abs(ca.dLon - cb.dLon) <= EPS * ca.dLon) {
+    const rows = (ob.lat - oa.lat) / ca.dLat; // B starts this many rows north of A
+    const cols = (oa.lon - ob.lon) / ca.dLon; // B starts this many cols west of A
+    if (Math.abs(rows - Math.round(rows)) < 1e-6 && Math.abs(cols - Math.round(cols)) < 1e-6) {
+      dr = Math.round(rows);
+      dc = Math.round(cols);
+      alignment = dr === 0 && dc === 0 && a.cols === b.cols && a.rows === b.rows ? 'same' : 'shifted';
     }
   }
-  return { ...a, marginDb: out, limitPolygon: undefined };
+  if (alignment !== 'none') {
+    for (let r = 0; r < a.rows; r++) {
+      const rb = r + dr;
+      if (rb < 0 || rb >= b.rows) continue;
+      for (let c = 0; c < a.cols; c++) {
+        const cbI = c + dc;
+        if (cbI < 0 || cbI >= b.cols) continue;
+        const i = r * a.cols + c;
+        comparable[i] = true;
+        const va = a.marginDb[i];
+        const vb = b.marginDb[rb * b.cols + cbI];
+        out[i] = va === null || va === undefined || vb === null || vb === undefined ? null : vb - va;
+      }
+    }
+  }
+  const notComparableCells = comparable.reduce((k, ok) => k + (ok ? 0 : 1), 0);
+  return { grid: { ...a, marginDb: out, marginWorstDb: undefined, limitPolygon: undefined }, comparable, notComparableCells, alignment };
 }
 
 /** Heatmap of a B − A grid with the diverging DeltaScale. */
@@ -93,7 +132,7 @@ export class CoverageDeltaLayer extends StyleLayerSet {
   readonly title = 'Coverage difference, B − A';
   readonly group = 'results' as const;
   override readonly order = 0.5;
-  override readonly legend = '▲ B better · ▼ B worse · under 1 dB not shown';
+  override readonly legend = '▲ B better · ▼ B worse · under 1 dB not shown · hatched: not comparable';
   private readonly scale = new DeltaScale();
   private url = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
   private coords: [[number, number], [number, number], [number, number], [number, number]] = [
@@ -113,10 +152,10 @@ export class CoverageDeltaLayer extends StyleLayerSet {
     return [{ id: 'coverage-delta', type: 'raster', source: 'rf-coverage-delta', paint: { 'raster-opacity': 0.6, 'raster-resampling': 'nearest', 'raster-fade-duration': 0 } }];
   }
 
-  /** Show a delta grid (from subtractGrids); null clears. */
-  setDelta(delta: CoverageGrid | null): void {
-    const b = delta ? gridBounds(delta) : null;
-    if (!delta || !b || !delta.marginDb) {
+  /** Show a difference (from subtractGrids); null clears. Cells that are not comparable are hatched grey. */
+  setDelta(delta: CoverageDelta | null): void {
+    const b = delta ? gridBounds(delta.grid) : null;
+    if (!delta || !b || !delta.grid.marginDb) {
       this.has = false;
     } else {
       const [w, s, e, n] = b;
@@ -143,19 +182,32 @@ export class CoverageDeltaLayer extends StyleLayerSet {
     super.setVisible(map, visible && this.has);
   }
 
-  private render(grid: CoverageGrid): string {
+  private render(delta: CoverageDelta): string {
+    const grid = delta.grid;
     const cols = grid.cols ?? 0;
     const rows = grid.rows ?? 0;
+    // 4 px per cell so the "not comparable" hatching stays visible
+    const s = Math.max(cols, rows) > 600 ? 1 : 4;
     const canvas = document.createElement('canvas');
-    canvas.width = cols;
-    canvas.height = rows;
+    canvas.width = cols * s;
+    canvas.height = rows * s;
     const ctx = canvas.getContext('2d');
     if (!ctx) return this.url;
-    const img = ctx.createImageData(cols, rows);
+    const img = ctx.createImageData(cols * s, rows * s);
     const m = grid.marginDb ?? [];
-    for (let i = 0; i < m.length; i++) {
-      const c = this.scale.color(m[i]);
-      if (c) img.data.set(c, i * 4);
+    const hatch: [number, number, number, number] = [...DeltaScale.SAME, 150];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        const col = delta.comparable[i] ? this.scale.color(m[i]) : null;
+        for (let y = 0; y < s; y++) {
+          for (let x = 0; x < s; x++) {
+            const px = ((r * s + y) * cols * s + (c * s + x)) * 4;
+            if (col) img.data.set(col, px);
+            else if (!delta.comparable[i] && ((r * s + y + c * s + x) % 4 === 0)) img.data.set(hatch, px);
+          }
+        }
+      }
     }
     ctx.putImageData(img, 0, 0);
     return canvas.toDataURL('image/png');

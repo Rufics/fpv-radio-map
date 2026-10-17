@@ -23,6 +23,10 @@ import {
   WeatherPoint,
   ForecastHorizon,
   ForecastTier,
+  LinkEnd,
+  MissingSpan,
+  Reason,
+  ResultForecastTier,
   linksEvaluated,
 } from '@rfmap/ui-kit';
 import { LOCAL, RIDGE_FRACTION, elevation, elevationLocal, toLatLon, toLocal } from './mock-terrain';
@@ -133,6 +137,7 @@ export function weatherAt(timeUtc: string | undefined, stale: boolean): WeatherP
 }
 
 // ---------------- link results ----------------
+/** Ground profile pilot → `to` (always ground first; `link()` reorders from the transmitter). */
 function profileBetween(a: MissionPoint, b: MissionPoint, n = 160): Profile {
   const la = toLocal(a.lat, a.lon);
   const lb = toLocal(b.lat, b.lon);
@@ -145,7 +150,7 @@ function profileBetween(a: MissionPoint, b: MissionPoint, n = 160): Profile {
     const ll = toLatLon(x, y);
     points.push({ distanceM: L * t, groundMslM: elevationLocal(x, y), lat: ll.lat, lon: ll.lon });
   }
-  return { source: 'Copernicus DEM GLO-30 (mock)', lengthM: L, points };
+  return { source: 'Copernicus DEM GLO-30 (mock)', lengthM: L, stepM: L / n, points };
 }
 
 function fspl(distanceM: number, f: number): number {
@@ -158,6 +163,13 @@ const TERMS_FIXED = (radio: string): BudgetTerm[] => [
   { id: 'air-antenna', label: 'Drone antenna', valueDb: -2, source: 'antenna air-dipole-2dbi rev 1' },
 ];
 
+/** Where along the leg the worst sample sits, and the two ends of the link there. */
+interface LinkGeometry {
+  pilot: MissionPoint;
+  drone: MissionPoint;
+  alongLegM: number;
+}
+
 interface LinkSpec {
   kind: LinkKind;
   f: number;
@@ -168,12 +180,29 @@ interface LinkSpec {
   r1: number;
   los: boolean;
   clearanceM: number;
+  /** Ground first (pilot → drone) */
   profile: Profile;
+  geo: LinkGeometry;
+  /** Obstruction distance from the pilot, m */
+  edgeFromPilotM?: number;
   extraNotes?: { what: string; detail: string }[];
 }
 
-function link(spec: LinkSpec, tier: ForecastTier): LinkResult {
+const end = (p: MissionPoint): LinkEnd => {
+  const groundMslM = elevation(p.lat, p.lon);
+  return { lat: p.lat, lon: p.lon, aglM: p.aglM, groundMslM, antennaMslM: groundMslM + p.aglM };
+};
+
+/** Contract order: profile and diffraction distances run from the transmitter (video: drone → pilot). */
+function fromTransmitter(profile: Profile, airTx: boolean): Profile {
+  if (!airTx) return profile;
+  const L = profile.lengthM ?? profile.points[profile.points.length - 1].distanceM;
+  return { ...profile, points: [...profile.points].reverse().map((p) => ({ ...p, distanceM: L - p.distanceM })) };
+}
+
+function link(spec: LinkSpec, tier: ResultForecastTier): LinkResult {
   const radio = spec.kind === 'video' ? 'digital-915-20mhz' : 'elrs-433-50hz';
+  const airTx = spec.kind === 'video';
   const terms: BudgetTerm[] = [
     ...TERMS_FIXED(radio),
     { id: 'fspl', label: 'Free space', valueDb: spec.fsplDb, source: 'ITU-R P.525 · geodesic distance on WGS84' },
@@ -182,47 +211,131 @@ function link(spec: LinkSpec, tier: ForecastTier): LinkResult {
   const received = -terms.reduce((s, t) => s + t.valueDb, 0);
   const required = -95;
   const margin = received - required;
-  const ridgeD = spec.rayM * RIDGE_FRACTION;
+  const edgeFromPilot = spec.edgeFromPilotM ?? spec.rayM * RIDGE_FRACTION;
+  const edgeFromTx = airTx ? spec.rayM - edgeFromPilot : edgeFromPilot;
   const notes = [
     { what: 'Input data error (not ours)', detail: `Elevation ±4 m (Copernicus GLO-30, LE90). Worst case ridge 4 m lower: ${margin < 0 ? 'still blocked' : 'still clear'}. Verdict: certain.` },
     ...(tier === 'none' ? [{ what: 'Beyond the forecast horizon', detail: 'No forecast exists for this time. Standard atmosphere (ISA, k = 4/3) is used; we do not invent weather.' }] : []),
     ...(tier === 'long-range' ? [{ what: 'Long-range forecast', detail: 'Refraction and air density come from coarser long-range models.' }] : []),
+    ...(tier === 'off' ? [{ what: 'Weather off', detail: 'rf.weather is not enabled for this mission: standard atmosphere, k = 4/3.' }] : []),
     ...(spec.extraNotes ?? []),
   ];
+  const { pilot, drone, alongLegM } = spec.geo;
   return {
     kind: spec.kind,
     frequencyHz: spec.f,
+    txPowerDbm: 30,
+    distanceM: spec.rayM,
     rayLengthM: spec.rayM,
     terms,
     receivedDbm: received,
+    sensitivityDbm: -105,
+    requiredMarginDb: 10,
     requiredDbm: required,
     marginDb: margin,
     reachable: margin >= 0,
     latencyMs: spec.kind === 'video' ? 40 : 20,
+    ends: { ground: end(pilot), air: end(drone), transmitter: airTx ? 'air' : 'ground' },
+    earth: { effectiveEarthFactor: 4 / 3, source: tier === 'off' ? 'standard atmosphere' : 'rf.weather' },
+    forecastTier: tier,
+    sample: { lat: drone.lat, lon: drone.lon, aglM: drone.aglM, alongLegM },
     diffraction: {
       lineOfSight: spec.los,
       nu: spec.nu,
       edgeHeightM: 622,
-      d1M: ridgeD,
-      d2M: spec.rayM - ridgeD,
+      d1M: edgeFromTx,
+      d2M: spec.rayM - edgeFromTx,
       lossDb: spec.diffDb,
       minFresnelClearance: spec.clearanceM / spec.r1,
       firstFresnelRadiusM: spec.r1,
-      dominant: { distanceM: ridgeD, groundMslM: 622, lat: RIDGE_POINT.lat, lon: RIDGE_POINT.lon },
+      dominant: { distanceM: edgeFromTx, groundMslM: 622, lat: RIDGE_POINT.lat, lon: RIDGE_POINT.lon },
     },
     uncertainty: notes,
-    profile: spec.profile,
+    profile: fromTransmitter(spec.profile, airTx),
     model: 'rf-core 1.3.0 · ITU-R P.526 single edge (Bullington) · k = 4/3 · forest off',
   };
 }
 
-function clearLink(kind: LinkKind, from: MissionPoint, to: MissionPoint, tier: ForecastTier): LinkResult {
+function clearLink(kind: LinkKind, pilot: MissionPoint, drone: MissionPoint, alongLegM: number, tier: ResultForecastTier): LinkResult {
   const f = kind === 'video' ? 915e6 : 433e6;
-  const profile = profileBetween(from, to);
+  const profile = profileBetween(pilot, drone);
   const d = profile.lengthM ?? 1;
-  const r = link({ kind, f, rayM: d, fsplDb: fspl(d, f), diffDb: 0, nu: -2.1, r1: Math.sqrt(((299792458 / f) * d) / 4), los: true, clearanceM: 60, profile }, tier);
+  const r = link({ kind, f, rayM: d, fsplDb: fspl(d, f), diffDb: 0, nu: -2.1, r1: Math.sqrt(((299792458 / f) * d) / 4), los: true, clearanceM: 60, profile, geo: { pilot, drone, alongLegM } }, tier);
   if (r.diffraction) r.diffraction = { lineOfSight: true, lossDb: 0, minFresnelClearance: 1.4, nu: -2.1 };
   return r;
+}
+
+/** The ridge link A → drone at B (blocked, or cleared at 345 m). */
+function ridgeLinks(mission: Mission, drone: MissionPoint, fixed: boolean, alongLegM: number, tier: ResultForecastTier) {
+  const profile = profileBetween(mission.pilot, drone);
+  profile.lengthM = A_TO_B_M;
+  const geo = { pilot: mission.pilot, drone, alongLegM };
+  const video = fixed
+    ? link({ kind: 'video', f: 915e6, rayM: A_TO_B_M, fsplDb: 106.12874, diffDb: 0.54891, nu: -0.6814, r1: 20.7934, los: true, clearanceM: 10.21, profile, geo }, tier)
+    : link({ kind: 'video', f: 915e6, rayM: A_TO_B_M, fsplDb: 106.12874, diffDb: 29.61391, nu: 6.8013, r1: 20.7934, los: false, clearanceM: -99.86, profile, geo }, tier);
+  const control = fixed
+    ? link({ kind: 'control', f: 433e6, rayM: A_TO_B_M, fsplDb: 99.63112, diffDb: 0.31107, nu: -0.4689, r1: 30.2214, los: true, clearanceM: 10.21, profile, geo }, tier)
+    : link({ kind: 'control', f: 433e6, rayM: A_TO_B_M, fsplDb: 99.63112, diffDb: 26.35847, nu: 4.6795, r1: 30.2214, los: false, clearanceM: -99.86, profile, geo }, tier);
+  return { control, video };
+}
+
+/** The part of the DEM that is "not loaded" in the missing-elevation scenario: around the end of leg 3. */
+function missingArea(): [number, number, number, number] {
+  const f0 = (LEG_LENGTHS[2] - 2400) / LEG_LENGTHS[2];
+  const s = toLocal(WP2.lat, WP2.lon);
+  const e = toLocal(TARGET.lat, TARGET.lon);
+  const start = { x: s.x + (e.x - s.x) * f0, y: s.y + (e.y - s.y) * f0 };
+  const xs = [start.x, e.x];
+  const ys = [start.y, e.y];
+  const sw = toLatLon(Math.min(...xs) - 0.3, Math.min(...ys) - 0.3);
+  const ne = toLatLon(Math.max(...xs) + 0.6, Math.max(...ys) + 0.6);
+  return [sw.lon, sw.lat, ne.lon, ne.lat];
+}
+
+const inBbox = (b: [number, number, number, number], p: { lat: number; lon: number }) => p.lon >= b[0] && p.lon <= b[2] && p.lat >= b[1] && p.lat <= b[3];
+
+/** Spans (m from the pilot) of the pilot → drone path that fall inside the missing area. */
+function missingSpans(pilot: MissionPoint, drone: MissionPoint, bbox: [number, number, number, number]): MissingSpan[] {
+  const a = toLocal(pilot.lat, pilot.lon);
+  const b = toLocal(drone.lat, drone.lon);
+  const L = Math.hypot(b.x - a.x, b.y - a.y) * 1000;
+  const n = 200;
+  const spans: MissingSpan[] = [];
+  let open: number | null = null;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const inside = inBbox(bbox, toLatLon(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t));
+    if (inside && open === null) open = L * t;
+    if (!inside && open !== null) {
+      spans.push({ fromM: open, toM: L * t });
+      open = null;
+    }
+  }
+  if (open !== null) spans.push({ fromM: open, toM: L });
+  return spans;
+}
+
+function missingLegData(mission: Mission, from: MissionPoint, to: MissionPoint, lengthM: number, stepM = 100): Pick<LegResult, 'missing' | 'missingData' | 'samples'> {
+  const bbox = missingArea();
+  const total = Math.ceil(lengthM / stepM) + 1;
+  const a = toLocal(from.lat, from.lon);
+  const b = toLocal(to.lat, to.lon);
+  const missing: NonNullable<LegResult['missing']> = [];
+  let missingCount = 0;
+  for (let i = 0; i < total; i++) {
+    const t = Math.min(1, (i * stepM) / lengthM);
+    const ll = toLatLon(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+    const drone = { ...ll, aglM: from.aglM + (to.aglM - from.aglM) * t };
+    const spans = missingSpans(mission.pilot, drone, bbox);
+    if (!spans.length) continue;
+    missingCount++;
+    if (missing.length < 20 && (missingCount - 1) % 4 === 0) missing.push({ alongLegM: lengthM * t, lat: ll.lat, lon: ll.lon, missing: spans });
+  }
+  return {
+    missing,
+    missingData: { bbox, source: 'Copernicus DEM GLO-30 (mock)' },
+    samples: { stepM, total, evaluated: total - missingCount, missingData: missingCount, overPilot: 0 },
+  };
 }
 
 // ---------------- fixes ----------------
@@ -260,65 +373,85 @@ export function fixTurnBack(mission: Mission): Fix & { note: string } {
 
 export type MockScenario = 'normal' | 'missing-elevation' | 'module-failed' | 'stale-forecast';
 
-/** The /calc/route answer for the reference mission and its fixed / turn-back variants. */
+/**
+ * The /calc/route answer for the reference mission and its fixed / turn-back variants, in the
+ * server's shapes: legs[] 0-based with the return leg last, rf-core reasons per leg with `link`,
+ * module reasons route-wide (or on a leg with `leg`), modules[id] = the module's data.
+ */
 export function routeResult(mission: Mission, scenario: MockScenario): RouteResult {
   const evaluated = linksEvaluated(mission.evaluate);
   const last = mission.waypoints[mission.waypoints.length - 1];
   const turnback = last?.label === 'T';
   const fixed = !turnback && (last?.aglM ?? 0) >= 345;
-  const tier = tierFor(mission.time.mode === 'planned' ? mission.time.utc : undefined);
-  const weather = weatherAt(mission.time.mode === 'planned' ? mission.time.utc : undefined, scenario === 'stale-forecast');
-  if (tier === 'none') {
-    // ISA instead of the forecast: refraction changes very little at 5 km
-  }
+  const weatherOn = !!mission.modules?.['rf.weather'];
+  const timeUtc = mission.time.mode === 'planned' ? mission.time.utc : undefined;
+  const tier: ResultForecastTier = weatherOn ? tierFor(timeUtc) : 'off';
+  const weather = weatherOn ? weatherAt(timeUtc, scenario === 'stale-forecast') : undefined;
   const pick = (kinds: Partial<Record<LinkKind, LinkResult>>) => Object.fromEntries(evaluated.map((k) => [k, kinds[k]]).filter(([, v]) => v));
   const pts = [mission.pilot, ...mission.waypoints];
-  const legs: LegResult[] = [];
-  const names = ['A', ...mission.waypoints.map((w, i, arr) => w.label ?? (i === arr.length - 1 ? 'B' : `WP${i + 1}`))];
+  const returning = mission.returnToPilot !== false;
+  const legEnds: { from: MissionPoint; to: MissionPoint; fromName: string; toName: string }[] = [];
+  const nameOf = (p: MissionPoint, i: number) => p.label ?? (i === 0 ? 'Pilot' : `WP${i}`);
+  for (let i = 0; i + 1 < pts.length; i++) legEnds.push({ from: pts[i], to: pts[i + 1], fromName: nameOf(pts[i], i), toName: nameOf(pts[i + 1], i + 1) });
+  if (returning && last) legEnds.push({ from: last, to: mission.pilot, fromName: nameOf(last, pts.length - 1), toName: nameOf(mission.pilot, 0) });
 
-  for (let i = 0; i < mission.waypoints.length; i++) {
-    const idx = i + 1;
-    const to = mission.waypoints[i];
-    const isRidgeLeg = !turnback && i === 2;
-    const lengthM = turnback && i === 1 ? 2320.04 : (LEG_LENGTHS[i] ?? Math.hypot(1, 1));
-    if (isRidgeLeg && scenario === 'missing-elevation') {
+  const legs: LegResult[] = [];
+  const ridgeLeg = turnback ? -1 : 2;
+  legEnds.forEach((e, i) => {
+    const isReturn = returning && i === legEnds.length - 1;
+    const lengthM = isReturn ? (turnback ? 4195.17 : A_TO_B_M) : turnback && i === 1 ? 2320.04 : (LEG_LENGTHS[i] ?? 1);
+    const base = { index: i, from: e.fromName, to: e.toName, lengthM };
+    // the worst point of a leg away from the pilot is its far end; of the return leg its start
+    const drone = isReturn ? e.from : e.to;
+    const alongLegM = isReturn ? 0 : lengthM;
+    const touchesB = !turnback && (i === ridgeLeg || isReturn);
+    if (touchesB && scenario === 'missing-elevation') {
       legs.push({
-        index: idx, from: names[i], to: names[i + 1], lengthM, status: 'missing-data',
-        reasons: [{ module: 'rf-core', severity: 'blocked', text: 'No elevation data past WP2: the last 2.4 km of the route are outside the loaded region. That part is not calculated: we do not guess the terrain.' }],
+        ...base,
+        status: 'missing-data',
+        reasons: [{ module: 'rf-core', severity: 'blocked', text: `No elevation data ${isReturn ? 'around B' : 'past WP2'}: part of the paths to the drone are outside the loaded region. Those samples are not calculated: we do not guess the terrain.` }],
+        ...missingLegData(mission, e.from, e.to, lengthM),
       });
-      continue;
+      return;
     }
-    if (!isRidgeLeg) {
-      const worst = pick({ control: clearLink('control', pts[0], to, tier), video: clearLink('video', pts[0], to, tier) });
-      const reasons = turnback && i === mission.waypoints.length - 1
-        ? [{ module: 'fpv.core', severity: 'info' as const, text: 'The flight ends at T and returns; leg 3 is not flown, so the ridge no longer matters.' }]
-        : [];
-      legs.push({ index: idx, from: names[i], to: names[i + 1], lengthM, worst, status: 'ok', reasons });
-      continue;
+    if (!touchesB) {
+      const worst = pick({ control: clearLink('control', mission.pilot, drone, alongLegM, tier), video: clearLink('video', mission.pilot, drone, alongLegM, tier) });
+      legs.push({ ...base, worst, status: 'ok', reasons: [] });
+      return;
     }
-    const profile = profileBetween(mission.pilot, to);
-    profile.lengthM = A_TO_B_M;
-    const video = fixed
-      ? link({ kind: 'video', f: 915e6, rayM: A_TO_B_M, fsplDb: 106.12874, diffDb: 0.54891, nu: -0.6814, r1: 20.7934, los: true, clearanceM: 10.21, profile }, tier)
-      : link({ kind: 'video', f: 915e6, rayM: A_TO_B_M, fsplDb: 106.12874, diffDb: 29.61391, nu: 6.8013, r1: 20.7934, los: false, clearanceM: -99.86, profile }, tier);
-    const control = fixed
-      ? link({ kind: 'control', f: 433e6, rayM: A_TO_B_M, fsplDb: 99.63112, diffDb: 0.31107, nu: -0.4689, r1: 30.2214, los: true, clearanceM: 10.21, profile }, tier)
-      : link({ kind: 'control', f: 433e6, rayM: A_TO_B_M, fsplDb: 99.63112, diffDb: 26.35847, nu: 4.6795, r1: 30.2214, los: false, clearanceM: -99.86, profile }, tier);
-    const worst = pick({ control, video });
+    const worst = pick(ridgeLinks(mission, drone, fixed, alongLegM, tier));
     const videoBlocked = !!worst['video'] && !worst['video'].reachable;
-    const reasons = videoBlocked
-      ? [{ module: 'rf-core', severity: 'blocked' as const, text: 'Ridge 622 m blocks the video link by 100 m.', fix: fixAltitude(mission) }]
+    const where = isReturn ? 'at B, the start of the return' : 'at B';
+    const reasons: Reason[] = videoBlocked
+      ? [{ module: 'rf-core', severity: 'blocked', link: 'video', text: `Ridge 622 m blocks the video link by 100 m ${where}.`, ...(isReturn ? {} : { fix: fixAltitude(mission) }) }]
       : fixed
-        ? [{ module: 'rf-core', severity: 'info' as const, text: 'At 345 m AGL the line of sight passes 10 m over the ridge: diffraction 0.55 dB, video margin +25.32 dB.' }]
+        ? [{ module: 'rf-core', severity: 'info', link: 'video', text: 'At 345 m AGL the line of sight passes 10 m over the ridge: diffraction 0.55 dB, video margin +25.32 dB.' }]
         : [];
-    legs.push({ index: idx, from: names[i], to: names[i + 1], lengthM, worst, status: videoBlocked ? 'blocked' : 'ok', reasons });
+    legs.push({ ...base, worst, status: videoBlocked ? 'blocked' : 'ok', reasons });
+  });
+
+  if (turnback && legs.length) {
+    // a module reason with `leg` lands in that leg's reasons
+    const lastOut = returning ? legs.length - 2 : legs.length - 1;
+    legs[lastOut].reasons = [...(legs[lastOut].reasons ?? []), { module: 'fpv.core', severity: 'info', leg: lastOut, text: 'The flight ends at T and returns; leg 3 is not flown, so the ridge no longer matters.' }];
   }
 
   const result: RouteResult = {
     missionRevision: 1,
     inputHash: `mock-${turnback ? 't' : fixed ? 'f' : 'b'}-${mission.evaluate}`,
+    timeUtc: timeUtc ?? new Date().toISOString(),
     legs,
+    reasons: [],
     weather,
+    forecastTier: tier,
+    library: [
+      { kind: 'radio-profiles', id: 'elrs-433-50hz', version: 2, verified: true },
+      { kind: 'radio-profiles', id: 'digital-915-20mhz', version: 2, verified: true },
+      { kind: 'antennas', id: 'ground-dipole-5dbi', version: 1, verified: true },
+      { kind: 'antennas', id: 'air-dipole-2dbi', version: 1, verified: true },
+      { kind: 'drones', id: 'fpv-10in-recon', version: 1, verified: true },
+      { kind: 'batteries', id: 'liion-6s-6000', version: 1, verified: true },
+    ],
     modules: {},
     moduleFailures: [],
   };
@@ -328,11 +461,12 @@ export function routeResult(mission: Mission, scenario: MockScenario): RouteResu
   } else {
     const usableWh = 103.68;
     const whPerM = usableWh / RANGE_M;
+    result.modules = { 'fpv.battery': { usableWh, rangeM: RANGE_M } };
     if (turnback) {
       const out = 6003.13;
       const back = 4195.17;
       result.battery = { energyWh: 129.6, usableWh, neededWh: (out + back) * whPerM, rangeM: RANGE_M, neededM: out + back, shortfallM: 0, turnBack: { distanceAlongRouteM: out, returnM: back, lat: TURN_BACK.lat, lon: TURN_BACK.lon } };
-      result.modules = { 'fpv.battery': { reasons: [{ module: 'fpv.battery', severity: 'info', text: 'Turn back at T: 6.0 km out and 4.2 km back fit the 10.2 km range.' }] } };
+      result.reasons = [{ module: 'fpv.battery', severity: 'info', text: 'Turn back at T: 6.0 km out and 4.2 km back fit the 10.2 km range.' }];
     } else {
       const climbM = fixed ? 196.4 : 0;
       const needed = NEEDED_M + climbM;
@@ -346,20 +480,16 @@ export function routeResult(mission: Mission, scenario: MockScenario): RouteResu
         shortfallM: needed - RANGE_M,
         turnBack: { distanceAlongRouteM: out, returnM: 4195.17, lat: TURN_BACK.lat, lon: TURN_BACK.lon },
       };
-      result.modules = {
-        'fpv.battery': {
-          reasons: [
-            {
-              module: 'fpv.battery',
-              severity: 'warn',
-              text: fixed
-                ? `Route plus return with the climb to 345 m needs ${(needed / 1000).toFixed(1)} km; the pack gives 10.2 km at 36 km/h.`
-                : 'Route 10.8 km plus 5.3 km back to the pilot needs 16.1 km; the pack gives 10.2 km at 36 km/h.',
-              fix: fixTurnBack(mission),
-            },
-          ],
+      result.reasons = [
+        {
+          module: 'fpv.battery',
+          severity: 'warn',
+          text: fixed
+            ? `Route plus return with the climb to 345 m needs ${(needed / 1000).toFixed(1)} km; the pack gives 10.2 km at 36 km/h.`
+            : 'Route 10.8 km plus 5.3 km back to the pilot needs 16.1 km; the pack gives 10.2 km at 36 km/h.',
+          fix: fixTurnBack(mission),
         },
-      };
+      ];
     }
   }
   return result;
@@ -457,7 +587,24 @@ export function coverageGrid(mission: Mission, kind: LinkKind): CoverageGrid {
       ),
     ),
   };
-  const grid: CoverageGrid = { origin: { lat: nw.lat, lon: nw.lon }, cellM: cellKm * 1000, cols: n, rows: n, bbox: [nw.lon, se.lat, se.lon, nw.lat], marginDb: margins, limitPolygon: limit };
+  const grid: CoverageGrid = {
+    link: kind,
+    pilot: { lat: mission.pilot.lat, lon: mission.pilot.lon },
+    forecastTier: mission.modules?.['rf.weather'] ? tierFor(mission.time.mode === 'planned' ? mission.time.utc : undefined) : 'off',
+    radiusM: radiusKm * 1000,
+    droneAglM: droneAgl,
+    origin: { lat: nw.lat, lon: nw.lon },
+    cellM: cellKm * 1000,
+    // the mock grid is regular in its local km plane, which maps linearly to degrees here
+    cellLatDeg: (nw.lat - se.lat) / n,
+    cellLonDeg: (se.lon - nw.lon) / n,
+    cols: n,
+    rows: n,
+    bbox: [nw.lon, se.lat, se.lon, nw.lat],
+    marginDb: margins,
+    missingDataCells: 0,
+    limitPolygon: limit,
+  };
   gridCache.set(key, grid);
   return grid;
 }

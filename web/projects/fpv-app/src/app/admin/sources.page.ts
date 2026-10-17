@@ -1,6 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Map as MlMap } from 'maplibre-gl';
-import { ApiError, CacheTier, LayerPanelComponent, LayerRegistry, MapViewComponent, RfmapApiClient, createStandardLayers, provideMapView } from '@rfmap/ui-kit';
+import { ApiError, CacheTier, CacheTierId, LayerPanelComponent, LayerRegistry, MapViewComponent, RfmapApiClient, createStandardLayers, provideMapView } from '@rfmap/ui-kit';
 import { FpvDataService } from '../core/fpv-data.service';
 
 /** Map layers and data sources (MapSources.dc.html) plus the server cache limits. */
@@ -32,17 +32,34 @@ import { FpvDataService } from '../core/fpv-data.service';
         @if (cacheError(); as e) {<div class="rf-field-error" role="alert">{{ e }}</div>}
         @for (t of tiers(); track t.id) {
           <div class="tier">
-            <div class="tier-head"><b>{{ t.label }}</b><span class="muted small rf-num">{{ gb(t.usedBytes) }} of {{ gb(t.limitBytes) }} GB{{ t.hitRate !== undefined ? ' · hit rate ' + pct(t.hitRate) : '' }}</span></div>
-            <div class="bar" role="img" [attr.aria-label]="pct(t.usedBytes / t.limitBytes) + ' used'"><div class="fill" [style.width.%]="Math.min(100, (100 * t.usedBytes) / t.limitBytes)"></div></div>
-            <label class="lim">Limit, GB
-              <input class="rf-input rf-num" type="number" min="0" step="1" [value]="t.limitBytes / 1e9" (change)="setLimit(t.id, +$any($event.target).value)" />
-            </label>
+            <div class="tier-head">
+              <b>{{ t.label ?? t.id }}</b>
+              <span class="muted small rf-num">{{ usage(t) }}</span>
+            </div>
+            @if (fraction(t); as f) {
+              <div class="bar" role="img" [attr.aria-label]="pct(f) + ' used'"><div class="fill" [style.width.%]="Math.min(100, 100 * f)"></div></div>
+            }
+            @if (t.entries !== undefined || t.hits !== undefined) {
+              <span class="muted small rf-num">{{ t.entries ?? '–' }} entries · {{ t.hits ?? '–' }} hits · {{ t.misses ?? '–' }} misses · {{ t.evictions ?? '–' }} evictions</span>
+            }
+            <div class="lims">
+              <label class="lim">Limit, GB
+                <input class="rf-input rf-num" type="number" min="0" step="0.1" [value]="t.limitBytes !== undefined ? t.limitBytes / 1e9 : ''" (change)="setLimit(t.id, 'limitBytes', +$any($event.target).value * 1e9)" />
+              </label>
+              @if (t.id === 'results-table') {
+                <label class="lim">Limit, rows
+                  <input class="rf-input rf-num" type="number" min="0" step="1000" [value]="t.limitRows ?? ''" (change)="setLimit(t.id, 'limitRows', +$any($event.target).value)" />
+                </label>
+              }
+              <button type="button" class="rf-btn rf-btn--secondary" [disabled]="busy()" (click)="clear(t.id)">Clear</button>
+            </div>
           </div>
         }
         @if (tiers().length) {
           <div class="actions">
             <button type="button" class="rf-btn rf-btn--primary" [disabled]="!dirty() || busy()" (click)="saveCache()">{{ busy() ? 'Saving…' : 'Save limits' }}</button>
-            @if (saved()) {<span class="ok-text" role="status">Saved.</span>}
+            <button type="button" class="rf-btn rf-btn--secondary" [disabled]="busy()" (click)="clear('all')">Clear all caches</button>
+            @if (saved(); as msg) {<span class="ok-text" role="status">{{ msg }}</span>}
           </div>
         }
       </section>
@@ -54,6 +71,7 @@ import { FpvDataService } from '../core/fpv-data.service';
     .mv { position: absolute; inset: 0; }
     .panel { position: absolute; top: 12px; left: 12px; z-index: 3; width: 260px; }
     .side { border-left: 1px solid var(--rf-border); background: var(--rf-surface-2); padding: 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+    .side > * { flex-shrink: 0; }
     h1 { margin: 0; font-size: 20px; display: flex; gap: 8px; align-items: center; }
     h2 { margin: 8px 0 0; font-size: 16px; }
     .muted { color: var(--rf-text-2); }
@@ -68,6 +86,7 @@ import { FpvDataService } from '../core/fpv-data.service';
     .tier-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
     .bar { height: 6px; border-radius: 3px; background: var(--rf-surface-3); overflow: hidden; }
     .fill { height: 100%; background: var(--rf-ok); }
+    .lims { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
     .lim { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--rf-text-2); }
     .lim input { width: 100px; height: 32px; }
     .actions { display: flex; align-items: center; gap: 10px; }
@@ -84,7 +103,7 @@ export class SourcesPage implements OnInit {
   protected readonly tiers = signal<CacheTier[]>([]);
   protected readonly dirty = signal(false);
   protected readonly busy = signal(false);
-  protected readonly saved = signal(false);
+  protected readonly saved = signal<string | null>(null);
   protected readonly cacheError = signal<string | null>(null);
 
   protected readonly rows: string[][] = [
@@ -113,26 +132,50 @@ export class SourcesPage implements OnInit {
     for (const def of createStandardLayers(cfg, new Date().toISOString())) this.layers.register(def);
   }
 
-  protected gb(b: number): string {
-    return (b / 1e9).toFixed(1);
+  protected usage(t: CacheTier): string {
+    const gb = (b: number | undefined) => (b === undefined ? '–' : (b / 1e9).toFixed(2));
+    const parts = [`${gb(t.usedBytes)} of ${gb(t.limitBytes)} GB`];
+    if (t.limitRows !== undefined) parts.push(`max ${t.limitRows.toLocaleString('en-US')} rows`);
+    if (t.hitRate !== undefined) parts.push(`hit rate ${this.pct(t.hitRate)}`);
+    return parts.join(' · ');
+  }
+  /** Used share, or null when the server did not send both numbers (no bar then). */
+  protected fraction(t: CacheTier): number | null {
+    return t.usedBytes !== undefined && t.limitBytes ? Math.max(t.usedBytes / t.limitBytes, 0.0001) : null;
   }
   protected pct(x: number): string {
     return `${Math.round(x * 100)} %`;
   }
 
-  protected setLimit(id: string, gb: number): void {
-    if (!Number.isFinite(gb) || gb < 0) return;
-    this.tiers.update((ts) => ts.map((t) => (t.id === id ? { ...t, limitBytes: Math.round(gb * 1e9) } : t)));
+  protected setLimit(id: CacheTierId, field: 'limitBytes' | 'limitRows', value: number): void {
+    if (!Number.isFinite(value) || value < 0) return;
+    this.tiers.update((ts) => ts.map((t) => (t.id === id ? { ...t, [field]: Math.round(value) } : t)));
     this.dirty.set(true);
-    this.saved.set(false);
+    this.saved.set(null);
   }
 
   protected async saveCache(): Promise<void> {
     this.busy.set(true);
+    this.cacheError.set(null);
     try {
-      await this.api.putAdminCache(this.tiers().map((t) => ({ id: t.id, limitBytes: t.limitBytes })));
+      const body = this.tiers().map((t) => ({ id: t.id, limitBytes: t.limitBytes, ...(t.id === 'results-table' && t.limitRows !== undefined ? { limitRows: t.limitRows } : {}) }));
+      this.tiers.set(await this.api.putAdminCache(body));
       this.dirty.set(false);
-      this.saved.set(true);
+      this.saved.set('Saved. Limits survive a restart.');
+    } catch (e) {
+      this.cacheError.set(ApiError.from(e).message);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected async clear(tier: CacheTierId | 'all'): Promise<void> {
+    this.busy.set(true);
+    this.cacheError.set(null);
+    try {
+      await this.api.clearCache(tier);
+      this.tiers.set(await this.api.adminCache());
+      this.saved.set(tier === 'all' ? 'All caches cleared.' : `${tier} cleared.`);
     } catch (e) {
       this.cacheError.set(ApiError.from(e).message);
     } finally {

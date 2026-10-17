@@ -34,7 +34,8 @@ export interface RouteDrawing {
   /** legs[i] connects point i to point i+1, with the pilot as point 0 */
   legs: DrawLeg[];
   /** Optional dashed return from a point to the pilot */
-  returnLeg?: { from: LatLon; label?: string } | null;
+  /** `labelAt`: where the label sits, as a fraction from `from` to the pilot (default 0.5) */
+  returnLeg?: { from: LatLon; label?: string; labelAt?: number } | null;
   markers?: DrawMarker[];
 }
 
@@ -145,7 +146,11 @@ export class RouteTool {
         if (!leg.label || !pts[i] || !pts[i + 1]) return;
         this.addLabel(map, midpoint(pts[i], pts[i + 1]), leg.label, `rf-leg-label is-${leg.status}`, () => this.options.onSelectLeg?.(i));
       });
-      if (d.returnLeg?.label) this.addLabel(map, midpoint(d.returnLeg.from, d.pilot), d.returnLeg.label, 'rf-leg-label is-return');
+      if (d.returnLeg?.label) {
+        const t = d.returnLeg.labelAt ?? 0.5;
+        const at = { lat: d.returnLeg.from.lat + (d.pilot.lat - d.returnLeg.from.lat) * t, lon: d.returnLeg.from.lon + (d.pilot.lon - d.returnLeg.from.lon) * t };
+        this.addLabel(map, at, d.returnLeg.label, 'rf-leg-label is-return');
+      }
     }
     for (const m of d.markers ?? []) this.addPoint(map, m, `rf-marker rf-marker--${m.kind}`, m.symbol, -2, false);
     d.waypoints.forEach((w, i) => {

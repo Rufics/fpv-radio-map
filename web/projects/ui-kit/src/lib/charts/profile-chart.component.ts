@@ -83,6 +83,9 @@ export class ProfileChartComponent {
   readonly profile = input<Profile | null | undefined>();
   readonly fromAglM = input(2);
   readonly toAglM = input(120);
+  /** Antenna MSL of each end (LinkResult.ends); preferred over profile ground + AGL */
+  readonly fromAntennaMslM = input<number | undefined>(undefined);
+  readonly toAntennaMslM = input<number | undefined>(undefined);
   readonly frequencyHz = input(915e6);
   readonly kFactor = input<number | undefined>(undefined);
   readonly diffraction = input<Diffraction | undefined>(undefined);
@@ -119,6 +122,8 @@ export class ProfileChartComponent {
         profile,
         fromAglM: this.fromAglM(),
         toAglM: this.toAglM(),
+        fromAntennaMslM: this.fromAntennaMslM(),
+        toAntennaMslM: this.toAntennaMslM(),
         frequencyHz: this.frequencyHz(),
         kFactor: this.kFactor(),
         diffraction: this.diffraction(),

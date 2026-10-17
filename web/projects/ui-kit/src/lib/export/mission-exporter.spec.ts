@@ -31,7 +31,12 @@ describe('MissionExporter', () => {
 
   it('writes valid KML with every point, full precision and AGL heights', () => {
     const file = exporter.toKml(mission, {
-      legs: [{ index: 3, status: 'blocked', worst: { video: { marginDb: -3.74265 }, control: { marginDb: 6.01041 } } }],
+      // legs in route order, index 0-based as the server sends them
+      legs: [
+        { index: 0, status: 'ok' },
+        { index: 1, status: 'ok' },
+        { index: 2, status: 'blocked', worst: { video: { marginDb: -3.74265 }, control: { marginDb: 6.01041 } } },
+      ],
     });
     expect(file.filename).toBe('north-ridge-recon-co.kml');
     expect(file.mime).toContain('kml');
@@ -47,6 +52,9 @@ describe('MissionExporter', () => {
     expect(coords[3]).toBe('35.2586279,48.5572762,120');
     expect(coords[4]).toBe('35.2,48.53,2');
     expect(file.content).toContain('<Data name="videoMarginDb"><value>-3.74265</value></Data>');
+    // the margins belong to the third point (B), not to the first
+    const bMark = Array.from(placemarks).find((p) => p.getElementsByTagName('name')[0].textContent === 'B · target');
+    expect(bMark?.textContent).toContain('-3.74265');
     expect(file.content).toContain('relativeToGround');
   });
 

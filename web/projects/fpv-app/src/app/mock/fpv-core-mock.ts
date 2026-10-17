@@ -29,9 +29,10 @@ const sameGeometry = (a: Mission, b: Mission) => {
 /**
  * Mock of modules/fpv/core: data.compare (scenario B = merge patch) and data.export.
  * Margins along the route come from the mock coverage grid (drone height of the grid), so A and B
- * differ exactly by what the patch changes in the link budget.
+ * differ exactly by what the patch changes in the link budget. Returns the module's `data`, which the
+ * server puts at RouteResult.modules['fpv.core'] as is (its reasons, if any, go to RouteResult.reasons).
  */
-export function fpvCoreMock(mission: Mission): { data: FpvCoreData; reasons: unknown[] } {
+export function fpvCoreMock(mission: Mission): FpvCoreData {
   const opts = (mission.modules?.['fpv.core'] as FpvCoreOptions | undefined) ?? {};
   const data: FpvCoreData = {};
   if (opts.compare) {
@@ -73,7 +74,7 @@ export function fpvCoreMock(mission: Mission): { data: FpvCoreData; reasons: unk
       else data.export.kml = { mediaType: 'application/vnd.google-earth.kml+xml', content: kml(mission, step, opts.kmlAltitude ?? 'relativeToGround') };
     }
   }
-  return { data, reasons: [] };
+  return data;
 }
 
 function kml(m: Mission, stepM: number, mode: 'relativeToGround' | 'absolute'): string {

@@ -4,6 +4,7 @@ import type { Geometry, Position } from 'geojson';
 import {
   CoverageDeltaLayer,
   CoverageLayer,
+  MissingDataLayer,
   DrawMarker,
   RouteDeltaLayer,
   DrawPoint,
@@ -53,6 +54,7 @@ import { CompareService } from '../core/fpv-core';
               <div class="legend-head"><span>{{ (cmp.options()?.name || 'B') === 'B' ? 'B' : 'B “' + cmp.options()?.name + '”' }} − A · {{ cmp.link() }} link</span></div>
               <div class="delta-scale" aria-hidden="true"></div>
               <div class="delta-keys"><span>▼ B worse</span><span>= under 1 dB</span><span>▲ B better</span></div>
+              @if ((cmp.delta()?.notComparableCells ?? 0) > 0) {<div class="delta-keys"><span>▨ hatched: not comparable</span></div>}
             </div>
           } @else if (showHeatLegend()) {
             <div class="legend">
@@ -118,6 +120,8 @@ export class MapStageComponent {
   readonly interactiveEdit = input(true);
   /** Height of the bottom drawer that covers the map while "why" is open (desktop); 0 = none. */
   readonly drawerHeight = input(0);
+  /** Phone: fewer map labels (a blocked return leg is already in the leg list) */
+  readonly compact = input(false);
 
   protected readonly linkOptions = [
     { value: 'control' as const, label: 'C' },
@@ -128,6 +132,7 @@ export class MapStageComponent {
   private coverage = new CoverageLayer();
   private limits = new LimitsLayer();
   private coverageDelta = new CoverageDeltaLayer();
+  private missingData = new MissingDataLayer();
   private routeDelta = new RouteDeltaLayer();
   protected readonly cmp = inject(CompareService);
   private weather: WeatherLayer[] = [];
@@ -161,6 +166,11 @@ export class MapStageComponent {
       // while the B − A difference map is shown, it replaces the plain heatmap
       const grid = this.cmp.delta() ? null : (this.ws.store.coverage()[this.ws.heatLink()] ?? null);
       untracked(() => this.coverage.setGrid(grid));
+    });
+    effect(() => {
+      if (!this.ready()) return;
+      const shapes = this.ws.store.preview() ? [] : this.ws.missingAreas();
+      untracked(() => this.missingData.setShapes(shapes));
     });
     effect(() => {
       if (!this.ready()) return;
@@ -244,6 +254,7 @@ export class MapStageComponent {
     this.layers.register(this.coverage);
     this.layers.register(this.limits);
     this.layers.register(this.coverageDelta);
+    this.layers.register(this.missingData);
     this.layers.register(this.routeDelta);
     this.tool = new RouteTool(this.layers, this.ctx, {
       onMove: (i, p) => this.ws.store.movePoint(i, p),
@@ -294,13 +305,22 @@ export class MapStageComponent {
     const markers: DrawMarker[] = [];
     const v = this.ws.verdict();
     if (!preview && v) {
-      const dom = this.ws.store.result()?.legs?.find((l) => l.index === v.legIndex)?.worst?.[v.link]?.diffraction;
+      const dom = this.ws.store.result()?.legs?.[v.legIndex - 1]?.worst?.[v.link]?.diffraction;
       const d = dom?.dominant;
       if (d?.lat !== undefined && d.lon !== undefined) {
         markers.push({ kind: 'obstruction', symbol: '✕', lat: d.lat, lon: d.lon, caption: `Ridge ${RfFormat.format(dom?.edgeHeightM ?? d.groundMslM, 'm')}`, ariaLabel: `Obstruction ${RfFormat.format(dom?.edgeHeightM ?? d.groundMslM, 'm')}` });
       }
     }
-    const ret = turn && m.returnToPilot !== false ? { from: m.waypoints[m.waypoints.length - 1], label: `Turn back · ${RfFormat.format(rows.find((r) => r.isReturn)?.lengthM, 'km1')}` } : null;
+    const retRow = rows.find((r) => r.isReturn);
+    const ret =
+      m.returnToPilot !== false && retRow
+        ? {
+            from: m.waypoints[m.waypoints.length - 1],
+            label: turn ? `Turn back · ${RfFormat.format(retRow.lengthM, 'km1')}` : retRow.tone === 'blocked' && !this.compact() ? `Return · ${retRow.mark}` : undefined,
+            // keep the label clear of an obstruction marker, which tends to sit mid-way on the pilot line
+            labelAt: markers.length ? 0.78 : 0.5,
+          }
+        : null;
     return { pilot, waypoints, legs, markers, returnLeg: ret };
   });
 

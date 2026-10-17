@@ -1,5 +1,5 @@
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { ApiError, ModuleInfo, ModuleUiLoader, RfmapApiClient, ValidationReport } from '@rfmap/ui-kit';
+import { Component, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
+import { ApiError, CredentialStore, ModuleInfo, ModuleUiLoader, RfmapApiClient, TrustedKey, ValidationReport } from '@rfmap/ui-kit';
 
 /** Module manager (ModuleManager.dc.html): installed modules with lifecycle, upload + validation report. */
 @Component({
@@ -15,7 +15,7 @@ import { ApiError, ModuleInfo, ModuleUiLoader, RfmapApiClient, ValidationReport 
         </div>
         <div class="table" role="table" aria-label="Installed modules">
           <div class="tr th" role="row">
-            <span role="columnheader">Module</span><span role="columnheader">Version</span><span role="columnheader">Stage</span><span role="columnheader">Requires</span><span role="columnheader">Notes</span>
+            <span role="columnheader">Module</span><span role="columnheader">Version</span><span role="columnheader">Stage</span><span role="columnheader">Requires</span><span role="columnheader">Notes</span><span role="columnheader"><span class="sr-only">Actions</span></span>
           </div>
           @for (m of modules(); track m.id + '@' + m.version) {
             <div class="tr" role="row" [class.dep]="m.lifecycle === 'deprecated'">
@@ -26,6 +26,14 @@ import { ApiError, ModuleInfo, ModuleUiLoader, RfmapApiClient, ValidationReport 
               </span>
               <span role="cell" class="muted">{{ m.requires?.join(', ') || '—' }}</span>
               <span role="cell" [class.warn-text]="m.lifecycle === 'deprecated'" class="notes">{{ notes(m) }}</span>
+              <span role="cell" class="acts">
+                @if (isAdmin() && m.id) {
+                  <button type="button" class="rf-btn rf-btn--dense rf-btn--secondary" [disabled]="busy()" (click)="toggle(m)" [attr.aria-label]="(m.state === 'disabled' ? 'Enable ' : 'Disable ') + m.id">{{ m.state === 'disabled' ? 'Enable' : 'Disable' }}</button>
+                  @if (!m.builtIn) {
+                    <button type="button" class="rf-btn rf-btn--dense rf-btn--danger" [disabled]="busy()" (click)="remove(m)" [attr.aria-label]="'Remove ' + m.id">Remove</button>
+                  }
+                }
+              </span>
             </div>
           }
         </div>
@@ -40,6 +48,12 @@ import { ApiError, ModuleInfo, ModuleUiLoader, RfmapApiClient, ValidationReport 
           </div>
           <div class="muted small">A deprecated API stays for at least 3 minor releases. The warning names the version it goes away in and the replacement, and appears in the upload report, server logs and a banner in affected missions.</div>
         </section>
+        @if (notices().length) {
+          <section class="lifecycle">
+            <b>Load-time notices</b>
+            @for (n of notices(); track $index) {<div class="small warn-text">{{ noticeText(n) }}</div>}
+          </section>
+        }
         @if (uiStatus().length) {
           <section class="lifecycle">
             <b>Module UI bundles in this browser</b>
@@ -72,6 +86,34 @@ import { ApiError, ModuleInfo, ModuleUiLoader, RfmapApiClient, ValidationReport 
           </div>
           @if (installed()) {<div class="ok-text" role="status">Installed. It appears in the list after the server reloads its modules.</div>}
         }
+        <section class="keys" aria-labelledby="keys-title">
+          <h2 id="keys-title">Trusted signing keys</h2>
+          @if (!isAdmin()) {
+            <div class="muted small">Set the admin token (top right) to see and change the keys.</div>
+          } @else {
+            <div class="muted small">Only packages signed with one of these keys load. Removing a key stops its modules at once; the built-in owner key stays.</div>
+            @for (k of keys(); track k.id) {
+              <div class="key">
+                <div class="key-text">
+                  <b>{{ k.label || k.id }}</b>
+                  @if (k.builtIn) {<span class="rf-badge rf-badge--stable">built in</span>}
+                  <span class="rf-mono small muted">{{ k.id }}{{ k.key ? ' · ' + k.key : '' }}</span>
+                </div>
+                @if (!k.builtIn && k.id) {
+                  <button type="button" class="rf-btn rf-btn--dense rf-btn--danger" [disabled]="busy()" (click)="deleteKey(k)" [attr.aria-label]="'Remove key ' + (k.label || k.id)">Remove</button>
+                }
+              </div>
+            }
+            <label class="rf-field">Public key (rfmod text form)
+              <textarea class="rf-input rf-mono keyin" rows="2" [value]="newKey()" (input)="newKey.set($any($event.target).value)"></textarea>
+            </label>
+            <label class="rf-field">Label
+              <input class="rf-input" [value]="newLabel()" (input)="newLabel.set($any($event.target).value)" />
+            </label>
+            <button type="button" class="rf-btn rf-btn--secondary" [disabled]="busy() || !newKey().trim()" (click)="addKey()">Add key</button>
+            @if (keyError(); as e) {<div class="rf-field-error" role="alert">{{ e }}</div>}
+          }
+        </section>
       </aside>
     </div>
   `,
@@ -87,7 +129,7 @@ import { ApiError, ModuleInfo, ModuleUiLoader, RfmapApiClient, ValidationReport 
     .warn-text { color: var(--rf-warn-text); font-size: 13px; }
     .ok-text { color: var(--rf-ok-text); font-size: 13px; }
     .table { border: 1px solid var(--rf-border); border-radius: 12px; overflow: hidden; }
-    .tr { display: grid; grid-template-columns: 2fr 0.9fr 1.2fr 1.2fr 2.4fr; border-top: 1px solid var(--rf-divider); align-items: center; }
+    .tr { display: grid; grid-template-columns: 1.8fr 0.8fr 1.2fr 1.2fr 2.2fr 1.5fr; border-top: 1px solid var(--rf-divider); align-items: center; }
     .tr > span { padding: 10px 12px; }
     .tr.th { background: var(--rf-surface-3); font-size: 12px; color: var(--rf-text-2); font-weight: 600; border-top: 0; }
     .tr.dep { background: var(--rf-warn-bg); }
@@ -106,13 +148,27 @@ import { ApiError, ModuleInfo, ModuleUiLoader, RfmapApiClient, ValidationReport 
     .checks .ok .mark { color: var(--rf-ok-text); }
     .checks .bad { color: var(--rf-blocked-text); }
     .checks .warn { padding: 8px; border-radius: 8px; background: var(--rf-warn-bg); color: var(--rf-warn-text); }
-    .actions { display: flex; gap: 8px; margin-top: auto; }
+    .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+    .keys { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--rf-divider); }
+    h2 { margin: 0; font-size: 16px; }
+    .key { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--rf-border); background: var(--rf-surface-1); }
+    .key-text { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; min-width: 0; }
+    .key-text .rf-mono { overflow-wrap: anywhere; }
+    .keyin { height: auto; min-height: 56px; padding: 8px; font-size: 12px; }
+    .actions { display: flex; gap: 8px; }
     .actions .rf-btn--primary { flex: 1; }
   `,
 })
 export class ModulesPage implements OnInit {
   private readonly api = inject(RfmapApiClient);
   private readonly loader = inject(ModuleUiLoader);
+  private readonly creds = inject(CredentialStore);
+  protected readonly isAdmin = computed(() => !!this.creds.adminTokenSignal());
+  protected readonly keys = signal<TrustedKey[]>([]);
+  protected readonly notices = signal<Record<string, unknown>[]>([]);
+  protected readonly newKey = signal('');
+  protected readonly newLabel = signal('');
+  protected readonly keyError = signal<string | null>(null);
   protected readonly modules = signal<ModuleInfo[]>([]);
   protected readonly report = signal<ValidationReport | null>(null);
   protected readonly fileName = signal('');
@@ -134,12 +190,74 @@ export class ModulesPage implements OnInit {
     }
   }
 
+  constructor() {
+    // keys and notices need the admin token; load them whenever it is set
+    effect(() => {
+      if (this.isAdmin()) untracked(() => void this.loadAdmin());
+    });
+  }
+
+  private async loadAdmin(): Promise<void> {
+    try {
+      this.keys.set(await this.api.adminKeys());
+      this.notices.set(await this.api.moduleNotices());
+    } catch (e) {
+      this.keyError.set(ApiError.from(e).message);
+    }
+  }
+
+  protected noticeText(n: Record<string, unknown>): string {
+    const parts = ['module', 'message', 'detail', 'text'].map((k) => n[k]).filter((v) => typeof v === 'string');
+    return parts.length ? parts.join(': ') : JSON.stringify(n);
+  }
+
+  protected async toggle(m: ModuleInfo): Promise<void> {
+    await this.adminCall(async () => this.modules.set(await this.api.setModule(m.id!, { enabled: m.state === 'disabled' })));
+  }
+
+  protected async remove(m: ModuleInfo): Promise<void> {
+    await this.adminCall(async () => {
+      await this.api.removeModule(m.id!);
+      this.modules.set(await this.api.modules());
+    });
+  }
+
+  protected async addKey(): Promise<void> {
+    this.keyError.set(null);
+    await this.adminCall(async () => {
+      this.keys.set(await this.api.addKey(this.newKey().trim(), this.newLabel().trim() || undefined));
+      this.newKey.set('');
+      this.newLabel.set('');
+    }, this.keyError);
+  }
+
+  protected async deleteKey(k: TrustedKey): Promise<void> {
+    this.keyError.set(null);
+    await this.adminCall(async () => {
+      await this.api.deleteKey(k.id!);
+      this.keys.set(await this.api.adminKeys());
+    }, this.keyError);
+  }
+
+  private async adminCall(fn: () => Promise<void>, errSignal = this.error): Promise<void> {
+    this.busy.set(true);
+    try {
+      await fn();
+    } catch (e) {
+      const err = ApiError.from(e);
+      errSignal.set(err.status === 401 ? 'Set the admin token first (top right).' : err.message);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
   protected notes(m: ModuleInfo): string {
     if (m.deprecation) {
       const d = m.deprecation;
       return [d.since ? `Since ${d.since}` : '', d.removedIn ? `removed in ${d.removedIn}` : '', d.message ?? (d.replacement ? `Use ${d.replacement}.` : '')].filter(Boolean).join(', ').replace(', Use', '. Use');
     }
-    if (m.id === 'rf-core') return 'Built in';
+    if (m.stateDetail) return m.stateDetail;
+    if (m.builtIn) return 'Built in · can be disabled, not removed';
     if (m.lifecycle === 'beta') return 'Users see a beta label';
     if (m.lifecycle === 'alpha') return 'Hidden from users';
     return m.ui?.bundle ? `UI bundle · slots ${m.ui.slots?.join(', ')}` : '';

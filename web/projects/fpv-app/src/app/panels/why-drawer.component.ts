@@ -6,6 +6,7 @@ import {
   RfFormat,
   RfNumComponent,
   SlotHostComponent,
+  groundToAir,
 } from '@rfmap/ui-kit';
 import { FpvWorkspace, LINK_LETTER } from '../core/fpv-workspace.service';
 
@@ -36,12 +37,14 @@ import { FpvWorkspace, LINK_LETTER } from '../core/fpv-workspace.service';
         <div class="chart" [class.budget]="tab() === 'budget'">
           @if (tab() === 'profile') {
             <rf-profile-chart
-              [profile]="v.link.profile"
+              [profile]="v.view.profile"
               [fromAglM]="v.fromAgl"
               [toAglM]="v.toAgl"
+              [fromAntennaMslM]="v.view.ground?.antennaMslM"
+              [toAntennaMslM]="v.view.air?.antennaMslM"
               [frequencyHz]="v.link.frequencyHz ?? 915e6"
               [kFactor]="v.k"
-              [diffraction]="v.link.diffraction"
+              [diffraction]="v.view.diffraction"
               [lossDb]="v.link.diffraction?.lossDb"
               obstacleName="Ridge"
             />
@@ -52,7 +55,7 @@ import { FpvWorkspace, LINK_LETTER } from '../core/fpv-workspace.service';
       </div>
       <div class="right">
         <dl class="rf-breakdown">
-          <dt>Distance</dt><dd><rf-num [value]="v.link.rayLengthM" kind="km3" /></dd>
+          <dt [title]="'Ray length ' + (v.link.rayLengthM ?? '')">Distance</dt><dd><rf-num [value]="v.link.distanceM ?? v.link.rayLengthM" kind="km3" /></dd>
           @for (t of v.terms; track t.id) {
             <dt [title]="t.source">{{ t.label }}</dt><dd><rf-num [value]="t.value" [kind]="t.kind" /></dd>
           }
@@ -119,8 +122,12 @@ export class WhyDrawerComponent {
     const failing = link.reachable === false;
     const mhz = RfFormat.format(link.frequencyHz, 'mhz');
     const to = leg.to ?? 'B';
-    const subtitle = `A → drone at ${to} · ${w.link} ${mhz}`;
-    const title = `${failing ? 'Why leg' : 'Leg'} ${leg.index}${failing ? ' fails' : ' · reachable'} · ${subtitle}`;
+    // where along the leg the worst sample was taken
+    const along = link.sample?.alongLegM;
+    const atEnd = along === undefined || leg.lengthM === undefined || Math.abs(leg.lengthM - along) < 1;
+    const where = atEnd ? `at ${to}` : along! < 1 ? `at ${leg.from ?? 'the start'}` : `${RfFormat.format(along, 'km1')} into the leg`;
+    const subtitle = `A → drone ${where} · ${w.link} ${mhz}`;
+    const title = `${failing ? 'Why leg' : 'Leg'} ${w.leg}${failing ? ' fails' : ' · reachable'} · ${subtitle}`;
     const links = (['control', 'video'] as LinkKind[])
       .filter((k) => leg.worst?.[k])
       .map((k) => ({ kind: k, label: `${LINK_LETTER[k]} ${leg.worst?.[k]?.reachable === false ? '✕' : '✓'}` }));
@@ -128,10 +135,12 @@ export class WhyDrawerComponent {
       .filter((t) => t.valueDb > 0)
       .map((t) => ({ id: t.id, label: t.id === 'fspl' ? 'Free-space loss' : t.id === 'diffraction' ? 'Ridge diffraction' : t.label, value: t.valueDb, source: t.source, kind: 'db' as const }));
     const gains = (link.terms ?? []).filter((t) => t.valueDb <= 0);
-    const toPoint = m.waypoints[(leg.index ?? 1) - 1];
-    const fix = (leg.reasons ?? []).find((r) => r.fix)?.fix;
+    const toPoint = m.waypoints[w.leg - 1] ?? m.pilot;
+    const fix = (leg.reasons ?? []).find((r) => r.fix && (!r.link || r.link === w.link))?.fix;
+    const view = groundToAir(link);
     return {
-      leg: leg.index ?? 0,
+      leg: w.leg,
+      view,
       kind: w.link,
       title,
       subtitle,
@@ -139,9 +148,10 @@ export class WhyDrawerComponent {
       link,
       terms,
       gains,
-      fromAgl: m.pilot.aglM,
-      toAgl: toPoint?.aglM ?? 120,
-      k: this.ws.store.result()?.weather?.effectiveEarthFactor,
+      // heights from LinkResult.ends; the mission only when an older result has no ends
+      fromAgl: view.ground?.aglM ?? m.pilot.aglM,
+      toAgl: view.air?.aglM ?? link.sample?.aglM ?? toPoint.aglM,
+      k: link.earth?.effectiveEarthFactor ?? this.ws.store.result()?.weather?.effectiveEarthFactor,
       fix,
       fixTitle: fix?.title ? fix.title.replace(/^Fly /, '').replace(/^./, (c) => c.toLowerCase()) : '',
     };

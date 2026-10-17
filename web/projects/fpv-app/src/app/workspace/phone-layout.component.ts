@@ -28,7 +28,7 @@ import { MapStageComponent } from './map-stage.component';
       </section>
     } @else {
       <div class="map">
-        <fpv-map-stage class="stage" [fitPadding]="padding" />
+        <fpv-map-stage class="stage" [fitPadding]="padding" [compact]="true" />
         <div class="chips">
           <span class="chip name">{{ ws.mission()?.name ?? 'FPV Radio Map' }}</span>
           @if (ws.mission()) {
@@ -55,7 +55,7 @@ import { MapStageComponent } from './map-stage.component';
           <div class="rf-eyebrow">Route · {{ ws.routeLengthText() }}{{ ws.store.result() ? ' · tap a leg' : '' }}</div>
           <div class="legs">
             @for (r of ws.legRows(); track r.index) {
-              @if (ws.store.result() && !r.isReturn) {
+              @if (ws.store.result() && r.mark) {
                 <button type="button" class="leg" [class.bad]="r.tone === 'blocked'" (click)="ws.openWhy(r.index)" [attr.aria-label]="r.name + ', ' + r.info + ', ' + r.markLabel + '. Show why'">
                   <span>{{ r.name }} · {{ km(r.lengthM) }}</span><span class="mark" [class]="'mark tone-' + r.tone">{{ r.mark }} ›</span>
                 </button>
@@ -110,9 +110,9 @@ export class PhoneLayoutComponent {
   }
 
   protected readonly whyTitle = computed(() => {
-    const leg = this.ws.whyLeg();
     const link = this.ws.whyLink();
-    return link?.reachable === false ? `Why leg ${leg?.index} fails` : `Leg ${leg?.index}`;
+    const n = this.ws.why()?.leg;
+    return link?.reachable === false ? `Why leg ${n} fails` : `Leg ${n}`;
   });
 
   protected readonly verdictText = computed(() => {

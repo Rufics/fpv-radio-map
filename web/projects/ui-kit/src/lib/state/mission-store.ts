@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { CoverageGrid, Fix, GetMissionResponse, Job, Role, RouteResult } from '../models/api.models';
+import { CoverageGrid, Fix, GetMissionResponse, Job, JobPart, Role, RouteResult } from '../models/api.models';
 import { EvaluateMode, LinkKind, Mission, MissionPoint, linksEvaluated } from '../models/mission.models';
 import { ApiError, RfmapApiClient } from './api-client';
 import { CredentialStore } from './credential-store';
@@ -14,13 +14,18 @@ export interface FixPreview {
   after: Mission;
 }
 
-/** Which coverage link a job part delivers. @gap parts carry only a name; see API-NOTES.md */
+/** Fallback only: the link named in a part's display name ("Coverage grid, control link"). */
 export function coverageLinkOfPart(name: string | undefined): LinkKind | null {
   const n = (name ?? '').toLowerCase();
   if (!n.includes('coverage')) return null;
   if (n.includes('control')) return 'control';
   if (n.includes('video')) return 'video';
   return null;
+}
+
+/** Which coverage link a job part delivers: `JobPart.link`, else parsed from the name. */
+export function partLink(part: JobPart): LinkKind | null {
+  return part.link ?? coverageLinkOfPart(part.name);
 }
 
 /**
@@ -209,7 +214,7 @@ export class MissionStore {
       if (run !== this.runId) return;
       this.job.set(j);
       for (const part of j.parts ?? []) {
-        const link = coverageLinkOfPart(part.name);
+        const link = partLink(part);
         if (link && (part.state === 'done' || part.state === 'cached') && !fetched.has(link) && j.jobId) {
           fetched.add(link);
           this.api

@@ -10,7 +10,17 @@ interface LinkCard {
   hint: string;
   link: ShareLink | null;
   url: string | null;
+  /** Opens, expiry and pause of the link, from ShareLink */
+  status: string[];
+  paused: boolean;
 }
+
+const EXPIRY_CHOICES: { label: string; days: number | null }[] = [
+  { label: 'Until revoked', days: null },
+  { label: '1 day', days: 1 },
+  { label: '7 days', days: 7 },
+  { label: '30 days', days: 30 },
+];
 
 /** Share: edit link + view link, each with a 6-digit PIN; revoking needs the owner key; KML/GPX export. */
 @Component({
@@ -30,6 +40,9 @@ interface LinkCard {
         @for (c of cards(); track c.role) {
           <div class="card">
             <div class="row"><b>{{ c.title }}</b><span class="rf-caption">{{ c.hint }}</span></div>
+            @if (c.status.length) {
+              <div class="rf-caption status" [class.paused]="c.paused">{{ c.status.join(' · ') }}</div>
+            }
             @if (c.url) {
               <div class="row gap">
                 <div class="url rf-mono" [title]="c.url">{{ c.url }}</div>
@@ -54,7 +67,14 @@ interface LinkCard {
                   <input class="rf-input rf-mono pin" inputmode="numeric" autocomplete="off" maxlength="6" [value]="pins()[c.role]" (input)="setPin(c.role, $any($event.target).value)" [class.is-invalid]="pinError()[c.role]" [attr.aria-invalid]="!!pinError()[c.role]" />
                 </label>
                 <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="randomPin(c.role)">Random</button>
-                <button type="button" class="rf-btn rf-btn--sm rf-btn--primary" (click)="create(c.role)" [disabled]="busy() || !ownerKey()">Create link</button>
+              </div>
+              <div class="row gap">
+                <label class="rf-field grow">Link works
+                  <select class="rf-input" [value]="expiry()[c.role]" (change)="setExpiry(c.role, +$any($event.target).value)">
+                    @for (x of expiryChoices; track $index) {<option [value]="$index">{{ x.label }}</option>}
+                  </select>
+                </label>
+                <button type="button" class="rf-btn rf-btn--sm rf-btn--primary create" (click)="create(c.role)" [disabled]="busy() || !ownerKey()">Create link</button>
               </div>
               @if (pinError()[c.role]; as e) {<div class="rf-field-error">{{ e }}</div>}
             }
@@ -110,6 +130,9 @@ interface LinkCard {
     .owner-btn { border: 1px solid var(--rf-warn-border); color: var(--rf-warn-text); }
     .exports { padding-top: 4px; flex-wrap: wrap; }
     .alt { height: 32px; width: auto; }
+    .status { color: var(--rf-text-2); }
+    .status.paused { color: var(--rf-warn-text); }
+    .create { align-self: flex-end; }
   `,
 })
 export class ShareDialogComponent implements OnInit {
@@ -144,14 +167,37 @@ export class ShareDialogComponent implements OnInit {
     void this.refresh();
   }
 
+  protected readonly expiryChoices = EXPIRY_CHOICES;
+  /** Index into EXPIRY_CHOICES per role */
+  protected readonly expiry = signal<Record<Role, number>>({ edit: 0, view: 0 });
+
+  protected setExpiry(role: Role, i: number): void {
+    this.expiry.update((e) => ({ ...e, [role]: i }));
+  }
+
+  private static fmt(iso: string): string {
+    return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
   protected readonly cards = computed<LinkCard[]>(() => {
+    const now = Date.now();
     const make = (role: Role, title: string, hint: string): LinkCard => {
       const tok = this.tokens()[role];
-      const active = this.links().filter((l) => l.role === role && !l.revoked);
+      const active = this.links().filter((l) => l.role === role && !l.revoked && !(l.expiresAt && Date.parse(l.expiresAt) <= now));
       const link = tok ? (active.find((l) => l.linkId === tok.linkId) ?? null) : this.hidden()[role] ? null : (active[active.length - 1] ?? null);
       const url = tok && link ? `${location.origin}/m/${role === 'edit' ? 'e' : 'v'}/${tok.token}` : null;
-      const opened = link?.lastOpenedAt ? `last opened ${new Date(link.lastOpenedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : '';
-      return { role, title, hint: opened || hint, link, url };
+      const opened = link?.lastOpenedAt ? `last opened ${ShareDialogComponent.fmt(link.lastOpenedAt)}` : '';
+      const status: string[] = [];
+      let paused = false;
+      if (link) {
+        if (link.openCount !== undefined) status.push(`opened ${link.openCount} ${link.openCount === 1 ? 'time' : 'times'}`);
+        status.push(link.expiresAt ? `expires ${ShareDialogComponent.fmt(link.expiresAt)}` : 'no expiry');
+        if (link.pausedUntil && Date.parse(link.pausedUntil) > now) {
+          paused = true;
+          status.push(`paused after wrong PINs until ${ShareDialogComponent.fmt(link.pausedUntil)}`);
+        }
+      }
+      return { role, title, hint: opened || hint, link, url, status, paused };
     };
     return [make('edit', 'Can edit', 'PIN required · revoke with owner key'), make('view', 'View only', 'PIN required · opens on phone')];
   });
@@ -188,7 +234,10 @@ export class ShareDialogComponent implements OnInit {
     this.busy.set(true);
     this.error.set(null);
     try {
-      const created = await this.api.createLink(id, { role, pin, label: role === 'edit' ? 'Edit link' : 'View link' }, this.ownerKey() ?? undefined);
+      const days = EXPIRY_CHOICES[this.expiry()[role]]?.days ?? null;
+      const expiresAt = days ? new Date(Date.now() + days * 86400e3).toISOString() : undefined;
+      const req = { role, pin, label: role === 'edit' ? 'Edit link' : 'View link', ...(expiresAt ? { expiresAt } : {}) };
+      const created = await this.api.createLink(id, req, this.ownerKey() ?? undefined);
       if (created.token) this.tokens.update((t) => ({ ...t, [role]: { linkId: created.linkId, token: created.token! } }));
       this.hidden.update((h) => ({ ...h, [role]: false }));
       await this.refresh();

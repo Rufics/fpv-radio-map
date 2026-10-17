@@ -104,7 +104,12 @@ type Change = 'video-radio' | 'control-radio' | 'video-power' | 'video-antenna' 
           </div>
           @if (!hasCoverage()) {<div class="small muted">The difference map needs this mission's coverage; it is calculated with Calculate.</div>}
           @if (cmp.diffError(); as e) {<div class="rf-field-error" role="alert">{{ e }}</div>}
-          @if (cmp.delta()) {<div class="small muted">Map: ▲ teal where B is better, ▼ coral where B is worse ({{ cmp.link() }} link, B − A, 1 dB and more).</div>}
+          @if (cmp.delta(); as d) {
+            <div class="small muted">Map: ▲ teal where B is better, ▼ coral where B is worse ({{ cmp.link() }} link, B − A, 1 dB and more).</div>
+            @if (d.notComparableCells > 0) {
+              <div class="note">{{ d.notComparableCells }} cells are not comparable (hatched): B's grid does not cover them with exactly the same cells. Nothing is resampled.</div>
+            }
+          }
         } @else {
           <div class="muted small">{{ ws.store.calcState() === 'running' || ws.store.calcState() === 'saving' ? 'Calculating A and B…' : 'Calculate to compare.' }}</div>
         }

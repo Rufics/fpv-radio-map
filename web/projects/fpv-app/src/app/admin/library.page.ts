@@ -69,9 +69,12 @@ type Entry = Record<string, unknown> & { id?: string; name?: string; verified?: 
           }
           @if (serverIssues().length) {
             <div class="small muted">Server report:</div>
-            @for (i of serverIssues(); track $index) {<div class="bad"><span aria-hidden="true">✕</span> {{ i }}</div>}
+            @for (i of serverIssues(); track $index) {<div class="bad"><span aria-hidden="true">✕</span> <code>{{ i.path || '/' }}</code> {{ i.message }}</div>}
           }
           @if (message(); as m) {<div [class]="m.ok ? 'ok' : 'bad'">{{ m.text }}</div>}
+          @if (conflict()) {
+            <div><button type="button" class="rf-btn rf-btn--dense rf-btn--secondary" (click)="loadCurrent()">Load the current version</button> <span class="small muted">Loading replaces this draft; copy your change first.</span></div>
+          }
         </div>
         @if (kind() === 'radio-profiles') {
         <div class="formula">
@@ -127,7 +130,9 @@ export class LibraryPage implements OnInit {
   protected readonly text = signal('{}');
   protected readonly busy = signal(false);
   protected readonly message = signal<{ ok: boolean; text: string } | null>(null);
-  protected readonly serverIssues = signal<string[]>([]);
+  /** Server 422 report: `path` is a JSON pointer into the body sent */
+  protected readonly serverIssues = signal<{ path: string; message: string }[]>([]);
+  protected readonly conflict = signal(false);
 
   protected readonly schemaFile = computed(() => LIBRARY_KINDS.find((k) => k.kind === this.kind())?.schemaFile ?? '');
   private readonly parsed = computed<{ value?: unknown; error?: string }>(() => {
@@ -178,6 +183,20 @@ export class LibraryPage implements OnInit {
     this.text.set(JSON.stringify(e, null, 2));
     this.serverIssues.set([]);
     this.message.set(null);
+    this.conflict.set(false);
+  }
+
+  /** After a 409: fetch the item as it is now (its version) and show it. */
+  protected async loadCurrent(): Promise<void> {
+    const id = this.selectedId();
+    if (!id) return;
+    try {
+      const cur = await this.api.libraryItem<Entry>(this.kind(), id);
+      this.select(cur);
+      this.message.set({ ok: true, text: `Loaded version ${cur.version ?? '?'}. Make your change again and save.` });
+    } catch (e) {
+      this.message.set({ ok: false, text: ApiError.from(e).message });
+    }
   }
 
   protected newEntry(): void {
@@ -208,22 +227,27 @@ export class LibraryPage implements OnInit {
     this.busy.set(true);
     this.serverIssues.set([]);
     this.message.set(null);
+    this.conflict.set(false);
     try {
       const id = this.selectedId();
-      if (id) await this.api.saveLibraryEntry(this.kind(), id, value);
-      else await this.api.addLibraryEntry(this.kind(), value);
-      this.message.set({ ok: true, text: 'Saved.' });
+      // PUT sends the version that was edited (it is in the draft); the server answers with the new one
+      const saved = (id ? await this.api.saveLibraryEntry(this.kind(), id, value) : await this.api.addLibraryEntry(this.kind(), value)) as Entry | null;
       const list = await this.api.library<Entry>(this.kind());
       this.entries.set(list);
-      this.selectedId.set(value.id ?? id);
+      const current = saved && typeof saved === 'object' ? saved : list.find((e) => e.id === (value.id ?? id));
+      if (current) this.select(current);
+      else this.selectedId.set(value.id ?? id);
+      this.message.set({ ok: true, text: `Saved${current?.version !== undefined ? ` as version ${current.version}` : ''}.` });
       void this.data.reloadLibrary();
     } catch (e) {
       const err = ApiError.from(e);
       if (err.status === 401 || err.status === 403) this.message.set({ ok: false, text: 'Set the admin token first (top right).' });
       else if (err.status === 422) {
-        const issues = (err.body as { issues?: { path?: string; message?: string }[] } | undefined)?.issues ?? [];
-        this.serverIssues.set(issues.map((i) => `${i.path ?? ''} ${i.message ?? ''}`.trim()));
+        this.serverIssues.set(err.issues);
         this.message.set({ ok: false, text: 'The server rejected the entry.' });
+      } else if (err.status === 409) {
+        this.conflict.set(!!this.selectedId());
+        this.message.set({ ok: false, text: this.selectedId() ? `Someone saved this item after version ${value.version ?? '?'} that you edited. Nothing was saved. ${err.message}` : err.message });
       } else this.message.set({ ok: false, text: err.message });
     } finally {
       this.busy.set(false);

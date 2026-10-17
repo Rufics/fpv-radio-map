@@ -40,7 +40,7 @@ export class MissionExporter {
       <Point><altitudeMode>relativeToGround</altitudeMode><coordinates>${n(p.lon)},${n(p.lat)},${n(p.aglM)}</coordinates></Point>
     </Placemark>`;
     const legData = (i: number) => {
-      const leg = result?.legs?.find((l) => l.index === i + 1) ?? result?.legs?.[i];
+      const leg = result?.legs?.[i]; // legs are in route order (LegResult.index is 0-based on the server)
       if (!leg) return '';
       const parts: string[] = [`<Data name="status"><value>${xmlEscape(leg.status ?? '')}</value></Data>`];
       for (const kind of ['control', 'video'] as const) {

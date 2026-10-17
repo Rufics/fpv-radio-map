@@ -47,8 +47,9 @@ Demo data:
 | Seeded mission | `/mission/m-north-ridge`, owner key `owner-demo-key` |
 | View link | `/m/v/demo-view`, PIN `246810` |
 | Edit link | `/m/e/demo-edit`, PIN `135790` |
-| Revoked link | `/m/v/demo-revoked` |
-| Wrong PIN | 5 tries, then the link pauses for 15 min (429 + `Retry-After`) |
+| Wrong PIN | 5 tries, then the link pauses for 15 min (429 with `retryAfterS` + `Retry-After`) |
+| Expired link | `/m/v/demo-expired` (410) |
+| Revoked link | `/m/v/demo-revoked` (410) |
 | Admin token | any non-empty token |
 | Scenarios | `?scenario=missing-elevation`, `module-failed`, `stale-forecast`, `normal` (kept for the tab) |
 
@@ -104,7 +105,7 @@ export function register(api) {
 
 `fpv.core` is used only when `/modules` lists it as active. Its options go to `mission.modules["fpv.core"]`, and its output is read from `RouteResult.modules["fpv.core"].data`.
 
-- **Compare (feature 13):** `options.compare = { name, patch }`, where `patch` is a JSON merge patch on the mission. The compare panel offers presets (video or control radio, video power, ground antenna, airframe) or a custom patch. It shows A and B worst margins side by side, with B − A and the counts of better and worse points. When the route is aligned, the route gets a delta-coloured casing. "Coverage difference map" runs a second coverage job for B and subtracts the grids client-side.
+- **Compare (feature 13):** `options.compare = { name, patch }`, where `patch` is a JSON merge patch on the mission. The compare panel offers presets (video or control radio, video power, ground antenna, airframe) or a custom patch. It shows A and B worst margins side by side, with B − A and the counts of better and worse points. When the route is aligned, the route gets a delta-coloured casing. "Coverage difference map" runs a second coverage job for B and subtracts the grids client-side, cell by cell, only where the cells coincide exactly. Grids are never resampled; cells without an exact partner are hatched grey and labelled "not comparable".
 - **Export (feature 14):** the Share dialog asks for `options.export = [kind]` with `kmlAltitude` (above ground or above sea level) through `/calc/route`, then downloads `data.export[kind].content` as a Blob. Without fpv.core, the browser writes KML/GPX itself, with AGL heights only.
 - **Equipment library (feature 16):** `/admin/library` over `/library/{kind}`. Everyone can browse it read-only. Only the admin token allows edits; entries are validated live with ajv and on the server. Verified and unverified status and the source are shown in the library list and editor, in the radio setup dialog, and in the compare pickers.
 

@@ -8,6 +8,7 @@
 import { HttpErrorResponse, HttpHeaders, HttpRequest, HttpResponse } from '@angular/common/http';
 import { fpvCoreMock } from './fpv-core-mock';
 import {
+  CacheLimit,
   CacheTier,
   CoverageGrid,
   CreateLinkRequest,
@@ -20,6 +21,7 @@ import {
   RouteResult,
   SchemaValidator,
   ShareLink,
+  TrustedKey,
   ValidationReport,
 } from '@rfmap/ui-kit';
 import {
@@ -40,7 +42,7 @@ interface StoredMission {
   revision: number;
   ownerKey: string;
   lastResult?: RouteResult;
-  links: (ShareLink & { token: string; pin: string; wrong: number; pausedUntil?: number })[];
+  links: (ShareLink & { token: string; pin: string; wrong: number; pausedUntilMs?: number })[];
 }
 
 interface StoredJob {
@@ -67,11 +69,16 @@ export class MockBackend {
     drones: structuredClone(LIBRARY.drones) as unknown as Record<string, unknown>[],
   };
   private cache: CacheTier[] = [
-    { id: 'tiles', label: 'Map tiles (PMTiles range cache)', limitBytes: 20e9, usedBytes: 6.4e9, hitRate: 0.93 },
-    { id: 'dem', label: 'Elevation tiles for maths', limitBytes: 8e9, usedBytes: 2.1e9, hitRate: 0.97 },
-    { id: 'results', label: 'Calculation results', limitBytes: 4e9, usedBytes: 0.9e9, hitRate: 0.61 },
-    { id: 'weather', label: 'Weather forecast runs', limitBytes: 2e9, usedBytes: 1.3e9, hitRate: 0.88 },
+    { id: 'dem-blocks', label: 'Elevation blocks in memory', limitBytes: 2e9, usedBytes: 1.1e9, entries: 412, hits: 96210, misses: 2980, evictions: 120, hitRate: 0.97 },
+    { id: 'results-memory', label: 'Results in memory', limitBytes: 5e8, usedBytes: 1.8e8, entries: 61, hits: 830, misses: 520, evictions: 4, hitRate: 0.61 },
+    { id: 'results-table', label: 'Results table (Postgres)', limitBytes: 4e9, limitRows: 50000, usedBytes: 0.9e9, entries: 8120, hits: 2210, misses: 1430, evictions: 0, hitRate: 0.61 },
   ];
+  private keys: TrustedKey[] = [
+    { id: '9f3a1c0b', label: 'Server owner key', key: 'rfmod-ed25519 9f3a1c0b5e7d…', builtIn: true, firstParty: true },
+    { id: '4be27d11', label: 'club.ham publisher', key: 'rfmod-ed25519 4be27d11a0c3…', builtIn: false, firstParty: false },
+  ];
+  private history = new Map<string, { version: number; verified: boolean; item: Record<string, unknown>; changedBy: string; changedAt: string }[]>();
+  private modules: ModuleInfo[] = structuredClone(MODULES);
   private validator = new SchemaValidator();
   private routes: [string, RegExp, Handler][] = [];
 
@@ -85,6 +92,7 @@ export class MockBackend {
     r('GET', /^\/missions\/([^/]+)\/links$/, (req, m) => this.withOwner(req, m[1], (s) => this.ok(s.links.map(publicLink))));
     r('POST', /^\/missions\/([^/]+)\/links$/, (req, m) => this.withOwner(req, m[1], (s) => this.createLink(s, req.body as CreateLinkRequest)));
     r('DELETE', /^\/missions\/([^/]+)\/links\/([^/]+)$/, (req, m) => this.withOwner(req, m[1], (s) => this.revokeLink(s, m[2])));
+    r('GET', /^\/links\/([^/]+)$/, (_req, m) => this.linkInfo(m[1]));
     r('POST', /^\/links\/([^/]+)\/open$/, (req, m) => this.openLink(m[1], (req.body as { pin?: string })?.pin ?? ''));
     r('POST', /^\/calc\/route$/, (req) => this.calcRoute(req));
     r('POST', /^\/calc\/path$/, () => { throw this.error(501, 'Not part of the mock'); });
@@ -95,14 +103,22 @@ export class MockBackend {
     r('GET', /^\/elevation\/profile$/, (req) => this.profile(req));
     r('GET', /^\/library\/([a-z-]+)$/, (_req, m) => this.ok(this.library[m[1] as LibraryKind] ?? []));
     r('POST', /^\/library\/([a-z-]+)$/, (req, m) => this.admin(req, () => this.saveLibrary(m[1] as LibraryKind, null, req.body)));
+    r('GET', /^\/library\/([a-z-]+)\/([^/]+)\/history$/, (_req, m) => this.ok(this.history.get(`${m[1]}/${m[2]}`) ?? []));
+    r('GET', /^\/library\/([a-z-]+)\/([^/]+)$/, (_req, m) => this.libraryItem(m[1] as LibraryKind, m[2]));
     r('PUT', /^\/library\/([a-z-]+)\/([^/]+)$/, (req, m) => this.admin(req, () => this.saveLibrary(m[1] as LibraryKind, m[2], req.body)));
     r('GET', /^\/weather\/horizon$/, () => this.ok(horizon()));
     r('GET', /^\/weather\/point$/, (req) => this.ok(weatherAt(req.params.get('timeUtc') ?? undefined, this.scenario() === 'stale-forecast')));
-    r('GET', /^\/modules$/, () => this.ok(MODULES));
+    r('GET', /^\/modules$/, () => this.ok(this.modules));
+    r('PUT', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.setModule(decodeURIComponent(m[1]), req.body as { enabled?: boolean })));
+    r('DELETE', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.removeModule(decodeURIComponent(m[1]))));
     r('POST', /^\/admin\/modules$/, (req) => this.admin(req, () => this.uploadModule(req)));
-    r('GET', /^\/admin\/keys$/, (req) => this.admin(req, () => this.ok([{ id: 'owner', name: 'Server owner key (built in)', removable: false }, { id: 'club-ham', name: 'club.ham publisher', removable: true }])));
+    r('GET', /^\/admin\/modules\/notices$/, (req) => this.admin(req, () => this.ok([])));
+    r('GET', /^\/admin\/keys$/, (req) => this.admin(req, () => this.ok(this.keys)));
+    r('POST', /^\/admin\/keys$/, (req) => this.admin(req, () => this.addKey(req.body as { key?: string; label?: string })));
+    r('DELETE', /^\/admin\/keys\/([^/]+)$/, (req, m) => this.admin(req, () => this.deleteKey(m[1])));
+    r('DELETE', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(null, 204)));
     r('GET', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(this.cache)));
-    r('PUT', /^\/admin\/cache$/, (req) => this.admin(req, () => this.putCache(req.body as Pick<CacheTier, 'id' | 'limitBytes'>[])));
+    r('PUT', /^\/admin\/cache$/, (req) => this.admin(req, () => this.putCache(req.body as CacheLimit[])));
   }
 
   /** Route a request under the API base. Returns null if no mock route matches. */
@@ -128,9 +144,10 @@ export class MockBackend {
     const mission = exampleMission();
     const s: StoredMission = { id, mission, revision: 3, ownerKey: 'owner-demo-key', links: [] };
     s.lastResult = routeResult(mission, 'normal');
-    s.links.push({ linkId: 'l-demo-view', role: 'view', label: 'Phone crew', createdAt: new Date(Date.now() - 86400e3).toISOString(), revoked: false, token: 'demo-view', pin: '246810', wrong: 0 });
-    s.links.push({ linkId: 'l-demo-edit', role: 'edit', label: 'Co-pilot', createdAt: new Date(Date.now() - 86400e3).toISOString(), revoked: false, token: 'demo-edit', pin: '135790', wrong: 0 });
-    s.links.push({ linkId: 'l-demo-revoked', role: 'view', label: 'Old link', createdAt: new Date(Date.now() - 5 * 86400e3).toISOString(), revoked: true, token: 'demo-revoked', pin: '000000', wrong: 0 });
+    s.links.push({ linkId: 'l-demo-view', role: 'view', label: 'Phone crew', createdAt: new Date(Date.now() - 86400e3).toISOString(), revoked: false, openCount: 7, token: 'demo-view', pin: '246810', wrong: 0 });
+    s.links.push({ linkId: 'l-demo-edit', role: 'edit', label: 'Co-pilot', createdAt: new Date(Date.now() - 86400e3).toISOString(), revoked: false, openCount: 2, expiresAt: new Date(Date.now() + 6 * 86400e3).toISOString(), token: 'demo-edit', pin: '135790', wrong: 0 });
+    s.links.push({ linkId: 'l-demo-expired', role: 'view', label: 'Last week', createdAt: new Date(Date.now() - 9 * 86400e3).toISOString(), expiresAt: new Date(Date.now() - 2 * 86400e3).toISOString(), revoked: false, openCount: 3, token: 'demo-expired', pin: '111111', wrong: 0 });
+    s.links.push({ linkId: 'l-demo-revoked', role: 'view', label: 'Old link', createdAt: new Date(Date.now() - 5 * 86400e3).toISOString(), revoked: true, openCount: 12, token: 'demo-revoked', pin: '000000', wrong: 0 });
     this.missions.set(id, s);
   }
 
@@ -180,7 +197,7 @@ export class MockBackend {
     const session = `s-${rnd(24)}`;
     this.missions.set(id, { id, mission: structuredClone(mission), revision: 1, ownerKey, links: [] });
     this.sessions.set(session, { missionId: id, role: 'edit' });
-    return this.ok({ missionId: id, ownerKey, session }, 201);
+    return this.ok({ missionId: id, ownerKey, session, revision: 1 }, 201);
   }
 
   private getMission(req: HttpRequest<unknown>, id: string): HttpResponse<unknown> {
@@ -207,8 +224,9 @@ export class MockBackend {
 
   private createLink(s: StoredMission, body: CreateLinkRequest): HttpResponse<unknown> {
     if (!/^[0-9]{6}$/.test(body?.pin ?? '')) throw this.error(400, 'PIN must be 6 digits');
+    if (body.expiresAt !== undefined && !(Date.parse(body.expiresAt) > Date.now())) throw this.error(400, 'expiresAt must be a future date-time');
     const token = rnd(32);
-    const link = { linkId: `l-${rnd(6)}`, role: body.role, label: body.label, createdAt: new Date().toISOString(), revoked: false, token, pin: body.pin, wrong: 0 };
+    const link = { linkId: `l-${rnd(6)}`, role: body.role, label: body.label, createdAt: new Date().toISOString(), revoked: false, openCount: 0, expiresAt: body.expiresAt, token, pin: body.pin, wrong: 0 };
     s.links.push(link);
     return this.ok({ ...publicLink(link), token }, 201);
   }
@@ -221,30 +239,52 @@ export class MockBackend {
     return this.ok(null, 204);
   }
 
-  private openLink(token: string, pin: string): HttpResponse<unknown> {
+  private findLink(token: string) {
     for (const s of this.missions.values()) {
       const link = s.links.find((l) => l.token === token);
-      if (!link) continue;
-      if (link.revoked) throw this.error(410, 'This link was revoked by the mission owner.');
-      if (link.pausedUntil && link.pausedUntil > Date.now()) {
-        throw this.error(429, 'Paused after too many wrong PINs', {}, new HttpHeaders({ 'Retry-After': String(Math.ceil((link.pausedUntil - Date.now()) / 1000)) }));
-      }
-      if (pin !== link.pin) {
-        link.wrong++;
-        if (link.wrong >= 5) {
-          link.wrong = 0;
-          link.pausedUntil = Date.now() + 15 * 60e3;
-          throw this.error(429, 'Paused after too many wrong PINs', {}, new HttpHeaders({ 'Retry-After': '900' }));
-        }
-        throw this.error(401, 'Wrong PIN', { triesLeft: 5 - link.wrong });
-      }
-      link.wrong = 0;
-      link.lastOpenedAt = new Date().toISOString();
-      const session = `s-${rnd(24)}`;
-      this.sessions.set(session, { missionId: s.id, role: link.role, linkId: link.linkId } as never);
-      return this.ok({ session, missionId: s.id, role: link.role, missionName: s.mission.name });
+      if (link) return { s, link };
     }
     throw this.error(404, 'Unknown link');
+  }
+
+  private gone(link: StoredMission['links'][number]): void {
+    if (link.revoked) throw this.error(410, 'This link was revoked by the mission owner.');
+    if (link.expiresAt && Date.parse(link.expiresAt) <= Date.now()) throw this.error(410, 'This link has expired.');
+  }
+
+  private pausedIso(link: StoredMission['links'][number]): string | undefined {
+    return link.pausedUntilMs && link.pausedUntilMs > Date.now() ? new Date(link.pausedUntilMs).toISOString() : undefined;
+  }
+
+  private linkInfo(token: string): HttpResponse<unknown> {
+    const { s, link } = this.findLink(token);
+    this.gone(link);
+    return this.ok({ role: link.role, missionName: s.mission.name, expiresAt: link.expiresAt, pausedUntil: this.pausedIso(link) });
+  }
+
+  private paused(seconds: number): HttpErrorResponse {
+    return this.error(429, 'Paused after too many wrong PINs', { retryAfterS: seconds }, new HttpHeaders({ 'Retry-After': String(seconds) }));
+  }
+
+  private openLink(token: string, pin: string): HttpResponse<unknown> {
+    const { s, link } = this.findLink(token);
+    this.gone(link);
+    if (link.pausedUntilMs && link.pausedUntilMs > Date.now()) throw this.paused(Math.ceil((link.pausedUntilMs - Date.now()) / 1000));
+    if (pin !== link.pin) {
+      link.wrong++;
+      if (link.wrong >= 5) {
+        link.wrong = 0;
+        link.pausedUntilMs = Date.now() + 15 * 60e3;
+        throw this.paused(900);
+      }
+      throw this.error(401, 'Wrong PIN', { triesLeft: 5 - link.wrong });
+    }
+    link.wrong = 0;
+    link.lastOpenedAt = new Date().toISOString();
+    link.openCount = (link.openCount ?? 0) + 1;
+    const session = `s-${rnd(24)}`;
+    this.sessions.set(session, { missionId: s.id, role: link.role, linkId: link.linkId } as never);
+    return this.ok({ session, missionId: s.id, role: link.role, missionName: s.mission.name });
   }
 
   private calcRoute(req: HttpRequest<unknown>): HttpResponse<unknown> {
@@ -272,19 +312,20 @@ export class MockBackend {
   private jobView(job: StoredJob): Job {
     const t = (Date.now() - job.started) / 1000;
     const kinds = job.mission.evaluate === 'both' ? (['control', 'video'] as const) : ([job.mission.evaluate] as const);
-    const plan: { name: string; start: number; dur: number; cached?: boolean }[] = [
+    const plan: { name: string; link?: LinkKind; start: number; dur: number; cached?: boolean }[] = [
       { name: 'Elevation for 16 × 16 km', start: 0, dur: 0.1, cached: true },
       { name: `Route profiles, ${job.mission.waypoints.length} legs`, start: 0, dur: 0.9 },
-      ...kinds.map((k, i) => ({ name: `Coverage grid, ${k} link`, start: 0.6 + i * 1.3, dur: 1.4 })),
+      ...kinds.map((k, i) => ({ name: `Coverage grid, ${k} link`, link: k, start: 0.6 + i * 1.3, dur: 1.4 })),
     ];
     const parts = plan.map((p) => {
-      if (job.cancelled && t < p.start + p.dur) return { name: p.name, state: 'waiting' as const, progress: 0 };
-      if (t >= p.start + p.dur) return { name: p.name, state: p.cached ? ('cached' as const) : ('done' as const), progress: 1 };
-      if (t >= p.start) return { name: p.name, state: 'running' as const, progress: (t - p.start) / p.dur };
-      return { name: p.name, state: 'waiting' as const, progress: 0 };
+      const base = p.link ? { name: p.name, link: p.link } : { name: p.name };
+      if (job.cancelled && t < p.start + p.dur) return { ...base, state: 'waiting' as const, progress: 0 };
+      if (t >= p.start + p.dur) return { ...base, state: p.cached ? ('cached' as const) : ('done' as const), progress: 1 };
+      if (t >= p.start) return { ...base, state: 'running' as const, progress: (t - p.start) / p.dur };
+      return { ...base, state: 'waiting' as const, progress: 0 };
     });
     const done = parts.every((p) => p.state === 'done' || p.state === 'cached');
-    return { jobId: job.id, state: job.cancelled ? 'cancelled' : done ? 'done' : 'running', parts };
+    return { jobId: job.id, createdAt: new Date(job.started).toISOString(), state: job.cancelled ? 'cancelled' : done ? 'done' : 'running', parts };
   }
 
   private getJob(id: string): HttpResponse<unknown> {
@@ -314,21 +355,75 @@ export class MockBackend {
     return this.ok(elevationProfile(parse(req.params.get('from')), parse(req.params.get('to'))));
   }
 
+  private libraryItem(kind: LibraryKind, id: string): HttpResponse<unknown> {
+    const item = (this.library[kind] ?? []).find((e) => e['id'] === id);
+    if (!item) throw this.error(404, 'No such item');
+    return this.ok(item);
+  }
+
+  /** POST adds version 1; PUT needs the edited `version` (409 if it moved on). 422 paths are JSON pointers. */
   private saveLibrary(kind: LibraryKind, id: string | null, body: unknown): HttpResponse<unknown> {
     if (!LIBRARY_KINDS.some((k) => k.kind === kind)) throw this.error(404, 'Unknown library kind');
-    const v = this.validator.validateLibrary(kind, body);
-    if (!v.ok) throw this.error(422, 'Schema validation failed', { issues: v.issues });
     const entry = structuredClone(body) as Record<string, unknown>;
+    const edited = entry['version'];
+    delete entry['version'];
+    delete entry['verified'];
+    const v = this.validator.validateLibrary(kind, entry);
+    if (!v.ok) throw this.error(422, 'Schema validation failed', { issues: v.issues });
     const list = this.library[kind];
     const idx = list.findIndex((e) => e['id'] === (id ?? entry['id']));
-    if (id === null && idx >= 0) throw this.error(409, `An entry with id ${entry['id']} exists`);
-    if (idx >= 0) {
-      entry['version'] = Number(list[idx]['version'] ?? 1) + 1;
-      list[idx] = entry;
-      return this.ok(entry, 200);
+    if (id === null) {
+      if (idx >= 0) throw this.error(409, `An item with id ${entry['id']} exists`);
+      const added = { ...entry, version: 1, verified: false };
+      list.push(added);
+      return this.ok(added, 201);
     }
-    list.push(entry);
-    return this.ok(entry, 201);
+    if (idx < 0) throw this.error(404, 'No such item');
+    const current = list[idx];
+    const currentVersion = Number(current['version'] ?? 1);
+    if (Number(edited) !== currentVersion) throw this.error(409, `The item changed since version ${edited ?? '?'}; now at version ${currentVersion}`);
+    const key = `${kind}/${id}`;
+    const hist = this.history.get(key) ?? [];
+    hist.unshift({ version: currentVersion, verified: current['verified'] !== false, item: current, changedBy: 'admin', changedAt: new Date().toISOString() });
+    this.history.set(key, hist);
+    const saved = { ...entry, id, version: currentVersion + 1, verified: true };
+    list[idx] = saved;
+    return this.ok(saved, 200);
+  }
+
+  private setModule(id: string, body: { enabled?: boolean }): HttpResponse<unknown> {
+    const mods = this.modules.filter((x) => x.id === id);
+    if (!mods.length) throw this.error(422, 'Unknown module');
+    if (typeof body?.enabled === 'boolean') for (const x of mods) {
+      x.state = body.enabled ? 'active' : 'disabled';
+      x.stateDetail = body.enabled ? undefined : 'Disabled by the admin';
+    }
+    return this.ok(this.modules);
+  }
+
+  private removeModule(id: string): HttpResponse<unknown> {
+    const mod = this.modules.find((x) => x.id === id);
+    if (!mod) throw this.error(422, 'Unknown module');
+    if (mod.builtIn) throw this.error(422, 'Built-in modules can be disabled, not removed');
+    const users = this.modules.filter((x) => x.id !== id && x.state === 'active' && (x.requires ?? []).some((r) => r.split(/[<>=]/)[0] === id));
+    if (users.length) throw this.error(422, `Required by ${users.map((u) => u.id).join(', ')}`);
+    this.modules = this.modules.filter((x) => x.id !== id);
+    return this.ok(null, 204);
+  }
+
+  private addKey(body: { key?: string; label?: string }): HttpResponse<unknown> {
+    const key = (body?.key ?? '').trim();
+    const m = key.match(/^rfmod-ed25519 ([0-9a-f]{8})[0-9a-f]{8,}$/);
+    if (!m) throw this.error(422, 'Not a valid key (expected "rfmod-ed25519 <hex>")');
+    if (!this.keys.some((k) => k.id === m[1])) this.keys.push({ id: m[1], label: body.label || 'Publisher key', key: `${key.slice(0, 26)}…`, builtIn: false, firstParty: false });
+    return this.ok(this.keys, 201);
+  }
+
+  private deleteKey(id: string): HttpResponse<unknown> {
+    const k = this.keys.find((x) => x.id === id);
+    if (!k || k.builtIn) throw this.error(409, k ? 'The built-in owner key cannot be removed' : 'No such key');
+    this.keys = this.keys.filter((x) => x !== k);
+    return this.ok(null, 204);
   }
 
   private async uploadModule(req: HttpRequest<unknown>): Promise<HttpResponse<ValidationReport>> {
@@ -351,22 +446,32 @@ export class MockBackend {
     return this.ok({ ok: checks.every((c) => c.ok), checks });
   }
 
-  private putCache(body: Pick<CacheTier, 'id' | 'limitBytes'>[]): HttpResponse<unknown> {
-    for (const b of body ?? []) {
+  private putCache(body: CacheLimit[]): HttpResponse<unknown> {
+    if (!Array.isArray(body)) throw this.error(400, 'Expected an array of {id, limitBytes?, limitRows?}');
+    for (const b of body) {
       const t = this.cache.find((c) => c.id === b.id);
-      if (t && Number.isFinite(b.limitBytes) && b.limitBytes > 0) t.limitBytes = b.limitBytes;
+      if (!t) throw this.error(400, `Unknown cache tier ${b.id}`);
+      const bad = (n: unknown) => n !== undefined && !(Number.isInteger(n) && (n as number) >= 0);
+      if (bad(b.limitBytes) || bad(b.limitRows)) throw this.error(400, 'Limits must be integers ≥ 0');
+      if (b.limitRows !== undefined && b.id !== 'results-table') throw this.error(400, 'limitRows is for results-table only');
+    }
+    for (const b of body) {
+      const t = this.cache.find((c) => c.id === b.id)!;
+      if (b.limitBytes !== undefined) t.limitBytes = b.limitBytes;
+      if (b.limitRows !== undefined) t.limitRows = b.limitRows;
     }
     return this.ok(this.cache);
   }
 }
 
-function publicLink(l: ShareLink & { token?: string; pin?: string }): ShareLink {
-  const { linkId, role, label, createdAt, lastOpenedAt, revoked } = l;
-  return { linkId, role, label, createdAt, lastOpenedAt, revoked };
+function publicLink(l: ShareLink & { token?: string; pin?: string; pausedUntilMs?: number }): ShareLink {
+  const { linkId, role, label, createdAt, lastOpenedAt, revoked, openCount, expiresAt } = l;
+  const pausedUntil = l.pausedUntilMs && l.pausedUntilMs > Date.now() ? new Date(l.pausedUntilMs).toISOString() : undefined;
+  return { linkId, role, label, createdAt, lastOpenedAt, revoked, openCount, expiresAt, pausedUntil };
 }
 
 export const MODULES: ModuleInfo[] = [
-  { id: 'rf-core', version: '1.3.0', title: 'Radio core', lifecycle: 'stable', provides: ['link.budget', 'diffraction'], signedBy: 'built in', isolated: false, state: 'active' },
+  { id: 'rf-core', version: '1.3.0', title: 'Radio core', builtIn: true, lifecycle: 'stable', provides: ['link.budget', 'diffraction'], signedBy: 'built in', isolated: false, state: 'active' },
   { id: 'rf.weather', version: '1.1.0', title: 'Weather and refraction', lifecycle: 'stable', requires: ['rf-core>=1.2'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'rf.clutter', version: '0.9.2', title: 'Land cover clutter', lifecycle: 'beta', requires: ['rf-core>=1.2'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.core', version: '1.0.0', title: 'FPV core', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },

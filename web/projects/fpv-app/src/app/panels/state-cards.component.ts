@@ -13,13 +13,19 @@ import { FpvWorkspace } from '../core/fpv-workspace.service';
         <button type="button" class="rf-btn rf-btn--secondary" (click)="ws.store.calculate()">Try again</button>
       </section>
     }
-    @if (ws.missingLeg(); as leg) {
+    @if (ws.missingLeg(); as ml) {
       <section class="rf-card rf-card--blocked card" role="alert">
         <div class="rf-eyebrow bad">Missing data</div>
-        <h3>No elevation data on leg {{ leg.index }}</h3>
-        <div class="rf-body">{{ leg.reasons?.[0]?.text ?? 'Part of this leg is outside the loaded region. That part is not calculated: we do not guess the terrain.' }}</div>
-        <div class="box rf-mono">Leg {{ leg.index }} · {{ leg.from }} → {{ leg.to }} · {{ km(leg.lengthM) }} not calculated</div>
-        <button type="button" class="rf-btn rf-btn--primary" (click)="askAdmin(leg.index ?? 0)">{{ copied() === 'area' ? 'Request copied' : 'Ask admin to add this area' }}</button>
+        <h3>No elevation data on leg {{ ml.number }}</h3>
+        <div class="rf-body">{{ ml.leg.reasons?.[0]?.text ?? 'Part of this leg is outside the loaded region. That part is not calculated: we do not guess the terrain.' }}</div>
+        <div class="box rf-mono">
+          Leg {{ ml.number }} · {{ ml.leg.from }} → {{ ml.leg.to }} · {{ km(ml.leg.lengthM) }}
+          @if (ml.leg.samples; as sm) {<br />{{ sm.missingData }} of {{ sm.total }} drone positions not calculated (no terrain data)}
+          @if (ml.leg.missingData; as md) {
+            @if (md.bbox; as b) {<br />Area {{ bboxText(b) }}{{ md.source ? ' · ' + md.source : '' }} (dashed on the map)}
+          }
+        </div>
+        <button type="button" class="rf-btn rf-btn--primary" (click)="askAdmin(ml.number)">{{ copied() === 'area' ? 'Request copied' : 'Ask admin to add this area' }}</button>
         <button type="button" class="rf-btn rf-btn--secondary" (click)="showCalculated()">Show the calculated part</button>
       </section>
     }
@@ -97,20 +103,31 @@ export class StateCardsComponent {
 
   protected showCalculated(): void {
     const m = this.ws.mission();
-    const missing = this.ws.missingLeg()?.index ?? 0;
+    const missing = this.ws.missingLeg()?.number ?? 0;
     if (!m) return;
     const pts = [m.pilot, ...m.waypoints].slice(0, Math.max(2, missing));
     this.ctx.fitTo(pts, 80);
   }
 
+  /** [west, south, east, north] as text, full precision kept to 5 decimals (about 1 m). */
+  protected bboxText(b: number[]): string {
+    const [w, s, e, n] = b;
+    return `${s.toFixed(5)}–${n.toFixed(5)} N, ${w.toFixed(5)}–${e.toFixed(5)} E`;
+  }
+
   protected async askAdmin(leg: number): Promise<void> {
     const m = this.ws.mission();
     if (!m) return;
-    const pts = [m.pilot, ...m.waypoints];
-    const lats = pts.map((p) => p.lat);
-    const lons = pts.map((p) => p.lon);
-    const text = `Please add elevation data for mission "${m.name}", leg ${leg}: ${Math.min(...lats).toFixed(2)}–${Math.max(...lats).toFixed(2)} N, ${Math.min(...lons).toFixed(2)}–${Math.max(...lons).toFixed(2)} E`;
-    await this.copy(text, 'area');
+    const md = this.ws.missingLeg()?.leg.missingData;
+    let area: string;
+    if (md?.bbox) area = `${this.bboxText(md.bbox)}${md.source ? ` (${md.source})` : ''}`;
+    else {
+      const pts = [m.pilot, ...m.waypoints];
+      const lats = pts.map((p) => p.lat);
+      const lons = pts.map((p) => p.lon);
+      area = `${Math.min(...lats).toFixed(2)}–${Math.max(...lats).toFixed(2)} N, ${Math.min(...lons).toFixed(2)}–${Math.max(...lons).toFixed(2)} E (route extent)`;
+    }
+    await this.copy(`Please add elevation data for mission "${m.name}", leg ${leg}: ${area}`, 'area');
   }
 
   protected copyReport(text: string): Promise<void> {

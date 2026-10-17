@@ -3,6 +3,7 @@ import { Injectable, InjectionToken, inject } from '@angular/core';
 import { Observable, firstValueFrom } from 'rxjs';
 import { map } from 'rxjs/operators';
 import {
+  CacheLimit,
   CacheTier,
   CalcPathRequest,
   CoverageGrid,
@@ -11,6 +12,9 @@ import {
   CreatedShareLink,
   ForecastHorizon,
   GetMissionResponse,
+  LibraryHistoryEntry,
+  LinkInfo,
+  MissingData,
   Job,
   LinkResult,
   MapSourcesConfig,
@@ -19,6 +23,7 @@ import {
   Profile,
   RouteResult,
   ShareLink,
+  TrustedKey,
   ValidationReport,
   WeatherPoint,
 } from '../models/api.models';
@@ -43,12 +48,26 @@ export class ApiError extends Error {
   static from(e: unknown): ApiError {
     if (e instanceof ApiError) return e;
     if (e instanceof HttpErrorResponse) {
-      const retry = Number(e.headers?.get('Retry-After'));
       const body = e.error;
+      // 429 and 503 carry retryAfterS in the body and Retry-After in the header
+      const fromBody = body && typeof body === 'object' ? Number((body as { retryAfterS?: unknown }).retryAfterS) : NaN;
+      const retry = Number.isFinite(fromBody) && fromBody > 0 ? fromBody : Number(e.headers?.get('Retry-After'));
       const msg = (body && typeof body === 'object' && 'message' in body && String((body as { message: unknown }).message)) || e.message;
       return new ApiError(e.status, msg, body, Number.isFinite(retry) && retry > 0 ? retry : undefined);
     }
     return new ApiError(0, e instanceof Error ? e.message : String(e));
+  }
+
+  /** The 422 "missing-data" body of /calc/path and /elevation/profile, if this is one. */
+  get missingData(): MissingData | null {
+    const b = this.body as MissingData | undefined;
+    return this.status === 422 && b && (b.status === 'missing-data' || !!b.missingData) ? b : null;
+  }
+
+  /** The 422 schema report: JSON pointers into the request body. */
+  get issues(): { path: string; message: string }[] {
+    const b = this.body as { issues?: { path?: string; message?: string }[] } | undefined;
+    return this.status === 422 && Array.isArray(b?.issues) ? b.issues.map((i) => ({ path: i.path ?? '', message: i.message ?? '' })) : [];
   }
 }
 
@@ -127,7 +146,12 @@ export class RfmapApiClient {
     );
   }
 
-  /** 401 wrong PIN (body: tries left), 410 revoked, 429 paused (Retry-After). */
+  /** Public, before the PIN: role, mission name, expiry, pause. 404 unknown, 410 revoked or expired. */
+  linkInfo(token: string): Promise<LinkInfo> {
+    return this.run(this.http.get<LinkInfo>(this.url(`/links/${encodeURIComponent(token)}`)));
+  }
+
+  /** 401 wrong PIN (body: triesLeft), 410 revoked or expired, 429 paused (retryAfterS). */
   openLink(token: string, pin: string): Promise<OpenLinkResponse> {
     return this.run(this.http.post<OpenLinkResponse>(this.url(`/links/${encodeURIComponent(token)}/open`), { pin }));
   }
@@ -171,8 +195,17 @@ export class RfmapApiClient {
     return this.run(this.http.post(this.url(`/library/${kind}`), entry, { headers: this.adminHeaders() }));
   }
 
+  /** Save as a new version; `entry.version` must be the version you edited (409 if it changed). */
   saveLibraryEntry(kind: LibraryKind, id: string, entry: unknown): Promise<unknown> {
     return this.run(this.http.put(this.url(`/library/${kind}/${encodeURIComponent(id)}`), entry, { headers: this.adminHeaders() }));
+  }
+
+  libraryItem<T = Record<string, unknown>>(kind: LibraryKind, id: string): Promise<T> {
+    return this.run(this.http.get<T>(this.url(`/library/${kind}/${encodeURIComponent(id)}`)));
+  }
+
+  libraryHistory(kind: LibraryKind, id: string): Promise<LibraryHistoryEntry[]> {
+    return this.run(this.http.get<LibraryHistoryEntry[]>(this.url(`/library/${kind}/${encodeURIComponent(id)}/history`)));
   }
 
   // ---- weather ----
@@ -191,27 +224,55 @@ export class RfmapApiClient {
     return this.run(this.http.get<ModuleInfo[]>(this.url('/modules')));
   }
 
-  /** @gap `install` is passed as a query parameter; the contract names it but not where it goes. */
+  /** `install=false` only checks the package. */
   uploadModule(pkg: Blob, install: boolean): Promise<ValidationReport> {
     const params = new HttpParams().set('install', String(install));
     const headers = this.adminHeaders().set('Content-Type', 'application/octet-stream');
     return this.run(this.http.post<ValidationReport>(this.url('/admin/modules'), pkg, { headers, params }));
   }
 
-  adminKeys(): Promise<unknown> {
-    return this.run(this.http.get(this.url('/admin/keys'), { headers: this.adminHeaders() }));
+  /** Enable or disable a module (built-ins included) and set its server-wide options. */
+  setModule(moduleId: string, body: { enabled?: boolean; options?: Record<string, unknown> }): Promise<ModuleInfo[]> {
+    return this.run(this.http.put<ModuleInfo[]>(this.url(`/admin/modules/${encodeURIComponent(moduleId)}`), body, { headers: this.adminHeaders() }));
   }
 
-  /** @gap response body not specified; see API-NOTES.md */
+  removeModule(moduleId: string): Promise<void> {
+    return this.run(this.http.delete(this.url(`/admin/modules/${encodeURIComponent(moduleId)}`), { headers: this.adminHeaders() }).pipe(map(() => undefined)));
+  }
+
+  moduleNotices(): Promise<Record<string, unknown>[]> {
+    return this.run(this.http.get<Record<string, unknown>[]>(this.url('/admin/modules/notices'), { headers: this.adminHeaders() }));
+  }
+
+  adminKeys(): Promise<TrustedKey[]> {
+    return this.run(this.http.get<TrustedKey[]>(this.url('/admin/keys'), { headers: this.adminHeaders() }));
+  }
+
+  /** Add a trusted signing key; returns the key list. */
+  addKey(key: string, label?: string): Promise<TrustedKey[]> {
+    return this.run(this.http.post<TrustedKey[]>(this.url('/admin/keys'), label ? { key, label } : { key }, { headers: this.adminHeaders() }));
+  }
+
+  /** 409 for the built-in owner key or an unknown key. */
+  deleteKey(keyId: string): Promise<void> {
+    return this.run(this.http.delete(this.url(`/admin/keys/${encodeURIComponent(keyId)}`), { headers: this.adminHeaders() }).pipe(map(() => undefined)));
+  }
+
   adminCache(): Promise<CacheTier[]> {
     return this.run(this.http.get<CacheTier[]>(this.url('/admin/cache'), { headers: this.adminHeaders() }));
   }
 
-  putAdminCache(tiers: Pick<CacheTier, 'id' | 'limitBytes'>[]): Promise<unknown> {
-    return this.run(this.http.put(this.url('/admin/cache'), tiers, { headers: this.adminHeaders() }));
+  /** Change limits; returns the tiers. */
+  putAdminCache(limits: CacheLimit[]): Promise<CacheTier[]> {
+    return this.run(this.http.put<CacheTier[]>(this.url('/admin/cache'), limits, { headers: this.adminHeaders() }));
   }
 
-  /** @gap not in the contract; GET /config/map. Falls back to the app environment. */
+  clearCache(tier: 'all' | CacheTier['id'] = 'all'): Promise<void> {
+    const params = new HttpParams().set('tier', tier);
+    return this.run(this.http.delete(this.url('/admin/cache'), { headers: this.adminHeaders(), params }).pipe(map(() => undefined)));
+  }
+
+  /** GET /config/map. Falls back to the app environment when the server cannot be reached. */
   mapConfig(): Promise<MapSourcesConfig> {
     return this.run(this.http.get<MapSourcesConfig>(this.url('/config/map')));
   }

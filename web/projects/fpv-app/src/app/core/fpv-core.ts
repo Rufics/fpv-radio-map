@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { ApiError, CoverageGrid, LinkKind, Mission, MissionStore, RfmapApiClient, RouteResult, applyMergePatch, subtractGrids } from '@rfmap/ui-kit';
+import { ApiError, CoverageDelta, LinkKind, Mission, MissionStore, RfmapApiClient, RouteResult, applyMergePatch, subtractGrids } from '@rfmap/ui-kit';
 import { FpvDataService } from './fpv-data.service';
 
 /** Module id of the FPV core module (modules/fpv/core). Its options go to mission.modules["fpv.core"]. */
@@ -45,15 +45,14 @@ export interface FpvExportFile {
   content: string;
 }
 
-/** RouteResult.modules["fpv.core"] = { data, reasons } */
+/** RouteResult.modules["fpv.core"]: the module's route.analyze `data`, as returned. Its reasons are in RouteResult.reasons / leg reasons. */
 export interface FpvCoreData {
   compare?: FpvCompareData;
   export?: Partial<Record<'kml' | 'gpx', FpvExportFile>>;
 }
 
 export function fpvCoreData(result: RouteResult | null | undefined): FpvCoreData | null {
-  const out = result?.modules?.[FPV_CORE] as { data?: FpvCoreData } | undefined;
-  return out?.data ?? null;
+  return (result?.modules?.[FPV_CORE] as FpvCoreData | undefined) ?? null;
 }
 
 export function fpvCoreOptions(m: Mission | null | undefined): FpvCoreOptions {
@@ -74,7 +73,7 @@ export class CompareService {
   readonly link = signal<LinkKind>('video');
   readonly diffState = signal<'idle' | 'running' | 'done' | 'failed'>('idle');
   readonly diffError = signal<string | null>(null);
-  readonly delta = signal<CoverageGrid | null>(null);
+  readonly delta = signal<CoverageDelta | null>(null);
   private run = 0;
 
   /** fpv.core is installed and active on this server */
@@ -149,8 +148,11 @@ export class CompareService {
       if (job.state !== 'done') throw new Error(`Coverage for B ${job.state}.`);
       const gridB = await this.api.getCoverage(id, job.jobId ?? '', link);
       if (run !== this.run) return;
+      // Cells are compared only where A and B have exactly the same cell; the rest is "not comparable".
+      // The API takes no bbox for a coverage job, so B's grid follows B's own pilot, radius and cell size.
       const d = subtractGrids(a, gridB);
       if (!d) throw new Error('The two coverage grids could not be compared.');
+      if (d.alignment === 'none') throw new Error('B uses other grid cells than A (pilot latitude or cell size changed), so no cell can be compared exactly.');
       this.delta.set(d);
       this.diffState.set('done');
     } catch (e) {

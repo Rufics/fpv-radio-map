@@ -22,10 +22,12 @@ export * from './lib/map/map-view.component';
 export * from './lib/coverage/heat-scale';
 export * from './lib/coverage/coverage-layer';
 export * from './lib/coverage/delta';
+export * from './lib/coverage/missing-data-layer';
 // charts
 export * from './lib/charts/profile-geometry';
 export * from './lib/charts/profile-chart.component';
 export * from './lib/charts/budget-chart.component';
+export * from './lib/charts/link-view';
 // tools
 export * from './lib/tools/geo';
 export * from './lib/tools/route-tool';

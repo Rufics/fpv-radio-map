@@ -101,18 +101,10 @@ export class FpvWorkspace {
   readonly batteryFailure = computed(() => this.store.result()?.moduleFailures?.find((f) => (f.module ?? '').startsWith('fpv.battery')) ?? null);
 
   // ---------- reasons ----------
-  /** Reasons modules attach at route level. @gap: assumed at RouteResult.modules[id].reasons */
-  readonly moduleReasons = computed<Reason[]>(() => {
-    const mods = this.store.result()?.modules ?? {};
-    const out: Reason[] = [];
-    for (const [id, v] of Object.entries(mods)) {
-      const reasons = (v as { reasons?: Reason[] } | null)?.reasons;
-      if (Array.isArray(reasons)) out.push(...reasons.map((r) => ({ module: id, ...r })));
-    }
-    return out;
-  });
+  /** Route-wide reasons (module reasons without a leg), each naming its module. */
+  readonly moduleReasons = computed<Reason[]>(() => this.store.result()?.reasons ?? []);
 
-  readonly batteryReason = computed(() => this.moduleReasons().find((r) => r.module === 'fpv.battery') ?? null);
+  readonly batteryReason = computed(() => this.moduleReasons().find((r) => (r.module ?? '').startsWith('fpv.battery')) ?? null);
 
   // ---------- pills ----------
   readonly pills = computed<PillVm[]>(() => {
@@ -150,8 +142,9 @@ export class FpvWorkspace {
   });
 
   // ---------- legs ----------
-  private legResult(r: RouteResult | null, index: number): LegResult | undefined {
-    return r?.legs?.find((l) => l.index === index) ?? r?.legs?.[index - 1];
+  /** Leg by its 1-based number in the UI. Legs come in route order; LegResult.index is 0-based. */
+  legResult(r: RouteResult | null, n: number): LegResult | undefined {
+    return r?.legs?.[n - 1];
   }
 
   /** Legs of the shown mission (preview mission while previewing). */
@@ -165,16 +158,7 @@ export class FpvWorkspace {
       const index = i + 1;
       const leg = this.legResult(r, index);
       const len = leg?.lengthM ?? distanceM(pts[i], pts[i + 1]);
-      const failing = (['control', 'video'] as LinkKind[]).filter((k) => leg?.worst?.[k] && leg.worst[k]!.reachable === false);
-      let mark = '';
-      let markLabel = '';
-      let tone: LegRowVm['tone'] = 'none';
-      if (leg) {
-        if (leg.status === 'missing-data') [mark, markLabel, tone] = ['? no data', 'No elevation data, not calculated', 'warn'];
-        else if (failing.length) [mark, markLabel, tone] = [`${failing.map((k) => LINK_LETTER[k]).join(' ')} ✕`, `${failing.join(' and ')} link blocked`, 'blocked'];
-        else if (leg.status === 'warn') [mark, markLabel, tone] = ['!', 'Warning', 'warn'];
-        else [mark, markLabel, tone] = ['✓', 'Reachable', 'ok'];
-      }
+      const { mark, markLabel, tone, failing } = this.legMark(leg);
       const from = pointName(m, i - 1);
       const to = pointName(m, i);
       return {
@@ -193,27 +177,39 @@ export class FpvWorkspace {
         aglM: w.aglM,
       };
     });
-    if (endsAtTurnBack(m) && m.returnToPilot !== false) {
-      const t = m.waypoints[m.waypoints.length - 1];
-      const back = this.store.result()?.battery?.turnBack?.returnM ?? distanceM(t, m.pilot);
+    if (m.returnToPilot !== false && m.waypoints.length > 0) {
+      // The server adds the leg last → pilot when returnToPilot; it is evaluated like any other leg.
+      const index = rows.length + 1;
+      const last = m.waypoints[m.waypoints.length - 1];
+      const leg = this.legResult(r, index);
+      const back = leg?.lengthM ?? distanceM(last, m.pilot);
+      const from = pointName(m, m.waypoints.length - 1);
+      const to = pointName(m, -1);
+      const v = this.legMark(leg);
       rows.push({
-        index: rows.length + 1,
-        name: `${rows.length + 1} · T → A, return`,
-        from: 'T',
-        to: 'A',
-        info: `${RfFormat.format(back, 'km1')} · ${RfFormat.format(t.aglM, 'm')}`,
-        infoTitle: RfFormat.full(back, 'km3'),
-        mark: r ? '✓' : '',
-        markLabel: r ? 'Return inside the flown area' : '',
-        tone: r ? 'ok' : 'none',
-        failing: [],
+        index,
+        name: `${index} · ${from} → ${to}, return`,
+        from,
+        to,
+        info: `${RfFormat.format(back, 'km1')} · ${RfFormat.format(last.aglM, 'm')} → ${RfFormat.format(m.pilot.aglM, 'm')}`,
+        infoTitle: `${RfFormat.full(back, 'km3')} back to the pilot`,
+        ...v,
         isReturn: true,
         lengthM: back,
-        aglM: t.aglM,
+        aglM: last.aglM,
       });
     }
     return rows;
   });
+
+  private legMark(leg: LegResult | undefined): Pick<LegRowVm, 'mark' | 'markLabel' | 'tone' | 'failing'> {
+    const failing = (['control', 'video'] as LinkKind[]).filter((k) => leg?.worst?.[k] && leg.worst[k]!.reachable === false);
+    if (!leg) return { mark: '', markLabel: '', tone: 'none', failing };
+    if (leg.status === 'missing-data') return { mark: '? no data', markLabel: 'No elevation data, not calculated', tone: 'warn', failing };
+    if (failing.length) return { mark: `${failing.map((k) => LINK_LETTER[k]).join(' ')} ✕`, markLabel: `${failing.join(' and ')} link blocked`, tone: 'blocked', failing };
+    if (leg.status === 'warn') return { mark: '!', markLabel: 'Warning', tone: 'warn', failing };
+    return { mark: '✓', markLabel: 'Reachable', tone: 'ok', failing };
+  }
 
   readonly routeLengthText = computed(() => {
     const m = this.shown();
@@ -230,16 +226,25 @@ export class FpvWorkspace {
     const r = this.store.result();
     const m = this.mission();
     if (!r || !m) return null;
-    for (const leg of r.legs ?? []) {
+    const legs = r.legs ?? [];
+    for (let i = 0; i < legs.length; i++) {
+      const leg = legs[i];
       const failing = (['video', 'control'] as LinkKind[]).filter((k) => leg.worst?.[k]?.reachable === false);
       if (leg.status !== 'blocked' && failing.length === 0) continue;
       const link = failing[0] ?? 'video';
-      const reason = (leg.reasons ?? []).find((x) => x.severity === 'blocked') ?? leg.reasons?.[0];
+      const reasons = leg.reasons ?? [];
+      // a reason with a fix first, then the blocked reason for this link, then any blocked reason
+      const reason =
+        reasons.find((x) => x.fix && (!x.link || x.link === link)) ??
+        reasons.find((x) => x.severity === 'blocked' && x.link === link) ??
+        reasons.find((x) => x.severity === 'blocked') ??
+        reasons[0];
       const lr = leg.worst?.[link];
-      const idx = leg.index ?? 0;
+      const idx = i + 1;
+      const back = i >= m.waypoints.length;
       return {
         legIndex: idx,
-        title: `Leg ${idx} · ${leg.from ?? pointName(m, idx - 2)} → ${leg.to ?? pointName(m, idx - 1)}`,
+        title: `Leg ${idx} · ${back ? pointName(m, m.waypoints.length - 1) : pointName(m, i - 1)} → ${back ? pointName(m, -1) : pointName(m, i)}`,
         badge: `${failing.map((k) => LINK_LETTER[k]).join(' ')} ✕`,
         text: reason?.text ?? `The ${link} link is ${RfFormat.format(-(lr?.marginDb ?? 0), 'db')} short of the required level.`,
         fix: reason?.fix,
@@ -251,13 +256,23 @@ export class FpvWorkspace {
     return null;
   });
 
-  readonly missingLeg = computed(() => this.store.result()?.legs?.find((l) => l.status === 'missing-data') ?? null);
+  readonly missingLeg = computed(() => {
+    const legs = this.store.result()?.legs ?? [];
+    const i = legs.findIndex((l) => l.status === 'missing-data');
+    return i < 0 ? null : { leg: legs[i], number: i + 1 };
+  });
+
+  /** Missing-data areas and drone positions of every leg, for the map outline. */
+  readonly missingAreas = computed(() =>
+    (this.store.result()?.legs ?? []).filter((l) => l.missingData || l.missing?.length).map((l) => ({ area: l.missingData ?? null, positions: l.missing ?? [] })),
+  );
 
   readonly allClearText = computed(() => {
     const r = this.store.result();
     const m = this.mission();
     if (!r || !m || this.verdict() || this.missingLeg()) return null;
-    const info = (r.legs ?? []).flatMap((l) => l.reasons ?? []).find((x) => x.severity === 'info' && x.text);
+    // a module's info line says more than the core's per-link margin lines
+    const info = [...(r.legs ?? []).flatMap((l) => l.reasons ?? []), ...(r.reasons ?? [])].find((x) => x.severity === 'info' && x.text && x.module !== 'rf-core');
     if (info?.text) return info.text;
     const ev = this.evaluated();
     if (ev.length === 1) {
@@ -312,8 +327,11 @@ export class FpvWorkspace {
     const planned = m.time.mode === 'planned' && m.time.utc;
     const t = planned ? new Date(m.time.utc!) : new Date();
     const hm = t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    const tier = this.store.result()?.weather?.tier ?? this.data.tierFor(planned ? m.time.utc! : null);
-    const tierText = tier === 'hourly' ? 'forecast hourly' : tier === 'long-range' ? 'long-range forecast' : 'no forecast · standard atmosphere';
+    // the result says which tier it used; before a calculation, the horizon tells what to expect
+    const r = this.store.result();
+    const tier = r?.forecastTier ?? this.data.tierFor(planned ? m.time.utc! : null);
+    const tierText =
+      tier === 'hourly' ? 'forecast hourly' : tier === 'long-range' ? 'long-range forecast' : tier === 'off' ? 'weather off · standard atmosphere' : 'beyond the forecast · standard atmosphere';
     const day = planned ? t.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' : 'Now · ';
     return `${day}${hm} local · ${tierText}`;
   });
@@ -345,13 +363,15 @@ export class FpvWorkspace {
     const r = this.store.result();
     const legs = r?.legs ?? [];
     const out: { pilot?: number; target?: number } = {};
+    const m = this.mission();
+    const targetLeg = m ? legs[m.waypoints.length - 1] : undefined;
     for (const leg of legs) {
       const lr = leg.worst?.video ?? leg.worst?.control;
-      const pts = lr?.profile?.points;
-      if (!pts?.length) continue;
-      out.pilot ??= pts[0].groundMslM;
-      if (leg === legs[legs.length - 1]) out.target = pts[pts.length - 1].groundMslM;
+      out.pilot ??= lr?.ends?.ground?.groundMslM;
     }
+    // the target's ground from the leg that ends there, when its worst sample is at the end
+    const tl = targetLeg?.worst?.video ?? targetLeg?.worst?.control;
+    if (tl?.sample?.alongLegM !== undefined && targetLeg?.lengthM !== undefined && Math.abs(tl.sample.alongLegM - targetLeg.lengthM) < 1) out.target = tl.ends?.air?.groundMslM;
     return out;
   });
 

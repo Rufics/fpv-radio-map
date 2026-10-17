@@ -70,7 +70,7 @@ import { CompareService } from '../core/fpv-core';
       </div>
       <div class="list">
         @for (r of ws.legRows(); track r.index) {
-          @if (ws.store.result() && !r.isReturn && !ws.editingRoute()) {
+          @if (ws.store.result() && r.mark && !ws.editingRoute()) {
             <button type="button" class="row leg" [class]="'row leg tone-' + r.tone" (click)="ws.openWhy(r.index)" [attr.aria-label]="r.name + ', ' + r.info + (r.markLabel ? ', ' + r.markLabel : '') + '. Show details'">
               <span>{{ r.name }}</span><span class="info rf-mono" [title]="r.infoTitle">{{ r.info }}</span><span class="mark" aria-hidden="true">{{ r.mark }}</span>
             </button>

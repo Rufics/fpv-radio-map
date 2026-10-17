@@ -41,6 +41,11 @@ try {
   await laptop.screenshot({ path: `${OUT}/laptop-fix-preview.png` });
   await laptop.getByRole('button', { name: 'Cancel', exact: true }).click();
   await laptop.getByRole('button', { name: 'Share', exact: true }).click();
+  await settle(laptop, 800);
+  // make a view link valid for 7 days, so the card shows its status (opens, expiry)
+  await laptop.getByRole('button', { name: 'Random' }).nth(1).click();
+  await laptop.getByLabel('Link works').nth(1).selectOption({ label: '7 days' });
+  await laptop.getByRole('button', { name: 'Create link' }).nth(1).click();
   await settle(laptop, 1500);
   await laptop.screenshot({ path: `${OUT}/laptop-share.png` });
   // extra: compare scenario B (feature 13): other video ground antenna, then the coverage difference map
@@ -70,11 +75,27 @@ try {
   await empty.goto(`${BASE}/admin/modules`);
   await settle(empty, 1500);
   await empty.screenshot({ path: `${OUT}/admin-modules.png` });
+  await empty.getByLabel('Admin token').fill('demo-admin-token');
+  await empty.getByLabel('Admin token').press('Enter');
+  await settle(empty, 1200);
+  await empty.screenshot({ path: `${OUT}/admin-modules-keys.png`, fullPage: true });
+  await empty.goto(`${BASE}/admin/sources`);
+  await settle(empty, 3000);
+  await empty.screenshot({ path: `${OUT}/admin-sources.png` });
   await empty.goto(`${BASE}/admin/library`);
   await empty.getByRole('button', { name: 'Batteries' }).click();
   await empty.getByRole('button', { name: /6S LiPo 3300/ }).click();
   await settle(empty, 800);
   await empty.screenshot({ path: `${OUT}/admin-library.png` });
+
+  // extra: missing elevation data, outlined on the map
+  const missing = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watch(missing, 'missing');
+  await missing.goto(`${BASE}/?scenario=missing-elevation`);
+  await missing.getByRole('button', { name: 'Use example route' }).click();
+  await missing.getByRole('button', { name: /^Calculate$/ }).click();
+  await settle(missing, 7000);
+  await missing.screenshot({ path: `${OUT}/laptop-missing-data.png` });
 
   // ---- phone: PIN entry, then the mission view ----
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -83,6 +104,12 @@ try {
   for (const d of '24') await phone.getByRole('button', { name: `Digit ${d}` }).click();
   await settle(phone, 300);
   await phone.screenshot({ path: `${OUT}/phone-pin.png` });
+  const gone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  watch(gone, 'phone-expired');
+  await gone.goto(`${BASE}/m/v/demo-expired`);
+  await settle(gone, 1200);
+  await gone.screenshot({ path: `${OUT}/phone-pin-expired.png` });
+  await gone.close();
   for (const d of '6810') await phone.getByRole('button', { name: `Digit ${d}` }).click();
   await phone.getByRole('button', { name: 'Open mission' }).click();
   await phone.waitForURL(/\/mission\//, { timeout: 10000 });

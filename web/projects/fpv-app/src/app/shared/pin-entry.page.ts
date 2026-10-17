@@ -1,4 +1,4 @@
-import { Component, ElementRef, computed, inject, input, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, OnInit, computed, inject, input, signal, viewChild } from '@angular/core';
 import { Router } from '@angular/router';
 import { ApiError, CredentialStore, RfmapApiClient } from '@rfmap/ui-kit';
 
@@ -7,14 +7,22 @@ import { ApiError, CredentialStore, RfmapApiClient } from '@rfmap/ui-kit';
   selector: 'fpv-pin-entry',
   template: `
     <div class="wrap">
-      <div class="rf-eyebrow">Shared mission · {{ role() === 'e' ? 'can edit' : 'view only' }}</div>
+      <div class="rf-eyebrow">Shared mission · {{ effectiveRole() === 'edit' ? 'can edit' : 'view only' }}</div>
       <h1>{{ missionName() ?? 'Shared mission' }}</h1>
+      @if (expiresText(); as x) {<div class="rf-caption">{{ x }}</div>}
       @switch (state()) {
-        @case ('revoked') {
-          <div class="card bad" role="alert"><b>This link was revoked.</b> The mission owner turned it off. Ask them for a new link.</div>
+        @case ('loading') {
+          <div class="rf-caption" role="status">Checking the link…</div>
+        }
+        @case ('gone') {
+          <div class="card bad" role="alert"><b>This link no longer works.</b> {{ goneText() }} Ask the mission owner for a new link.</div>
+        }
+        @case ('unknown') {
+          <div class="card bad" role="alert"><b>This link does not exist.</b> Check that you copied all of it.</div>
         }
         @case ('paused') {
-          <div class="card warn" role="alert"><b>Too many wrong PINs.</b> This link is paused for 15 minutes{{ retryText() }}. Try again later or ask the owner for the PIN.</div>
+          <div class="card warn" role="alert"><b>{{ pausedTitle() }}</b> This link is paused{{ retryText() }}. Try again later or ask the owner for the PIN.</div>
+          <button type="button" class="rf-btn rf-btn--secondary" (click)="check()">Try again</button>
         }
         @default {
           <label class="hint" for="pin-input">Enter the 6-digit PIN you were given.</label>
@@ -35,7 +43,7 @@ import { ApiError, CredentialStore, RfmapApiClient } from '@rfmap/ui-kit';
             }
           </div>
           <button type="button" class="rf-btn rf-btn--primary open" (click)="open()" [disabled]="pin().length !== 6 || busy()">{{ busy() ? 'Opening…' : 'Open mission' }}</button>
-          <div class="rf-caption fine">After 5 wrong tries the link pauses for 15 minutes.</div>
+          <div class="rf-caption fine">After 5 wrong tries the link pauses for 15 minutes, longer after each further pause.</div>
         }
       }
     </div>
@@ -63,7 +71,7 @@ import { ApiError, CredentialStore, RfmapApiClient } from '@rfmap/ui-kit';
     .card.warn b { color: var(--rf-warn-text); }
   `,
 })
-export class PinEntryPage {
+export class PinEntryPage implements OnInit {
   readonly role = input<string>('v');
   readonly token = input.required<string>();
   private readonly api = inject(RfmapApiClient);
@@ -75,18 +83,86 @@ export class PinEntryPage {
   protected readonly pin = signal('');
   protected readonly error = signal<string | null>(null);
   protected readonly busy = signal(false);
-  protected readonly state = signal<'entry' | 'paused' | 'revoked'>('entry');
-  protected readonly retryAfter = signal<number | null>(null);
-  /** @gap the contract gives the mission name only after a successful PIN. */
+  protected readonly state = signal<'loading' | 'entry' | 'paused' | 'gone' | 'unknown'>('loading');
+  /** Paused until this time (ms), from LinkInfo.pausedUntil or the 429 retryAfterS. */
+  protected readonly pausedUntil = signal<number | null>(null);
+  protected readonly pausedByRate = signal(false);
+  /** From the public GET /links/{token}, before the PIN. */
   protected readonly missionName = signal<string | null>(null);
+  protected readonly infoRole = signal<'edit' | 'view' | null>(null);
+  protected readonly expiresAt = signal<string | null>(null);
+  protected readonly goneMessage = signal<string | null>(null);
+
+  protected readonly effectiveRole = computed(() => this.infoRole() ?? (this.role() === 'e' ? 'edit' : 'view'));
+  protected readonly expiresText = computed(() => {
+    const x = this.expiresAt();
+    return x ? `Link valid until ${this.when(Date.parse(x))}` : null;
+  });
+  protected readonly goneText = computed(() => {
+    const x = this.expiresAt();
+    if (x && Date.parse(x) <= Date.now()) return `It expired ${this.when(Date.parse(x))}.`;
+    const m = this.goneMessage();
+    if (m && /expire/i.test(m)) return 'It has expired.';
+    if (m && /revoke/i.test(m)) return 'The mission owner revoked it.';
+    return 'The mission owner revoked it or it expired.';
+  });
+  protected readonly pausedTitle = computed(() => (this.pausedByRate() ? 'Too many requests.' : 'Too many wrong PINs.'));
 
   protected readonly dots = computed(() => Array.from({ length: 6 }, (_, i) => ({ filled: i < this.pin().length, current: i === this.pin().length })));
   protected readonly retryText = computed(() => {
-    const s = this.retryAfter();
-    if (!s) return '';
-    const until = new Date(Date.now() + s * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    return ` (until ${until})`;
+    const t = this.pausedUntil();
+    if (!t) return '';
+    const min = Math.max(1, Math.ceil((t - Date.now()) / 60e3));
+    return ` until ${new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} (about ${min} min)`;
   });
+
+  ngOnInit(): void {
+    void this.check();
+  }
+
+  private when(ms: number): string {
+    return new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  /** GET /links/{token}: mission name, role, expiry and pause, without using a PIN try. */
+  protected async check(): Promise<void> {
+    this.state.set('loading');
+    try {
+      const info = await this.api.linkInfo(this.token());
+      this.missionName.set(info.missionName ?? null);
+      this.infoRole.set(info.role ?? null);
+      this.expiresAt.set(info.expiresAt ?? null);
+      const paused = info.pausedUntil ? Date.parse(info.pausedUntil) : NaN;
+      if (Number.isFinite(paused) && paused > Date.now()) {
+        this.pausedByRate.set(false);
+        this.pausedUntil.set(paused);
+        this.state.set('paused');
+      } else this.state.set('entry');
+    } catch (e) {
+      this.handleError(ApiError.from(e), true);
+    }
+  }
+
+  private handleError(err: ApiError, fromInfo: boolean): void {
+    if (err.status === 410) {
+      this.goneMessage.set(err.message);
+      this.state.set('gone');
+    } else if (err.status === 404) {
+      this.state.set('unknown');
+    } else if (err.status === 429) {
+      this.pausedByRate.set(fromInfo);
+      this.pausedUntil.set(Date.now() + (err.retryAfterS ?? 900) * 1000);
+      this.state.set('paused');
+    } else if (err.status === 401) {
+      this.state.set('entry');
+      const left = (err.body as { triesLeft?: number } | undefined)?.triesLeft;
+      this.error.set(left !== undefined ? `Wrong PIN. ${left} ${left === 1 ? 'try' : 'tries'} left before the link pauses.` : 'Wrong PIN.');
+    } else {
+      // the info call is a convenience: if the server cannot answer it, still let the user try the PIN
+      this.state.set('entry');
+      if (!fromInfo) this.error.set(err.message || 'The server could not be reached.');
+    }
+  }
 
   protected focus(): void {
     this.pinInput()?.nativeElement.focus();
@@ -114,17 +190,8 @@ export class PinEntryPage {
       this.missionName.set(res.missionName);
       await this.router.navigate(['/mission', res.missionId]);
     } catch (e) {
-      const err = ApiError.from(e);
       this.pin.set('');
-      if (err.status === 410) this.state.set('revoked');
-      else if (err.status === 429) {
-        this.retryAfter.set(err.retryAfterS ?? 900);
-        this.state.set('paused');
-      } else if (err.status === 401) {
-        const left = (err.body as { triesLeft?: number; remainingTries?: number } | undefined)?.triesLeft ?? (err.body as { remainingTries?: number } | undefined)?.remainingTries;
-        this.error.set(left !== undefined ? `Wrong PIN. ${left} ${left === 1 ? 'try' : 'tries'} left before the link pauses.` : 'Wrong PIN.');
-      } else if (err.status === 404) this.error.set('This link does not exist. Check that you copied all of it.');
-      else this.error.set(err.message || 'The server could not be reached.');
+      this.handleError(ApiError.from(e), false);
     } finally {
       this.busy.set(false);
     }

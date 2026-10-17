@@ -5,9 +5,12 @@ export const SPEED_OF_LIGHT = 299_792_458;
 
 export interface ProfileInput {
   profile: Profile;
-  /** Height above ground of the transmitter end (pilot) and the receiver end (drone). */
+  /** Height above ground of the left end (pilot) and the right end (drone). */
   fromAglM: number;
   toAglM: number;
+  /** Antenna heights above sea level from LinkResult.ends; when given they win over profile ground + AGL. */
+  fromAntennaMslM?: number;
+  toAntennaMslM?: number;
   frequencyHz: number;
   /** Effective Earth radius factor; terrain is drawn with the Earth bulge for this k. Default 4/3. */
   kFactor?: number;
@@ -59,8 +62,8 @@ export function computeProfileGeometry(input: ProfileInput): ProfileGeometry {
   const L = input.profile.lengthM ?? pts[pts.length - 1].distanceM;
   const k = input.kFactor ?? 4 / 3;
   const lambda = SPEED_OF_LIGHT / input.frequencyHz;
-  const fromMsl = pts[0].groundMslM + input.fromAglM;
-  const toMsl = pts[pts.length - 1].groundMslM + input.toAglM;
+  const fromMsl = input.fromAntennaMslM ?? pts[0].groundMslM + input.fromAglM;
+  const toMsl = input.toAntennaMslM ?? pts[pts.length - 1].groundMslM + input.toAglM;
 
   const samples: ProfileSample[] = pts.map((p) => {
     const d1 = p.distanceM;
