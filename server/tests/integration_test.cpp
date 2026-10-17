@@ -447,6 +447,9 @@ TEST_F(Integration, BothLinksAndWeather) {
 TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
     json m = mission();
     m["name"] = "Ridge test 2";
+    // "now" is part of the input hash to the second, so the cache check below would miss when the
+    // two requests fall on either side of a second. A fixed planned time keeps the inputs equal.
+    m["time"] = {{"mode", "planned"}, {"utc", isoUtc(Clock::now())}};
     const auto r = call("POST", "/calc/route", m, bearer(env->editSession));
     ASSERT_EQ(r.status, 200) << r.body;
     dump("calc-route", r.body);
