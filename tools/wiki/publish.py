@@ -17,6 +17,12 @@ SPECIAL = {"README.md": "Home", "_Sidebar.md": "_Sidebar"}
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
 # ](target) in Markdown and src="target" in inline HTML.
 LINK = re.compile(r'(\]\(|src=")([^)"\s]+)([)"])')
+EXTERNAL = re.compile(r"^[a-z][a-z0-9+.-]*:")
+REPO_NAME = re.compile(r"^[\w.-]+/[\w.-]+$")
+
+
+class PublishError(Exception):
+    pass
 
 
 def page_name(rel: PurePosixPath, text: str) -> str:
@@ -30,61 +36,87 @@ def page_name(rel: PurePosixPath, text: str) -> str:
 def resolve(base: PurePosixPath, target: str) -> PurePosixPath:
     parts: list[str] = []
     for part in (base.parent / target).parts:
-        if part == "..":
-            if parts:
-                parts.pop()
-            else:
-                parts.append("..")
+        if part == ".." and parts and parts[-1] != "..":
+            parts.pop()
         elif part != ".":
             parts.append(part)
     return PurePosixPath(*parts)
 
 
-def main() -> int:
-    docs, wiki, repo = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
-    blob = f"https://github.com/{repo}/blob/main"
-    tree = f"https://github.com/{repo}/tree/main"
-    repo_root = docs.resolve().parent
+def inside(root: Path, path: Path) -> Path:
+    """The real path of `path`, which must lie under `root` (symlinks followed)."""
+    real = path.resolve()
+    if not real.is_relative_to(root):
+        raise PublishError(f"{path} is outside {root}")
+    return real
 
-    sources = {PurePosixPath(p.relative_to(docs).as_posix()): p.read_text(encoding="utf-8")
-               for p in sorted(docs.rglob("*.md"))}
-    names = {rel: page_name(rel, text) for rel, text in sources.items()}
-    clashes = {n for n in names.values() if list(names.values()).count(n) > 1}
-    if clashes:
-        print(f"two docs would publish to the same wiki page: {sorted(clashes)}", file=sys.stderr)
-        return 1
 
-    for old in wiki.iterdir():
-        if old.name.startswith("."):
-            continue
-        shutil.rmtree(old) if old.is_dir() else old.unlink()
+class Publisher:
+    def __init__(self, docs: Path, wiki: Path, repo: str):
+        if not REPO_NAME.match(repo):
+            raise PublishError(f"not an owner/name repository: {repo}")
+        self.docs = docs.resolve()
+        self.wiki = wiki.resolve()
+        self.repo_root = self.docs.parent
+        self.blob = f"https://github.com/{repo}/blob/main"
+        self.tree = f"https://github.com/{repo}/tree/main"
+        self.sources = {PurePosixPath(p.relative_to(self.docs).as_posix()): p.read_text(encoding="utf-8")
+                        for p in sorted(self.docs.rglob("*.md"))}
+        self.names = {rel: page_name(rel, text) for rel, text in self.sources.items()}
+        clashes = sorted({n for n in self.names.values() if list(self.names.values()).count(n) > 1})
+        if clashes:
+            raise PublishError(f"two docs would publish to the same wiki page: {clashes}")
 
-    def rewrite(rel: PurePosixPath, match: re.Match) -> str:
-        opening, target, closing = match.groups()
-        if re.match(r"^[a-z][a-z0-9+.-]*:", target) or target.startswith(("#", "/")):
-            return match.group(0)
+    def clear(self) -> None:
+        for old in self.wiki.iterdir():
+            if old.name.startswith("."):
+                continue
+            shutil.rmtree(old) if old.is_dir() else old.unlink()
+
+    def copy_image(self, resolved: PurePosixPath) -> str:
+        source = inside(self.docs, self.docs / resolved)
+        dest = inside(self.wiki, self.wiki / "assets" / resolved)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, dest)
+        return f"assets/{resolved}"
+
+    def target_for(self, rel: PurePosixPath, target: str) -> str:
+        if EXTERNAL.match(target) or target.startswith(("#", "/")):
+            return target
         path, _, anchor = target.partition("#")
         anchor = f"#{anchor}" if anchor else ""
         resolved = resolve(rel, path)
-        if resolved in names:
-            return f"{opening}{names[resolved]}{anchor}{closing}"
+        if resolved in self.names:
+            return self.names[resolved] + anchor
         if resolved.parts and resolved.parts[0] != ".." and resolved.suffix.lower() in IMAGE_SUFFIXES:
-            dest = wiki / "assets" / resolved
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(docs / resolved, dest)
-            return f"{opening}assets/{resolved}{closing}"
-        in_repo = resolve(PurePosixPath("docs/x"), str(resolved))
-        base = tree if (repo_root / in_repo).is_dir() else blob
-        return f"{opening}{base}/{in_repo}{anchor}{closing}"
+            return self.copy_image(resolved)
+        in_repo = resolve(PurePosixPath("docs/index"), str(resolved))
+        base = self.tree if (self.repo_root / in_repo).is_dir() else self.blob
+        return f"{base}/{in_repo}{anchor}"
 
-    for rel, text in sources.items():
-        body = LINK.sub(lambda m: rewrite(rel, m), text)
-        (wiki / f"{names[rel]}.md").write_text(body, encoding="utf-8")
-    (wiki / "_Footer.md").write_text(
-        "This wiki is generated from the [`docs/` folder](" + f"{tree}/docs" + "). "
-        "Edit the files there with a pull request; changes made here are overwritten.\n",
-        encoding="utf-8")
-    print(f"published {len(sources)} pages")
+    def write(self, name: str, text: str) -> None:
+        inside(self.wiki, self.wiki / f"{name}.md").write_text(text, encoding="utf-8")
+
+    def publish(self) -> int:
+        self.clear()
+        for rel, text in self.sources.items():
+            body = LINK.sub(lambda m, rel=rel: m.group(1) + self.target_for(rel, m.group(2)) + m.group(3), text)
+            self.write(self.names[rel], body)
+        self.write("_Footer", f"This wiki is generated from the [`docs/` folder]({self.tree}/docs). "
+                              "Edit the files there with a pull request; changes made here are overwritten.\n")
+        return len(self.sources)
+
+
+def main() -> int:
+    if len(sys.argv) != 4:
+        print(__doc__, file=sys.stderr)
+        return 2
+    try:
+        count = Publisher(Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]).publish()
+    except PublishError as e:
+        print(e, file=sys.stderr)
+        return 1
+    print(f"published {count} pages")
     return 0
 
 
