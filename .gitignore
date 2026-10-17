@@ -6,3 +6,5 @@ dist/
 *.rfmod
 *.pmtiles
 *.tif
+*.secret
+!platform/rfmod/keys/dev-*.secret
