@@ -1,0 +1,18 @@
+title: "[Q] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ask how something works or why a result looks the way it does. For a bug, open an issue instead.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What do you want to know?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Version or image tag, the radio profile, and a share link or screenshot of the result if it helps.

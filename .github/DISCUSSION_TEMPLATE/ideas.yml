@@ -1,0 +1,31 @@
+title: "[Idea] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Discuss an idea before it becomes an issue. Ideas that fit as a module are welcome too:
+        see the [module developer guide](https://github.com/Rufics/fpv-radio-map/blob/main/docs/modules/developer-guide.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can't you do today, or what takes too long?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: How would you like it to work?
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it belong?
+      options:
+        - Core calculation
+        - A module
+        - Web app
+        - Server or deployment
+        - Not sure

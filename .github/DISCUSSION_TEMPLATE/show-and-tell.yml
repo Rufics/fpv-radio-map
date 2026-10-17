@@ -1,0 +1,34 @@
+title: "[Field report] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Compare a prediction with a real flight. Reports like this are the best way to check the model.
+        Leave out anything you don't want public, such as your exact take-off spot.
+  - type: input
+    id: equipment
+    attributes:
+      label: Equipment
+      description: Control and video link, antennas, output power.
+      placeholder: ELRS 2.4 GHz 250 mW, 5.8 GHz analog VTX 600 mW, stock dipoles
+    validations:
+      required: true
+  - type: textarea
+    id: prediction
+    attributes:
+      label: Prediction
+      description: What FPV Radio Map predicted. A share link or screenshot is ideal.
+    validations:
+      required: true
+  - type: textarea
+    id: reality
+    attributes:
+      label: What happened
+      description: Distance and altitude where the link degraded or failed, RSSI or LQ from the logs if you have them.
+    validations:
+      required: true
+  - type: textarea
+    id: conditions
+    attributes:
+      label: Conditions
+      description: Weather, vegetation, interference, anything else that may matter.
