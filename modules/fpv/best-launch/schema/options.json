@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Best launch point options (per mission)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "area": {
+      "type": "array", "minItems": 3, "maxItems": 200,
+      "items": { "type": "object", "required": ["lat", "lon"], "additionalProperties": false,
+                 "properties": { "lat": { "type": "number", "minimum": -90, "maximum": 90 }, "lon": { "type": "number", "minimum": -180, "maximum": 180 } } }
+    },
+    "cellM": { "type": "number", "minimum": 10, "maximum": 5000, "default": 100 },
+    "stepM": { "type": "number", "minimum": 20, "maximum": 5000, "default": 250 },
+    "maxCandidates": { "type": "integer", "minimum": 1, "maximum": 2000, "default": 200 },
+    "antennaAglM": { "type": "number", "minimum": 0, "maximum": 100 }
+  }
+}

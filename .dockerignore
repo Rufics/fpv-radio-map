@@ -1,0 +1,13 @@
+# Keep build contexts small and free of secrets.
+.git
+build
+build-*
+**/node_modules
+web/dist
+web/.angular
+web/screenshots
+**/*.rfmod
+**/*.pmtiles
+**/*.tif
+**/*.secret
+!platform/rfmod/keys/dev-*.secret

@@ -1,0 +1,506 @@
+[
+  {
+    "id": "elrs-2g4-50hz",
+    "name": "ExpressLRS 2.4 GHz 50 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 2440000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -115,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 20.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 50 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-2g4-150hz",
+    "name": "ExpressLRS 2.4 GHz 150 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 2440000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -112,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 6.667,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 150 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-2g4-250hz",
+    "name": "ExpressLRS 2.4 GHz 250 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 2440000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -108,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 4.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 250 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-2g4-500hz",
+    "name": "ExpressLRS 2.4 GHz 500 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 2440000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -105,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 2.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 500 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-915-25hz",
+    "name": "ExpressLRS 915 MHz 25 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 915000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -123,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 40.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 25 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-915-50hz",
+    "name": "ExpressLRS 915 MHz 50 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 915000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -120,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 20.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 50 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-915-100hz",
+    "name": "ExpressLRS 915 MHz 100 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 915000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -117,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 10.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 100 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-915-200hz",
+    "name": "ExpressLRS 915 MHz 200 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 915000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -112,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 5.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 200 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-868-25hz",
+    "name": "ExpressLRS 868 MHz 25 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 868000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -123,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 40.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 25 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-868-50hz",
+    "name": "ExpressLRS 868 MHz 50 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 868000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -120,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 20.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 50 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-868-100hz",
+    "name": "ExpressLRS 868 MHz 100 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 868000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -117,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 10.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 100 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "elrs-868-200hz",
+    "name": "ExpressLRS 868 MHz 200 Hz",
+    "vendor": "ExpressLRS",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 868000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      17,
+      20,
+      24,
+      27,
+      30
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -112,
+      "source": {
+        "kind": "datasheet",
+        "reference": "ExpressLRS documentation, Signal Health: RFMD sensitivity limit per packet rate",
+        "url": "https://expresslrs.org/info/signal-health/",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 5.0,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 200 Hz; the radio adds its own processing time"
+      }
+    },
+    "notes": "Selectable power steps depend on the transmitter hardware; remove those yours lacks. Unverified until an admin checks the source."
+  },
+  {
+    "id": "crossfire-915",
+    "name": "TBS Crossfire 915 MHz",
+    "vendor": "Team BlackSheep",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 915000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      20,
+      24,
+      27,
+      30,
+      33
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -130,
+      "source": {
+        "kind": "datasheet",
+        "reference": "TBS Crossfire manual, specifications: receiver sensitivity up to -130 dBm",
+        "url": "https://www.rccorner.ae/media/descriptions/tbs-crossfire-manual.pdf",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 6.667,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 150 Hz"
+      }
+    },
+    "notes": "The manual gives -130 dBm without naming the mode (150 Hz, 50 Hz or 4 Hz). It is most likely the slowest mode, so this figure is optimistic for 150 Hz. Power steps: 10 mW to 2 W depending on the module. Unverified until an admin checks it."
+  },
+  {
+    "id": "crossfire-868",
+    "name": "TBS Crossfire 868 MHz",
+    "vendor": "Team BlackSheep",
+    "version": 1,
+    "verified": false,
+    "kind": "control",
+    "frequencyHz": 868000000.0,
+    "txPowerDbm": [
+      10,
+      14,
+      20,
+      24,
+      27,
+      30,
+      33
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -130,
+      "source": {
+        "kind": "datasheet",
+        "reference": "TBS Crossfire manual, specifications: receiver sensitivity up to -130 dBm",
+        "url": "https://www.rccorner.ae/media/descriptions/tbs-crossfire-manual.pdf",
+        "retrieved": "2026-10-17"
+      }
+    },
+    "latencyMs": {
+      "typical": 6.667,
+      "source": {
+        "kind": "derived",
+        "reference": "one packet period at 150 Hz"
+      }
+    },
+    "notes": "The manual gives -130 dBm without naming the mode (150 Hz, 50 Hz or 4 Hz). It is most likely the slowest mode, so this figure is optimistic for 150 Hz. Power steps: 10 mW to 2 W depending on the module. Unverified until an admin checks it."
+  }
+]

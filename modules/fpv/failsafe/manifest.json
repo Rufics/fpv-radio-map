@@ -1,0 +1,21 @@
+{
+  "schema": "rfmod/v1",
+  "id": "fpv.failsafe",
+  "version": "1.0.0",
+  "title": "Failsafe check",
+  "description": "Finds where the control link would drop on the way out and checks what the failsafe then does: for return-to-home, the altitude it flies, terrain on the way, where control comes back and whether the battery lasts.",
+  "author": "rfmap",
+  "license": "MIT",
+  "lifecycle": "beta",
+  "abi": 1,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [
+    { "id": "fpv.battery", "version": "^1.0.0" },
+    { "id": "fpv.min-altitude", "version": "^1.0.0" }
+  ],
+  "provides": ["route.analysis"],
+  "methods": ["route.analyze"],
+  "entry": { "linux-x86_64": "lib/libfpv_failsafe.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 256, "timeoutMs": 120000 }
+}

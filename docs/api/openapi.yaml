@@ -1,0 +1,1095 @@
+openapi: 3.1.0
+# Schemas under schemas/ are JSON Schema draft-07 so the C++ server and ajv validate them the same way.
+info:
+  title: FPV Radio Map API
+  version: 1.0.0
+  description: |
+    HTTP API of the rfmap server. All numbers are SI unless the field name says otherwise
+    (…Db, …Dbm, …M, …Hz). Values are full double precision; clients round only for display.
+
+    Authentication:
+    * Mission access: `Authorization: Bearer <session>` from `POST /links/{token}/open`.
+    * Owner actions: `X-Owner-Key: <key>` returned once when the mission is created.
+    * Admin actions: `Authorization: Bearer <admin token>` configured on the server.
+
+    Errors are JSON `{message, ...}`. 429 and 503 carry `Retry-After` and `retryAfterS`.
+    Request bodies are checked against schemas/ (draft-07); a failure is 422
+    `{message, issues: [{path, message}]}`, path being a JSON pointer into the body. Calculations answer 503 when the server has no DEM.
+    Every limit (body size, rate classes, coverage cells) is server configuration.
+servers:
+  - url: /api/v1
+tags:
+  - name: missions
+  - name: links
+  - name: calc
+  - name: library
+  - name: weather
+  - name: modules
+  - name: admin
+
+paths:
+  /health:
+    get:
+      summary: Liveness and which data sources are configured. No authentication.
+      responses:
+        '200':
+          description: Server state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  version: { type: string }
+                  dem: { type: boolean }
+                  landcover: { type: boolean }
+                  weather: { type: boolean }
+
+  /config/map:
+    get:
+      summary: >-
+        Map sources for the client (PMTiles under /tiles, glyphs, attribution, start view). Defaults are
+        the tiles-builder file names; a `map` object in the server config is merged over them (RFC 7386).
+      responses:
+        '200':
+          description: Map configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  basemap: { type: object, properties: { pmtiles: { type: string } } }
+                  satellite: { type: object, properties: { pmtiles: { type: string } } }
+                  hillshade: { type: object, properties: { pmtiles: { type: string } } }
+                  contours: { type: object, properties: { pmtiles: { type: string }, sourceLayer: { type: string } } }
+                  dem: { type: object, description: 'Optional raster-dem source, only when configured' }
+                  weather: { type: object, description: 'Optional weather tile templates, only when configured' }
+                  glyphs: { type: string }
+                  attribution: { type: array, items: { type: string }, description: 'From the tiles-builder manifest.json next to the DEM' }
+                  center: { type: array, items: { type: number }, minItems: 2, maxItems: 2, description: '[lon, lat], the DEM centre' }
+                  zoom: { type: number }
+
+  /missions:
+    post:
+      tags: [missions]
+      summary: Create a mission. Returns the owner key once; the server stores only its hash.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '../../schemas/mission.schema.json' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [missionId, ownerKey, session]
+                properties:
+                  missionId: { type: string }
+                  ownerKey: { type: string, description: 'Shown once. Needed to create or revoke links.' }
+                  session: { type: string, description: 'Edit session for the creator.' }
+                  revision: { type: integer, description: 'Always 1; also sent as ETag.' }
+        '422': { description: Schema validation report }
+
+  /missions/{missionId}:
+    parameters:
+      - { name: missionId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [missions]
+      security: [{ session: [] }]
+      responses:
+        '403': { description: The session belongs to another mission }
+        '200':
+          description: Mission with its last saved results. ETag carries the revision.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mission: { $ref: '../../schemas/mission.schema.json' }
+                  role: { enum: [edit, view] }
+                  revision: { type: integer }
+                  lastResult: { $ref: '#/components/schemas/RouteResult' }
+    put:
+      tags: [missions]
+      security: [{ session: [] }]
+      summary: Save. Requires an edit session and the revision you edited (optimistic locking).
+      parameters:
+        - { name: If-Match, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '../../schemas/mission.schema.json' }
+      responses:
+        '200':
+          description: Saved; the new revision is in the body and in ETag
+          content:
+            application/json:
+              schema: { type: object, properties: { revision: { type: integer } } }
+        '403': { description: Read-only (view) session, or a session of another mission }
+        '409':
+          description: Someone saved in between; the body carries the current revision
+          content:
+            application/json:
+              schema: { type: object, properties: { message: { type: string }, revision: { type: integer } } }
+        '422': { description: Schema validation report }
+        '428': { description: If-Match is missing or not a revision number }
+
+  /missions/{missionId}/links:
+    parameters:
+      - { name: missionId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [links]
+      security: [{ ownerKey: [] }]
+      responses:
+        '200':
+          description: Links of the mission
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ShareLink' } }
+        '401': { description: X-Owner-Key missing }
+        '403': { description: Wrong owner key }
+    post:
+      tags: [links]
+      security: [{ ownerKey: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role, pin]
+              properties:
+                role: { enum: [edit, view] }
+                pin: { type: string, pattern: '^[0-9]{6}$' }
+                label: { type: string, maxLength: 120 }
+                expiresAt: { type: string, format: date-time, description: 'Optional; sessions from the link end then too' }
+      responses:
+        '201':
+          description: The token appears only in this response.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ShareLink'
+                  - type: object
+                    properties: { token: { type: string } }
+        '403': { description: Wrong or missing owner key (checked before the body) }
+        '422': { description: Role or PIN invalid (PIN is exactly 6 digits) }
+
+  /missions/{missionId}/links/{linkId}:
+    delete:
+      tags: [links]
+      security: [{ ownerKey: [] }]
+      parameters:
+        - { name: missionId, in: path, required: true, schema: { type: string } }
+        - { name: linkId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Revoked; open sessions from this link end at once }
+        '403': { description: Wrong or missing owner key; only the owner key revokes links }
+        '404': { description: No such link on this mission }
+
+  /links/{token}:
+    get:
+      tags: [links]
+      summary: >-
+        Public, before the PIN: what the PIN screen shows. Changes nothing and does not count as a try;
+        rate limited like /open.
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: The link
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  role: { enum: [edit, view] }
+                  missionName: { type: string }
+                  expiresAt: { type: string, format: date-time }
+                  pausedUntil: { type: string, format: date-time }
+        '404': { description: Unknown token }
+        '410': { description: Link revoked or expired }
+
+  /links/{token}/open:
+    post:
+      tags: [links]
+      summary: >-
+        Exchange a link token and its PIN for a session. 5 wrong PINs (configurable) pause the link for
+        15 minutes; each further lockout doubles the pause. The PIN is stored only as an argon2id hash.
+      parameters:
+        - { name: token, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [pin], properties: { pin: { type: string } } }
+      responses:
+        '200':
+          description: Session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  session: { type: string }
+                  missionId: { type: string }
+                  role: { enum: [edit, view] }
+                  missionName: { type: string }
+        '401':
+          description: Wrong PIN
+          content:
+            application/json:
+              schema: { type: object, properties: { message: { type: string }, triesLeft: { type: integer } } }
+        '404': { description: Unknown token }
+        '410': { description: Link revoked or expired }
+        '429':
+          description: Paused after too many wrong PINs (or rate limited); Retry-After header
+          content:
+            application/json:
+              schema: { type: object, properties: { message: { type: string }, retryAfterS: { type: integer } } }
+
+  /calc/path:
+    post:
+      tags: [calc]
+      summary: >-
+        One radio link between two points, or both links on the same path. `from` is the ground
+        (pilot) end, `to` the air end; heights are AGL and MSL comes from the DEM. The video link is
+        evaluated drone → ground, the control link ground → drone.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              oneOf:
+                - required: [kind, link]
+                - required: [links]
+              properties:
+                from: { $ref: '../../schemas/mission.schema.json#/$defs/point' }
+                to: { $ref: '../../schemas/mission.schema.json#/$defs/point' }
+                kind: { enum: [control, video], description: 'Single-link form' }
+                link: { $ref: '../../schemas/mission.schema.json#/$defs/linkSetup' }
+                links:
+                  type: object
+                  description: 'Both-links form; evaluate picks which of them run'
+                  additionalProperties: false
+                  properties:
+                    control: { $ref: '../../schemas/mission.schema.json#/$defs/linkSetup' }
+                    video: { $ref: '../../schemas/mission.schema.json#/$defs/linkSetup' }
+                evaluate: { enum: [both, control, video], default: both }
+                timeUtc: { type: string, format: date-time, description: 'Forecast time; default now' }
+                modules: { type: object, description: 'Opt-in modules with options, as mission.modules', additionalProperties: { type: object } }
+      responses:
+        '200':
+          description: Link result (single form) or `{control?, video?}` (both-links form)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/LinkResult'
+                  - type: object
+                    properties:
+                      control: { $ref: '#/components/schemas/LinkResult' }
+                      video: { $ref: '#/components/schemas/LinkResult' }
+        '422':
+          description: Missing elevation data on part of the path; nothing is guessed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MissingData' }
+
+  /calc/route:
+    post:
+      tags: [calc]
+      summary: >-
+        Every leg of the mission route, both links as requested, plus the modules the mission opts into.
+        Legs are pilot → wp1 → … → last, plus last → pilot when returnToPilot. Each leg is sampled at
+        the DEM native step; the drone AGL is interpolated linearly between the waypoints' aglM. The
+        worst sample per link per leg is reported. When the body equals the stored mission and the
+        session can edit, the result is saved as the mission's lastResult. Modules, rf.weather and
+        rf.clutter included, run only when listed in mission.modules: leave out rf.weather for a run
+        without weather (standard atmosphere, forecastTier off).
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '../../schemas/mission.schema.json' }
+      responses:
+        '200':
+          description: Route result. A module failure never fails the request; it is listed in moduleFailures.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RouteResult' }
+        '422': { description: Schema validation report, or a library item / link setup that cannot be resolved }
+
+  /calc/coverage:
+    post:
+      tags: [calc]
+      summary: >-
+        Start a coverage job around the pilot (one part per evaluated link, run on the server thread pool).
+        Poll the job; finished parts are usable at once. Needs coverage.radiusM, coverage.cellM and
+        coverage.droneAglM; the grid may not exceed the server's coverage.maxCells.
+      security: [{ session: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '../../schemas/mission.schema.json' }
+      responses:
+        '202':
+          description: Job accepted
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '422': { description: Coverage settings missing, or the grid has too many cells }
+        '503': { description: Too many jobs queued; Retry-After }
+
+  /jobs/{jobId}:
+    get:
+      tags: [calc]
+      security: [{ session: [] }]
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Progress per part
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+    delete:
+      tags: [calc]
+      security: [{ session: [] }]
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Cancelled }
+        '404': { description: No such job for this session's mission }
+
+  /jobs/{jobId}/coverage/{link}.json:
+    get:
+      tags: [calc]
+      security: [{ session: [] }]
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string } }
+        - { name: link, in: path, required: true, schema: { enum: [control, video] } }
+      responses:
+        '200':
+          description: Margin grid of a finished part.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CoverageGrid' }
+        '409': { description: The part is not finished yet (body carries progress) or failed }
+        '404': { description: No such job, or this link was not evaluated }
+
+  /elevation/profile:
+    get:
+      tags: [calc]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, example: '48.53,35.20' } }
+        - { name: to, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Terrain profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Profile' }
+        '422':
+          description: Missing elevation data on part of the path
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MissingData' }
+
+  /library/{kind}:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { enum: [radio-profiles, antennas, batteries, drones] } }
+    get:
+      tags: [library]
+      responses:
+        '200':
+          description: >-
+            Entries; each validates against schemas/library/<kind>.schema.json and carries the server
+            field version (and verified). radio-profiles answers 404 while rf.radio-profiles is disabled.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/LibraryItem' } }
+    post:
+      tags: [library]
+      security: [{ admin: [] }]
+      summary: Add an item (version 1). Only the admin edits the library.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: 'schemas/library/<kind>.schema.json' }
+      responses:
+        '201':
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryItem' }
+        '409': { description: An item with this id exists }
+        '422': { description: Schema validation report }
+
+  /library/{kind}/{id}:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { enum: [radio-profiles, antennas, batteries, drones] } }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [library]
+      responses:
+        '200':
+          description: The current version of the item
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryItem' }
+        '404': { description: No such item }
+    put:
+      tags: [library]
+      security: [{ admin: [] }]
+      summary: >-
+        Save as a new version. Send the version you edited in `version`; the previous version is kept
+        in the history. Results record the item versions they used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, description: 'schemas/library/<kind>.schema.json, plus version' }
+      responses:
+        '200':
+          description: Saved as a new version
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LibraryItem' }
+        '404': { description: No such item }
+        '409': { description: The item changed since the version you edited }
+        '422': { description: Schema validation report }
+
+  /library/{kind}/{id}/history:
+    parameters:
+      - { name: kind, in: path, required: true, schema: { enum: [radio-profiles, antennas, batteries, drones] } }
+      - { name: id, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [library]
+      responses:
+        '200':
+          description: Every version, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    version: { type: integer }
+                    verified: { type: boolean }
+                    item: { $ref: '#/components/schemas/LibraryItem' }
+                    changedBy: { type: string }
+                    changedAt: { type: string, format: date-time }
+
+  /weather/point:
+    get:
+      tags: [weather]
+      parameters:
+        - { name: lat, in: query, required: true, schema: { type: number } }
+        - { name: lon, in: query, required: true, schema: { type: number } }
+        - { name: timeUtc, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: Forecast at the point and the available horizon
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WeatherPoint' }
+
+  /weather/horizon:
+    get:
+      tags: [weather]
+      summary: Horizon of the forecast at the centre of the DEM.
+      responses:
+        '200':
+          description: How far ahead each forecast tier reaches from the run the server holds
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ForecastHorizon' }
+
+  /modules:
+    get:
+      tags: [modules]
+      summary: >-
+        Built-in RF extensions (rf.weather, rf.clutter, rf.uncertainty, rf.radio-profiles) followed by
+        installed modules, with lifecycle and dependency state. The `ui` of an alpha module is listed
+        only to the admin, with a short-lived `?grant=` on the bundle URL.
+      responses:
+        '200':
+          description: Modules
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
+
+  /modules/{moduleId}/{path}:
+    get:
+      tags: [modules]
+      summary: >-
+        A public file of a module (its ui/ files and options schema), resolved by
+        ModuleRegistry::publicFile; lib/ is never served. Files of an alpha module need the admin
+        token or a valid grant.
+      parameters:
+        - { name: moduleId, in: path, required: true, schema: { type: string } }
+        - { name: path, in: path, required: true, schema: { type: string }, description: 'e.g. ui/bundle.js' }
+        - { name: grant, in: query, schema: { type: string } }
+      responses:
+        '200': { description: The file, with X-Content-Type-Options nosniff }
+        '404': { description: No such public file (also for alpha files without a grant) }
+
+  /admin/modules:
+    post:
+      tags: [admin]
+      security: [{ admin: [] }]
+      summary: Upload a .rfmod package. The server validates schema, signature, ABI, dependencies and runs its self-test.
+      parameters:
+        - { name: install, in: query, schema: { type: boolean, default: true }, description: 'false = check only' }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: Validation report; installs only if every check passed and install=true.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidationReport' }
+
+  /admin/modules/{moduleId}:
+    parameters:
+      - { name: moduleId, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [admin]
+      security: [{ admin: [] }]
+      summary: Enable or disable a module (built-ins included) and set its server-wide options.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                options: { type: object, description: 'Validated against the module options schema' }
+      responses:
+        '200':
+          description: The admin module listing
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
+        '422': { description: Options do not match the schema, or unknown module }
+    delete:
+      tags: [admin]
+      security: [{ admin: [] }]
+      responses:
+        '204': { description: Removed }
+        '422': { description: Built-in modules can be disabled, not removed; or other modules require this one }
+
+  /admin/modules/notices:
+    get:
+      tags: [admin]
+      security: [{ admin: [] }]
+      responses:
+        '200':
+          description: Load-time notices (refused signatures, missing dependencies, deprecations)
+          content:
+            application/json:
+              schema: { type: array, items: { type: object } }
+
+  /admin/keys:
+    get:
+      tags: [admin]
+      security: [{ admin: [] }]
+      responses:
+        '200':
+          description: Trusted signing keys; the built-in owner key cannot be removed
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/TrustedKey' } }
+    post:
+      tags: [admin]
+      security: [{ admin: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key]
+              properties:
+                key: { type: string, description: 'Public key in rfmod text form' }
+                label: { type: string }
+      responses:
+        '201':
+          description: Key added; modules are reloaded. Returns the key list.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/TrustedKey' } }
+        '422': { description: Not a valid key }
+
+  /admin/keys/{keyId}:
+    delete:
+      tags: [admin]
+      security: [{ admin: [] }]
+      parameters:
+        - { name: keyId, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]+$' } }
+      responses:
+        '204': { description: Removed; modules signed with it stop loading at once }
+        '409': { description: The built-in owner key cannot be removed, or no such key }
+
+  /admin/cache:
+    get:
+      tags: [admin]
+      security: [{ admin: [] }]
+      responses:
+        '200':
+          description: Cache tiers with limits, use and hit rates
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CacheTier' } }
+    put:
+      tags: [admin]
+      security: [{ admin: [] }]
+      summary: Change limits; they are stored and survive a restart.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                required: [id]
+                properties:
+                  id: { enum: [dem-blocks, results-memory, results-table] }
+                  limitBytes: { type: integer, minimum: 0 }
+                  limitRows: { type: integer, minimum: 0, description: 'results-table only' }
+      responses:
+        '200':
+          description: Limits changed; returns the tiers
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CacheTier' } }
+    delete:
+      tags: [admin]
+      security: [{ admin: [] }]
+      parameters:
+        - { name: tier, in: query, schema: { enum: [all, dem-blocks, results-memory, results-table], default: all } }
+      responses:
+        '204': { description: Cleared }
+
+components:
+  securitySchemes:
+    session: { type: http, scheme: bearer }
+    admin: { type: http, scheme: bearer }
+    ownerKey: { type: apiKey, in: header, name: X-Owner-Key }
+
+  schemas:
+    ShareLink:
+      type: object
+      properties:
+        linkId: { type: string }
+        role: { enum: [edit, view] }
+        label: { type: string }
+        createdAt: { type: string, format: date-time }
+        lastOpenedAt: { type: string, format: date-time }
+        revoked: { type: boolean }
+        pausedUntil: { type: string, format: date-time, description: 'Set while paused after too many wrong PINs' }
+        openCount: { type: integer, description: 'Successful opens' }
+        expiresAt: { type: string, format: date-time, description: 'Absent = valid until revoked' }
+
+    BudgetTerm:
+      type: object
+      required: [id, label, valueDb, source]
+      properties:
+        id: { type: string }
+        label: { type: string }
+        valueDb: { type: number, description: 'Positive = loss, negative = gain' }
+        source: { type: string }
+
+    Diffraction:
+      type: object
+      properties:
+        lineOfSight: { type: boolean }
+        nu: { type: number }
+        edgeHeightM: { type: number }
+        d1M: { type: number }
+        d2M: { type: number }
+        lossDb: { type: number }
+        minFresnelClearance: { type: number, description: 'Smallest clearance / first Fresnel radius' }
+        firstFresnelRadiusM: { type: number }
+        dominant: { $ref: '#/components/schemas/ProfilePoint' }
+        minClearancePoint: { $ref: '#/components/schemas/ProfilePoint' }
+
+    LinkEnd:
+      type: object
+      properties:
+        lat: { type: number }
+        lon: { type: number }
+        aglM: { type: number, description: 'As entered' }
+        groundMslM: { type: number, description: 'From the DEM' }
+        antennaMslM: { type: number }
+
+    LibraryRef:
+      type: object
+      description: A library item version a result used.
+      properties:
+        kind: { type: string }
+        id: { type: string }
+        version: { type: integer }
+        verified: { type: boolean }
+
+    LibraryItem:
+      type: object
+      description: 'schemas/library/<kind>.schema.json plus the server fields below'
+      properties:
+        id: { type: string }
+        version: { type: integer }
+        verified: { type: boolean, description: 'Seeded items stay false until the admin verifies them' }
+
+    Note:
+      type: object
+      properties:
+        what: { type: string }
+        detail: { type: string }
+
+    ModuleFailure:
+      type: object
+      properties:
+        module: { type: string }
+        error: { type: string }
+
+    UncertaintyBand:
+      type: object
+      description: rf.uncertainty. Margin with every stated error (DEM, datasheet) at its worst and best.
+      properties:
+        nominalDb: { type: number }
+        worstDb: { type: number }
+        bestDb: { type: number }
+        verdict: { enum: [reliable, marginal, blocked-may-work, blocked] }
+        source: { type: string }
+
+    LinkResult:
+      type: object
+      properties:
+        kind: { enum: [control, video] }
+        frequencyHz: { type: number }
+        txPowerDbm: { type: number }
+        distanceM: { type: number, description: 'Geodesic ground distance' }
+        rayLengthM: { type: number }
+        terms:
+          type: array
+          description: >-
+            rf-core terms, then built-in extension terms (rf.weather/rain, rf.clutter/…), then module
+            terms. Module term ids always start with "<moduleId>/"; others are dropped.
+          items: { $ref: '#/components/schemas/BudgetTerm' }
+        receivedDbm: { type: number }
+        sensitivityDbm: { type: number }
+        requiredMarginDb: { type: number }
+        requiredDbm: { type: number, description: 'sensitivity + required margin' }
+        marginDb: { type: number, description: 'receivedDbm − requiredDbm' }
+        snrDb: { type: number, description: 'Only when the radio profile states a noise floor' }
+        reachable: { type: boolean }
+        analogGrade: { enum: [clear, noisy, lost], description: 'Analog video only' }
+        latencyMs: { type: number }
+        diffraction: { $ref: '#/components/schemas/Diffraction' }
+        band: { $ref: '#/components/schemas/UncertaintyBand' }
+        ends:
+          type: object
+          properties:
+            ground: { $ref: '#/components/schemas/LinkEnd' }
+            air: { $ref: '#/components/schemas/LinkEnd' }
+            transmitter: { enum: [ground, air] }
+        earth:
+          type: object
+          properties:
+            effectiveEarthFactor: { type: number }
+            source: { type: string }
+        weather: { $ref: '#/components/schemas/WeatherPoint' }
+        forecastTier: { enum: [hourly, long-range, none, off], description: 'none = beyond the forecast (k = 4/3); off = rf.weather not opted in by the mission or disabled' }
+        library: { type: array, items: { $ref: '#/components/schemas/LibraryRef' } }
+        sample:
+          type: object
+          description: In a leg's worst result, where along the leg it was taken
+          properties:
+            lat: { type: number }
+            lon: { type: number }
+            aglM: { type: number }
+            alongLegM: { type: number }
+        uncertainty:
+          type: array
+          description: DEM, forecast, datasheet and library notes. Always present.
+          items: { $ref: '#/components/schemas/Note' }
+        moduleFailures: { type: array, items: { $ref: '#/components/schemas/ModuleFailure' } }
+        inputHash: { type: string, description: 'Hash of every input, including library versions and forecast run' }
+        profile: { $ref: '#/components/schemas/Profile', description: 'Ordered from the transmitter' }
+        model: { type: string, description: 'Model and version, e.g. rf-core 0.1.0 / Bullington exact' }
+
+    ProfilePoint:
+      type: object
+      properties:
+        distanceM: { type: number }
+        groundMslM: { type: number }
+        obstacleM: { type: number, description: 'Clutter height on top of the ground' }
+        uncertaintyM: { type: number, description: 'Stated vertical error of the DEM' }
+        lat: { type: number }
+        lon: { type: number }
+
+    Profile:
+      type: object
+      properties:
+        source: { type: string }
+        lengthM: { type: number }
+        stepM: { type: number, description: 'DEM native step (or half the path when shorter)' }
+        points: { type: array, items: { $ref: '#/components/schemas/ProfilePoint' } }
+
+    MissingData:
+      type: object
+      description: Terrain gaps are never filled; the spans without data are listed.
+      properties:
+        status: { const: missing-data }
+        message: { type: string }
+        missingData:
+          type: object
+          properties:
+            bbox: { type: array, items: { type: number }, minItems: 4, maxItems: 4, description: '[west, south, east, north] of the DEM samples without a value' }
+            source: { type: string, description: 'DEM name' }
+        missing: { type: array, items: { type: object, properties: { fromM: { type: number }, toM: { type: number } } } }
+
+    LegResult:
+      type: object
+      properties:
+        index: { type: integer }
+        from: { type: string }
+        to: { type: string }
+        lengthM: { type: number }
+        worst:
+          type: object
+          description: The worst sample along the leg for each evaluated link
+          properties:
+            control: { $ref: '#/components/schemas/LinkResult' }
+            video: { $ref: '#/components/schemas/LinkResult' }
+        status: { enum: [ok, warn, blocked, missing-data] }
+        reasons: { type: array, items: { $ref: '#/components/schemas/Reason' } }
+        missing:
+          type: array
+          description: 'Up to 20 drone positions whose path from the pilot lacks DEM data; spans are along that path'
+          items:
+            type: object
+            properties:
+              alongLegM: { type: number }
+              lat: { type: number }
+              lon: { type: number }
+              missing: { type: array, items: { type: object, properties: { fromM: { type: number }, toM: { type: number } } } }
+        missingData:
+          type: object
+          description: 'Union over the leg'
+          properties:
+            bbox: { type: array, items: { type: number }, minItems: 4, maxItems: 4, description: '[west, south, east, north]' }
+            source: { type: string }
+        samples:
+          type: object
+          properties:
+            stepM: { type: number }
+            total: { type: integer }
+            evaluated: { type: integer }
+            missingData: { type: integer }
+            overPilot: { type: integer, description: 'Samples at the pilot position, skipped' }
+
+    Reason:
+      type: object
+      description: One line of the "why" card, contributed by the core or a module.
+      properties:
+        module: { type: string, description: 'rf-core for the core' }
+        severity: { enum: [info, warn, blocked] }
+        text: { type: string }
+        link: { enum: [control, video] }
+        leg: { type: integer, description: 'Module reasons only: the leg it was attached to. Without it, the reason is route-wide (RouteResult.reasons).' }
+        fix: { $ref: '#/components/schemas/Fix' }
+
+    Fix:
+      type: object
+      description: A suggested change. The client shows a preview (before/after) and applies only on confirmation.
+      properties:
+        id: { type: string }
+        title: { type: string }
+        patch: { type: object, description: 'JSON merge patch to the mission' }
+        preview: { type: array, items: { type: object, properties: { label: { type: string }, now: { type: string }, after: { type: string } } } }
+
+    BatteryResult:
+      type: object
+      properties:
+        energyWh: { type: number }
+        usableWh: { type: number }
+        neededWh: { type: number }
+        rangeM: { type: number }
+        neededM: { type: number }
+        shortfallM: { type: number }
+        turnBack: { type: object, properties: { distanceAlongRouteM: { type: number }, returnM: { type: number }, lat: { type: number }, lon: { type: number } } }
+
+    RouteResult:
+      type: object
+      properties:
+        missionRevision: { type: integer, description: 'Only when the body equals the stored mission' }
+        inputHash: { type: string }
+        timeUtc: { type: string, format: date-time, description: 'Time the forecast was taken for' }
+        legs: { type: array, items: { $ref: '#/components/schemas/LegResult' } }
+        reasons: { type: array, items: { $ref: '#/components/schemas/Reason' }, description: 'Route-wide reasons from modules' }
+        battery: { $ref: '#/components/schemas/BatteryResult', description: 'Passed through from the first route.analyze response with a top-level `battery` (BatteryResult) next to `data`' }
+        weather: { $ref: '#/components/schemas/WeatherPoint', description: 'At the pilot, when rf.weather is opted in' }
+        forecastTier: { enum: [hourly, long-range, none, off], description: 'none = beyond the forecast (k = 4/3); off = rf.weather not opted in by the mission or disabled' }
+        library: { type: array, items: { $ref: '#/components/schemas/LibraryRef' } }
+        modules: { type: object, description: "Per-module output keyed by module id: the module's route.analyze `data` as returned. A module's reasons go to the leg they name (Reason.leg) or, without a leg, to RouteResult.reasons, not into modules[id]." }
+        moduleFailures: { type: array, items: { $ref: '#/components/schemas/ModuleFailure' } }
+
+    Job:
+      type: object
+      properties:
+        jobId: { type: string }
+        state: { enum: [queued, running, done, failed, cancelled] }
+        createdAt: { type: string, format: date-time }
+        parts:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string, description: 'For display, e.g. "Coverage grid, control link"' }
+              link: { enum: [control, video] }
+              state: { enum: [waiting, running, done, cached, failed] }
+              progress: { type: number, minimum: 0, maximum: 1 }
+              error: { type: string }
+
+    CoverageGrid:
+      type: object
+      description: >-
+        Regular grid in latitude/longitude. Cell (row r, col c) spans
+        lat [origin.lat − (r+1)·cellLatDeg, origin.lat − r·cellLatDeg] and
+        lon [origin.lon + c·cellLonDeg, origin.lon + (c+1)·cellLonDeg]; the margin is taken at its centre.
+      properties:
+        link: { enum: [control, video] }
+        origin: { type: object, description: 'North-west corner of the grid', properties: { lat: { type: number }, lon: { type: number } } }
+        pilot: { type: object, properties: { lat: { type: number }, lon: { type: number } } }
+        cellM: { type: number, description: 'Requested cell size; the grid uses the equivalent degrees at the pilot' }
+        cellLatDeg: { type: number }
+        cellLonDeg: { type: number }
+        cols: { type: integer }
+        rows: { type: integer }
+        radiusM: { type: number }
+        droneAglM: { type: number }
+        bbox: { type: array, items: { type: number }, minItems: 4, maxItems: 4, description: '[west, south, east, north]' }
+        marginDb:
+          type: array
+          items: { type: [number, 'null'] }
+          description: 'Row-major, north to south; null = beyond the radius, at the pilot, or no DEM data'
+        marginWorstDb: { type: array, items: { type: [number, 'null'] }, description: 'Same layout; worst edge of the uncertainty band' }
+        missingDataCells: { type: integer }
+        limitPolygon: { type: object, description: 'GeoJSON MultiPolygon made of cell edges around the cells with margin ≥ 0 dB (exact, not smoothed)' }
+        library: { type: array, items: { $ref: '#/components/schemas/LibraryRef' } }
+        timeUtc: { type: string, format: date-time }
+        weather: { $ref: '#/components/schemas/WeatherPoint' }
+        forecastTier: { enum: [hourly, long-range, none, off], description: 'none = beyond the forecast (k = 4/3); off = rf.weather not opted in by the mission or disabled' }
+        inputHash: { type: string }
+        modules: { type: object, description: 'coverage.analyze output per module: {layers, data}' }
+        reasons: { type: array, items: { $ref: '#/components/schemas/Reason' } }
+        moduleFailures: { type: array, items: { $ref: '#/components/schemas/ModuleFailure' } }
+
+    WeatherPoint:
+      type: object
+      properties:
+        model: { type: string }
+        runUtc: { type: string, format: date-time }
+        validUtc: { type: string, format: date-time }
+        tier: { enum: [hourly, long-range, none] }
+        temperatureC: { type: number }
+        pressureHpa: { type: number }
+        relativeHumidity: { type: number }
+        windSpeedMps: { type: number }
+        windFromDeg: { type: number }
+        refractivityGradientPerKm: { type: number }
+        effectiveEarthFactor: { type: number }
+        airDensityKgM3: { type: number }
+        precipitationMmPerHour: { type: number }
+        surfaceElevationM: { type: number }
+        surfaceRefractivityN: { type: number }
+        requestedUtc: { type: string, format: date-time }
+        forecastUntilUtc: { type: string, format: date-time, description: 'Set when the requested time is beyond the forecast (tier none)' }
+        stale: { type: boolean }
+        notes:
+          type: array
+          description: '/weather/point only. Beyond the forecast the result says so and k = 4/3 is used.'
+          items: { $ref: '#/components/schemas/Note' }
+
+    ForecastHorizon:
+      type: object
+      properties:
+        runUtc: { type: string, format: date-time }
+        hourlyUntilUtc: { type: string, format: date-time }
+        longRangeUntilUtc: { type: string, format: date-time }
+
+    ModuleInfo:
+      type: object
+      properties:
+        id: { type: string }
+        version: { type: string }
+        title: { type: string }
+        description: { type: string }
+        builtIn: { type: boolean, description: 'Built-in RF extension; can be disabled, not removed' }
+        lifecycle: { enum: [alpha, beta, stable, deprecated] }
+        deprecation: { type: object, properties: { since: { type: string }, removedIn: { type: string }, replacement: { type: string }, message: { type: string } } }
+        requires: { type: array, items: { type: string } }
+        optional: { type: array, items: { type: string } }
+        provides: { type: array, items: { type: string } }
+        signedBy: { type: string }
+        isolated: { type: boolean }
+        ui: { type: object, properties: { bundle: { type: string }, slots: { type: array, items: { type: string } } } }
+        options: { type: object, description: 'JSON Schema of the module options' }
+        settings: { type: object, description: 'Server-wide options set by the admin' }
+        state: { enum: [active, disabled, missing-dependency, failed] }
+        stateDetail: { type: string }
+
+    TrustedKey:
+      type: object
+      properties:
+        id: { type: string }
+        label: { type: string }
+        key: { type: string }
+        builtIn: { type: boolean }
+        firstParty: { type: boolean }
+
+    CacheTier:
+      type: object
+      properties:
+        id: { enum: [dem-blocks, results-memory, results-table] }
+        label: { type: string }
+        limitBytes: { type: integer }
+        limitRows: { type: integer }
+        usedBytes: { type: integer }
+        entries: { type: integer }
+        hits: { type: integer }
+        misses: { type: integer }
+        evictions: { type: integer }
+        hitRate: { type: number }
+
+    ValidationReport:
+      type: object
+      properties:
+        ok: { type: boolean }
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              ok: { type: boolean }
+              detail: { type: string }

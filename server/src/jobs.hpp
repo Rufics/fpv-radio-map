@@ -1,0 +1,59 @@
+#pragma once
+
+#include "calculator.hpp"
+#include "thread_pool.hpp"
+
+#include <atomic>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <string>
+
+namespace rfmap {
+
+/// Coverage jobs. Each job has one part per evaluated link; a finished part's grid is
+/// available at once while the other part still runs. Jobs belong to the mission of the
+/// session that started them and are forgotten after `keepMinutes`.
+class JobManager {
+public:
+    JobManager(Calculator& calc, int jobThreads, int cellThreads, int keepMinutes, Logger& log);
+    ~JobManager();
+
+    json start(const std::string& missionId, const json& mission);
+    [[nodiscard]] json status(const std::string& missionId, const std::string& jobId);
+    void cancel(const std::string& missionId, const std::string& jobId);
+    /// The part's grid; HttpError 409 while it is still running.
+    [[nodiscard]] json grid(const std::string& missionId, const std::string& jobId, const std::string& link);
+    [[nodiscard]] std::size_t running() const;
+
+private:
+    struct Part {
+        std::string name;  ///< for display
+        std::string link;  ///< control | video
+        std::string state = "waiting";
+        double progress = 0.0;
+        std::string error;
+        json grid;
+    };
+    struct Job {
+        std::string id;
+        std::string missionId;
+        std::string state = "queued";
+        std::vector<Part> parts;
+        std::atomic<bool> cancelled{false};
+        TimePoint created;
+    };
+    std::shared_ptr<Job> find(const std::string& missionId, const std::string& jobId);
+    json toJson(const Job& j) const;
+    void sweep();
+
+    Calculator& calc_;
+    int keepMinutes_;
+    Logger& log_;
+    mutable std::mutex mutex_;
+    std::map<std::string, std::shared_ptr<Job>> jobs_;
+    ThreadPool cells_;
+    ThreadPool runners_;  ///< declared last: destroyed first, so running jobs finish before the cell pool goes
+};
+
+}  // namespace rfmap

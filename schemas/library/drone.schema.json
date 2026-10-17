@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rfmap.local/schemas/library/drone.schema.json",
+  "title": "Drone flight profile",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "version",
+    "verified",
+    "massKg",
+    "cruiseAirspeedMps",
+    "cruisePowerW",
+    "climb",
+    "source"
+  ],
+  "properties": {
+    "id": {
+      "$ref": "common.schema.json#/$defs/id"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "vendor": {
+      "type": "string"
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Bumped on every edit; results record the version they used."
+    },
+    "verified": {
+      "type": "boolean",
+      "description": "Set by an admin after checking sources. User libraries (later) are never verified."
+    },
+    "notes": {
+      "type": "string"
+    },
+    "massKg": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "cruiseAirspeedMps": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "cruisePowerW": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Measured electrical power at cruise airspeed, sea-level ISA density."
+    },
+    "powerDensityExponent": {
+      "type": "number",
+      "default": 0,
+      "description": "Measured exponent n in P = P0 (rho0/rho)^n; 0 means density is not applied. Never assumed."
+    },
+    "climb": {
+      "type": "object",
+      "required": [
+        "method"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "potential-energy",
+            "measured"
+          ]
+        },
+        "efficiency": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "potential-energy: electrical-to-lift efficiency, measured."
+        },
+        "climbPowerW": {
+          "type": "number",
+          "description": "measured: power during climb at climbRateMps."
+        },
+        "climbRateMps": {
+          "type": "number"
+        }
+      }
+    },
+    "defaultRadios": {
+      "type": "object",
+      "properties": {
+        "control": {
+          "type": "string"
+        },
+        "video": {
+          "type": "string"
+        }
+      }
+    },
+    "source": {
+      "$ref": "common.schema.json#/$defs/source"
+    }
+  },
+  "additionalProperties": false
+}

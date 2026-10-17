@@ -1,0 +1,386 @@
+import { Injectable, computed, inject, signal } from '@angular/core';
+import {
+  BatteryResult,
+  Fix,
+  LegResult,
+  LinkKind,
+  LinkResult,
+  Mission,
+  MissionPoint,
+  MissionStore,
+  Reason,
+  RfFormat,
+  RouteResult,
+  Tone,
+  distanceM,
+  linksEvaluated,
+} from '@rfmap/ui-kit';
+import { FpvDataService, estimateRangeM } from './fpv-data.service';
+
+export interface PillVm {
+  key: string;
+  tone: Tone;
+  text: string;
+  title?: string;
+}
+
+export interface LegRowVm {
+  index: number;
+  name: string;
+  from: string;
+  to: string;
+  info: string;
+  infoTitle: string;
+  mark: string;
+  markLabel: string;
+  tone: 'ok' | 'blocked' | 'warn' | 'none';
+  failing: LinkKind[];
+  isReturn: boolean;
+  lengthM: number;
+  aglM: number;
+}
+
+export interface VerdictVm {
+  legIndex: number;
+  title: string;
+  badge: string;
+  text: string;
+  fix?: Fix;
+  link: LinkKind;
+  diffractionDb?: number;
+  marginDb?: number;
+}
+
+export const LINK_LETTER: Record<LinkKind, string> = { control: 'C', video: 'V' };
+const MINUS = RfFormat.MINUS;
+
+export function pointName(m: Mission, i: number): string {
+  if (i < 0) return m.pilot.label ?? 'A';
+  const w = m.waypoints[i];
+  if (w?.label) return w.label;
+  return i === m.waypoints.length - 1 ? 'B' : `WP${i + 1}`;
+}
+
+/** A mission whose last point is a turn-back point flies back from there. */
+export function endsAtTurnBack(m: Mission): boolean {
+  return m.waypoints[m.waypoints.length - 1]?.label === 'T';
+}
+
+/** FPV view of the mission state: pills, leg rows, verdict, battery, why-drawer selection. */
+@Injectable({ providedIn: 'root' })
+export class FpvWorkspace {
+  readonly store = inject(MissionStore);
+  readonly data = inject(FpvDataService);
+
+  /** Map click mode */
+  readonly placing = signal<'pilot' | 'waypoints' | null>(null);
+  /** Skeleton used when the pilot is placed on an empty map */
+  readonly pendingMission = signal<Mission | null>(null);
+  readonly editingRoute = signal(false);
+  /** "Show why" selection */
+  readonly why = signal<{ leg: number; link: LinkKind } | null>(null);
+  readonly shareOpen = signal(false);
+  readonly layersOpen = signal(false);
+  readonly radioSetup = signal<LinkKind | null>(null);
+  /** Link shown in the coverage heatmap */
+  readonly coverageLink = signal<LinkKind>('control');
+  readonly forecastOffsetH = signal(0);
+
+  readonly mission = this.store.mission;
+  readonly shown = this.store.shownMission;
+  readonly result = computed(() => (this.store.preview() ? this.store.result() : this.store.result()));
+  readonly calculated = computed(() => !!this.store.result());
+  readonly evaluated = computed(() => linksEvaluated(this.mission()?.evaluate ?? 'both'));
+
+  /** Coverage link actually shown (only evaluated links have a grid). */
+  readonly heatLink = computed<LinkKind>(() => {
+    const ev = this.evaluated();
+    return ev.includes(this.coverageLink()) ? this.coverageLink() : ev[0];
+  });
+
+  readonly batteryFailure = computed(() => this.store.result()?.moduleFailures?.find((f) => (f.module ?? '').startsWith('fpv.battery')) ?? null);
+
+  // ---------- reasons ----------
+  /** Route-wide reasons (module reasons without a leg), each naming its module. */
+  readonly moduleReasons = computed<Reason[]>(() => this.store.result()?.reasons ?? []);
+
+  readonly batteryReason = computed(() => this.moduleReasons().find((r) => (r.module ?? '').startsWith('fpv.battery')) ?? null);
+
+  // ---------- pills ----------
+  readonly pills = computed<PillVm[]>(() => {
+    const r = this.store.result();
+    const m = this.mission();
+    if (!r || !m) return [];
+    const pills: PillVm[] = [];
+    const legs = r.legs ?? [];
+    const missing = legs.some((l) => l.status === 'missing-data');
+    for (const kind of ['control', 'video'] as LinkKind[]) {
+      const letter = LINK_LETTER[kind];
+      if (!this.evaluated().includes(kind)) continue;
+      const margins = legs.map((l) => l.worst?.[kind]?.marginDb).filter((x): x is number => x !== undefined);
+      if (margins.length === 0) {
+        pills.push({ key: kind, tone: 'warn', text: `${letter} ? not calculated` });
+        continue;
+      }
+      const worst = Math.min(...margins);
+      const ok = worst >= 0;
+      pills.push({
+        key: kind,
+        tone: ok ? (missing ? 'warn' : 'ok') : 'blocked',
+        text: `${letter} ${ok ? (missing ? '?' : '✓') : '✕'} ${RfFormat.format(worst, 'db+')}${missing && ok ? ' · part missing' : ''}`,
+        title: `Worst ${kind} margin along the route: ${RfFormat.full(worst, 'db+')}`,
+      });
+    }
+    const b = r.battery;
+    if (this.batteryFailure()) pills.push({ key: 'battery', tone: 'warn', text: 'Battery ? not checked', title: 'The battery module failed; the verdict is missing, not assumed fine.' });
+    else if (b) {
+      if ((b.shortfallM ?? 0) > 0) pills.push({ key: 'battery', tone: 'warn', text: `Battery ! ${RfFormat.format(b.shortfallM, 'km1')} short`, title: RfFormat.full(b.shortfallM, 'km3') + ' short' });
+      else if (endsAtTurnBack(m)) pills.push({ key: 'battery', tone: 'ok', text: 'Battery ✓ turn back at T' });
+      else pills.push({ key: 'battery', tone: 'ok', text: `Battery ✓ ${RfFormat.format(b.rangeM, 'km1')} range` });
+    }
+    return pills;
+  });
+
+  // ---------- legs ----------
+  /** Leg by its 1-based number in the UI. Legs come in route order; LegResult.index is 0-based. */
+  legResult(r: RouteResult | null, n: number): LegResult | undefined {
+    return r?.legs?.[n - 1];
+  }
+
+  /** Legs of the shown mission (preview mission while previewing). */
+  readonly legRows = computed<LegRowVm[]>(() => {
+    const m = this.shown();
+    if (!m) return [];
+    const previewing = !!this.store.preview();
+    const r = previewing || this.store.resultStale() ? null : this.store.result();
+    const pts: MissionPoint[] = [m.pilot, ...m.waypoints];
+    const rows: LegRowVm[] = m.waypoints.map((w, i) => {
+      const index = i + 1;
+      const leg = this.legResult(r, index);
+      const len = leg?.lengthM ?? distanceM(pts[i], pts[i + 1]);
+      const { mark, markLabel, tone, failing } = this.legMark(leg);
+      const from = pointName(m, i - 1);
+      const to = pointName(m, i);
+      return {
+        index,
+        name: `${index} · ${from} → ${to}`,
+        from,
+        to,
+        info: `${RfFormat.format(len, 'km1')} · ${RfFormat.format(w.aglM, 'm')}`,
+        infoTitle: `${RfFormat.full(len, 'km3')}, ${RfFormat.full(w.aglM, 'm')} above ground`,
+        mark,
+        markLabel,
+        tone,
+        failing,
+        isReturn: false,
+        lengthM: len,
+        aglM: w.aglM,
+      };
+    });
+    if (m.returnToPilot !== false && m.waypoints.length > 0) {
+      // The server adds the leg last → pilot when returnToPilot; it is evaluated like any other leg.
+      const index = rows.length + 1;
+      const last = m.waypoints[m.waypoints.length - 1];
+      const leg = this.legResult(r, index);
+      const back = leg?.lengthM ?? distanceM(last, m.pilot);
+      const from = pointName(m, m.waypoints.length - 1);
+      const to = pointName(m, -1);
+      const v = this.legMark(leg);
+      rows.push({
+        index,
+        name: `${index} · ${from} → ${to}, return`,
+        from,
+        to,
+        info: `${RfFormat.format(back, 'km1')} · ${RfFormat.format(last.aglM, 'm')} → ${RfFormat.format(m.pilot.aglM, 'm')}`,
+        infoTitle: `${RfFormat.full(back, 'km3')} back to the pilot`,
+        ...v,
+        isReturn: true,
+        lengthM: back,
+        aglM: last.aglM,
+      });
+    }
+    return rows;
+  });
+
+  private legMark(leg: LegResult | undefined): Pick<LegRowVm, 'mark' | 'markLabel' | 'tone' | 'failing'> {
+    const failing = (['control', 'video'] as LinkKind[]).filter((k) => leg?.worst?.[k] && leg.worst[k]!.reachable === false);
+    if (!leg) return { mark: '', markLabel: '', tone: 'none', failing };
+    if (leg.status === 'missing-data') return { mark: '? no data', markLabel: 'No elevation data, not calculated', tone: 'warn', failing };
+    if (failing.length) return { mark: `${failing.map((k) => LINK_LETTER[k]).join(' ')} ✕`, markLabel: `${failing.join(' and ')} link blocked`, tone: 'blocked', failing };
+    if (leg.status === 'warn') return { mark: '!', markLabel: 'Warning', tone: 'warn', failing };
+    return { mark: '✓', markLabel: 'Reachable', tone: 'ok', failing };
+  }
+
+  readonly routeLengthText = computed(() => {
+    const m = this.shown();
+    const rows = this.legRows();
+    if (!m) return '';
+    const out = rows.filter((r) => !r.isReturn).reduce((s, r) => s + r.lengthM, 0);
+    const ret = rows.find((r) => r.isReturn);
+    if (ret) return `${RfFormat.format(out, 'km1')} + ${RfFormat.format(ret.lengthM, 'km1')} back`;
+    return RfFormat.format(out, 'km1');
+  });
+
+  // ---------- verdict ----------
+  readonly verdict = computed<VerdictVm | null>(() => {
+    const r = this.store.result();
+    const m = this.mission();
+    if (!r || !m) return null;
+    const legs = r.legs ?? [];
+    for (let i = 0; i < legs.length; i++) {
+      const leg = legs[i];
+      const failing = (['video', 'control'] as LinkKind[]).filter((k) => leg.worst?.[k]?.reachable === false);
+      if (leg.status !== 'blocked' && failing.length === 0) continue;
+      const link = failing[0] ?? 'video';
+      const reasons = leg.reasons ?? [];
+      // a reason with a fix first, then the blocked reason for this link, then any blocked reason
+      const reason =
+        reasons.find((x) => x.fix && (!x.link || x.link === link)) ??
+        reasons.find((x) => x.severity === 'blocked' && x.link === link) ??
+        reasons.find((x) => x.severity === 'blocked') ??
+        reasons[0];
+      const lr = leg.worst?.[link];
+      const idx = i + 1;
+      const back = i >= m.waypoints.length;
+      return {
+        legIndex: idx,
+        title: `Leg ${idx} · ${back ? pointName(m, m.waypoints.length - 1) : pointName(m, i - 1)} → ${back ? pointName(m, -1) : pointName(m, i)}`,
+        badge: `${failing.map((k) => LINK_LETTER[k]).join(' ')} ✕`,
+        text: reason?.text ?? `The ${link} link is ${RfFormat.format(-(lr?.marginDb ?? 0), 'db')} short of the required level.`,
+        fix: reason?.fix,
+        link,
+        diffractionDb: lr?.diffraction?.lossDb,
+        marginDb: lr?.marginDb,
+      };
+    }
+    return null;
+  });
+
+  readonly missingLeg = computed(() => {
+    const legs = this.store.result()?.legs ?? [];
+    const i = legs.findIndex((l) => l.status === 'missing-data');
+    return i < 0 ? null : { leg: legs[i], number: i + 1 };
+  });
+
+  /** Missing-data areas and drone positions of every leg, for the map outline. */
+  readonly missingAreas = computed(() =>
+    (this.store.result()?.legs ?? []).filter((l) => l.missingData || l.missing?.length).map((l) => ({ area: l.missingData ?? null, positions: l.missing ?? [] })),
+  );
+
+  readonly allClearText = computed(() => {
+    const r = this.store.result();
+    const m = this.mission();
+    if (!r || !m || this.verdict() || this.missingLeg()) return null;
+    // a module's info line says more than the core's per-link margin lines
+    const info = [...(r.legs ?? []).flatMap((l) => l.reasons ?? []), ...(r.reasons ?? [])].find((x) => x.severity === 'info' && x.text && x.module !== 'rf-core');
+    if (info?.text) return info.text;
+    const ev = this.evaluated();
+    if (ev.length === 1) {
+      const other = ev[0] === 'control' ? 'Video' : 'Control';
+      return `${other} is not checked in this mode; the ${ev[0]} link reaches every leg.`;
+    }
+    return 'Control and video reach every leg of the route.';
+  });
+
+  // ---------- battery ----------
+  readonly batteryPlanText = computed(() => {
+    const m = this.mission();
+    if (!m) return '';
+    const b = this.data.battery(m.battery);
+    const d = this.data.drone(m.drone);
+    const calc = this.store.result()?.battery?.rangeM;
+    const range = calc ?? estimateRangeM(b, d);
+    const label = b ? `${b.cellsSeries}S ${Math.round(b.capacityAh * 1000)} mAh` : (m.battery ?? 'no battery');
+    return `${label} · ${range !== null && range !== undefined ? (calc ? '' : '≈ ') + RfFormat.format(range, 'km1') : '—'}`;
+  });
+
+  readonly batteryCard = computed(() => {
+    const r = this.store.result();
+    const m = this.mission();
+    const b: BatteryResult | undefined = r?.battery;
+    if (!r || !m || !b || (b.shortfallM ?? 0) <= 0) return null;
+    const reason = this.batteryReason();
+    const tb = b.turnBack;
+    const legs = (r.legs ?? []).map((l) => l.lengthM ?? 0);
+    let where = '';
+    if (tb?.distanceAlongRouteM !== undefined) {
+      let acc = 0;
+      for (let i = 0; i < legs.length; i++) {
+        if (tb.distanceAlongRouteM <= acc + legs[i]) {
+          where = ` (${RfFormat.format(tb.distanceAlongRouteM - acc, 'km1')} into leg ${i + 1})`;
+          break;
+        }
+        acc += legs[i];
+      }
+    }
+    return {
+      text: reason?.text ?? `The route with the return needs ${RfFormat.format(b.neededM, 'km1')}; the pack gives ${RfFormat.format(b.rangeM, 'km1')}.`,
+      suggestion: tb?.distanceAlongRouteM !== undefined ? `turn back at T, ${RfFormat.format(tb.distanceAlongRouteM, 'km1')} along the route${where}, or pick a larger pack in the library.` : 'pick a larger pack in the library.',
+      fix: reason?.fix,
+    };
+  });
+
+  // ---------- header ----------
+  readonly timeText = computed(() => {
+    const m = this.mission();
+    if (!m) return '';
+    const planned = m.time.mode === 'planned' && m.time.utc;
+    const t = planned ? new Date(m.time.utc!) : new Date();
+    const hm = t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    // the result says which tier it used; before a calculation, the horizon tells what to expect
+    const r = this.store.result();
+    const tier = r?.forecastTier ?? this.data.tierFor(planned ? m.time.utc! : null);
+    const tierText =
+      tier === 'hourly' ? 'forecast hourly' : tier === 'long-range' ? 'long-range forecast' : tier === 'off' ? 'weather off · standard atmosphere' : 'beyond the forecast · standard atmosphere';
+    const day = planned ? t.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' : 'Now · ';
+    return `${day}${hm} local · ${tierText}`;
+  });
+
+  // ---------- why drawer ----------
+  readonly whyLeg = computed(() => {
+    const w = this.why();
+    const r = this.store.result();
+    if (!w || !r) return null;
+    return this.legResult(r, w.leg) ?? null;
+  });
+
+  readonly whyLink = computed<LinkResult | null>(() => {
+    const w = this.why();
+    return (w && this.whyLeg()?.worst?.[w.link]) || null;
+  });
+
+  openWhy(leg: number, link?: LinkKind): void {
+    const lr = this.legResult(this.store.result(), leg);
+    const failing = (['video', 'control'] as LinkKind[]).find((k) => lr?.worst?.[k]?.reachable === false);
+    const any = (['video', 'control'] as LinkKind[]).find((k) => lr?.worst?.[k]);
+    const chosen = link ?? failing ?? any;
+    if (!chosen) return;
+    this.why.set({ leg, link: chosen });
+  }
+
+  /** Ground heights of the reference profile, for marker captions ("Pilot · 544 + 2 m"). */
+  readonly groundAt = computed(() => {
+    const r = this.store.result();
+    const legs = r?.legs ?? [];
+    const out: { pilot?: number; target?: number } = {};
+    const m = this.mission();
+    const targetLeg = m ? legs[m.waypoints.length - 1] : undefined;
+    for (const leg of legs) {
+      const lr = leg.worst?.video ?? leg.worst?.control;
+      out.pilot ??= lr?.ends?.ground?.groundMslM;
+    }
+    // the target's ground from the leg that ends there, when its worst sample is at the end
+    const tl = targetLeg?.worst?.video ?? targetLeg?.worst?.control;
+    if (tl?.sample?.alongLegM !== undefined && targetLeg?.lengthM !== undefined && Math.abs(tl.sample.alongLegM - targetLeg.lengthM) < 1) out.target = tl.ends?.air?.groundMslM;
+    return out;
+  });
+
+  resetToEmpty(): void {
+    this.why.set(null);
+    this.placing.set(null);
+    this.editingRoute.set(false);
+    this.store.clear();
+  }
+}
+
+export { MINUS };

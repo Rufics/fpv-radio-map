@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Minimum altitude options (per mission)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "clearanceFraction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.6, "description": "Share of the first Fresnel zone radius that must be clear" },
+    "stepM": { "type": "number", "minimum": 10, "maximum": 2000, "default": 100, "description": "Spacing of the checked points along the route" },
+    "maxAglM": { "type": "number", "minimum": 10, "maximum": 5000, "default": 500, "description": "Highest height searched" }
+  }
+}

@@ -1,0 +1,123 @@
+# Tests every pull request and posts the results to it. main.yml (every push to main) and
+# release.yml (the release button) call this same workflow, so they run exactly these checks.
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  cpp:
+    name: C++ build and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build pkg-config \
+            libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
+            libpqxx-dev libgdal-dev gdal-bin libcpp-httplib-dev libgtest-dev \
+            postgresql-16 postgresql-16-postgis-3
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON
+      - name: Build
+        run: cmake --build build
+      # Includes the server integration test against a throw-away PostgreSQL 16 + PostGIS
+      # cluster (server/tests/pg_fixture.sh) and the signed-package upload checks.
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --output-junit "$GITHUB_WORKSPACE/test-results/cpp.xml"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-results-cpp
+          path: test-results/
+          if-no-files-found: ignore
+
+  web:
+    name: Web build and tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Build (mock backend)
+        run: npm run build:mock
+      - name: Test ui-kit
+        run: npx ng test ui-kit --watch=false --reporters=default --reporters=junit --output-file="$GITHUB_WORKSPACE/test-results/web-ui-kit.xml"
+      - name: Test fpv-app
+        if: success() || failure()
+        run: npx ng test fpv-app --watch=false --reporters=default --reporters=junit --output-file="$GITHUB_WORKSPACE/test-results/web-fpv-app.xml"
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-results-web
+          path: test-results/
+          if-no-files-found: ignore
+
+  report:
+    name: Test report
+    if: always()
+    needs: [cpp, web]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: tools/ci
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: test-results-*
+          path: test-results
+          merge-multiple: true
+      - name: Write the report
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          REPORT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REPORT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node tools/ci/report.mjs test-results "$NEEDS" > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+      # One comment per pull request, updated on every run. Pull requests from forks get a
+      # read-only token, so for them the report stays in the run summary and the checks.
+      - name: Post the report to the pull request
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('report.md', 'utf8');
+            const marker = '<!-- rfmap-ci-report -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+            const mine = comments.find((c) => c.user?.type === 'Bot' && c.body?.startsWith(marker));
+            if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+      - name: Fail when a job failed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

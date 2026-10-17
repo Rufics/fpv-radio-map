@@ -1,0 +1,132 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rfmap.local/schemas/library/common.schema.json",
+  "title": "Common definitions for reference-library entries",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"
+    },
+    "source": {
+      "description": "Where a number comes from. Every measured or datasheet value carries one.",
+      "type": "object",
+      "required": [
+        "kind",
+        "reference"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "datasheet",
+            "measurement",
+            "standard",
+            "derived"
+          ]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 3
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "retrieved": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sensitivity": {
+      "description": "Receiver threshold. 'computed' uses S = 10log10(kT0B)+30+NF+SNR; 'datasheet' uses the vendor's figure as stated.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "bandwidthHz",
+            "noiseFigureDb",
+            "requiredSnrDb",
+            "source"
+          ],
+          "properties": {
+            "method": {
+              "const": "computed"
+            },
+            "bandwidthHz": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "noiseFigureDb": {
+              "type": "number",
+              "minimum": 0
+            },
+            "requiredSnrDb": {
+              "type": "number"
+            },
+            "source": {
+              "$ref": "#/$defs/source"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "method",
+            "dBm",
+            "source"
+          ],
+          "properties": {
+            "method": {
+              "const": "datasheet"
+            },
+            "dBm": {
+              "type": "number",
+              "maximum": 0
+            },
+            "source": {
+              "$ref": "#/$defs/source"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "entryMeta": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version",
+        "verified"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "vendor": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Bumped on every edit; results record the version they used."
+        },
+        "verified": {
+          "type": "boolean",
+          "description": "Set by an admin after checking sources. User libraries (later) are never verified."
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

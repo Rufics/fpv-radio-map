@@ -1,0 +1,52 @@
+{
+  "name": "web",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "sync-schemas": "node scripts/sync-schemas.mjs",
+    "prestart": "npm run sync-schemas",
+    "start": "ng serve fpv-app",
+    "start:mock-prod": "ng serve fpv-app --configuration mock",
+    "prebuild": "npm run sync-schemas",
+    "build": "ng build ui-kit && ng build fpv-app",
+    "build:mock": "ng build fpv-app --configuration mock --output-path dist/fpv-app-mock --delete-output-path",
+    "pretest": "npm run sync-schemas",
+    "test": "ng test ui-kit --watch=false && ng test fpv-app --watch=false",
+    "screenshots": "node scripts/screenshots.mjs"
+  },
+  "private": true,
+  "packageManager": "npm@11.19.1",
+  "dependencies": {
+    "@angular/common": "^22.2.0",
+    "@angular/compiler": "^22.2.0",
+    "@angular/core": "^22.2.0",
+    "@angular/forms": "^22.2.0",
+    "@angular/platform-browser": "^22.2.0",
+    "@angular/router": "^22.2.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "d3-contour": "^4.0.2",
+    "maplibre-gl": "^5.24.0",
+    "pmtiles": "^4.5.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^22.2.3",
+    "@angular/cli": "^22.2.3",
+    "@angular/compiler-cli": "^22.2.0",
+    "@types/d3-contour": "^3.0.6",
+    "@types/geojson": "^7946.0.16",
+    "jsdom": "^30.0.0",
+    "ng-packagr": "^22.2.0",
+    "playwright-core": "^1.64.1",
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=22.22.3 <23 || >=24.15.0"
+  }
+}

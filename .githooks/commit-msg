@@ -1,0 +1,9 @@
+#!/bin/sh
+# Checks the commit message against Conventional Commits (see CONTRIBUTING.md).
+# Enable with: git config core.hooksPath .githooks   (after: cd tools/ci && npm ci)
+root=$(git rev-parse --show-toplevel)
+if [ ! -x "$root/tools/ci/node_modules/.bin/commitlint" ]; then
+  echo "commit-msg: run 'cd tools/ci && npm ci' to enable the commit message check" >&2
+  exit 0
+fi
+exec "$root/tools/ci/node_modules/.bin/commitlint" --config "$root/tools/ci/commitlint.config.mjs" --edit "$1"

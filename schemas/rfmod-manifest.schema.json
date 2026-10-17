@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rfmap.local/schemas/rfmod-manifest.schema.json",
+  "title": "rfmod module manifest (rfmod/v1)",
+  "type": "object",
+  "required": ["schema", "id", "version", "title", "lifecycle", "abi", "requires", "provides", "entry"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "rfmod/v1" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+$", "description": "Namespaced id, for example fpv.battery or acme.rain" },
+    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$" },
+    "title": { "type": "string", "minLength": 3, "maxLength": 60 },
+    "description": { "type": "string", "maxLength": 600 },
+    "author": { "type": "string" },
+    "license": { "type": "string" },
+    "lifecycle": { "enum": ["alpha", "beta", "stable", "deprecated"] },
+    "deprecation": {
+      "type": "object",
+      "required": ["since", "removedIn", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "since": { "type": "string" },
+        "removedIn": { "type": "string", "description": "Host or module version that removes it; at least 3 minor releases after 'since'." },
+        "replacement": { "type": "string" },
+        "message": { "type": "string", "minLength": 10 }
+      }
+    },
+    "abi": { "type": "integer", "const": 1 },
+    "host": { "type": "string", "description": "Host version range, for example \">=0.1.0 <1.0.0\"" },
+    "requires": { "type": "array", "items": { "$ref": "#/definitions/dependency" } },
+    "optional": { "type": "array", "items": { "$ref": "#/definitions/dependency" } },
+    "provides": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "enum": ["loss.contributor", "route.analysis", "coverage.analysis", "library.kind", "ui.panel"] }
+    },
+    "methods": { "type": "array", "items": { "type": "string" } },
+    "entry": {
+      "type": "object",
+      "description": "Shared library per platform, path inside the package.",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "pattern": "^lib/[A-Za-z0-9_./-]+$" }
+    },
+    "ui": {
+      "type": "object",
+      "required": ["bundle", "slots"],
+      "additionalProperties": false,
+      "properties": {
+        "bundle": { "type": "string", "pattern": "^ui/[A-Za-z0-9_./-]+\\.js$" },
+        "slots": { "type": "array", "items": { "enum": ["header.actions", "side.panels", "map.layers", "map.overlays", "bottom.drawer", "verdict.reasons"] } }
+      }
+    },
+    "optionsSchema": { "type": "string", "pattern": "^schema/[A-Za-z0-9_./-]+\\.json$" },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "memoryMb": { "type": "integer", "minimum": 16, "maximum": 8192 },
+        "timeoutMs": { "type": "integer", "minimum": 10, "maximum": 600000 }
+      }
+    }
+  },
+  "definitions": {
+    "dependency": {
+      "type": "object",
+      "required": ["id", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "version": { "type": "string", "description": "Range such as \">=1.2.0 <2.0.0\"" }
+      }
+    }
+  },
+  "if": { "properties": { "lifecycle": { "const": "deprecated" } } },
+  "then": { "required": ["deprecation"], "properties": { "deprecation": { "type": "object" } } }
+}

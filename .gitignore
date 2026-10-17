@@ -1,0 +1,12 @@
+build/
+build-*/
+node_modules/
+dist/
+.angular/
+*.rfmod
+*.pmtiles
+*.tif
+*.secret
+!platform/rfmod/keys/dev-*.secret
+.env
+test-results/

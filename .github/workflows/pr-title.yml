@@ -1,0 +1,34 @@
+# Pull requests are squash-merged, so the title becomes the commit on main that semantic-release
+# reads. Checked again whenever the title is edited.
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    name: Conventional Commits title
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tools/ci/package-lock.json
+      - run: npm ci --no-audit --no-fund
+        working-directory: tools/ci
+      # Pull requests are squash-merged, so the title becomes the commit on main that
+      # semantic-release reads. That is the message that must follow Conventional Commits.
+      - name: Check the pull request title
+        working-directory: tools/ci
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$TITLE" | npx commitlint --config commitlint.config.mjs --verbose
+
