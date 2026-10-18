@@ -11,6 +11,7 @@
 #include <ranges>
 #include <set>
 #include <sstream>
+#include <string_view>
 
 namespace rfmod {
 namespace fs = std::filesystem;
@@ -28,7 +29,7 @@ std::string readFile(const fs::path& p) {
 }
 
 /// Writes `p` (which must lie inside `root`) through a temporary file renamed into place.
-void writeFileAtomic(const ConfinedRoot& root, const fs::path& p, const std::string& content) {
+void writeFileAtomic(const ConfinedRoot& root, const fs::path& p, std::string_view content) {
     const fs::path target = root.confine(p);
     const fs::path tmp = root.confine(target.string() + ".tmp");
     fs::create_directories(target.parent_path());
