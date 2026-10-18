@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <shared_mutex>
@@ -352,13 +353,88 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     }
     for (const auto& f : failures) {
         const bool seen = std::any_of(result["moduleFailures"].begin(), result["moduleFailures"].end(),
-                                      [&](const json& j) { return j.value("module", "") == f.moduleId; });
+                                      [&f](const json& j) { return j.value("module", "") == f.moduleId; });
         if (!seen) result["moduleFailures"].push_back(f.toJson());
     }
     runRouteModules(mission, result, ctx);
     // Only a complete, failure-free result is worth keeping: a module that failed might work next time.
     if (result["moduleFailures"].empty()) cache_.put(hash, "route", result);
     return result;
+}
+
+namespace {
+
+/// The lat/lon-regular coverage grid: its size, north-west corner, cell pitch in degrees,
+/// and the radius and drone height every cell is evaluated with.
+struct CoverageGrid {
+    std::size_t rows;
+    std::size_t cols;
+    double north;
+    double west;
+    double dLat;
+    double dLon;
+    double radius;
+    double agl;
+};
+
+}  // namespace
+
+/// What every pool thread of one coverage calculation shares. Rows are handed out one at a
+/// time, and each cell's margin lands in its own slot.
+struct Calculator::CoverageRun {
+    const ResolvedLink& link;
+    const CalcContext& ctx;
+    const Terminal& pilot;
+    const std::function<void(double)>& progress;
+    const std::function<bool()>& cancelled;
+    CoverageGrid grid;
+    std::vector<std::optional<double>> margins{};
+    std::vector<std::optional<double>> worstBand{};
+    std::atomic<std::size_t> nextRow{0};
+    std::atomic<std::size_t> doneRows{0};
+    std::atomic<std::size_t> missingCells{0};
+    std::mutex failMutex{};
+    std::vector<ModuleFailure> failures{};
+    std::exception_ptr error{};
+    [[no_unique_address]] const rfcore::Geodesy geo{};
+};
+
+void Calculator::coverageWorker(CoverageRun& run) {
+    try {
+        for (std::size_t r = run.nextRow++; r < run.grid.rows; r = run.nextRow++) {
+            if (run.cancelled()) return;
+            std::shared_lock gate(modules_.gate());
+            const CalcContextScope scope(run.ctx);
+            coverageRow(run, r);
+            run.progress(static_cast<double>(++run.doneRows) / static_cast<double>(run.grid.rows));
+        }
+    } catch (...) {
+        std::lock_guard lock(run.failMutex);
+        if (!run.error) run.error = std::current_exception();
+        run.nextRow = run.grid.rows;
+    }
+}
+
+void Calculator::coverageRow(CoverageRun& run, std::size_t r) const {
+    for (std::size_t c = 0; c < run.grid.cols; ++c) {
+        const rfcore::GeoPoint centre{run.grid.north - (static_cast<double>(r) + 0.5) * run.grid.dLat,
+                                      run.grid.west + (static_cast<double>(c) + 0.5) * run.grid.dLon};
+        if (const double d = run.geo.inverse(run.pilot.position, centre).distance.value(); !(d > 0.0) || d > run.grid.radius) {
+            continue;
+        }
+        const PreparedPath p = links_.prepare(run.pilot, Terminal{centre, run.grid.agl}, run.ctx);
+        if (!p.complete()) {
+            ++run.missingCells;
+            continue;
+        }
+        LinkEvaluation e = links_.evaluate(p, run.link, run.ctx, builtins_.enabled(BuiltinModules::kUncertainty), false);
+        run.margins[r * run.grid.cols + c] = e.marginDb;
+        if (e.result.contains("band")) run.worstBand[r * run.grid.cols + c] = e.result["band"]["worstDb"].get<double>();
+        if (!e.failures.empty()) {
+            std::lock_guard lock(run.failMutex);
+            run.failures.insert(run.failures.end(), e.failures.begin(), e.failures.end());
+        }
+    }
 }
 
 json Calculator::coverage(const json& mission, LinkKind kind, const std::function<void(double)>& progress,
@@ -397,50 +473,17 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     const double north = lat0 + (static_cast<double>(half) + 0.5) * dLat;
     const double west = pilot.position.longitudeDeg - (static_cast<double>(half) + 0.5) * dLon;
 
-    std::vector<std::optional<double>> margins(cols * rows), worstBand(cols * rows);
-    std::atomic<std::size_t> nextRow{0}, doneRows{0}, missingCells{0};
-    std::mutex failMutex;
-    std::vector<ModuleFailure> failures;
-    std::exception_ptr error;
-    const rfcore::Geodesy geo;
-    auto worker = [&] {
-        try {
-            for (std::size_t r = 0; (r = nextRow++) < rows;) {
-                if (cancelled()) return;
-                std::shared_lock gate(modules_.gate());
-                const CalcContextScope scope(ctx);
-                for (std::size_t c = 0; c < cols; ++c) {
-                    const rfcore::GeoPoint centre{north - (static_cast<double>(r) + 0.5) * dLat,
-                                                  west + (static_cast<double>(c) + 0.5) * dLon};
-                    const double d = geo.inverse(pilot.position, centre).distance.value();
-                    if (!(d > 0.0) || d > radius) continue;
-                    const PreparedPath p = links_.prepare(pilot, Terminal{centre, agl}, ctx);
-                    if (!p.complete()) {
-                        ++missingCells;
-                        continue;
-                    }
-                    LinkEvaluation e = links_.evaluate(p, link, ctx, builtins_.enabled(BuiltinModules::kUncertainty), false);
-                    margins[r * cols + c] = e.marginDb;
-                    if (e.result.contains("band")) worstBand[r * cols + c] = e.result["band"]["worstDb"].get<double>();
-                    if (!e.failures.empty()) {
-                        std::lock_guard lock(failMutex);
-                        failures.insert(failures.end(), e.failures.begin(), e.failures.end());
-                    }
-                }
-                progress(static_cast<double>(++doneRows) / static_cast<double>(rows));
-            }
-        } catch (...) {
-            std::lock_guard lock(failMutex);
-            if (!error) error = std::current_exception();
-            nextRow = rows;
-        }
-    };
+    CoverageRun run{link, ctx, pilot, progress, cancelled, {rows, cols, north, west, dLat, dLon, radius, agl}};
+    run.margins.resize(cols * rows);
+    run.worstBand.resize(cols * rows);
     std::vector<std::future<void>> parts;
-    parts.reserve(static_cast<std::size_t>(pool.size()));
-    for (int t = 0; t < pool.size(); ++t) parts.push_back(pool.submit(worker));
+    std::generate_n(std::back_inserter(parts), pool.size(),
+                    [this, &pool, &run] { return pool.submit([this, &run] { coverageWorker(run); }); });
     for (auto& f : parts) f.get();
-    if (error) std::rethrow_exception(error);
-    if (cancelled()) throw std::runtime_error("cancelled");
+    if (run.error) std::rethrow_exception(run.error);
+    if (cancelled()) throw CalculationCancelled();
+    const std::vector<std::optional<double>>& margins = run.margins;
+    const std::vector<std::optional<double>>& worstBand = run.worstBand;
 
     json marginJson = json::array(), worstJson = json::array();
     std::vector<bool> reachable(cols * rows, false);
@@ -464,7 +507,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
                  {"bbox", {west, south, east, north}},
                  {"marginDb", marginJson},
                  {"limitPolygon", cellsToMultiPolygon(reachable, cols, rows, west, north, dLon, dLat)},
-                 {"missingDataCells", missingCells.load()},
+                 {"missingDataCells", run.missingCells.load()},
                  {"library", refs},
                  {"timeUtc", isoUtc(ctx.time)},
                  {"inputHash", hash},
@@ -474,9 +517,9 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     if (builtins_.enabled(BuiltinModules::kUncertainty)) grid["marginWorstDb"] = worstJson;
     if (ctx.forecast) grid["weather"] = ctx.forecast->point;
     grid["forecastTier"] = forecastTier(ctx);
-    for (const auto& f : failures) {
+    for (const auto& f : run.failures) {
         const bool seen = std::any_of(grid["moduleFailures"].begin(), grid["moduleFailures"].end(),
-                                      [&](const json& j) { return j.value("module", "") == f.moduleId; });
+                                      [&f](const json& j) { return j.value("module", "") == f.moduleId; });
         if (!seen) grid["moduleFailures"].push_back(f.toJson());
     }
 
@@ -526,7 +569,7 @@ json cellsToMultiPolygon(const std::vector<bool>& inside, std::size_t cols, std:
         long x0, y0, x1, y1;
         bool used = false;
     };
-    auto in = [&](long r, long c) {
+    auto in = [&inside, rows, cols](long r, long c) {
         return r >= 0 && c >= 0 && r < static_cast<long>(rows) && c < static_cast<long>(cols) &&
                inside[static_cast<std::size_t>(r) * cols + static_cast<std::size_t>(c)];
     };
@@ -636,7 +679,7 @@ json cellsToMultiPolygon(const std::vector<bool>& inside, std::size_t cols, std:
         }
         if (best < outers.size()) holesOf[outers[best]].push_back(i);
     }
-    auto coords = [&](const Ring& r) {
+    auto coords = [west, north, dLon, dLat](const Ring& r) {
         json ring = json::array();
         for (const auto& [x, y] : r) {
             ring.push_back({west + static_cast<double>(x) * dLon, north - static_cast<double>(y) * dLat});

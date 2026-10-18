@@ -452,7 +452,7 @@ export class MockBackend {
       { name: 'Size', ok: size <= 50 * 1024 * 1024, detail: `${(size / 1024 / 1024).toFixed(2)} MB of max 50 MB` },
       { name: 'Signature', ok: isZip, detail: isZip ? 'Signature valid, publisher key trusted' : 'No signature found' },
       { name: 'Manifest', ok: isZip, detail: isZip ? 'manifest.json matches schema rfmod/v1' : 'manifest.json missing' },
-      { name: 'ABI', ok: isZip, detail: 'Needs rf-core ≥1.2 <2, installed 1.3.0; ABI 1' },
+      { name: 'ABI', ok: isZip, detail: 'Needs rf-core ≥1.2 <2, installed 1.3.0; ABI 2' },
       { name: 'Dependencies', ok: isZip, detail: 'Dependencies resolved: rf.weather 1.1.0' },
       { name: 'Deprecated API', ok: true, detail: 'warning: calls link::budget_v1, deprecated in 1.3, removed in 1.6. Use link::budget.' },
       { name: 'Self-test', ok: isZip, detail: isZip ? 'Conformance tests 48 / 48 on reference cases' : 'not run' },

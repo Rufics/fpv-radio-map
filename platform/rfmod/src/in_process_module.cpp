@@ -3,17 +3,24 @@
 
 #include <dlfcn.h>
 
+#include <bit>
+
+/// What rfmod_host::context points to for an in-process module: which module is calling and
+/// where its calls go. Opaque to the module.
+struct rfmod_host_context {
+    std::string moduleId;
+    rfmod::IHostServices* services = nullptr;
+};
+
 namespace rfmod {
 
 struct InProcessModule::Bridge {
-    std::string moduleId;
-    IHostServices* services{};
-    rfmod_host host{};
+    rfmod_host_context context;
+    rfmod_host host;
 
-    static int call(void* ctx, const char* method, const char* request, const char** response) {
+    static int call(rfmod_host_context* self, const char* method, const char* request, const char** response) {
         // Valid until the next call on this thread, as abi.h promises.
         thread_local std::string last;
-        auto* self = static_cast<Bridge*>(ctx);
         try {
             const json req = request && *request ? json::parse(request) : json::object();
             last = self->services->call(self->moduleId, method ? method : "", req).dump();
@@ -26,8 +33,7 @@ struct InProcessModule::Bridge {
         }
     }
 
-    static void log(void* ctx, int level, const char* message) {
-        auto* self = static_cast<Bridge*>(ctx);
+    static void log(rfmod_host_context* self, int level, const char* message) {
         try {
             self->services->log(self->moduleId, level, message ? message : "");
         } catch (...) {
@@ -36,11 +42,31 @@ struct InProcessModule::Bridge {
     }
 };
 
+/// The module's shared library, open for as long as this object lives.
+struct InProcessModule::Library {
+    struct Close {
+        template <typename Handle>
+        void operator()(Handle* handle) const {
+            dlclose(handle);
+        }
+    };
+    std::unique_ptr<void, Close> handle;
+
+    explicit Library(const std::filesystem::path& path) : handle(dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL)) {
+        if (!handle) throw ModuleError("load_failed", std::string("dlopen: ") + dlerror());
+    }
+
+    [[nodiscard]] rfmod_get_module_fn entry() const {
+        // POSIX guarantees a function symbol's address round-trips through dlsym's void*.
+        return std::bit_cast<rfmod_get_module_fn>(dlsym(handle.get(), RFMOD_ENTRY_SYMBOL));
+    }
+};
+
 namespace {
 
-json takeResponse(const rfmod_module* api, char* response) {
+json takeResponse(const rfmod_module* api, const char* response) {
     if (!response) return json();
-    std::string text(response);
+    const std::string text(response);
     api->free_string(response);
     return json::parse(text);
 }
@@ -49,37 +75,30 @@ json takeResponse(const rfmod_module* api, char* response) {
 
 InProcessModule::InProcessModule(Manifest manifest, const std::filesystem::path& library, IHostServices& services,
                                  const json& options)
-    : manifest_(std::move(manifest)), bridge_(std::make_unique<Bridge>()) {
-    handle_ = dlopen(library.c_str(), RTLD_NOW | RTLD_LOCAL);
-    if (!handle_) throw ModuleError("load_failed", std::string("dlopen: ") + dlerror());
-    auto entry = reinterpret_cast<rfmod_get_module_fn>(dlsym(handle_, RFMOD_ENTRY_SYMBOL));
-    if (!entry) {
-        dlclose(handle_);
-        throw ModuleError("load_failed", "library does not export " RFMOD_ENTRY_SYMBOL);
-    }
+    : manifest_(std::move(manifest)), library_(std::make_unique<Library>(library)), bridge_(std::make_unique<Bridge>()) {
+    // library_ is a constructed member by now, so every throw below closes the library again.
+    const rfmod_get_module_fn entry = library_->entry();
+    if (!entry) throw ModuleError("load_failed", std::string("library does not export ") + RFMOD_ENTRY_SYMBOL);
     api_ = entry();
     if (!api_ || api_->abi_version != RFMOD_ABI_VERSION) {
-        dlclose(handle_);
         throw ModuleError("load_failed", "library speaks a different rfmod ABI");
     }
     const json embedded = json::parse(api_->manifest_json());
     if (embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
-        dlclose(handle_);
         throw ModuleError("load_failed", "library manifest does not match manifest.json");
     }
-    bridge_->moduleId = manifest_.id;
-    bridge_->services = &services;
-    bridge_->host = rfmod_host{RFMOD_ABI_VERSION, bridge_.get(), &Bridge::call, &Bridge::log};
+    bridge_->context.moduleId = manifest_.id;
+    bridge_->context.services = &services;
+    bridge_->host = rfmod_host{RFMOD_ABI_VERSION, &bridge_->context, &Bridge::call, &Bridge::log};
     const std::string opts = options.dump();
     if (api_->init(&bridge_->host, opts.c_str()) != RFMOD_OK) {
-        dlclose(handle_);
         throw ModuleError("init_failed", "module init returned an error");
     }
 }
 
 InProcessModule::~InProcessModule() {
     shutdown();
-    if (handle_) dlclose(handle_);
+    library_.reset();
 }
 
 json InProcessModule::invoke(const std::string& method, const json& request) {

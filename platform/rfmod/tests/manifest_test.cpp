@@ -34,7 +34,7 @@ TEST(Manifest, SchemaErrors) {
     m["unknown"] = 1;
     EXPECT_FALSE(parses(m, &failed));
     m = baseManifest("fpv.battery", "1.0.0");
-    m["abi"] = 2;
+    m["abi"] = RFMOD_ABI_VERSION + 1;
     EXPECT_FALSE(parses(m, &failed));
     m = baseManifest("fpv.battery", "1.0.0");
     m["lifecycle"] = "deprecated";  // deprecated needs a deprecation block

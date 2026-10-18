@@ -137,7 +137,7 @@ std::vector<RoutePoint> exportVertices(const Route& route, double stepM) {
 
 std::string toKml(const Mission& mission, const Route& route, const IWorld& world, const ExportSettings& s) {
     const std::string mode = s.altitude == AltitudeMode::Absolute ? "absolute" : "relativeToGround";
-    auto placemark = [&](const Waypoint& w) {
+    auto placemark = [&mode, &world, &s](const Waypoint& w) {
         return "<Placemark><name>" + xmlEscape(w.label) + "</name><Point><altitudeMode>" + mode +
                "</altitudeMode><coordinates>" + kmlCoord(w.position, altitudeOf(w, world, s.altitude)) +
                "</coordinates></Point></Placemark>\n";
@@ -159,7 +159,7 @@ std::string toKml(const Mission& mission, const Route& route, const IWorld& worl
 
 std::string toGpx(const Mission& mission, const Route& route, const IWorld& world, const ExportSettings& s) {
     // GPX has no height above ground: <ele> is always our DEM ground plus AGL.
-    auto point = [&](const char* tag, const Waypoint& w) {
+    auto point = [&world](const char* tag, const Waypoint& w) {
         return std::string("<") + tag + " " + latLonAttrs(w.position) + "><ele>" +
                num(altitudeOf(w, world, AltitudeMode::Absolute), 3) + "</ele><name>" + xmlEscape(w.label) +
                "</name><desc>" + num(w.aglM, 3) + " m above ground</desc></" + tag + ">\n";

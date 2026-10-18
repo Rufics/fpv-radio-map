@@ -34,7 +34,7 @@ UncertaintyAnalyzer::Extremes UncertaintyAnalyzer::knifeEdgeExtremes(double lo, 
     Extremes e{std::min(j(lo), j(hi)), std::max(j(lo), j(hi))};
     // Turning points of J lie about 1/|ν| apart for ν < 0 (the Fresnel phase is πν²/2); step at a
     // tenth of that so none is skipped, then refine each bracketed one.
-    auto refine = [&](double a, double b, bool findMax) {
+    auto refine = [&j](double a, double b, bool findMax) {
         const double g = (std::sqrt(5.0) - 1.0) / 2.0;
         double c = b - g * (b - a), d = a + g * (b - a);
         double fc = j(c), fd = j(d);

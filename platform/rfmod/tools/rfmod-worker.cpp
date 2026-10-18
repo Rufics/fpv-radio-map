@@ -53,7 +53,7 @@ json readLine() {
 
 long long nextCallback = 1;
 
-int hostCall(void*, const char* method, const char* request, const char** response) {
+int hostCall(rfmod_host_context*, const char* method, const char* request, const char** response) {
     thread_local std::string last;
     const long long id = nextCallback++;
     json req;
@@ -82,7 +82,7 @@ int hostCall(void*, const char* method, const char* request, const char** respon
     }
 }
 
-void hostLog(void*, int level, const char* message) {
+void hostLog(rfmod_host_context*, int level, const char* message) {
     sendLine({{"t", "log"}, {"level", level}, {"message", message ? message : ""}});
 }
 
@@ -96,7 +96,7 @@ int run(const char* library) {
     const bool netIsolated = unshare(CLONE_NEWUSER | CLONE_NEWNET) == 0;
 
     const json init = readLine();
-    auto fail = [&](const std::string& message) {
+    auto fail = [](const std::string& message) {
         sendLine({{"t", "ready"}, {"status", 1}, {"message", message}});
         return 1;
     };
@@ -105,7 +105,7 @@ int run(const char* library) {
     void* handle = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (!handle) return fail(std::string("dlopen: ") + dlerror());
     auto entry = reinterpret_cast<rfmod_get_module_fn>(dlsym(handle, RFMOD_ENTRY_SYMBOL));
-    if (!entry) return fail("library does not export " RFMOD_ENTRY_SYMBOL);
+    if (!entry) return fail(std::string("library does not export ") + RFMOD_ENTRY_SYMBOL);
     const rfmod_module* api = entry();
     if (!api || api->abi_version != RFMOD_ABI_VERSION) return fail("library speaks a different rfmod ABI");
 

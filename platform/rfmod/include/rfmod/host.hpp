@@ -59,8 +59,9 @@ public:
 
 private:
     struct Bridge;
+    struct Library;
     Manifest manifest_;
-    void* handle_ = nullptr;
+    std::unique_ptr<Library> library_;
     const struct rfmod_module* api_ = nullptr;
     std::unique_ptr<Bridge> bridge_;
     std::mutex mutex_;

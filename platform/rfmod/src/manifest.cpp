@@ -5,6 +5,7 @@
 #include <nlohmann/json-schema.hpp>
 
 #include <algorithm>
+#include <format>
 #include <set>
 #include <sstream>
 
@@ -105,7 +106,7 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
     m.entry = document.at("entry").get<std::map<std::string, std::string>>();
 
     bool ok = true;
-    auto check = [&](const std::string& name, bool passed, const std::string& detail) {
+    auto check = [&report, &ok](const std::string& name, bool passed, const std::string& detail) {
         report.add(name, passed, detail);
         ok = ok && passed;
     };
@@ -129,7 +130,8 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
         return std::nullopt;
     }
 
-    check("abi", m.abi == 1, "module ABI " + std::to_string(m.abi) + ", host supports 1");
+    check("abi", m.abi == RFMOD_ABI_VERSION,
+          std::format("module ABI {}, host supports {}", m.abi, RFMOD_ABI_VERSION));
 
     if (m.hostRange) {
         check("host.version", m.hostRange->contains(hostVersion),

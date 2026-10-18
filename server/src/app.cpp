@@ -745,7 +745,7 @@ void Application::routes() {
         results_->setLimits(l);
         const json stored = {{"demBlocksBytes", demLimit}, {"resultMemoryBytes", l.memoryBytes},
                              {"resultTableRows", l.tableRows}, {"resultTableBytes", l.tableBytes}};
-        db_->tx([&](pqxx::work& w) {
+        db_->tx([&stored](pqxx::work& w) {
             w.exec_params("insert into settings(key, value) values ('cache.limits', $1::jsonb) "
                           "on conflict (key) do update set value = excluded.value", stored.dump());
         });

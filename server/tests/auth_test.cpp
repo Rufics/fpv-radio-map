@@ -51,16 +51,16 @@ TEST_F(AuthTest, OwnerKeyIsRandomAndOnlyItsHashIsKept) {
 }
 
 TEST_F(AuthTest, OwnerKeyGuardsLinkManagement) {
-    expectStatus(401, [&] { (void)auth.listLinks("m1", ""); });
-    expectStatus(403, [&] { (void)auth.listLinks("m1", "rfo_wrong"); });
+    expectStatus(401, [this] { (void)auth.listLinks("m1", ""); });
+    expectStatus(403, [this] { (void)auth.listLinks("m1", "rfo_wrong"); });
     // The right key for another mission does not open this one.
-    expectStatus(403, [&] { (void)auth.listLinks("m2", owner.plain); });
-    expectStatus(403, [&] { (void)auth.listLinks("nope", owner.plain); });
+    expectStatus(403, [this] { (void)auth.listLinks("m2", owner.plain); });
+    expectStatus(403, [this] { (void)auth.listLinks("nope", owner.plain); });
     EXPECT_TRUE(auth.listLinks("m1", owner.plain).empty());
 
     const auto link = auth.createLink("m1", owner.plain, Role::View, "123456", "spotter");
-    expectStatus(403, [&] { auth.revokeLink("m1", "rfo_wrong", link.record.linkId); });
-    expectStatus(404, [&] { auth.revokeLink("m1", owner.plain, "unknown"); });
+    expectStatus(403, [this, &link] { auth.revokeLink("m1", "rfo_wrong", link.record.linkId); });
+    expectStatus(404, [this] { auth.revokeLink("m1", owner.plain, "unknown"); });
     const auto links = auth.listLinks("m1", owner.plain);
     ASSERT_EQ(links.size(), 1u);
     EXPECT_EQ(links[0].label, "spotter");
@@ -71,7 +71,7 @@ TEST_F(AuthTest, OwnerKeyGuardsLinkManagement) {
 
 TEST_F(AuthTest, PinMustBeSixDigits) {
     for (const char* bad : {"12345", "1234567", "abcdef", "12 456", ""}) {
-        expectStatus(422, [&] { (void)auth.createLink("m1", owner.plain, Role::Edit, bad, ""); });
+        expectStatus(422, [this, &bad] { (void)auth.createLink("m1", owner.plain, Role::Edit, bad, ""); });
     }
 }
 
@@ -84,33 +84,33 @@ TEST_F(AuthTest, OpenWithPinGivesASessionWithTheLinksRole) {
     EXPECT_EQ(p.missionId, "m1");
     EXPECT_EQ(p.role, Role::View);
     EXPECT_EQ(p.linkId, link.record.linkId);
-    expectStatus(404, [&] { (void)auth.openLink("rfl_unknown", "246810"); });
+    expectStatus(404, [this] { (void)auth.openLink("rfl_unknown", "246810"); });
 }
 
 TEST_F(AuthTest, FiveWrongPinsPauseTheLinkWithRetryAfter) {
     const auto link = auth.createLink("m1", owner.plain, Role::Edit, "135790", "");
     for (int i = 0; i < 4; ++i) {
-        const json b = expectStatus(401, [&] { (void)auth.openLink(link.token, "000000"); });
+        const json b = expectStatus(401, [this, &link] { (void)auth.openLink(link.token, "000000"); });
         EXPECT_EQ(b.at("triesLeft").get<int>(), 4 - i);
     }
-    const json fifth = expectStatus(429, [&] { (void)auth.openLink(link.token, "000000"); });
+    const json fifth = expectStatus(429, [this, &link] { (void)auth.openLink(link.token, "000000"); });
     EXPECT_EQ(fifth.at("retryAfterS").get<long long>(), 15 * 60);
     // Paused: even the right PIN is refused, and the check happens before the PIN is hashed.
-    const json paused = expectStatus(429, [&] { (void)auth.openLink(link.token, "135790"); });
+    const json paused = expectStatus(429, [this, &link] { (void)auth.openLink(link.token, "135790"); });
     EXPECT_EQ(paused.at("retryAfterS").get<long long>(), 15 * 60);
     clock.advance(std::chrono::minutes(10));
-    expectStatus(429, [&] { (void)auth.openLink(link.token, "135790"); });
+    expectStatus(429, [this, &link] { (void)auth.openLink(link.token, "135790"); });
     clock.advance(std::chrono::minutes(5));
     EXPECT_NO_THROW((void)auth.openLink(link.token, "135790"));
 }
 
 TEST_F(AuthTest, RepeatedLockoutsDoubleThePause) {
     const auto link = auth.createLink("m1", owner.plain, Role::Edit, "135790", "");
-    for (int i = 0; i < 4; ++i) expectStatus(401, [&] { (void)auth.openLink(link.token, "111111"); });
-    expectStatus(429, [&] { (void)auth.openLink(link.token, "111111"); });
+    for (int i = 0; i < 4; ++i) expectStatus(401, [this, &link] { (void)auth.openLink(link.token, "111111"); });
+    expectStatus(429, [this, &link] { (void)auth.openLink(link.token, "111111"); });
     clock.advance(std::chrono::minutes(15));
-    for (int i = 0; i < 4; ++i) expectStatus(401, [&] { (void)auth.openLink(link.token, "111111"); });
-    const json second = expectStatus(429, [&] { (void)auth.openLink(link.token, "111111"); });
+    for (int i = 0; i < 4; ++i) expectStatus(401, [this, &link] { (void)auth.openLink(link.token, "111111"); });
+    const json second = expectStatus(429, [this, &link] { (void)auth.openLink(link.token, "111111"); });
     EXPECT_EQ(second.at("retryAfterS").get<long long>(), 30 * 60);
 }
 
@@ -119,8 +119,8 @@ TEST_F(AuthTest, RevokingALinkEndsItsSessionsAtOnce) {
     const auto opened = auth.openLink(link.token, "112233");
     const std::string creator = auth.createSession("m1", Role::Edit, std::nullopt);
     auth.revokeLink("m1", owner.plain, link.record.linkId);
-    expectStatus(401, [&] { (void)auth.authenticate(opened.session); });
-    expectStatus(410, [&] { (void)auth.openLink(link.token, "112233"); });
+    expectStatus(401, [this, &opened] { (void)auth.authenticate(opened.session); });
+    expectStatus(410, [this, &link] { (void)auth.openLink(link.token, "112233"); });
     // Other sessions of the mission are untouched.
     EXPECT_EQ(auth.authenticate(creator).missionId, "m1");
 }
@@ -130,29 +130,29 @@ TEST_F(AuthTest, SessionsExpireAndUnknownOnesAreRefused) {
     EXPECT_EQ(s.rfind("rfs_", 0), 0u);
     EXPECT_NE(s, auth.createSession("m1", Role::Edit, std::nullopt));
     EXPECT_EQ(auth.authenticate(s).role, Role::Edit);
-    expectStatus(401, [&] { (void)auth.authenticate(""); });
-    expectStatus(401, [&] { (void)auth.authenticate("rfs_forged"); });
+    expectStatus(401, [this] { (void)auth.authenticate(""); });
+    expectStatus(401, [this] { (void)auth.authenticate("rfs_forged"); });
     clock.advance(std::chrono::hours(24));
-    expectStatus(401, [&] { (void)auth.authenticate(s); });
+    expectStatus(401, [this, &s] { (void)auth.authenticate(s); });
 }
 
 TEST_F(AuthTest, PeekShowsTheLinkBeforeThePinAndChangesNothing) {
     const auto link = auth.createLink("m1", owner.plain, Role::View, "121212", "");
     EXPECT_EQ(auth.peekLink(link.token).role, Role::View);
-    expectStatus(401, [&] { (void)auth.openLink(link.token, "000000"); });
+    expectStatus(401, [this, &link] { (void)auth.openLink(link.token, "000000"); });
     // Peeking neither counts as a try nor resets the count.
     for (int i = 0; i < 3; ++i) (void)auth.peekLink(link.token);
-    const json b = expectStatus(401, [&] { (void)auth.openLink(link.token, "000000"); });
+    const json b = expectStatus(401, [this, &link] { (void)auth.openLink(link.token, "000000"); });
     EXPECT_EQ(b.at("triesLeft").get<int>(), 3);
-    expectStatus(404, [&] { (void)auth.peekLink("rfl_unknown"); });
+    expectStatus(404, [this] { (void)auth.peekLink("rfl_unknown"); });
     auth.revokeLink("m1", owner.plain, link.record.linkId);
-    expectStatus(410, [&] { (void)auth.peekLink(link.token); });
+    expectStatus(410, [this, &link] { (void)auth.peekLink(link.token); });
 }
 
 TEST_F(AuthTest, OpenCountAndExpiry) {
     const TimePoint until = clock.now() + std::chrono::hours(2);
     const auto link = auth.createLink("m1", owner.plain, Role::Edit, "454545", "", until);
-    expectStatus(422, [&] { (void)auth.createLink("m1", owner.plain, Role::Edit, "454545", "", clock.now()); });
+    expectStatus(422, [this] { (void)auth.createLink("m1", owner.plain, Role::Edit, "454545", "", clock.now()); });
     const auto first = auth.openLink(link.token, "454545");
     (void)auth.openLink(link.token, "454545");
     const json listed = AuthService::linkJson(auth.listLinks("m1", owner.plain).front());
@@ -160,9 +160,9 @@ TEST_F(AuthTest, OpenCountAndExpiry) {
     EXPECT_EQ(listed.at("expiresAt").get<std::string>(), isoUtc(until));
     // The session never outlives the link, although the session TTL is 24 h.
     clock.advance(std::chrono::hours(2));
-    expectStatus(401, [&] { (void)auth.authenticate(first.session); });
-    expectStatus(410, [&] { (void)auth.openLink(link.token, "454545"); });
-    expectStatus(410, [&] { (void)auth.peekLink(link.token); });
+    expectStatus(401, [this, &first] { (void)auth.authenticate(first.session); });
+    expectStatus(410, [this, &link] { (void)auth.openLink(link.token, "454545"); });
+    expectStatus(410, [this, &link] { (void)auth.peekLink(link.token); });
 }
 
 TEST(SecretsTest, ConstantTimeEqualComparesContent) {
