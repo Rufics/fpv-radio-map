@@ -390,10 +390,11 @@ void ModuleRegistry::reloadLocked() {
 }
 
 bool ModuleRegistry::visit(const std::string& id, VisitMarks& mark, std::unique_lock<std::mutex>& lock) {
+    using enum ModuleState;
     Entry& e = entries_.at(id);
-    if (mark[id] == 2) return e.state == ModuleState::Active;
+    if (mark[id] == 2) return e.state == Active;
     if (mark[id] == 1) {
-        e.state = ModuleState::Failed;
+        e.state = Failed;
         e.stateDetail = "dependency cycle through " + id;
         return false;
     }
@@ -401,7 +402,7 @@ bool ModuleRegistry::visit(const std::string& id, VisitMarks& mark, std::unique_
     bool ok = mayLoad(e) && requiredDependenciesActive(e, mark, lock);
     if (ok) {
         for (const Dependency& d : e.manifest.optionalDependencies) {
-            if (entries_.count(d.id) && d.range.contains(entries_.at(d.id).manifest.version)) (void)visit(d.id, mark, lock);
+            if (entries_.contains(d.id) && d.range.contains(entries_.at(d.id).manifest.version)) (void)visit(d.id, mark, lock);
         }
         ok = start(id, e, lock);
     }
@@ -410,13 +411,14 @@ bool ModuleRegistry::visit(const std::string& id, VisitMarks& mark, std::unique_
 }
 
 bool ModuleRegistry::mayLoad(Entry& e) const {
+    using enum ModuleState;
     if (!e.enabled) {
-        e.state = ModuleState::Disabled;
+        e.state = Disabled;
         e.stateDetail = "disabled by the admin";
         return false;
     }
     if (e.manifest.deprecation && config_.hostVersion >= e.manifest.deprecation->removedIn) {
-        e.state = ModuleState::Failed;
+        e.state = Failed;
         e.stateDetail = "removed in host " + e.manifest.deprecation->removedIn.str();
         return false;
     }
@@ -438,6 +440,7 @@ bool ModuleRegistry::requiredDependenciesActive(Entry& e, VisitMarks& mark, std:
 }
 
 bool ModuleRegistry::start(const std::string& id, Entry& e, std::unique_lock<std::mutex>& lock) {
+    using enum ModuleState;
     std::unique_ptr<IModuleInstance> instance;
     std::string error;
     lock.unlock();
@@ -448,12 +451,12 @@ bool ModuleRegistry::start(const std::string& id, Entry& e, std::unique_lock<std
     }
     lock.lock();
     if (!instance) {
-        e.state = ModuleState::Failed;
+        e.state = Failed;
         e.stateDetail = error;
         return false;
     }
     e.instance = std::move(instance);
-    e.state = ModuleState::Active;
+    e.state = Active;
     e.stateDetail.clear();
     order_.push_back(id);
     return true;
@@ -462,18 +465,19 @@ bool ModuleRegistry::start(const std::string& id, Entry& e, std::unique_lock<std
 void ModuleRegistry::resolve() {
     // Depth-first over required and optional dependencies; required failures propagate.
     // mutex_ is released only while a module loads: its init is module code and may read the registry.
+    using enum ModuleState;
     std::unique_lock lock(mutex_);
     VisitMarks mark;
-    for (auto& [id, e] : entries_) (void)visit(id, mark, lock);
+    for (const auto& entry : entries_) (void)visit(entry.first, mark, lock);
 
     for (const auto& [id, e] : entries_) {
-        if (e.state == ModuleState::Active && e.manifest.deprecation) {
+        if (e.state == Active && e.manifest.deprecation) {
             const auto& d = *e.manifest.deprecation;
             notices_.push_back(id + " is deprecated since " + d.since.str() + " and will be removed in " +
                                d.removedIn.str() + ". " + d.message +
                                (d.replacement.empty() ? "" : " Use " + d.replacement + " instead."));
         }
-        if (e.state == ModuleState::Active) {
+        if (e.state == Active) {
             for (const Dependency& dep : e.manifest.dependencies) {
                 const Entry& target = entries_.at(dep.id);
                 if (target.manifest.deprecation) {
@@ -482,7 +486,7 @@ void ModuleRegistry::resolve() {
                 }
             }
         }
-        if (e.state == ModuleState::MissingDependency || e.state == ModuleState::Failed) {
+        if (e.state == MissingDependency || e.state == Failed) {
             notices_.push_back(id + " is " + toString(e.state) + ": " + e.stateDetail);
         }
     }

@@ -10,6 +10,7 @@
 #include "weather.hpp"
 
 #include <atomic>
+#include <stdexcept>
 
 namespace rfmap {
 
@@ -21,6 +22,12 @@ public:
     virtual void report(double fraction) = 0;
     /// Polled between rows; true stops the calculation.
     [[nodiscard]] virtual bool cancelled() const = 0;
+};
+
+/// Thrown when a coverage calculation stops because its CoverageProgress asked it to.
+class CalculationCancelled : public std::runtime_error {
+public:
+    CalculationCancelled() : std::runtime_error("cancelled") {}
 };
 
 /// The three calculations of the API: one path, a whole route, a coverage grid. Every result
@@ -60,7 +67,7 @@ private:
     struct CoverageRun;
     /// One pool thread of a coverage calculation: takes rows until none are left.
     void coverageWorker(CoverageRun& run);
-    void coverageRow(CoverageRun& run, std::size_t row);
+    void coverageRow(CoverageRun& run, std::size_t row) const;
     void runCoverageModules(const json& mission, LinkKind kind, const CalcContext& ctx, std::size_t cells, json& grid);
 
     LinkService& links_;

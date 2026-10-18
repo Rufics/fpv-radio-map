@@ -44,9 +44,11 @@ struct Scenario {
 
 /// Both scenarios on one link. Points and the better/worse counts are filled only when aligned.
 struct LinkComparison {
-    WorstMargin a, b;
+    WorstMargin a;
+    WorstMargin b;
     json points = json::array();
-    std::size_t better = 0, worse = 0;
+    std::size_t better = 0;
+    std::size_t worse = 0;
 };
 
 LinkComparison compareLink(const std::string& link, const Scenario& sa, const Scenario& sb, bool aligned) {

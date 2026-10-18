@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <shared_mutex>
@@ -49,8 +50,7 @@ std::string label(const json& p, const std::string& fallback) {
 /// Adds each failing module to `list` once, keeping the entries already there.
 void appendModuleFailures(json& list, const std::vector<ModuleFailure>& failures) {
     for (const auto& f : failures) {
-        const bool seen = std::any_of(list.begin(), list.end(),
-                                      [&f](const json& j) { return j.value("module", "") == f.moduleId; });
+        const bool seen = std::ranges::any_of(list, [&f](const json& j) { return j.value("module", "") == f.moduleId; });
         if (!seen) list.push_back(f.toJson());
     }
 }
@@ -441,7 +441,7 @@ struct Calculator::CoverageRun {
     std::mutex failMutex;
     std::vector<ModuleFailure> failures;
     std::exception_ptr error;
-    const rfcore::Geodesy geo{};
+    [[no_unique_address]] const rfcore::Geodesy geo{};
 };
 
 void Calculator::coverageWorker(CoverageRun& run) {
@@ -460,12 +460,13 @@ void Calculator::coverageWorker(CoverageRun& run) {
     }
 }
 
-void Calculator::coverageRow(CoverageRun& run, std::size_t r) {
+void Calculator::coverageRow(CoverageRun& run, std::size_t r) const {
     const CoverageGrid& g = run.grid;
     for (std::size_t c = 0; c < g.cols; ++c) {
         const rfcore::GeoPoint centre = g.centre(r, c);
-        const double d = run.geo.inverse(run.pilot.position, centre).distance.value();
-        if (!(d > 0.0) || d > g.radius) continue;
+        if (const double d = run.geo.inverse(run.pilot.position, centre).distance.value(); !(d > 0.0) || d > g.radius) {
+            continue;
+        }
         const PreparedPath p = links_.prepare(run.pilot, Terminal{centre, g.agl}, run.ctx);
         if (!p.complete()) {
             ++run.missingCells;
@@ -521,10 +522,11 @@ json Calculator::coverage(const json& mission, LinkKind kind, CoverageProgress& 
     const CoverageGrid g = coverageGrid(pilot.position, radius, cell, agl);
     CoverageRun run(link, ctx, pilot, g, progress);
     std::vector<std::future<void>> parts;
-    for (int t = 0; t < pool.size(); ++t) parts.push_back(pool.submit([this, &run] { coverageWorker(run); }));
+    std::generate_n(std::back_inserter(parts), pool.size(),
+                    [this, &pool, &run] { return pool.submit([this, &run] { coverageWorker(run); }); });
     for (auto& f : parts) f.get();
     if (run.error) std::rethrow_exception(run.error);
-    if (progress.cancelled()) throw std::runtime_error("cancelled");
+    if (progress.cancelled()) throw CalculationCancelled();
 
     json marginJson = json::array(), worstJson = json::array();
     std::vector<bool> reachable(g.cols * g.rows, false);
