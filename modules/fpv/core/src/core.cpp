@@ -243,7 +243,7 @@ json analyze(const json& request, const IWorld& world,
             data["export"] = files;
         }
     } catch (const MissingTerrain& e) {
-        reasons.push_back(reason(kId, "warning", std::string("No terrain data: ") + e.what()));
+        reasons.push_back(reason(kId, "warn", std::string("No terrain data: ") + e.what()));
     }
     return {{"data", data}, {"reasons", reasons}};
 }

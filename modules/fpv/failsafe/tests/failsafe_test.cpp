@@ -76,3 +76,87 @@ TEST(Failsafe, EnergyIncludesOutboundClimbAndReturn) {
     EXPECT_GT(rth.at("energyWh").get<double>(), rth.at("usableWh").get<double>());
     EXPECT_EQ(r.at("reasons").back().at("severity"), "blocked");
 }
+
+namespace {
+
+json lossRequest(const IWorld& w, const json& options, const std::string& evaluate = "control") {
+    json m = mission(w, 3.0, 100.0);
+    m["evaluate"] = evaluate;
+    return {{"mission", m}, {"options", options}};
+}
+
+const json kDrone = {{"id", "d"}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
+                     {"climb", {{"method", "potential-energy"}, {"efficiency", 0.5}}}};
+const json kBattery = {{"id", "b"}, {"cellsSeries", 6}, {"capacityAh", 2.0}, {"nominalCellVoltage", 3.7}, {"usableFraction", 0.8},
+                       {"temperatureDerating", {{{"celsius", 0}, {"factor", 0.5}}, {{"celsius", 25}, {"factor", 1.0}}}}};
+
+}  // namespace
+
+TEST(Failsafe, NeedsTheControlLink) {
+    const auto w = hillWorld();
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    const json r = analyze(lossRequest(w, json::object(), "video"), w, probe, std::nullopt, std::nullopt);
+    EXPECT_EQ(r.at("reasons").at(0).at("severity"), "info");
+    EXPECT_FALSE(r.at("data").contains("controlLost"));
+}
+
+TEST(Failsafe, LandAndHoverStopAtTheLossPoint) {
+    const auto w = hillWorld();
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    for (const char* action : {"land", "hover"}) {
+        const json r = analyze(lossRequest(w, {{"action", action}}), w, probe, std::nullopt, std::nullopt);
+        EXPECT_TRUE(r.at("data").at("controlLost").get<bool>());
+        EXPECT_FALSE(r.at("data").contains("rth")) << action;
+        ASSERT_EQ(r.at("reasons").size(), 1u);
+        EXPECT_EQ(r.at("reasons").at(0).at("severity"), "blocked");
+        EXPECT_NE(r.at("reasons").at(0).at("text").get<std::string>().find(action == std::string("land") ? "lands" : "hovers"),
+                  std::string::npos);
+    }
+}
+
+TEST(Failsafe, MaxModeFliesTheHigherOfCurrentAndFixed) {
+    const auto w = hillWorld();
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    const json low = analyze(lossRequest(w, {{"rthAltitudeAboveHomeM", 20.0}}), w, probe, std::nullopt, std::nullopt);
+    const json high = analyze(lossRequest(w, {{"rthAltitudeAboveHomeM", 200.0}}), w, probe, std::nullopt, std::nullopt);
+    const double lossAgl = low.at("data").at("loss").at("aglM").get<double>();
+    EXPECT_NEAR(low.at("data").at("rth").at("altitudeAboveHomeM").get<double>(), lossAgl, 1e-6);
+    EXPECT_NEAR(high.at("data").at("rth").at("altitudeAboveHomeM").get<double>(), 200.0, 1e-6);
+}
+
+TEST(Failsafe, UsableEnergyFollowsTemperatureAndTheBatteryModule) {
+    const auto w = hillWorld();
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    json req = lossRequest(w, {{"temperatureC", 0.0}});
+    const json cold = analyze(req, w, probe, kDrone, kBattery);
+    EXPECT_NEAR(cold.at("data").at("rth").at("usableWh").get<double>(), 6 * 3.7 * 2.0 * 0.5 * 0.8, 1e-9);
+
+    req["options"] = json::object();
+    req["weather"] = {{"temperatureC", 25.0}, {"airDensityKgM3", 1.2}, {"windSpeedMps", 0.0}, {"windFromDeg", 0.0}};
+    const json warm = analyze(req, w, probe, kDrone, kBattery);
+    EXPECT_NEAR(warm.at("data").at("rth").at("usableWh").get<double>(), 6 * 3.7 * 2.0 * 0.8, 1e-9);
+
+    req["modules"] = {{"fpv.battery", {{"usableWh", 3.0}}}};
+    const json quoted = analyze(req, w, probe, kDrone, kBattery);
+    EXPECT_DOUBLE_EQ(quoted.at("data").at("rth").at("usableWh").get<double>(), 3.0);
+    EXPECT_EQ(quoted.at("reasons").back().at("severity"), "blocked");
+}
+
+TEST(Failsafe, HeadwindHomeIsUnflyable) {
+    const auto w = hillWorld();
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    // 12 m/s from the west against a 10 m/s airspeed: the drone cannot fly home westwards.
+    json req = lossRequest(w, json::object());
+    req["weather"] = {{"windSpeedMps", 12.0}, {"windFromDeg", 270.0}};
+    const json r = analyze(req, w, probe, kDrone, kBattery);
+    EXPECT_EQ(r.at("reasons").back().at("severity"), "blocked");
+    EXPECT_NE(r.at("reasons").back().at("text").get<std::string>().find("not flyable"), std::string::npos);
+}
+
+TEST(Failsafe, TemperatureOutsideTheMeasuredRangeSkipsTheEnergyCheck) {
+    const auto w = hillWorld();
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    const json r = analyze(lossRequest(w, {{"temperatureC", 40.0}}), w, probe, kDrone, kBattery);
+    EXPECT_EQ(r.at("reasons").back().at("severity"), "warn");
+    EXPECT_NE(r.at("reasons").back().at("text").get<std::string>().find("energy not checked"), std::string::npos);
+}

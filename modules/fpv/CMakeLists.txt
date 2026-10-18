@@ -52,8 +52,10 @@ function(fpv_module dir lib)
     add_test(NAME ${lib}_upload_checks COMMAND $<TARGET_FILE:rfmod> test ${pkg} --trust ${FPV_KEYS}/dev-owner.pub ${with})
     set_tests_properties(${lib}_upload_checks PROPERTIES DEPENDS "${deps}" PASS_REGULAR_EXPRESSION "All checks passed")
     if(M_TESTS)
-      add_executable(${lib}_tests ${M_TESTS} $<TARGET_OBJECTS:${core}> ${extra})
-      target_include_directories(${lib}_tests PRIVATE ${incs})
+      # The module's entry file is compiled in too, so the tests drive it through the C ABI with
+      # the fake host in common/tests.
+      add_executable(${lib}_tests ${M_TESTS} ${dir}/src/module.cpp $<TARGET_OBJECTS:${core}> ${extra})
+      target_include_directories(${lib}_tests PRIVATE ${incs} ${CMAKE_CURRENT_SOURCE_DIR}/common/tests)
       target_link_libraries(${lib}_tests PRIVATE fpv_common GTest::gtest_main)
       include(GoogleTest)
       gtest_discover_tests(${lib}_tests)
@@ -63,26 +65,26 @@ endfunction()
 
 fpv_module(battery fpv_battery
   SOURCES battery/src/energy_model.cpp battery/src/analysis.cpp
-  TESTS battery/tests/energy_model_test.cpp)
+  TESTS battery/tests/energy_model_test.cpp battery/tests/module_test.cpp)
 
 fpv_module(min-altitude fpv_min_altitude
   SOURCES min-altitude/src/clearance.cpp min-altitude/src/analysis.cpp
-  TESTS min-altitude/tests/clearance_test.cpp)
+  TESTS min-altitude/tests/clearance_test.cpp min-altitude/tests/module_test.cpp)
 
 fpv_module(failsafe fpv_failsafe
   SOURCES failsafe/src/failsafe.cpp
   USES fpv_battery
   DEPENDS_ON fpv_battery fpv_min_altitude
-  TESTS failsafe/tests/failsafe_test.cpp)
+  TESTS failsafe/tests/failsafe_test.cpp failsafe/tests/module_test.cpp)
 
 fpv_module(best-launch fpv_best_launch
   SOURCES best-launch/src/best_launch.cpp
-  TESTS best-launch/tests/best_launch_test.cpp)
+  TESTS best-launch/tests/best_launch_test.cpp best-launch/tests/module_test.cpp)
 
 fpv_module(core fpv_core
   SOURCES core/src/core.cpp
-  TESTS core/tests/core_test.cpp)
+  TESTS core/tests/core_test.cpp core/tests/module_test.cpp)
 
 fpv_module(relay fpv_relay
   SOURCES relay/src/relay.cpp
-  TESTS relay/tests/relay_test.cpp)
+  TESTS relay/tests/relay_test.cpp relay/tests/module_test.cpp)

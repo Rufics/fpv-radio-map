@@ -383,13 +383,11 @@ export class MockBackend {
     const edited = entry['version'];
     delete entry['version'];
     delete entry['verified'];
-    const v = this.validator.validateLibrary(kind, entry);
-    if (!v.ok) throw this.error(422, 'Schema validation failed', { issues: v.issues });
     const list = this.library[kind];
     const idx = list.findIndex((e) => e['id'] === (id ?? entry['id']));
     if (id === null) {
       if (idx >= 0) throw this.error(409, `An item with id ${entry['id']} exists`);
-      const added = { ...entry, version: 1, verified: false };
+      const added = this.validated(kind, { ...entry, version: 1, verified: false });
       list.push(added);
       return this.ok(added, 201);
     }
@@ -397,13 +395,20 @@ export class MockBackend {
     const current = list[idx];
     const currentVersion = Number(current['version'] ?? 1);
     if (Number(edited) !== currentVersion) throw this.error(409, `The item changed since version ${edited ?? '?'}; now at version ${currentVersion}`);
+    const saved = this.validated(kind, { ...entry, id, version: currentVersion + 1, verified: true });
     const key = `${kind}/${id}`;
     const hist = this.history.get(key) ?? [];
     hist.unshift({ version: currentVersion, verified: current['verified'] !== false, item: current, changedBy: 'admin', changedAt: new Date().toISOString() });
     this.history.set(key, hist);
-    const saved = { ...entry, id, version: currentVersion + 1, verified: true };
     list[idx] = saved;
     return this.ok(saved, 200);
+  }
+
+  /** The item as it will be stored (the server sets version and verified), checked against its schema. */
+  private validated(kind: LibraryKind, item: Record<string, unknown>): Record<string, unknown> {
+    const v = this.validator.validateLibrary(kind, item);
+    if (!v.ok) throw this.error(422, 'Schema validation failed', { issues: v.issues });
+    return item;
   }
 
   private setModule(id: string, body: { enabled?: boolean }): HttpResponse<unknown> {
