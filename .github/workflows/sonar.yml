@@ -1,6 +1,6 @@
 # SonarQube Cloud analysis with coverage, for pull requests from branches of this repository and
 # every push to main. The settings are in sonar-project.properties; the one-time setup (automatic
-# analysis off, the SONAR_TOKEN secret) is in docs/admin/sonarcloud.md.
+# analysis off, the SONAR_TOKEN secret) is in docs/dev/sonarcloud.md.
 #
 # The analysis needs the SONAR_TOKEN secret, which pull requests from forks and Dependabot never
 # get, so their runs skip it; ci.yml still tests them. The token is passed to the scanner step
