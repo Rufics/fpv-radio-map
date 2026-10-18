@@ -18,6 +18,8 @@ on:
       - .github/workflows/wiki.yml
       - .github/workflows/release.yml
       - .github/workflows/ci-report.yml
+      - .github/workflows/sonar.yml
+      - sonar-project.properties
       - .github/CODEOWNERS
       - .github/pull_request_template.md
       - tools/wiki/**

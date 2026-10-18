@@ -18,6 +18,9 @@ dist/
 /deploy/docker-compose.override.yml
 /deploy/nginx-realip.conf
 test-results/
+sonar-reports/
+.scannerwork/
+.coverage
 test-scratch/
 .rfmod-test-*/
 wiki/

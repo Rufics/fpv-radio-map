@@ -54,6 +54,7 @@ jobs:
               .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*) ;;
               .dockerignore|.gitignore) ;;
               .github/workflows/fuzz.yml) ;;
+              .github/workflows/sonar.yml|sonar-project.properties) ;;
               web/*) web=true ;;
               schemas/*|.github/workflows/ci.yml) cpp=true; web=true ;;
               core/*|platform/*|modules/*|server/*|examples/*|data/*|fuzz/*|CMakeLists.txt|.github/actions/cpp-deps/*|.github/actions/fuzz/*) cpp=true ;;
