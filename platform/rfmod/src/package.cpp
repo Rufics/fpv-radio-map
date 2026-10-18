@@ -8,6 +8,7 @@
 #include <array>
 #include <format>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -49,8 +50,11 @@ struct ArchiveWriteDeleter {
     void operator()(archive* a) const { archive_write_free(a); }
 };
 
-std::map<std::string, std::string> parseFileList(const std::string& text, std::string& error) {
-    std::map<std::string, std::string> out;
+/// Path -> SHA-256 hex, as META/files.sha256 lists them.
+using FileHashes = std::map<std::string, std::string, std::less<>>;
+
+FileHashes parseFileList(const std::string& text, std::string& error) {
+    FileHashes out;
     std::istringstream in(text);
     std::string line;
     std::string previous;
@@ -258,7 +262,7 @@ private:
 
     /// One packed file: META/ holds only the list and the signature, and every other file is listed
     /// with its hash.
-    bool coveredBySignature(const std::map<std::string, std::string>& listed, const std::string& path,
+    bool coveredBySignature(const FileHashes& listed, const std::string& path,
                             const std::string& content) {
         if (path.starts_with("META/")) {
             return path == kFileList || path == kSignature || refuse("files.integrity", "unexpected file " + path);
