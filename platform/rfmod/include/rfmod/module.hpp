@@ -8,9 +8,9 @@
 
 #include <nlohmann/json.hpp>
 
-#include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 
@@ -83,8 +83,9 @@ struct ModuleAdapter {
         return m;
     }
 
+    /// A module-owned copy for the host; the host hands it back to freeString, never to free().
     static char* copy(const std::string& s) {
-        char* out = static_cast<char*>(std::malloc(s.size() + 1));
+        auto* out = new (std::nothrow) char[s.size() + 1];
         if (out) std::memcpy(out, s.c_str(), s.size() + 1);
         return out;
     }
@@ -134,7 +135,7 @@ struct ModuleAdapter {
         }
     }
 
-    static void freeString(char* s) { std::free(s); }
+    static void freeString(char* s) { delete[] s; }
 
     static void shutdown() {
         try {
