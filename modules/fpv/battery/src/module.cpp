@@ -53,7 +53,7 @@ json BatteryModule::selftest() {
                     {"returnToPilot", true}};
     json checks = json::array();
     bool ok = true;
-    auto check = [&](const std::string& name, double got, double want, double tol) {
+    auto check = [&checks, &ok](const std::string& name, double got, double want, double tol) {
         const bool pass = std::abs(got - want) <= tol;
         checks.push_back({{"name", name}, {"ok", pass}, {"detail", "got " + std::to_string(got) + ", want " + std::to_string(want)}});
         ok = ok && pass;

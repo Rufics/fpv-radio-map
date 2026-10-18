@@ -50,7 +50,7 @@ LinkRecord linkFrom(const pqxx::row& r) {
 }  // namespace
 
 std::optional<Digest> PgAuthStore::ownerKeyHash(const std::string& missionId) {
-    return db_.tx([&](pqxx::work& w) -> std::optional<Digest> {
+    return db_.tx([&missionId](pqxx::work& w) -> std::optional<Digest> {
         const auto r = w.exec_params("select encode(owner_key_hash,'hex') from missions where id = $1", missionId);
         if (r.empty()) return std::nullopt;
         return digestFromHex(r[0][0].as<std::string>());
@@ -58,7 +58,7 @@ std::optional<Digest> PgAuthStore::ownerKeyHash(const std::string& missionId) {
 }
 
 void PgAuthStore::insertLink(const LinkRecord& l) {
-    db_.tx([&](pqxx::work& w) {
+    db_.tx([&l](pqxx::work& w) {
         w.exec_params(
             "insert into share_links(id, mission_id, token_hash, pin_hash, role, label, created_at, expires_at) "
             "values ($1, $2, decode($3,'hex'), $4, $5, $6, to_timestamp($7), to_timestamp($8))",
@@ -69,7 +69,7 @@ void PgAuthStore::insertLink(const LinkRecord& l) {
 }
 
 std::vector<LinkRecord> PgAuthStore::links(const std::string& missionId) {
-    return db_.tx([&](pqxx::work& w) {
+    return db_.tx([&missionId](pqxx::work& w) {
         std::vector<LinkRecord> out;
         for (const auto& r : w.exec_params(std::string("select ") + kLinkColumns +
                                                " from share_links where mission_id = $1 order by created_at",
@@ -81,7 +81,7 @@ std::vector<LinkRecord> PgAuthStore::links(const std::string& missionId) {
 }
 
 std::optional<LinkRecord> PgAuthStore::linkByToken(const Digest& tokenHash) {
-    return db_.tx([&](pqxx::work& w) -> std::optional<LinkRecord> {
+    return db_.tx([&tokenHash](pqxx::work& w) -> std::optional<LinkRecord> {
         const auto r = w.exec_params(std::string("select ") + kLinkColumns +
                                          " from share_links where token_hash = decode($1,'hex')",
                                      Secrets::hex(tokenHash));
@@ -93,7 +93,7 @@ std::optional<LinkRecord> PgAuthStore::linkByToken(const Digest& tokenHash) {
 FailureOutcome PgAuthStore::recordFailure(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
                                           TimePoint now) {
     // One statement, so concurrent wrong guesses are counted one by one under the row lock.
-    return db_.tx([&](pqxx::work& w) {
+    return db_.tx([&linkId, maxAttempts, lockout, now](pqxx::work& w) {
         const auto r = w.exec_params(
             "update share_links set "
             "  locked_until = case when failed_attempts + 1 >= $2 "
@@ -110,7 +110,7 @@ FailureOutcome PgAuthStore::recordFailure(const std::string& linkId, int maxAtte
 }
 
 void PgAuthStore::recordSuccess(const std::string& linkId, TimePoint now) {
-    db_.tx([&](pqxx::work& w) {
+    db_.tx([&linkId, now](pqxx::work& w) {
         w.exec_params(
             "update share_links set failed_attempts = 0, lockouts = 0, last_opened_at = to_timestamp($2), "
             "open_count = open_count + 1 where id = $1",
@@ -119,7 +119,7 @@ void PgAuthStore::recordSuccess(const std::string& linkId, TimePoint now) {
 }
 
 bool PgAuthStore::revokeLink(const std::string& missionId, const std::string& linkId) {
-    return db_.tx([&](pqxx::work& w) {
+    return db_.tx([&missionId, &linkId](pqxx::work& w) {
         const auto r = w.exec_params(
             "update share_links set revoked_at = coalesce(revoked_at, now()) where id = $1 and mission_id = $2 returning id",
             linkId, missionId);
@@ -129,7 +129,7 @@ bool PgAuthStore::revokeLink(const std::string& missionId, const std::string& li
 }
 
 void PgAuthStore::insertSession(const SessionRecord& s) {
-    db_.tx([&](pqxx::work& w) {
+    db_.tx([&s](pqxx::work& w) {
         w.exec_params(
             "insert into sessions(token_hash, mission_id, link_id, role, expires_at) "
             "values (decode($1,'hex'), $2, $3, $4, to_timestamp($5))",
@@ -138,7 +138,7 @@ void PgAuthStore::insertSession(const SessionRecord& s) {
 }
 
 std::optional<SessionRecord> PgAuthStore::session(const Digest& tokenHash, TimePoint now) {
-    return db_.tx([&](pqxx::work& w) -> std::optional<SessionRecord> {
+    return db_.tx([&tokenHash, now](pqxx::work& w) -> std::optional<SessionRecord> {
         // A session from a revoked link is gone already, but check the link too in case of a race.
         const auto r = w.exec_params(
             "select s.mission_id, s.link_id, s.role, extract(epoch from s.expires_at)::float8 from sessions s "
@@ -157,7 +157,7 @@ std::optional<SessionRecord> PgAuthStore::session(const Digest& tokenHash, TimeP
 }
 
 void PgAuthStore::purgeExpired(TimePoint now) {
-    db_.tx([&](pqxx::work& w) { w.exec_params("delete from sessions where expires_at <= to_timestamp($1)", epochSeconds(now)); });
+    db_.tx([now](pqxx::work& w) { w.exec_params("delete from sessions where expires_at <= to_timestamp($1)", epochSeconds(now)); });
 }
 
 }  // namespace rfmap

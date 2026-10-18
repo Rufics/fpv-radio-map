@@ -73,7 +73,7 @@ struct CoverageGrid {
 };
 
 CoverageGrid coverageGrid(const rfcore::GeoPoint& pilot, double radius, double cell, double agl) {
-    CoverageGrid g;
+    CoverageGrid g{};
     g.radius = radius;
     g.agl = agl;
     const double lat0 = pilot.latitudeDeg;
@@ -412,7 +412,7 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     }
     for (const auto& f : failures) {
         const bool seen = std::any_of(result["moduleFailures"].begin(), result["moduleFailures"].end(),
-                                      [&](const json& j) { return j.value("module", "") == f.moduleId; });
+                                      [&f](const json& j) { return j.value("module", "") == f.moduleId; });
         if (!seen) result["moduleFailures"].push_back(f.toJson());
     }
     runRouteModules(mission, result, ctx);
@@ -584,7 +584,7 @@ json cellsToMultiPolygon(const std::vector<bool>& inside, std::size_t cols, std:
         long x0, y0, x1, y1;
         bool used = false;
     };
-    auto in = [&](long r, long c) {
+    auto in = [&inside, rows, cols](long r, long c) {
         return r >= 0 && c >= 0 && r < static_cast<long>(rows) && c < static_cast<long>(cols) &&
                inside[static_cast<std::size_t>(r) * cols + static_cast<std::size_t>(c)];
     };
@@ -694,7 +694,7 @@ json cellsToMultiPolygon(const std::vector<bool>& inside, std::size_t cols, std:
         }
         if (best < outers.size()) holesOf[outers[best]].push_back(i);
     }
-    auto coords = [&](const Ring& r) {
+    auto coords = [west, north, dLon, dLat](const Ring& r) {
         json ring = json::array();
         for (const auto& [x, y] : r) {
             ring.push_back({west + static_cast<double>(x) * dLon, north - static_cast<double>(y) * dLat});

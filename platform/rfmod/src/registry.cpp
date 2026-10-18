@@ -359,7 +359,7 @@ std::optional<ModuleRegistry::Entry> ModuleRegistry::readInstalled(const fs::pat
     }
     // The files on disk must be the signed ones.
     if (const bool intact = std::ranges::all_of(pkg->files.files,
-                                                [&](const auto& file) {
+                                                [&dir](const auto& file) {
                                                     return fs::exists(dir / file.first) &&
                                                            readFile(dir / file.first) == file.second;
                                                 });

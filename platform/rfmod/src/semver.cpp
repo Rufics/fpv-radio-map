@@ -128,7 +128,7 @@ std::strong_ordering operator<=>(const Version& a, const Version& b) {
 }
 
 void VersionRange::appendComparators(std::string_view token, Set& out) {
-    auto take = [&](std::string_view prefix) {
+    auto take = [&token](std::string_view prefix) {
         if (token.substr(0, prefix.size()) == prefix) {
             token.remove_prefix(prefix.size());
             return true;

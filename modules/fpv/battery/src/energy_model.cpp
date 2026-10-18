@@ -122,7 +122,8 @@ double EnergyModel::groundSpeedMps(double courseDeg) const {
 double EnergyModel::cruiseWh(const LatLon& a, double azimuthDeg, double length) const {
     // ∫ P / Vg(course(x)) dx along the geodesic; the course at x comes from the geodesic itself.
     const auto seconds = integrate(
-        [&](double x) { return 1.0 / groundSpeedMps(world_.direct(a, azimuthDeg, x).azimuthDeg); }, 0.0, length);
+        [this, &a, azimuthDeg](double x) { return 1.0 / groundSpeedMps(world_.direct(a, azimuthDeg, x).azimuthDeg); },
+        0.0, length);
     return power_ * seconds / 3600.0;
 }
 
@@ -202,7 +203,7 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
     if (!mission.returnToPilot || p.neededWh <= p.usableWh) return p;
 
     // Turn-back: the farthest point on the way out from which the direct flight home still fits.
-    auto costAt = [&](double s) {
+    auto costAt = [this, &route, &mission](double s) {
         const RoutePoint pt = route.at(s);
         return model_.routeWh(route, s) + model_.segmentWh(pt.position, pt.aglM, mission.pilot.position, mission.pilot.aglM);
     };
