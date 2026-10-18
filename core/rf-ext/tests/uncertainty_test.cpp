@@ -64,7 +64,7 @@ TerrainProfile hills(const Sweep& sweep, long n, double length, double step) {
     for (std::size_t i = 0; static_cast<double>(i) * step <= length; ++i) {
         const double d = static_cast<double>(i) * step;
         const double x = d / length;
-        pts.push_back({d, 150.0 + a * std::sin(3.1 * x) + b * std::sin(7.3 * x + 1.0) + c * x * x});
+        pts.emplace_back(d, 150.0 + a * std::sin(3.1 * x) + b * std::sin(7.3 * x + 1.0) + c * x * x);
     }
     return test::makeProfile(pts);
 }

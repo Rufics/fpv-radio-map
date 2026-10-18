@@ -82,7 +82,7 @@ inline json reason(const std::string& moduleId, const std::string& severity, con
 /// Formats a number for preview text with a fixed number of decimals. Display only.
 inline std::string fixed(double v, int decimals) {
     char buf[64];
-    std::snprintf(buf, sizeof buf, "%.*f", decimals, v);
+    (void)std::snprintf(buf, sizeof buf, "%.*f", decimals, v);
     return buf;
 }
 

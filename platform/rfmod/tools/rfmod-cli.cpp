@@ -58,7 +58,7 @@ Args parseArgs(int argc, char** argv, int from) {
     Args a;
     for (int i = from; i < argc; ++i) {
         std::string s = argv[i];
-        if (s.rfind("--", 0) == 0 || s == "-o") {
+        if (s.starts_with("--") || s == "-o") {
             if (i + 1 >= argc) throw std::invalid_argument("missing value for " + s);
             a.flags.emplace(s == "-o" ? "--out" : s, argv[++i]);
         } else {
@@ -151,7 +151,7 @@ int cmdInspect(const Args& a) {
     const auto files = rfmod::PackageReader::read(readFile(a.positional[0]), {}, r);
     if (!files) return printReport(r);
     for (const auto& [path, content] : files->files) std::cout << "  " << content.size() << "\t" << path << "\n";
-    if (files->files.count("manifest.json")) std::cout << json::parse(files->files.at("manifest.json")).dump(2) << "\n";
+    if (files->files.contains("manifest.json")) std::cout << json::parse(files->files.at("manifest.json")).dump(2) << "\n";
     return 0;
 }
 

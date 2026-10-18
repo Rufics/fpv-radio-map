@@ -54,9 +54,9 @@ int main(int argc, char** argv) {
         rfmap::Application app(rfmap::Config::load(configFile, rfmap::Config::processEnvironment()),
                                RFMAP_OWNER_PUBKEY_TEXT, RFMAP_OWNER_KEY_IS_DEV != 0, sqlDir);
         running = &app;
-        std::signal(SIGTERM, onSignal);
-        std::signal(SIGINT, onSignal);
-        std::signal(SIGPIPE, SIG_IGN);
+        (void)std::signal(SIGTERM, onSignal);
+        (void)std::signal(SIGINT, onSignal);
+        (void)std::signal(SIGPIPE, SIG_IGN);
         const bool ok = app.listen();
         running = nullptr;
         if (!ok) {
@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
         app.log().info("http", "stopped");
         return 0;
     } catch (const std::exception& e) {
-        std::cerr << "rfmap-server: " << e.what() << std::endl;
+        std::cerr << "rfmap-server: " << e.what() << '\n';
         return 1;
     }
 }

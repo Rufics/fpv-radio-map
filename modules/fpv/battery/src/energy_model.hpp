@@ -12,11 +12,11 @@ namespace fpv::battery {
 struct DroneSpec {
     std::string id;
     int version = 0;
-    double massKg;
-    double cruiseAirspeedMps;
-    double cruisePowerW;          ///< measured, sea-level ISA density
-    double powerDensityExponent;  ///< n in P = P0 (ρ0/ρ)^n; 0 = density not applied
-    std::string climbMethod;      ///< potential-energy | measured
+    double massKg{};
+    double cruiseAirspeedMps{};
+    double cruisePowerW{};          ///< measured, sea-level ISA density
+    double powerDensityExponent{};  ///< n in P = P0 (ρ0/ρ)^n; 0 = density not applied
+    std::string climbMethod;        ///< potential-energy | measured
     double climbEfficiency = 0.0;
     double climbPowerW = 0.0;
     double climbRateMps = 0.0;
@@ -27,10 +27,10 @@ struct DroneSpec {
 struct BatterySpec {
     std::string id;
     int version = 0;
-    int cellsSeries;
-    double capacityAh;
-    double nominalCellVoltage;
-    double usableFraction;
+    int cellsSeries{};
+    double capacityAh{};
+    double nominalCellVoltage{};
+    double usableFraction{};
     std::vector<std::pair<double, double>> derating;  ///< (°C, factor), sorted by temperature
 
     static BatterySpec fromJson(const json& j);

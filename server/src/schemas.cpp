@@ -51,7 +51,7 @@ void SchemaRegistry::add(const std::string& name, const json& schema) {
     const fs::path dir = dir_;
     auto loader = [dir](const nlohmann::json_uri& uri, json& out) {
         std::string location = uri.location();
-        if (location.rfind(kBase, 0) != 0) throw std::invalid_argument("schema outside rfmap: " + location);
+        if (!location.starts_with(kBase)) throw std::invalid_argument("schema outside rfmap: " + location);
         const fs::path rel = location.substr(std::string(kBase).size());
         if (rel.empty() || rel.is_absolute() || rel.string().find("..") != std::string::npos) {
             throw std::invalid_argument("bad schema reference " + location);

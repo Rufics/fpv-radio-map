@@ -50,6 +50,7 @@ jobs:
               docs/*|*.md|LICENSE|.github/ISSUE_TEMPLATE/*|.github/DISCUSSION_TEMPLATE/*|.github/dependabot.yml) ;;
               .github/workflows/pr-title.yml|.github/workflows/wiki.yml|tools/wiki/*|.githooks/*) ;;
               .github/workflows/ci-report.yml|.github/CODEOWNERS|.github/pull_request_template.md) ;;
+              tools/ci/clang_tidy.py|.clang-tidy) cpp=true ;;
               .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*) ;;
               .dockerignore|.gitignore) ;;
               web/*) web=true ;;
@@ -62,9 +63,45 @@ jobs:
           echo "cpp=$cpp" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
 
+  # The gate in front of every C++ build: when clang-tidy (checks in .clang-tidy) finds anything,
+  # the build, the tests and everything after them are skipped. Configures with Clang to get the
+  # compile database and builds only the generated headers. A pull request checks the sources it
+  # changes, or everything when it changes a header or the build; other runs check everything.
+  # The files are split across four runners; the gate fails when any of them finds anything.
+  clang-tidy:
+    name: C++ static analysis (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      # Every part runs to the end, so one run reports all the findings.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: ./.github/actions/cpp-deps
+        with:
+          extra: clang-18 clang-tidy-18
+      - name: Configure
+        run: >-
+          cmake -S . -B build-tidy -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++-18
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON
+      - name: Generate headers
+        run: cmake --build build-tidy --target platform/rfmod/generated/manifest_schema.hpp
+      # On a pull request HEAD is the merge commit and HEAD^1 the base branch it was merged onto.
+      - name: clang-tidy
+        run: >-
+          python3 -I tools/ci/clang_tidy.py --build-dir build-tidy --clang-tidy clang-tidy-18 --shard ${{ matrix.shard }}/4
+          ${{ github.event_name == 'pull_request' && '--base HEAD^1' || '' }}
+
   cpp:
     name: C++ build and tests
-    needs: changes
+    needs: [changes, clang-tidy]
     if: needs.changes.outputs.cpp == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -94,7 +131,7 @@ jobs:
   # links the uncovered lines to that commit, so the line numbers match.
   coverage:
     name: C++ coverage
-    needs: changes
+    needs: [changes, clang-tidy]
     if: needs.changes.outputs.cpp == 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -196,7 +233,7 @@ jobs:
   report:
     name: Test report
     if: always()
-    needs: [changes, cpp, coverage, web]
+    needs: [changes, clang-tidy, cpp, coverage, web]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -247,7 +284,7 @@ jobs:
   # is still in the run summary.
   comment:
     name: Post the CI report
-    needs: [changes, cpp, coverage, web, report]
+    needs: [changes, clang-tidy, cpp, coverage, web, report]
     if: >-
       always() &&
       !contains(needs.*.result, 'cancelled') &&

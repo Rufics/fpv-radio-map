@@ -8,8 +8,8 @@
 namespace fpv {
 
 struct Waypoint {
-    LatLon position;
-    double aglM;
+    LatLon position{};
+    double aglM{};
     std::string label;
 };
 

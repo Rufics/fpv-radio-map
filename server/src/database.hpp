@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace rfmap {
@@ -27,7 +28,7 @@ public:
     auto with(F&& f) -> decltype(f(std::declval<pqxx::connection&>())) {
         Lease lease(*this);
         try {
-            return f(*lease.conn);
+            return std::forward<F>(f)(*lease.conn);
         } catch (const pqxx::broken_connection&) {
             lease.broken = true;
             throw;
@@ -40,10 +41,10 @@ public:
         return with([&f](pqxx::connection& c) {
             pqxx::work w(c);
             if constexpr (std::is_void_v<decltype(f(w))>) {
-                f(w);
+                std::forward<F>(f)(w);
                 w.commit();
             } else {
-                auto r = f(w);
+                auto r = std::forward<F>(f)(w);
                 w.commit();
                 return r;
             }

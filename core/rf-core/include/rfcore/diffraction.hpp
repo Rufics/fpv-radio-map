@@ -10,18 +10,18 @@ namespace rfcore {
 
 /// Result of the terrain diffraction calculation for one path.
 struct DiffractionResult {
-    bool lineOfSight;            ///< True when no profile point rises above the direct ray.
-    double nu;                   ///< ν of the governing (real or equivalent) edge.
-    Metres edgeHeight;           ///< Height of that edge above the direct ray (negative: clearance).
-    Metres d1;                   ///< Along the ray from the first antenna to the edge.
-    Metres d2;                   ///< Along the ray from the edge to the second antenna.
-    std::size_t dominantSample;  ///< Index of the profile point that governs (from the first antenna side).
-    Decibel loss;                ///< J(ν), exact form.
+    bool lineOfSight{};            ///< True when no profile point rises above the direct ray.
+    double nu{};                   ///< ν of the governing (real or equivalent) edge.
+    Metres edgeHeight;             ///< Height of that edge above the direct ray (negative: clearance).
+    Metres d1;                     ///< Along the ray from the first antenna to the edge.
+    Metres d2;                     ///< Along the ray from the edge to the second antenna.
+    std::size_t dominantSample{};  ///< Index of the profile point that governs (from the first antenna side).
+    Decibel loss;                  ///< J(ν), exact form.
 
     /// Smallest clearance of the first Fresnel zone over the whole path, as a fraction of r1:
     /// 1.0 = fully clear, 0.6 = the usual planning rule, 0 = ray grazes, negative = blocked.
-    double minFresnelClearance;
-    std::size_t minClearanceSample;
+    double minFresnelClearance{};
+    std::size_t minClearanceSample{};
     Metres firstFresnelRadiusAtMin;
 };
 

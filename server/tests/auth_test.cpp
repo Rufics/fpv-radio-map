@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 using namespace rfmap;
 using rfmap::test::FakeClock;
 
@@ -21,7 +23,7 @@ protected:
     template <class F>
     json expectStatus(int status, F&& f) {
         try {
-            f();
+            std::forward<F>(f)();
         } catch (const HttpError& e) {
             EXPECT_EQ(e.status(), status) << e.what();
             return e.body();

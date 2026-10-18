@@ -7,7 +7,7 @@ using namespace rfmod::test;
 
 namespace {
 
-bool parses(const nlohmann::json& m, std::string* failed = nullptr, Version host = Version(0, 1, 0)) {
+bool parses(const nlohmann::json& m, std::string* failed = nullptr, const Version& host = Version(0, 1, 0)) {
     ValidationReport r;
     const bool ok = ManifestParser::parse(m, host, r).has_value();
     if (failed) {

@@ -13,14 +13,14 @@ struct GeoPoint {
 };
 
 struct GeodesicInverse {
-    Metres distance;          ///< Geodesic distance on the ellipsoid.
-    double azimuthStartDeg;   ///< Forward azimuth at the start point, clockwise from north.
-    double azimuthEndDeg;     ///< Forward azimuth at the end point.
+    Metres distance;           ///< Geodesic distance on the ellipsoid.
+    double azimuthStartDeg{};  ///< Forward azimuth at the start point, clockwise from north.
+    double azimuthEndDeg{};    ///< Forward azimuth at the end point.
 };
 
 struct GeodesicDirect {
     GeoPoint point;
-    double azimuthEndDeg;  ///< Forward azimuth at the reached point.
+    double azimuthEndDeg{};  ///< Forward azimuth at the reached point.
 };
 
 /// Geodesics on WGS84 using Karney's algorithm (GeographicLib), accurate to about

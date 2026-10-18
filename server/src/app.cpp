@@ -24,7 +24,7 @@ std::string header(const Req& req, const char* name) { return req.has_header(nam
 
 std::string bearer(const Req& req) {
     const std::string h = header(req, "Authorization");
-    if (h.rfind("Bearer ", 0) == 0) return h.substr(7);
+    if (h.starts_with("Bearer ")) return h.substr(7);
     return {};
 }
 
@@ -120,7 +120,7 @@ void sendHttpError(Res& res, const HttpError& e) {
 
 }  // namespace
 
-Application::Application(Config config, std::string ownerKeyText, bool ownerKeyIsDev, std::filesystem::path sqlDir)
+Application::Application(Config config, const std::string& ownerKeyText, bool ownerKeyIsDev, const std::filesystem::path& sqlDir)
     : config_(std::move(config)) {
     Secrets::init();
     if (ownerKeyIsDev) {

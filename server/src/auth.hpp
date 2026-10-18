@@ -44,7 +44,7 @@ struct SessionRecord {
 /// Outcome of a wrong PIN, decided atomically by the store so parallel guesses cannot each see
 /// the same remaining count.
 struct FailureOutcome {
-    int remaining;
+    int remaining{};
     std::optional<TimePoint> lockedUntil;
 };
 
@@ -110,7 +110,7 @@ public:
 
     struct OwnerKey {
         std::string plain;  ///< returned to the creator once
-        Digest hash;        ///< what is stored
+        Digest hash{};      ///< what is stored
     };
     [[nodiscard]] static OwnerKey newOwnerKey();
     /// Throws HttpError 401/403 unless `presented` is this mission's owner key.

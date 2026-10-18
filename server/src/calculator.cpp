@@ -406,9 +406,10 @@ CalcContext Calculator::contextFor(const json& mission) const {
 }
 
 json Calculator::environmentKey(const CalcContext& ctx) const {
+    const std::optional<double> demError = links_.dem() ? links_.dem()->statedErrorM() : std::nullopt;
     json key = {{"server", links_.version()},
                 {"dem", links_.dem() ? links_.dem()->raster().identity() : ""},
-                {"demError", links_.dem() && links_.dem()->statedErrorM().has_value() ? json(*links_.dem()->statedErrorM()) : json()},
+                {"demError", demError ? json(*demError) : json()},
                 {"landcover", links_.landcover() ? links_.landcover()->raster().identity() : ""},
                 {"builtins", builtins_.list()},
                 {"modules", modules_.versions(ctx)}};

@@ -238,7 +238,7 @@ std::optional<PackageFiles> PackageReader::read(const std::string& archiveBytes,
     int rc = ARCHIVE_OK;
     while ((rc = archive_read_next_header(a.get(), &entry)) == ARCHIVE_OK) {
         std::string path = archive_entry_pathname(entry) ? archive_entry_pathname(entry) : "";
-        if (path.rfind("./", 0) == 0) path = path.substr(2);
+        if (path.starts_with("./")) path = path.substr(2);
         if (archive_entry_filetype(entry) == AE_IFDIR) continue;
         if (!acceptEntry(entry, path, out, limits, report)) return std::nullopt;
         auto content = readEntryData(a.get(), path, total, limits, report);
@@ -256,7 +256,7 @@ std::optional<PackageFiles> PackageReader::read(const std::string& archiveBytes,
 std::string PackageWriter::fileList(const PackageFiles& files) {
     std::string list;
     for (const auto& [path, content] : files.files) {
-        if (path.rfind("META/", 0) == 0) continue;
+        if (path.starts_with("META/")) continue;
         list += Sha256::hex(content) + "  " + path + "\n";
     }
     return list;
@@ -265,11 +265,11 @@ std::string PackageWriter::fileList(const PackageFiles& files) {
 std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key) {
     PackageFiles files;
     for (const auto& [path, content] : input.files) {
-        if (path.rfind("META/", 0) == 0) continue;
+        if (path.starts_with("META/")) continue;
         if (!safePath(path)) throw std::invalid_argument("unsafe path: " + path);
         files.files.emplace(path, content);
     }
-    if (!files.files.count("manifest.json")) throw std::invalid_argument("package needs manifest.json");
+    if (!files.files.contains("manifest.json")) throw std::invalid_argument("package needs manifest.json");
     const std::string list = fileList(files);
     const Bytes sig = key.sign(list);
     files.files[kFileList] = list;
@@ -320,7 +320,7 @@ std::string PackageWriter::pack(const fs::path& sourceDir, const SecretKey& key)
         if (item.is_symlink()) throw std::invalid_argument("symlinks are not allowed: " + item.path().string());
         if (!item.is_regular_file()) continue;
         const std::string rel = fs::relative(item.path(), sourceDir).generic_string();
-        if (rel.rfind("META/", 0) == 0) continue;
+        if (rel.starts_with("META/")) continue;
         std::ifstream in(item.path(), std::ios::binary);
         std::ostringstream content;
         content << in.rdbuf();

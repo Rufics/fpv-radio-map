@@ -8,6 +8,7 @@
 #include <fstream>
 #include <functional>
 #include <random>
+#include <ranges>
 #include <set>
 #include <sstream>
 
@@ -44,12 +45,7 @@ std::string randomName() {
 }
 
 std::string isoNow() {
-    const auto t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    char buf[32];
-    std::tm tm{};
-    gmtime_r(&t, &tm);
-    std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
-    return buf;
+    return std::format("{:%FT%TZ}", std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now()));
 }
 
 std::optional<std::string> validateOptions(const fs::path& dir, const Manifest& m, const json& options) {
@@ -115,12 +111,13 @@ ModuleRegistry::ModuleRegistry(RegistryConfig config, const TrustStore& trust, I
 
 ModuleRegistry::~ModuleRegistry() {
     // Shut down in reverse dependency order.
-    for (auto it = order_.rbegin(); it != order_.rend(); ++it) {
-        auto e = entries_.find(*it);
+    for (const auto& id : std::ranges::reverse_view(order_)) {
+        auto e = entries_.find(id);
         if (e != entries_.end() && e->second.instance) {
             try {
                 e->second.instance->shutdown();
             } catch (...) {
+                // Ignored: one module failing to shut down must not stop the others.
             }
             e->second.instance.reset();
         }
@@ -188,8 +185,9 @@ void ModuleRegistry::checkDependencies(const Manifest& m, ValidationReport& repo
             problems.push_back(d.id + " " + d.range.str() + " needed, " + it->second.manifest.version.str() + " installed");
         } else if (it->second.state != ModuleState::Active) {
             problems.push_back(d.id + " is " + toString(it->second.state));
-        } else if (it->second.manifest.lifecycle == Lifecycle::Deprecated) {
-            report.pass("dependencies.deprecated", d.id + " is deprecated: " + it->second.manifest.deprecation->message);
+        } else if (const auto& dep = it->second.manifest.deprecation;
+                   it->second.manifest.lifecycle == Lifecycle::Deprecated && dep.has_value()) {
+            report.pass("dependencies.deprecated", d.id + " is deprecated: " + dep->message);
         }
     }
     const std::string optionalDetail = optionalDependencySummary(m);
@@ -350,8 +348,8 @@ void ModuleRegistry::shutdownAll() {
     std::vector<std::unique_ptr<IModuleInstance>> retired;
     {
         std::lock_guard lock(mutex_);
-        for (auto it = order_.rbegin(); it != order_.rend(); ++it) {
-            auto e = entries_.find(*it);
+        for (const auto& id : std::ranges::reverse_view(order_)) {
+            auto e = entries_.find(id);
             if (e != entries_.end() && e->second.instance) retired.push_back(std::move(e->second.instance));
         }
         entries_.clear();
@@ -363,6 +361,7 @@ void ModuleRegistry::shutdownAll() {
         try {
             instance->shutdown();
         } catch (...) {
+            // Ignored: one module failing to shut down must not stop the others.
         }
     }
 }
@@ -581,10 +580,10 @@ std::optional<fs::path> ModuleRegistry::publicFile(const std::string& id, const 
     const auto it = entries_.find(id);
     if (it == entries_.end() || it->second.state != ModuleState::Active) return std::nullopt;
     // Only the UI bundle directory and the options schema are public; never lib/.
-    const bool isUi = path.rfind("ui/", 0) == 0;
-    const bool isSchema = it->second.manifest.optionsSchema && path == *it->second.manifest.optionsSchema;
+    const bool isUi = path.starts_with("ui/");
+    const bool isSchema = it->second.manifest.optionsSchema == path;
     if ((!isUi && !isSchema) || path.find("..") != std::string::npos) return std::nullopt;
-    const fs::path p = it->second.dir / path;
+    fs::path p = it->second.dir / path;
     if (!fs::is_regular_file(p)) return std::nullopt;
     return p;
 }
