@@ -4,11 +4,13 @@
 
 #include <nlohmann/json.hpp>
 
+#include <condition_variable>
 #include <filesystem>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace rfmod {
 
@@ -91,11 +93,21 @@ public:
     [[nodiscard]] const SandboxInfo& sandbox() const { return sandbox_; }
 
 private:
+    class Turn;
     void start();
     void stop(bool kill);
     void send(const json& message);
-    /// Reads worker messages until `done` returns true, answering callbacks on the way.
+    /// Reads worker messages until one of `type` (and `id`, except for "ready") arrives,
+    /// answering callbacks on the way.
     json waitFor(const std::string& type, long long id, long long deadlineMs);
+    /// Handles the complete lines in outBuffer_; returns the awaited message if one of them is it.
+    std::optional<json> handleBufferedMessages(std::string_view type, long long id);
+    /// Runs a host call the worker asked for and sends the result back.
+    void answerCallback(const json& msg);
+    /// Forwards the complete lines the worker wrote to stderr to the host log.
+    void logBufferedStderr();
+    /// Waits up to a second (and never past the deadline) for worker output and buffers it.
+    void readWorkerOutput(long long deadlineMs);
 
     Manifest manifest_;
     std::filesystem::path library_;
@@ -103,7 +115,11 @@ private:
     IHostServices& services_;
     json options_;
     SandboxInfo sandbox_;
+    /// One exchange with the worker at a time: mutex_ guards only busy_, so the pipe I/O never
+    /// runs with a lock held and the next caller sleeps on idle_ until the worker is free.
     std::mutex mutex_;
+    std::condition_variable idle_;
+    bool busy_ = false;
     int pid_ = -1;
     int toWorker_ = -1;
     int fromWorker_ = -1;

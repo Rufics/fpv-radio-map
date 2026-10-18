@@ -59,16 +59,12 @@ std::string_view trim(std::string_view s) {
     return s;
 }
 
-/// The dot-separated identifiers of a prerelease or build part. `kind` names the part in errors.
-std::vector<std::string_view> identifiers(std::string_view part, std::string_view kind, std::string_view text) {
-    std::vector<std::string_view> ids = split(part, '.');
-    for (std::string_view id : ids) {
-        if (id.empty()) throw std::invalid_argument(std::format("empty {} identifier in {}", kind, text));
-        if (!std::ranges::all_of(id, isIdentChar)) {
-            throw std::invalid_argument(std::format("bad {} identifier in {}", kind, text));
-        }
+/// Throws unless `id` is a non-empty run of [0-9A-Za-z-]; `kind` and `text` go into the message.
+void checkIdentifier(std::string_view id, std::string_view kind, std::string_view text) {
+    if (id.empty()) throw std::invalid_argument("empty " + std::string(kind) + " identifier in " + std::string(text));
+    if (!std::ranges::all_of(id, isIdentChar)) {
+        throw std::invalid_argument("bad " + std::string(kind) + " identifier in " + std::string(text));
     }
-    return ids;
 }
 
 }  // namespace
@@ -76,12 +72,13 @@ std::vector<std::string_view> identifiers(std::string_view part, std::string_vie
 Version Version::parse(std::string_view text) {
     std::string_view s = text;
     if (const auto plus = s.find('+'); plus != std::string_view::npos) {
-        identifiers(s.substr(plus + 1), "build", text);
+        for (const std::string_view id : split(s.substr(plus + 1), '.')) checkIdentifier(id, "build", text);
         s = s.substr(0, plus);
     }
     Version v;
     if (const auto dash = s.find('-'); dash != std::string_view::npos) {
-        for (std::string_view id : identifiers(s.substr(dash + 1), "prerelease", text)) {
+        for (std::string_view id : split(s.substr(dash + 1), '.')) {
+            checkIdentifier(id, "prerelease", text);
             if (isDigits(id) && id.size() > 1 && id.front() == '0') {
                 throw std::invalid_argument(std::format("leading zero in prerelease of {}", text));
             }
@@ -182,10 +179,9 @@ void VersionRange::appendComparators(std::string_view token, Set& out) {
 
 VersionRange::Set VersionRange::parseSet(std::string_view alternative) {
     Set set;
-    if (alternative.empty() || alternative == "*") return set;
-    for (std::string_view token : split(alternative, ' ')) {
-        token = trim(token);
-        if (!token.empty()) appendComparators(token, set);
+    for (std::string_view tok : split(alternative, ' ')) {
+        tok = trim(tok);
+        if (!tok.empty()) appendComparators(tok, set);
     }
     return set;
 }
@@ -198,10 +194,13 @@ VersionRange VersionRange::parse(std::string_view text) {
     for (;;) {
         const std::size_t bar = t.find("||", start);
         const std::string_view alt = trim(std::string_view(t).substr(start, bar == std::string::npos ? std::string::npos : bar - start));
-        if (alt.empty() && (bar != std::string::npos || start != 0)) {
+        Set set;
+        if (!alt.empty() && alt != "*") {
+            set = parseSet(alt);
+        } else if (alt.empty() && (bar != std::string::npos || start != 0)) {
             throw std::invalid_argument("empty alternative in range: " + t);
         }
-        r.sets_.push_back(parseSet(alt));
+        r.sets_.push_back(std::move(set));
         if (bar == std::string::npos) break;
         start = bar + 2;
     }

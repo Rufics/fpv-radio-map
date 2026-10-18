@@ -54,7 +54,7 @@ private:
     using Set = std::vector<Comparator>;
 
     static void appendComparators(std::string_view token, Set& out);
-    /// The comparators of one `||` alternative; empty or "*" matches every version.
+    /// One "||" alternative: space-separated comparators, all of which must match.
     static Set parseSet(std::string_view alternative);
 
     std::string text_;

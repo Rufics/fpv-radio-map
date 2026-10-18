@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string_view>
 
 namespace rfext {
 namespace {
@@ -15,6 +16,17 @@ rfcore::TerrainProfile shifted(const rfcore::TerrainProfile& p, double interior,
         s[i].groundMsl = s[i].groundMsl + rfcore::Metres(sign * s[i].uncertainty.value());
     }
     return rfcore::TerrainProfile(std::move(s), p.sourceName(), p.azimuthDeg(), p.midLatitudeDeg());
+}
+
+/// Widens [lo, hi] to the value of term `id` at every corner that has it.
+void widenOverCorners(const std::vector<rfcore::LinkResult>& corners, std::string_view id, double& lo, double& hi) {
+    for (const auto& c : corners) {
+        for (const auto& term : c.terms) {
+            if (term.id != id) continue;
+            hi = std::max(hi, term.value.value());
+            lo = std::min(lo, term.value.value());
+        }
+    }
 }
 
 }  // namespace
@@ -94,14 +106,7 @@ MarginBand UncertaintyAnalyzer::analyze(const rfcore::TerrainProfile& profile, r
             continue;
         }
         double hi = nominal.terms[t].value.value(), lo = hi;
-        for (const auto& c : corners) {
-            for (const auto& term : c.terms) {
-                if (term.id == id) {
-                    hi = std::max(hi, term.value.value());
-                    lo = std::min(lo, term.value.value());
-                }
-            }
-        }
+        widenOverCorners(corners, id, lo, hi);
         worstLoss += hi;
         bestLoss += lo;
     }

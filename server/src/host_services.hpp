@@ -5,10 +5,17 @@
 #include <rfmod/host.hpp>
 
 #include <functional>
+#include <stdexcept>
 
 namespace rfmap {
 
 class Logger;
+
+/// A host call the server cannot answer; what() is the message the module receives.
+class HostCallError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 /// Makes the CalcContext a mission is evaluated with (time, module choices, forecast).
 using ContextFactory = std::function<CalcContext(const json& mission)>;
@@ -44,6 +51,9 @@ public:
 private:
     json linkEvaluate(const json& req);
     json profileGet(const json& req);
+    json elevationPoint(const json& req) const;
+    json weatherPoint(const json& req);
+    json libraryGet(const json& req) const;
 
     LinkService* links_;
     const Library* library_;

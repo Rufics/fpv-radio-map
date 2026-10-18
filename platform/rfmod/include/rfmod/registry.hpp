@@ -88,6 +88,17 @@ private:
     bool requiredDependenciesActive(Entry& e, VisitMarks& mark, std::unique_lock<std::mutex>& lock);
     /// Loads the module with `lock` released and records the outcome; true if it is active.
     bool start(const std::string& id, Entry& e, std::unique_lock<std::mutex>& lock);
+    /// Deprecation and failure notices for one resolved module.
+    void addNotices(const std::string& id, const Entry& e);
+    /// The upload checks against what is installed: version upgrade, dependents, dependencies.
+    void checkUpgrade(const Manifest& m, ValidationReport& report) const;
+    void checkDependencies(const Manifest& m, ValidationReport& report) const;
+    [[nodiscard]] std::string optionalDependencySummary(const Manifest& m) const;
+    /// Unpacks into `staging` and runs the package's self-test in a worker.
+    void runSelfTest(const VerifiedPackage& pkg, const std::filesystem::path& staging, ValidationReport& report);
+    /// Moves a self-tested package from `staging` into place, keeping the old version's settings.
+    void installStaged(const VerifiedPackage& pkg, const std::string& archive, const std::filesystem::path& staging,
+                       ValidationReport& report);
     /// Takes the instance out of the entry, then shuts it down outside mutex_.
     void retire(Entry& e);
     void writeState(const Entry& e) const;
