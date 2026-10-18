@@ -122,7 +122,8 @@ read-only token:
   workflow (`.github/workflows/ci-report.yml`) then runs from `main`, reads those results as data
   and posts the comment. Nothing from a fork runs with write access, and changing either workflow
   in a fork's pull request has no effect on that pull request's report. Pull requests from
-  branches of this repository get the comment from `ci.yml` directly.
+  branches of this repository get the comment from a job in `ci.yml` that only posts the
+  finished report and runs none of the pull request's code.
 - Changes to `.github/`, `tools/ci/`, `deploy/` and the signing keys need a review by a code owner
   (`.github/CODEOWNERS`).
 
