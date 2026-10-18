@@ -13,6 +13,7 @@
 #include <rfext/uncertainty.hpp>
 
 #include <algorithm>
+#include <functional>
 #include <cmath>
 #include <set>
 #include <sstream>
@@ -77,6 +78,168 @@ json pointJson(const rfcore::ProfileSample& s, double distanceM) {
             {"obstacleM", s.obstacleHeight.value()},
             {"lat", s.position.latitudeDeg},
             {"lon", s.position.longitudeDeg}};
+}
+
+/// Land-cover codes the mission turned off in its rf.clutter options.
+std::set<int> disabledClasses(const json& opts) {
+    std::set<int> off;
+    if (!opts.contains("disabledClasses") || !opts.at("disabledClasses").is_array()) return off;
+    for (const json& c : opts.at("disabledClasses")) {
+        if (c.is_number_integer()) off.insert(c.get<int>());
+    }
+    return off;
+}
+
+/// The admin's clutter class settings, with the mission's disabled classes switched off.
+std::map<rfext::LandCover, rfext::ClassSetting> clutterSettings(const json& admin, const std::set<int>& off) {
+    std::map<rfext::LandCover, rfext::ClassSetting> settings;
+    for (const auto& [code, s] : admin.items()) {
+        const auto cls = rfext::landCoverFromCode(std::stoi(code));
+        if (!cls) continue;
+        rfext::ClassSetting set;
+        set.enabled = s.value("enabled", false) && !off.contains(std::stoi(code));
+        if (s.contains("heightM")) set.height = Metres(s.at("heightM").get<double>());
+        set.heightSource = s.value("source", "");
+        settings[*cls] = set;
+    }
+    return settings;
+}
+
+/// The effective-earth factor a path uses and where it came from.
+struct EarthFactor {
+    double k = rfcore::constants::kStandardEffectiveEarthFactor;
+    std::string source = "standard atmosphere (ITU-R P.453, -40 N/km)";
+};
+
+/// k from the forecast gradient over the layer the path lives in, or the standard atmosphere
+/// with a note saying why.
+EarthFactor earthFactor(const rfcore::TerrainProfile& profile, const CalcContext& ctx, bool weatherOn,
+                        double topMsl, std::vector<rfcore::UncertaintyNote>& notes) {
+    EarthFactor out;
+    if (!weatherOn) {
+        notes.push_back({"Refraction", "weather not used for this calculation; standard atmosphere k = 4/3"});
+        return out;
+    }
+    if (!ctx.forecast.has_value()) return out;
+    for (const auto& n : ctx.forecast->notes) notes.push_back(n);
+    if (!ctx.forecast->covered()) return out;
+    const auto est = rfext::refractionForPath(ctx.forecast->column, Metres(topMsl));
+    if (!est) {
+        notes.push_back({"Refraction", "the forecast column does not reach the higher antenna (" + fmt(topMsl) +
+                                           " m MSL); standard k = 4/3 used"});
+        return out;
+    }
+    const Metres radius = rfcore::EarthModel::radiusOfCurvature(profile.midLatitudeDeg(), profile.azimuthDeg());
+    if (const double kf = rfcore::EarthModel::factorFromRefractivityGradient(est->gradientPerKm, radius);
+        kf > 0.0 && std::isfinite(kf)) {
+        out.k = kf;
+        out.source = est->description + ", forecast";
+    } else {
+        notes.push_back({"Refraction", "the forecast gradient " + fmt(est->gradientPerKm) +
+                                           " N/km means ducting (k <= 0); the effective-earth model does not "
+                                           "apply, so the standard atmosphere is shown instead"});
+    }
+    return out;
+}
+
+/// Adds the P.838 rain term when the forecast has rain and the link can take it.
+void addRain(rfcore::LinkEvaluator& evaluator, const CalcContext& ctx, Hertz frequency,
+             const std::optional<double>& tiltDeg, std::vector<rfcore::UncertaintyNote>& notes) {
+    if (!ctx.forecast.has_value() || !ctx.forecast->covered() || !ctx.forecast->rainMmPerHour.has_value() ||
+        !(*ctx.forecast->rainMmPerHour > 0.0)) {
+        return;
+    }
+    if (frequency.value() < 1e9) {
+        notes.push_back({"Rain", "ITU-R P.838-3 covers 1-1000 GHz; rain loss at " + fmt(frequency.value() / 1e6) +
+                                     " MHz is not computed (forecast " + fmt(*ctx.forecast->rainMmPerHour) + " mm/h)"});
+    } else if (tiltDeg.has_value()) {
+        evaluator.addContributor(std::make_shared<rfext::RainContributor>(*ctx.forecast->rainMmPerHour, *tiltDeg,
+                                                                          ctx.forecast->sourceLabel));
+    }
+}
+
+/// The note on the DEM's stated vertical error, if there is one to make.
+void addTerrainNote(json& uncertainty, const DemSource& dem) {
+    const std::optional<double> statedError = dem.statedErrorM();
+    if (!statedError.has_value()) {
+        uncertainty.push_back({{"what", "Terrain data"},
+                               {"detail", "the DEM's stated vertical error is not configured on this server "
+                                          "(data.demStatedErrorM), so no terrain error is carried"}});
+    } else if (!dem.statedErrorSource().empty()) {
+        uncertainty.push_back({{"what", "Terrain data"},
+                               {"detail", "stated error " + fmt(*statedError) + " m from " + dem.statedErrorSource()}});
+    }
+}
+
+/// The diffraction result with its points in ground -> air order whatever the direction of
+/// transmission.
+json diffractionJson(const rfcore::DiffractionResult& d, const std::vector<rfcore::ProfileSample>& groundToAir,
+                     bool txIsGround) {
+    const std::size_t n = groundToAir.size();
+    const auto groundIndex = [txIsGround, n](std::size_t i) { return txIsGround ? i : n - 1 - i; };
+    json diff = {{"lineOfSight", d.lineOfSight},
+                 {"nu", d.nu},
+                 {"edgeHeightM", d.edgeHeight.value()},
+                 {"d1M", d.d1.value()},
+                 {"d2M", d.d2.value()},
+                 {"lossDb", d.loss.value()},
+                 {"minFresnelClearance", d.minFresnelClearance},
+                 {"firstFresnelRadiusM", d.firstFresnelRadiusAtMin.value()}};
+    const auto& s = groundToAir[groundIndex(d.dominantSample)];
+    diff["dominant"] = pointJson(s, s.distance.value());
+    const auto& m = groundToAir[groundIndex(d.minClearanceSample)];
+    diff["minClearancePoint"] = pointJson(m, m.distance.value());
+    return diff;
+}
+
+/// The best analog picture grade the SNR reaches, or "lost".
+std::string analogGrade(const json& grades, double snr) {
+    std::vector<std::pair<double, std::string>> sorted;
+    for (const json& g : grades) {
+        sorted.emplace_back(g.at("requiredSnrDb").get<double>(), g.at("label").get<std::string>());
+    }
+    std::ranges::sort(sorted, std::greater{});
+    for (const auto& [need, label] : sorted) {
+        if (snr >= need) return label;
+    }
+    return "lost";
+}
+
+/// Latency and, for analog video, the SNR and picture grade from the radio profile.
+void addRadioDetails(json& res, const json& radio, const std::optional<DecibelMilliwatt>& noiseFloor,
+                     double receivedDbm) {
+    if (!radio.is_object()) return;
+    if (radio.contains("latencyMs")) {
+        res["latencyMs"] = radio.at("latencyMs").at("typical");
+        if (radio.at("latencyMs").contains("max")) res["latencyMaxMs"] = radio.at("latencyMs").at("max");
+    }
+    if (radio.value("kind", "") != "video-analog") return;
+    if (noiseFloor.has_value()) {
+        const double snr = receivedDbm - noiseFloor->value();
+        res["snrDb"] = snr;
+        res["analogGrade"] = analogGrade(radio.at("analogGrades"), snr);
+    } else {
+        res["uncertainty"].push_back({{"what", "Analog grade"},
+                                      {"detail", "the radio profile gives a datasheet sensitivity, not the noise "
+                                                 "figure and bandwidth the picture grades need"}});
+    }
+}
+
+json refsJson(const std::vector<LibraryRef>& refs) {
+    json out = json::array();
+    for (const auto& ref : refs) out.push_back(ref.toJson());
+    return out;
+}
+
+/// A module that failed in any of the band's evaluations is listed once.
+std::vector<ModuleFailure> oncePerModule(const std::vector<ModuleFailure>& failures) {
+    std::vector<ModuleFailure> unique;
+    for (const auto& f : failures) {
+        if (std::ranges::none_of(unique, [&f](const ModuleFailure& u) { return u.moduleId == f.moduleId; })) {
+            unique.push_back(f);
+        }
+    }
+    return unique;
 }
 
 }  // namespace
@@ -151,44 +314,33 @@ PreparedPath LinkService::prepare(const Terminal& ground, const Terminal& air, c
     if (p.distanceM < 2.0 * dem.nativeResolution().value()) step = Metres(p.distanceM / 2.0);
     rfcore::ProfileResult built = rfcore::ProfileBuilder(dem).build(ground.position, air.position, step);
     p.missing = std::move(built.missing);
-    if (!built.profile) return p;
-    p.profile = std::move(built.profile);
+    if (!built.profile.has_value()) return p;
+    rfcore::TerrainProfile& profile = p.profile.emplace(std::move(*built.profile));
 
     if (landcover_) {
-        for (auto& s : p.profile->mutableSamples()) s.landCover = landcover_->code(s.position);
+        for (auto& s : profile.mutableSamples()) s.landCover = landcover_->code(s.position);
     }
     if (builtins_.enabled(BuiltinModules::kClutter) && ctx.optedIn(BuiltinModules::kClutter)) {
-        if (!landcover_) {
-            p.notes.push_back({"Clutter", "no land cover layer is configured on this server; clutter not applied"});
-        } else {
-            std::set<int> off;
-            const json opts = ctx.optionsFor(BuiltinModules::kClutter);
-            if (opts.contains("disabledClasses") && opts.at("disabledClasses").is_array()) {
-                for (const json& c : opts.at("disabledClasses")) {
-                    if (c.is_number_integer()) off.insert(c.get<int>());
-                }
-            }
-            std::map<rfext::LandCover, rfext::ClassSetting> settings;
-            const json admin = builtins_.options(BuiltinModules::kClutter).value("classes", json::object());
-            for (const auto& [code, s] : admin.items()) {
-                const auto cls = rfext::landCoverFromCode(std::stoi(code));
-                if (!cls) continue;
-                rfext::ClassSetting set;
-                set.enabled = s.value("enabled", false) && !off.count(std::stoi(code));
-                if (s.contains("heightM")) set.height = Metres(s.at("heightM").get<double>());
-                set.heightSource = s.value("source", "");
-                settings[*cls] = set;
-            }
-            const auto report = rfext::ClutterConditioner(settings).apply(*p.profile);
-            for (auto& n : report.notes()) p.notes.push_back(std::move(n));
-            if (!off.empty()) {
-                std::string list;
-                for (int c : off) list += (list.empty() ? "" : ", ") + std::to_string(c);
-                p.notes.push_back({"Clutter", "classes turned off for this mission: " + list});
-            }
-        }
+        applyClutter(profile, p.notes, ctx);
     }
     return p;
+}
+
+void LinkService::applyClutter(rfcore::TerrainProfile& profile, std::vector<rfcore::UncertaintyNote>& notes,
+                               const CalcContext& ctx) const {
+    if (!landcover_) {
+        notes.push_back({"Clutter", "no land cover layer is configured on this server; clutter not applied"});
+        return;
+    }
+    const std::set<int> off = disabledClasses(ctx.optionsFor(BuiltinModules::kClutter));
+    const json admin = builtins_.options(BuiltinModules::kClutter).value("classes", json::object());
+    const auto report = rfext::ClutterConditioner(clutterSettings(admin, off)).apply(profile);
+    for (auto& n : report.notes()) notes.push_back(std::move(n));
+    if (!off.empty()) {
+        std::string list;
+        for (const int c : off) list += (list.empty() ? "" : ", ") + std::to_string(c);
+        notes.push_back({"Clutter", "classes turned off for this mission: " + list});
+    }
 }
 
 LinkEvaluation LinkService::evaluate(const PreparedPath& path, const ResolvedLink& link, const CalcContext& ctx,
@@ -290,46 +442,14 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
     const double rxMsl = samples.back().groundMsl.value() + b.rx.antennaAgl.value();
 
     // Effective earth: k from the forecast gradient over the layer the path lives in.
-    double k = rfcore::constants::kStandardEffectiveEarthFactor;
-    std::string kSource = "standard atmosphere (ITU-R P.453, -40 N/km)";
     const bool weatherOn = builtins_.enabled(BuiltinModules::kWeather) && ctx.optedIn(BuiltinModules::kWeather);
-    if (weatherOn && ctx.forecast) {
-        for (const auto& n : ctx.forecast->notes) notes.push_back(n);
-        if (ctx.forecast->covered()) {
-            if (const auto est = rfext::refractionForPath(ctx.forecast->column, Metres(std::max(txMsl, rxMsl)))) {
-                const Metres radius = rfcore::EarthModel::radiusOfCurvature(profile.midLatitudeDeg(), profile.azimuthDeg());
-                const double kf = rfcore::EarthModel::factorFromRefractivityGradient(est->gradientPerKm, radius);
-                if (kf > 0.0 && std::isfinite(kf)) {
-                    k = kf;
-                    kSource = est->description + ", forecast";
-                } else {
-                    notes.push_back({"Refraction", "the forecast gradient " + fmt(est->gradientPerKm) +
-                                                       " N/km means ducting (k <= 0); the effective-earth model does not "
-                                                       "apply, so the standard atmosphere is shown instead"});
-                }
-            } else {
-                notes.push_back({"Refraction", "the forecast column does not reach the higher antenna (" +
-                                                   fmt(std::max(txMsl, rxMsl)) + " m MSL); standard k = 4/3 used"});
-            }
-        }
-    } else if (!weatherOn) {
-        notes.push_back({"Refraction", "weather not used for this calculation; standard atmosphere k = 4/3"});
-    }
+    const EarthFactor earth = earthFactor(profile, ctx, weatherOn, std::max(txMsl, rxMsl), notes);
 
     rfcore::BullingtonDiffraction::Options dopt;
     dopt.useEmpiricalCorrection = ctx.optionsFor("rf.core").value("useEmpiricalCorrection", false);
-    rfcore::LinkEvaluator evaluator{rfcore::EarthModel(k), rfcore::BullingtonDiffraction(dopt)};
+    rfcore::LinkEvaluator evaluator{rfcore::EarthModel(earth.k), rfcore::BullingtonDiffraction(dopt)};
 
-    if (weatherOn && ctx.forecast && ctx.forecast->covered() && ctx.forecast->rainMmPerHour.has_value() &&
-        *ctx.forecast->rainMmPerHour > 0.0) {
-        if (b.frequency.value() < 1e9) {
-            notes.push_back({"Rain", "ITU-R P.838-3 covers 1-1000 GHz; rain loss at " + fmt(b.frequency.value() / 1e6) +
-                                         " MHz is not computed (forecast " + fmt(*ctx.forecast->rainMmPerHour) + " mm/h)"});
-        } else if (b.tiltDeg.has_value()) {
-            evaluator.addContributor(std::make_shared<rfext::RainContributor>(*ctx.forecast->rainMmPerHour, *b.tiltDeg,
-                                                                              ctx.forecast->sourceLabel));
-        }
-    }
+    if (weatherOn) addRain(evaluator, ctx, b.frequency, b.tiltDeg, notes);
     if (modules_) {
         const Terminal& txT = b.txIsGround ? path.ground : path.air;
         const Terminal& rxT = b.txIsGround ? path.air : path.ground;
@@ -348,35 +468,10 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
     json uncertainty = json::array();
     for (const auto& n : r.uncertainty) uncertainty.push_back({{"what", n.what}, {"detail", n.detail}});
     for (const auto& n : notes) uncertainty.push_back({{"what", n.what}, {"detail", n.detail}});
-    const DemSource& dem = requireDem();
-    if (!dem.statedErrorM().has_value()) {
-        uncertainty.push_back({{"what", "Terrain data"},
-                               {"detail", "the DEM's stated vertical error is not configured on this server "
-                                          "(data.demStatedErrorM), so no terrain error is carried"}});
-    } else if (!dem.statedErrorSource().empty()) {
-        uncertainty.push_back({{"what", "Terrain data"},
-                               {"detail", "stated error " + fmt(*dem.statedErrorM()) + " m from " + dem.statedErrorSource()}});
-    }
+    addTerrainNote(uncertainty, requireDem());
 
-    // Report positions in ground -> air order whatever the direction of transmission.
-    const std::size_t n = samples.size();
-    auto groundIndex = [&b, n](std::size_t i) { return b.txIsGround ? i : n - 1 - i; };
     const auto& gs = path.profile->samples();
-    const rfcore::DiffractionResult& d = r.diffraction;
-    json diff = {{"lineOfSight", d.lineOfSight},
-                 {"nu", d.nu},
-                 {"edgeHeightM", d.edgeHeight.value()},
-                 {"d1M", d.d1.value()},
-                 {"d2M", d.d2.value()},
-                 {"lossDb", d.loss.value()},
-                 {"minFresnelClearance", d.minFresnelClearance},
-                 {"firstFresnelRadiusM", d.firstFresnelRadiusAtMin.value()}};
-    {
-        const auto& s = gs[groundIndex(d.dominantSample)];
-        diff["dominant"] = pointJson(s, s.distance.value());
-        const auto& m = gs[groundIndex(d.minClearanceSample)];
-        diff["minClearancePoint"] = pointJson(m, m.distance.value());
-    }
+    const json diff = diffractionJson(r.diffraction, gs, b.txIsGround);
 
     json& res = out.result;
     res = {{"frequencyHz", b.frequency.value()},
@@ -392,7 +487,7 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
            {"reachable", r.reachable()},
            {"diffraction", diff},
            {"uncertainty", uncertainty},
-           {"earth", {{"effectiveEarthFactor", k}, {"source", kSource}}},
+           {"earth", {{"effectiveEarthFactor", earth.k}, {"source", earth.source}}},
            {"model", "rfmap-server " + version_ + " / rf-core: free space ITU-R P.525, Bullington ITU-R P.526-15 with "
                                                   "exact J(nu), exact effective-earth geometry" +
                          std::string(dopt.useEmpiricalCorrection ? ", P.526 empirical correction on" : "")}};
@@ -407,40 +502,8 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
                    {"air", endJson(path.air, gs.back())},
                    {"transmitter", b.txIsGround ? "ground" : "air"}};
     if (b.kind) res["kind"] = toString(*b.kind);
-    if (!b.refs.empty()) {
-        json refs = json::array();
-        for (const auto& ref : b.refs) refs.push_back(ref.toJson());
-        res["library"] = refs;
-    }
-    if (b.radio.is_object()) {
-        if (b.radio.contains("latencyMs")) {
-            res["latencyMs"] = b.radio.at("latencyMs").at("typical");
-            if (b.radio.at("latencyMs").contains("max")) res["latencyMaxMs"] = b.radio.at("latencyMs").at("max");
-        }
-        if (b.radio.value("kind", "") == "video-analog") {
-            if (b.noiseFloor) {
-                const double snr = r.received.value() - b.noiseFloor->value();
-                res["snrDb"] = snr;
-                std::vector<std::pair<double, std::string>> grades;
-                for (const json& g : b.radio.at("analogGrades")) {
-                    grades.emplace_back(g.at("requiredSnrDb").get<double>(), g.at("label").get<std::string>());
-                }
-                std::sort(grades.rbegin(), grades.rend());
-                std::string grade = "lost";
-                for (const auto& [need, label] : grades) {
-                    if (snr >= need) {
-                        grade = label;
-                        break;
-                    }
-                }
-                res["analogGrade"] = grade;
-            } else {
-                res["uncertainty"].push_back({{"what", "Analog grade"},
-                                              {"detail", "the radio profile gives a datasheet sensitivity, not the noise "
-                                                         "figure and bandwidth the picture grades need"}});
-            }
-        }
-    }
+    if (!b.refs.empty()) res["library"] = refsJson(b.refs);
+    addRadioDetails(res, b.radio, b.noiseFloor, r.received.value());
 
     if (withBand) {
         if (builtins_.enabled(BuiltinModules::kUncertainty)) {
@@ -456,14 +519,7 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
     }
     if (withProfile) res["profile"] = profileJson(*path.profile, (gs[1].distance - gs[0].distance).value());
 
-    // A module that failed in any of the band's evaluations is listed once.
-    std::vector<ModuleFailure> unique;
-    for (const auto& f : out.failures) {
-        if (std::none_of(unique.begin(), unique.end(), [&f](const ModuleFailure& u) { return u.moduleId == f.moduleId; })) {
-            unique.push_back(f);
-        }
-    }
-    out.failures = unique;
+    out.failures = oncePerModule(out.failures);
     json failures = json::array();
     for (const auto& f : out.failures) failures.push_back(f.toJson());
     res["moduleFailures"] = failures;

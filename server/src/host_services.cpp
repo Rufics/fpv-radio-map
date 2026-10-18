@@ -20,6 +20,17 @@ struct DepthGuard {
 };
 
 rfcore::GeoPoint geo(const json& p) { return {p.at("lat").get<double>(), p.at("lon").get<double>()}; }
+
+json geodesyInverse(const json& request) {
+    const auto r = rfcore::Geodesy().inverse(geo(request.at("from")), geo(request.at("to")));
+    return {{"distanceM", r.distance.value()}, {"azimuth1Deg", r.azimuthStartDeg}, {"azimuth2Deg", r.azimuthEndDeg}};
+}
+
+json geodesyDirect(const json& request) {
+    const auto r = rfcore::Geodesy().directWithAzimuth(geo(request.at("from")), request.at("azimuthDeg").get<double>(),
+                                                       rfcore::Metres(request.at("distanceM").get<double>()));
+    return {{"lat", r.point.latitudeDeg}, {"lon", r.point.longitudeDeg}, {"azimuthDeg", r.azimuthEndDeg}};
+}
 }  // namespace
 
 CalcContextScope::CalcContextScope(const CalcContext& ctx) : previous_(currentContext) { currentContext = &ctx; }
@@ -47,54 +58,53 @@ void ServerHostServices::log(const std::string& moduleId, int level, const std::
 }
 
 json ServerHostServices::call(const std::string& moduleId, const std::string& method, const json& request) {
-    if (hostDepth >= kMaxDepth) throw std::runtime_error("host calls nested deeper than " + std::to_string(kMaxDepth));
+    if (hostDepth >= kMaxDepth) throw HostCallError("host calls nested deeper than " + std::to_string(kMaxDepth));
     const DepthGuard depth;
     if (method == "link.evaluate") {
         // The guide's promise: evaluating a link runs loss.contribute, so calling it from there recurses.
         if (!LossContributionScope::active().empty()) {
-            throw std::runtime_error("link.evaluate is refused inside loss.contribute (called by " +
+            throw HostCallError("link.evaluate is refused inside loss.contribute (called by " +
                                      LossContributionScope::active() + "): it would recurse");
         }
-        if (!links_) throw std::runtime_error("link evaluation is not available");
+        if (!links_) throw HostCallError("link evaluation is not available");
         return linkEvaluate(request);
     }
-    const rfcore::Geodesy g;
-    if (method == "geodesy.inverse") {
-        const auto r = g.inverse(geo(request.at("from")), geo(request.at("to")));
-        return {{"distanceM", r.distance.value()}, {"azimuth1Deg", r.azimuthStartDeg}, {"azimuth2Deg", r.azimuthEndDeg}};
-    }
-    if (method == "geodesy.direct") {
-        const auto r = g.directWithAzimuth(geo(request.at("from")), request.at("azimuthDeg").get<double>(),
-                                           rfcore::Metres(request.at("distanceM").get<double>()));
-        return {{"lat", r.point.latitudeDeg}, {"lon", r.point.longitudeDeg}, {"azimuthDeg", r.azimuthEndDeg}};
-    }
-    if (method == "elevation.point") {
-        if (!links_) throw std::runtime_error("no terrain model");
-        const DemSource& dem = links_->requireDem();
-        const auto e = dem.elevation(geo(request));
-        return {{"groundMslM", e ? json(e->heightMsl.value()) : json(nullptr)},
-                {"uncertaintyM", dem.statedErrorM().has_value() ? json(*dem.statedErrorM()) : json(nullptr)},
-                {"source", dem.name()}};
-    }
+    if (method == "geodesy.inverse") return geodesyInverse(request);
+    if (method == "geodesy.direct") return geodesyDirect(request);
+    if (method == "elevation.point") return elevationPoint(request);
     if (method == "profile.get") return profileGet(request);
-    if (method == "weather.point") {
-        if (!weather_) throw std::runtime_error("no weather service");
-        const auto t = request.contains("time") ? parseIsoUtc(request.at("time").get<std::string>()) : Clock::now();
-        if (!t) throw std::runtime_error("time must be ISO 8601");
-        return weather_->at(request.at("lat").get<double>(), request.at("lon").get<double>(), *t).point;
-    }
-    if (method == "library.get") {
-        if (!library_) throw std::runtime_error("no library");
-        const auto item = library_->get(request.at("kind").get<std::string>(), request.at("id").get<std::string>());
-        if (!item) throw std::runtime_error("no library item " + request.value("kind", "") + "/" + request.value("id", ""));
-        return *item;
-    }
+    if (method == "weather.point") return weatherPoint(request);
+    if (method == "library.get") return libraryGet(request);
     (void)moduleId;
-    throw std::runtime_error("unknown host method " + method);
+    throw HostCallError("unknown host method " + method);
+}
+
+json ServerHostServices::elevationPoint(const json& req) const {
+    if (!links_) throw HostCallError("no terrain model");
+    const DemSource& dem = links_->requireDem();
+    const auto e = dem.elevation(geo(req));
+    const std::optional<double> statedError = dem.statedErrorM();
+    return {{"groundMslM", e.has_value() ? json(e->heightMsl.value()) : json(nullptr)},
+            {"uncertaintyM", statedError.has_value() ? json(*statedError) : json(nullptr)},
+            {"source", dem.name()}};
+}
+
+json ServerHostServices::weatherPoint(const json& req) {
+    if (!weather_) throw HostCallError("no weather service");
+    const auto t = req.contains("time") ? parseIsoUtc(req.at("time").get<std::string>()) : Clock::now();
+    if (!t.has_value()) throw HostCallError("time must be ISO 8601");
+    return weather_->at(req.at("lat").get<double>(), req.at("lon").get<double>(), *t).point;
+}
+
+json ServerHostServices::libraryGet(const json& req) const {
+    if (!library_) throw HostCallError("no library");
+    const auto item = library_->get(req.at("kind").get<std::string>(), req.at("id").get<std::string>());
+    if (!item.has_value()) throw HostCallError("no library item " + req.value("kind", "") + "/" + req.value("id", ""));
+    return *item;
 }
 
 json ServerHostServices::profileGet(const json& req) {
-    if (!links_) throw std::runtime_error("no terrain model");
+    if (!links_) throw HostCallError("no terrain model");
     const DemSource& dem = links_->requireDem();
     const rfcore::Geodesy g;
     const auto from = geo(req.at("from"));
@@ -102,7 +112,7 @@ json ServerHostServices::profileGet(const json& req) {
     const double total = g.inverse(from, to).distance.value();
     double step = dem.nativeResolution().value();
     if (req.contains("stepM")) step = std::min(step, req.at("stepM").get<double>());
-    if (!(step > 0.0)) throw std::runtime_error("stepM must be positive");
+    if (!(step > 0.0)) throw HostCallError("stepM must be positive");
     const auto points = g.sample(from, to, rfcore::Metres(step));
     const double n = static_cast<double>(points.size() - 1);
     json samples = json::array();
@@ -134,7 +144,7 @@ json ServerHostServices::linkEvaluate(const json& req) {
         for (const auto& s : p.missing) {
             spans += (spans.empty() ? "" : ", ") + std::to_string(s.from.value()) + "-" + std::to_string(s.to.value()) + " m";
         }
-        return std::runtime_error("missing-data: no elevation data on " + spans + " of the path; nothing is guessed");
+        return HostCallError("missing-data: no elevation data on " + spans + " of the path; nothing is guessed");
     };
     if (req.contains("mission")) {
         const json& mission = req.at("mission");
@@ -142,13 +152,13 @@ json ServerHostServices::linkEvaluate(const json& req) {
         if (schemas_) {
             const auto problems = schemas_->check("mission", mission);
             if (!problems.empty()) {
-                throw std::runtime_error("bad_request: mission does not match mission.schema.json: " +
+                throw HostCallError("bad_request: mission does not match mission.schema.json: " +
                                          problems.front().pointer + " " + problems.front().message);
             }
         }
         const LinkKind kind = linkKindFromString(req.at("link").get<std::string>());
         const json& links = mission.at("links");
-        if (!links.contains(toString(kind))) throw std::runtime_error("the mission has no " + toString(kind) + " link");
+        if (!links.contains(toString(kind))) throw HostCallError("the mission has no " + toString(kind) + " link");
         const CalcContext ctx = contexts_(mission);
         const CalcContextScope scope(ctx);
         const ResolvedLink link = links_->resolve(links.at(toString(kind)), kind);
@@ -163,7 +173,7 @@ json ServerHostServices::linkEvaluate(const json& req) {
     else ctx.time = Clock::now();
     if (req.contains("time")) {
         const auto t = parseIsoUtc(req.at("time").get<std::string>());
-        if (!t) throw std::runtime_error("time must be ISO 8601");
+        if (!t) throw HostCallError("time must be ISO 8601");
         ctx.time = *t;
     }
     const json& tx = req.at("tx");
@@ -181,7 +191,7 @@ json ServerHostServices::linkEvaluate(const json& req) {
     try {
         return links_->evaluateRaw(e, ctx).result;
     } catch (const HttpError& err) {
-        throw std::runtime_error(err.body().contains("status") ? "missing-data: " + std::string(err.what()) : err.what());
+        throw HostCallError(err.body().contains("status") ? "missing-data: " + std::string(err.what()) : err.what());
     }
 }
 

@@ -66,6 +66,34 @@ std::optional<std::string> validateOptions(const fs::path& dir, const Manifest& 
     }
 }
 
+void checkLifecycle(const Manifest& m, const Version& hostVersion, ValidationReport& report) {
+    if (m.lifecycle != Lifecycle::Deprecated || !m.deprecation.has_value()) {
+        report.pass("lifecycle", toString(m.lifecycle));
+        return;
+    }
+    const Deprecation& d = *m.deprecation;
+    report.pass("lifecycle", "deprecated since " + d.since.str() + ", removed in " + d.removedIn.str() + ": " + d.message);
+    if (hostVersion >= d.removedIn) {
+        report.fail("lifecycle.removed", "this host (" + hostVersion.str() + ") no longer accepts it");
+    }
+}
+
+std::string sandboxDetail(const SandboxInfo& sb) {
+    return "separate process, memory limit " + std::to_string(sb.memoryLimitMb) + " MB, no file writes; no_new_privs " +
+           (sb.noNewPrivileges ? "on" : "unavailable") + "; network " +
+           (sb.networkIsolated ? "cut off" : "NOT isolated on this host");
+}
+
+std::string selfTestDetail(const json& result, bool passed) {
+    std::string detail = passed ? "self-test passed" : "self-test failed";
+    if (result.contains("checks")) {
+        for (const json& c : result.at("checks")) {
+            detail += "; " + c.value("name", "?") + (c.value("ok", false) ? " ok" : " FAILED");
+        }
+    }
+    return detail;
+}
+
 }  // namespace
 
 std::string toString(ModuleState s) {
@@ -118,13 +146,7 @@ std::unique_ptr<IModuleInstance> ModuleRegistry::load(const Manifest& m, const T
     return std::make_unique<IsolatedModule>(m, library, config_.workerExecutable, services_, options);
 }
 
-ValidationReport ModuleRegistry::upload(const std::string& archive, bool install) {
-    std::lock_guard admin(adminMutex_);
-    ValidationReport report;
-    auto pkg = PackageVerifier::verify(archive, trust_, config_.hostVersion, report, config_.limits);
-    if (!pkg) return report;
-    const Manifest& m = pkg->manifest;
-
+void ModuleRegistry::checkUpgrade(const Manifest& m, ValidationReport& report) const {
     if (auto existing = entries_.find(m.id); existing != entries_.end()) {
         const Version& have = existing->second.manifest.version;
         report.add("version.upgrade", m.version > have,
@@ -143,7 +165,19 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
         }
     }
     if (!stranded.empty()) report.fail("dependents", m.version.str() + " breaks enabled modules: " + stranded);
+}
 
+std::string ModuleRegistry::optionalDependencySummary(const Manifest& m) const {
+    std::string optionalDetail;
+    for (const Dependency& d : m.optionalDependencies) {
+        const auto it = entries_.find(d.id);
+        const bool ok = it != entries_.end() && d.range.contains(it->second.manifest.version);
+        optionalDetail += (optionalDetail.empty() ? "" : "; ") + d.id + (ok ? " present" : " absent, features off");
+    }
+    return optionalDetail;
+}
+
+void ModuleRegistry::checkDependencies(const Manifest& m, ValidationReport& report) const {
     // Required dependencies must already be installed, in range and loadable.
     std::vector<std::string> problems;
     for (const Dependency& d : m.dependencies) {
@@ -158,12 +192,7 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
             report.pass("dependencies.deprecated", d.id + " is deprecated: " + it->second.manifest.deprecation->message);
         }
     }
-    std::string optionalDetail;
-    for (const Dependency& d : m.optionalDependencies) {
-        const auto it = entries_.find(d.id);
-        const bool ok = it != entries_.end() && d.range.contains(it->second.manifest.version);
-        optionalDetail += (optionalDetail.empty() ? "" : "; ") + d.id + (ok ? " present" : " absent, features off");
-    }
+    const std::string optionalDetail = optionalDependencySummary(m);
     if (problems.empty()) {
         report.pass("dependencies", m.dependencies.empty() ? "no required dependencies"
                                                             : std::to_string(m.dependencies.size()) + " required, all active" +
@@ -173,54 +202,34 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
         for (const auto& p : problems) all += (all.empty() ? "" : "; ") + p;
         report.fail("dependencies", all);
     }
-    if (m.lifecycle == Lifecycle::Deprecated) {
-        report.pass("lifecycle", "deprecated since " + m.deprecation->since.str() + ", removed in " +
-                                     m.deprecation->removedIn.str() + ": " + m.deprecation->message);
-        if (config_.hostVersion >= m.deprecation->removedIn) {
-            report.fail("lifecycle.removed", "this host (" + config_.hostVersion.str() + ") no longer accepts it");
-        }
-    } else {
-        report.pass("lifecycle", toString(m.lifecycle));
-    }
-    if (!report.ok()) return report;
+}
 
-    // Self-test always runs in a worker, whoever signed it: an upload is untrusted until installed.
-    const fs::path staging = config_.root / "staging" / randomName();
+void ModuleRegistry::runSelfTest(const VerifiedPackage& pkg, const fs::path& staging, ValidationReport& report) {
     try {
-        unpack(pkg->files, staging);
-        auto instance = load(m, pkg->signer, staging, json::object(), true);
+        unpack(pkg.files, staging);
+        auto instance = load(pkg.manifest, pkg.signer, staging, json::object(), true);
         if (const auto* iso = dynamic_cast<const IsolatedModule*>(instance.get())) {
-            const SandboxInfo& sb = iso->sandbox();
             // Informational: says what this server's kernel allowed, so nobody assumes more.
-            report.pass("sandbox", "separate process, memory limit " + std::to_string(sb.memoryLimitMb) +
-                                       " MB, no file writes; no_new_privs " + (sb.noNewPrivileges ? "on" : "unavailable") +
-                                       "; network " + (sb.networkIsolated ? "cut off" : "NOT isolated on this host"));
+            report.pass("sandbox", sandboxDetail(iso->sandbox()));
         }
         const json result = instance->invoke("rfmod.selftest", json::object());
         instance->shutdown();
         const bool passed = result.value("ok", false);
-        std::string detail = passed ? "self-test passed" : "self-test failed";
-        if (result.contains("checks")) {
-            for (const json& c : result.at("checks")) {
-                detail += "; " + c.value("name", "?") + (c.value("ok", false) ? " ok" : " FAILED");
-            }
-        }
-        report.add("selftest", passed, detail);
+        report.add("selftest", passed, selfTestDetail(result, passed));
     } catch (const ModuleError& e) {
         report.fail("selftest", e.code() + ": " + e.what());
     } catch (const std::exception& e) {
         report.fail("selftest", e.what());
     }
+}
 
-    if (!report.ok() || !install) {
-        fs::remove_all(staging);
-        return report;
-    }
-
-    // Install: replace the old version atomically from the directory's point of view.
+void ModuleRegistry::installStaged(const VerifiedPackage& pkg, const std::string& archive, const fs::path& staging,
+                                   ValidationReport& report) {
+    // Replace the old version atomically from the directory's point of view.
+    const Manifest& m = pkg.manifest;
     const fs::path target = config_.root / "installed" / m.id;
     writeFileAtomic(staging / kPackageFile, archive);
-    Entry fresh{m, pkg->signer, target, true, json::object(), ModuleState::Disabled, {}, nullptr};
+    Entry fresh{m, pkg.signer, target, true, json::object(), ModuleState::Disabled, {}, nullptr};
     if (auto existing = entries_.find(m.id); existing != entries_.end()) {
         retire(existing->second);
         fresh.enabled = existing->second.enabled;
@@ -232,7 +241,28 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
     fs::remove_all(old);
     writeState(fresh);
     report.pass("installed", m.id + " " + m.version.str() + " at " + isoNow());
+}
 
+ValidationReport ModuleRegistry::upload(const std::string& archive, bool install) {
+    const std::lock_guard admin(adminMutex_);
+    ValidationReport report;
+    auto pkg = PackageVerifier::verify(archive, trust_, config_.hostVersion, report, config_.limits);
+    if (!pkg) return report;
+
+    checkUpgrade(pkg->manifest, report);
+    checkDependencies(pkg->manifest, report);
+    checkLifecycle(pkg->manifest, config_.hostVersion, report);
+    if (!report.ok()) return report;
+
+    // Self-test always runs in a worker, whoever signed it: an upload is untrusted until installed.
+    const fs::path staging = config_.root / "staging" / randomName();
+    runSelfTest(*pkg, staging, report);
+    if (!report.ok() || !install) {
+        fs::remove_all(staging);
+        return report;
+    }
+
+    installStaged(*pkg, archive, staging, report);
     reloadLocked();
     return report;
 }
@@ -462,34 +492,34 @@ bool ModuleRegistry::start(const std::string& id, Entry& e, std::unique_lock<std
     return true;
 }
 
+void ModuleRegistry::addNotices(const std::string& id, const Entry& e) {
+    using enum ModuleState;
+    if (e.state == MissingDependency || e.state == Failed) {
+        notices_.push_back(id + " is " + toString(e.state) + ": " + e.stateDetail);
+        return;
+    }
+    if (e.state != Active) return;
+    if (e.manifest.deprecation.has_value()) {
+        const auto& d = *e.manifest.deprecation;
+        notices_.push_back(id + " is deprecated since " + d.since.str() + " and will be removed in " +
+                           d.removedIn.str() + ". " + d.message +
+                           (d.replacement.empty() ? "" : " Use " + d.replacement + " instead."));
+    }
+    for (const Dependency& dep : e.manifest.dependencies) {
+        if (const Entry& target = entries_.at(dep.id); target.manifest.deprecation.has_value()) {
+            notices_.push_back(id + " depends on deprecated " + dep.id + "; it stops working when " + dep.id +
+                               " is removed in " + target.manifest.deprecation->removedIn.str() + ".");
+        }
+    }
+}
+
 void ModuleRegistry::resolve() {
     // Depth-first over required and optional dependencies; required failures propagate.
     // mutex_ is released only while a module loads: its init is module code and may read the registry.
-    using enum ModuleState;
     std::unique_lock lock(mutex_);
     VisitMarks mark;
     for (const auto& [id, e] : entries_) (void)visit(id, mark, lock);
-
-    for (const auto& [id, e] : entries_) {
-        if (e.state == Active && e.manifest.deprecation) {
-            const auto& d = *e.manifest.deprecation;
-            notices_.push_back(id + " is deprecated since " + d.since.str() + " and will be removed in " +
-                               d.removedIn.str() + ". " + d.message +
-                               (d.replacement.empty() ? "" : " Use " + d.replacement + " instead."));
-        }
-        if (e.state == Active) {
-            for (const Dependency& dep : e.manifest.dependencies) {
-                const Entry& target = entries_.at(dep.id);
-                if (target.manifest.deprecation) {
-                    notices_.push_back(id + " depends on deprecated " + dep.id + "; it stops working when " + dep.id +
-                                       " is removed in " + target.manifest.deprecation->removedIn.str() + ".");
-                }
-            }
-        }
-        if (e.state == MissingDependency || e.state == Failed) {
-            notices_.push_back(id + " is " + toString(e.state) + ": " + e.stateDetail);
-        }
-    }
+    for (const auto& [id, e] : entries_) addNotices(id, e);
 }
 
 json ModuleRegistry::list() const {

@@ -45,6 +45,9 @@ private:
     };
     std::shared_ptr<Job> find(const std::string& missionId, const std::string& jobId);
     json toJson(const Job& j) const;
+    /// Runs the job's parts in order on a runner thread; `failed` is set by a part that failed.
+    void runJob(Job& job, const json& mission);
+    void runPart(Job& job, Part& part, const json& mission, bool& failed);
     void sweep();
 
     Calculator& calc_;

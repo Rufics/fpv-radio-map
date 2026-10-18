@@ -48,6 +48,36 @@ std::optional<double> valueAt(const json& hourly, const std::string& var, std::s
     return arr.at(i).get<double>();
 }
 
+/// The last hour with the surface values the column needs, if any.
+std::optional<TimePoint> lastSurfaceHour(const json& hourly) {
+    const json& times = hourly.value("time", json::array());
+    for (std::size_t i = times.size(); i-- > 0;) {
+        if (valueAt(hourly, "temperature_2m", i).has_value() && valueAt(hourly, "surface_pressure", i).has_value()) {
+            return Clock::from_time_t(times.at(i).get<std::time_t>());
+        }
+    }
+    return std::nullopt;
+}
+
+/// Appends the pressure levels of hour `i` that lie above the ground; returns how many.
+std::size_t addPressureLevels(std::vector<rfext::AirSample>& column, const json& hourly, std::size_t i,
+                              double surface) {
+    std::size_t levels = 0;
+    for (const int level : OpenMeteoSource::pressureLevelsHpa()) {
+        const std::string s = std::to_string(level) + "hPa";
+        const auto t = valueAt(hourly, "temperature_" + s, i);
+        const auto rh = valueAt(hourly, "relative_humidity_" + s, i);
+        const auto gh = valueAt(hourly, "geopotential_height_" + s, i);
+        if (!t.has_value() || !rh.has_value() || !gh.has_value()) continue;
+        const double h = WeatherService::geometricHeight(*gh);
+        // A level the model extrapolates below the ground is not air the path flies through.
+        if (!(h > surface)) continue;
+        column.push_back({rfext::Metres(h), *t, static_cast<double>(level), *rh});
+        ++levels;
+    }
+    return levels;
+}
+
 }  // namespace
 
 const std::vector<int>& OpenMeteoSource::pressureLevelsHpa() {
@@ -158,80 +188,11 @@ ForecastAt WeatherService::at(double lat, double lon, TimePoint time) {
         const json& hourly = r.value("hourly", json::object());
         const json& times = hourly.value("time", json::array());
         if (times.empty()) continue;
+        if (const auto last = lastSurfaceHour(hourly); last.has_value() && (!reach.has_value() || *last > *reach)) reach = last;
         const auto t0 = Clock::from_time_t(times.front().get<std::time_t>());
-        const double hours = std::chrono::duration<double>(time - t0).count() / 3600.0;
-        const double idx = std::round(hours);
-        // Last hour with the surface values the column needs.
-        for (std::size_t i = times.size(); i-- > 0;) {
-            if (valueAt(hourly, "temperature_2m", i).has_value() && valueAt(hourly, "surface_pressure", i).has_value()) {
-                const auto t = Clock::from_time_t(times.at(i).get<std::time_t>());
-                if (!reach || t > *reach) reach = t;
-                break;
-            }
-        }
+        const double idx = std::round(std::chrono::duration<double>(time - t0).count() / 3600.0);
         if (idx < 0 || idx >= static_cast<double>(times.size())) continue;
-        const auto i = static_cast<std::size_t>(idx);
-        const auto t2 = valueAt(hourly, "temperature_2m", i);
-        const auto rh2 = valueAt(hourly, "relative_humidity_2m", i);
-        const auto ps = valueAt(hourly, "surface_pressure", i);
-        if (!t2.has_value() || !rh2.has_value() || !ps.has_value() || !r.contains("elevation")) continue;
-
-        const TimePoint valid = Clock::from_time_t(times.at(i).get<std::time_t>());
-        const double surface = r.at("elevation").get<double>() + 2.0;
-        out.column.push_back({rfext::Metres(surface), *t2, *ps, *rh2});
-        std::size_t levels = 0;
-        for (int level : OpenMeteoSource::pressureLevelsHpa()) {
-            const std::string s = std::to_string(level) + "hPa";
-            const auto t = valueAt(hourly, "temperature_" + s, i);
-            const auto rh = valueAt(hourly, "relative_humidity_" + s, i);
-            const auto gh = valueAt(hourly, "geopotential_height_" + s, i);
-            if (!t.has_value() || !rh.has_value() || !gh.has_value()) continue;
-            const double h = geometricHeight(*gh);
-            // A level the model extrapolates below the ground is not air the path flies through.
-            if (!(h > surface)) continue;
-            out.column.push_back({rfext::Metres(h), *t, static_cast<double>(level), *rh});
-            ++levels;
-        }
-        out.rainMmPerHour = valueAt(hourly, "precipitation", i);
-
-        const std::string models = tier.models.empty() ? "default models" : tier.models;
-        const auto offsetMin = std::chrono::duration_cast<std::chrono::minutes>(time - valid).count();
-        out.sourceLabel = "Open-Meteo " + models + ", valid " + isoUtc(valid) + (run ? ", run " + isoUtc(*run) : "");
-        json& p = out.point;
-        p = {{"model", "Open-Meteo " + models},
-             {"validUtc", isoUtc(valid)},
-             {"tier", tier.name},
-             {"temperatureC", *t2},
-             {"pressureHpa", *ps},
-             {"relativeHumidity", *rh2},
-             {"airDensityKgM3", airDensity(out.column.front())},
-             {"surfaceElevationM", surface - 2.0},
-             {"stale", false}};
-        if (const auto ws = valueAt(hourly, "wind_speed_10m", i); ws.has_value()) p["windSpeedMps"] = *ws;
-        if (const auto wd = valueAt(hourly, "wind_direction_10m", i); wd.has_value()) p["windFromDeg"] = *wd;
-        if (out.rainMmPerHour.has_value()) p["precipitationMmPerHour"] = *out.rainMmPerHour;
-        if (run) {
-            p["runUtc"] = isoUtc(*run);
-            p["stale"] = clock_.now() - *run > std::chrono::hours(cfg_.staleAfterHours);
-        }
-        if (const auto est = rfext::refractionForPath(out.column, rfext::Metres(surface))) {
-            p["refractivityGradientPerKm"] = est->gradientPerKm;
-            p["surfaceRefractivityN"] = est->nSurface;
-            p["effectiveEarthFactor"] =
-                rfcore::EarthModel::factorFromRefractivityGradient(est->gradientPerKm, rfcore::Metres(meanRadius(lat)));
-        }
-        out.notes.push_back({"Forecast", out.sourceLabel + (offsetMin != 0 ? " (" + std::to_string(offsetMin) +
-                                                                                   " min from the requested time)"
-                                                                             : "")});
-        out.notes.push_back({"Forecast air column",
-                             "surface air is the 2 m temperature and humidity with the surface pressure; " +
-                                 std::to_string(levels) + " pressure levels above the ground; forecast values are "
-                                                          "model output with their own error, not measurements"});
-        if (levels == 0) {
-            out.notes.push_back({"Refraction", "no forecast pressure level lies above the ground here; k cannot be "
-                                               "derived and the standard atmosphere k = 4/3 is used"});
-        }
-        return out;
+        if (auto found = forecastAtHour(r, hourly, static_cast<std::size_t>(idx), tier, time, run, lat)) return *found;
     }
     out.point["requestedUtc"] = isoUtc(time);
     if (!lastError.empty() && !reach) {
@@ -248,6 +209,61 @@ ForecastAt WeatherService::at(double lat, double lon, TimePoint time) {
     return out;
 }
 
+std::optional<ForecastAt> WeatherService::forecastAtHour(const json& r, const json& hourly, std::size_t i,
+                                                         const Config::WeatherTier& tier, TimePoint time,
+                                                         const std::optional<TimePoint>& run, double lat) const {
+    const auto t2 = valueAt(hourly, "temperature_2m", i);
+    const auto rh2 = valueAt(hourly, "relative_humidity_2m", i);
+    const auto ps = valueAt(hourly, "surface_pressure", i);
+    if (!t2.has_value() || !rh2.has_value() || !ps.has_value() || !r.contains("elevation")) return std::nullopt;
+
+    ForecastAt out;
+    const TimePoint valid = Clock::from_time_t(hourly.value("time", json::array()).at(i).get<std::time_t>());
+    const double surface = r.at("elevation").get<double>() + 2.0;
+    out.column.push_back({rfext::Metres(surface), *t2, *ps, *rh2});
+    const std::size_t levels = addPressureLevels(out.column, hourly, i, surface);
+    out.rainMmPerHour = valueAt(hourly, "precipitation", i);
+
+    const std::string models = tier.models.empty() ? "default models" : tier.models;
+    const auto offsetMin = std::chrono::duration_cast<std::chrono::minutes>(time - valid).count();
+    out.sourceLabel = "Open-Meteo " + models + ", valid " + isoUtc(valid) + (run ? ", run " + isoUtc(*run) : "");
+    json& p = out.point;
+    p = {{"model", "Open-Meteo " + models},
+         {"validUtc", isoUtc(valid)},
+         {"tier", tier.name},
+         {"temperatureC", *t2},
+         {"pressureHpa", *ps},
+         {"relativeHumidity", *rh2},
+         {"airDensityKgM3", airDensity(out.column.front())},
+         {"surfaceElevationM", surface - 2.0},
+         {"stale", false}};
+    if (const auto ws = valueAt(hourly, "wind_speed_10m", i); ws.has_value()) p["windSpeedMps"] = *ws;
+    if (const auto wd = valueAt(hourly, "wind_direction_10m", i); wd.has_value()) p["windFromDeg"] = *wd;
+    if (out.rainMmPerHour.has_value()) p["precipitationMmPerHour"] = *out.rainMmPerHour;
+    if (run) {
+        p["runUtc"] = isoUtc(*run);
+        p["stale"] = clock_.now() - *run > std::chrono::hours(cfg_.staleAfterHours);
+    }
+    if (const auto est = rfext::refractionForPath(out.column, rfext::Metres(surface))) {
+        p["refractivityGradientPerKm"] = est->gradientPerKm;
+        p["surfaceRefractivityN"] = est->nSurface;
+        p["effectiveEarthFactor"] =
+            rfcore::EarthModel::factorFromRefractivityGradient(est->gradientPerKm, rfcore::Metres(meanRadius(lat)));
+    }
+    out.notes.push_back({"Forecast", out.sourceLabel + (offsetMin != 0 ? " (" + std::to_string(offsetMin) +
+                                                                               " min from the requested time)"
+                                                                         : "")});
+    out.notes.push_back({"Forecast air column",
+                         "surface air is the 2 m temperature and humidity with the surface pressure; " +
+                             std::to_string(levels) + " pressure levels above the ground; forecast values are "
+                                                      "model output with their own error, not measurements"});
+    if (levels == 0) {
+        out.notes.push_back({"Refraction", "no forecast pressure level lies above the ground here; k cannot be "
+                                           "derived and the standard atmosphere k = 4/3 is used"});
+    }
+    return out;
+}
+
 json WeatherService::horizon(double lat, double lon) {
     json out = json::object();
     if (!source_) return {{"configured", false}};
@@ -260,14 +276,8 @@ json WeatherService::horizon(double lat, double lon) {
             out["error"] = e.what();
             continue;
         }
-        const json& hourly = r.value("hourly", json::object());
-        const json& times = hourly.value("time", json::array());
-        for (std::size_t i = times.size(); i-- > 0;) {
-            if (valueAt(hourly, "temperature_2m", i).has_value() && valueAt(hourly, "surface_pressure", i).has_value()) {
-                const std::string key = tier.name == "long-range" ? "longRangeUntilUtc" : "hourlyUntilUtc";
-                out[key] = isoUtc(Clock::from_time_t(times.at(i).get<std::time_t>()));
-                break;
-            }
+        if (const auto last = lastSurfaceHour(r.value("hourly", json::object()))) {
+            out[tier.name == "long-range" ? "longRangeUntilUtc" : "hourlyUntilUtc"] = isoUtc(*last);
         }
     }
     return out;

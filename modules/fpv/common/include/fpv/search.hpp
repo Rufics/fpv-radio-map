@@ -86,13 +86,12 @@ public:
             for (std::size_t col = 0; (static_cast<double>(col) + 0.5) * cellM < width; ++col) {
                 const double dx = (static_cast<double>(col) + 0.5) * cellM;
                 const LatLon p = world.direct(rowStart, 90.0, dx).point;
-                if (contains(p)) {
-                    out.push_back(p);
-                    if (out.size() > maxPoints) {
-                        throw rfmod::BadRequest("the area holds more than " + std::to_string(maxPoints) +
-                                                " candidate points at " + std::to_string(static_cast<int>(cellM)) +
-                                                " m; draw a smaller area or use a larger cell");
-                    }
+                if (!contains(p)) continue;
+                out.push_back(p);
+                if (out.size() > maxPoints) {
+                    throw rfmod::BadRequest("the area holds more than " + std::to_string(maxPoints) +
+                                            " candidate points at " + std::to_string(static_cast<int>(cellM)) +
+                                            " m; draw a smaller area or use a larger cell");
                 }
             }
         }

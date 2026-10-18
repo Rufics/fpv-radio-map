@@ -78,6 +78,11 @@ private:
     };
     json fetchCached(double lat, double lon, const Config::WeatherTier& tier);
     std::optional<TimePoint> runTimeCached();
+    /// The forecast for hour `i` of a tier's response (`hourly` is its hourly block); nothing when
+    /// its surface values are missing.
+    std::optional<ForecastAt> forecastAtHour(const json& response, const json& hourly, std::size_t i,
+                                             const Config::WeatherTier& tier, TimePoint time,
+                                             const std::optional<TimePoint>& run, double lat) const;
 
     Config::Weather cfg_;
     IForecastSource* source_;

@@ -5,8 +5,10 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <fstream>
 #include <memory>
+#include <ranges>
 #include <sstream>
 #include <stdexcept>
 
@@ -71,6 +73,149 @@ std::map<std::string, std::string> parseFileList(const std::string& text, std::s
     return out;
 }
 
+/// Checks one archive entry before its data is read: a regular file with a safe, new path,
+/// within the file count limit.
+bool acceptEntry(archive_entry* entry, const std::string& path, const PackageFiles& files, const PackageLimits& limits,
+                 ValidationReport& report) {
+    if (archive_entry_filetype(entry) != AE_IFREG || archive_entry_hardlink(entry) != nullptr) {
+        report.fail("archive.entries", "only regular files are allowed: " + path);
+        return false;
+    }
+    if (!safePath(path)) {
+        report.fail("archive.paths", "unsafe path: " + path);
+        return false;
+    }
+    if (files.files.contains(path)) {
+        report.fail("archive.entries", "duplicate entry: " + path);
+        return false;
+    }
+    if (files.files.size() + 1 > limits.maxFiles) {
+        report.fail("archive.size", "more than " + std::to_string(limits.maxFiles) + " files");
+        return false;
+    }
+    return true;
+}
+
+/// Reads the current entry's data, adding its size to `total` (the whole archive's unpacked size).
+std::optional<std::string> readEntryData(archive* a, const std::string& path, std::size_t& total,
+                                         const PackageLimits& limits, ValidationReport& report) {
+    std::string content;
+    std::array<char, 65536> buf{};
+    la_ssize_t n = 0;
+    while ((n = archive_read_data(a, buf.data(), buf.size())) > 0) {
+        total += static_cast<std::size_t>(n);
+        if (total > limits.maxUnpackedBytes) {
+            report.fail("archive.size", "unpacked size over " + std::to_string(limits.maxUnpackedBytes) + " bytes");
+            return std::nullopt;
+        }
+        content.append(buf.data(), static_cast<std::size_t>(n));
+    }
+    if (n < 0) {
+        report.fail("archive.format", std::string("corrupt entry ") + path + ": " + archive_error_string(a));
+        return std::nullopt;
+    }
+    return content;
+}
+
+/// Checks META/signature against the trust store; the signer if it vouches for `fileList`.
+std::optional<TrustedKey> checkSignature(const std::string& signature, const std::string& fileList,
+                                         const TrustStore& trust, ValidationReport& report) {
+    try {
+        const json sig = json::parse(signature);
+        if (sig.at("alg").get<std::string>() != "ed25519") throw std::invalid_argument("unsupported algorithm");
+        const std::string keyId = sig.at("keyId").get<std::string>();
+        std::optional<TrustedKey> signer = trust.find(keyId);
+        if (!signer.has_value()) {
+            report.fail("signature", "signed by key " + keyId + ", which this server does not trust");
+            return std::nullopt;
+        }
+        if (!signer->key.verify(fileList, fromBase64(sig.at("signature").get<std::string>()))) {
+            report.fail("signature", "signature does not match the file list");
+            return std::nullopt;
+        }
+        report.pass("signature", "valid ed25519 signature by " + signer->label + " (" + keyId + ")" +
+                                     (signer->firstParty() ? ", first-party" : ", third-party: runs isolated"));
+        return signer;
+    } catch (const std::exception& e) {
+        report.fail("signature", std::string("unreadable META/signature: ") + e.what());
+        return std::nullopt;
+    }
+}
+
+/// Checks that every file outside META/ is listed with its hash and every listed file exists.
+bool checkIntegrity(const PackageFiles& files, const std::string& fileList, ValidationReport& report) {
+    std::string listError;
+    const auto listed = parseFileList(fileList, listError);
+    if (!listError.empty()) {
+        report.fail("files.integrity", listError);
+        return false;
+    }
+    for (const auto& [path, content] : files.files) {
+        if (path.starts_with("META/")) {
+            if (path == kFileList || path == kSignature) continue;
+            report.fail("files.integrity", "unexpected file " + path);
+            return false;
+        }
+        const auto it = listed.find(path);
+        if (it == listed.end()) {
+            report.fail("files.integrity", path + " is not covered by the signature");
+            return false;
+        }
+        if (it->second != Sha256::hex(content)) {
+            report.fail("files.integrity", path + " was changed after signing");
+            return false;
+        }
+    }
+    for (const auto& [path, hash] : listed) {
+        if (!files.files.contains(path)) {
+            report.fail("files.integrity", path + " is listed but missing");
+            return false;
+        }
+    }
+    report.pass("files.integrity", std::to_string(listed.size()) + " files match their SHA-256");
+    return true;
+}
+
+/// Parses manifest.json and checks it against the schema and rules.
+std::optional<Manifest> readManifest(const PackageFiles& files, const Version& hostVersion, ValidationReport& report) {
+    const auto manifestIt = files.files.find("manifest.json");
+    if (manifestIt == files.files.end()) {
+        report.fail("manifest.schema", "manifest.json is missing");
+        return std::nullopt;
+    }
+    json document;
+    try {
+        document = json::parse(manifestIt->second);
+    } catch (const std::exception& e) {
+        report.fail("manifest.schema", std::string("manifest.json is not JSON: ") + e.what());
+        return std::nullopt;
+    }
+    return ManifestParser::parse(document, hostVersion, report);
+}
+
+/// Checks that the libraries, UI bundle and options schema the manifest names are in the package.
+bool checkReferencedFiles(const PackageFiles& files, const Manifest& manifest, ValidationReport& report) {
+    std::vector<std::string> referenced;
+    referenced.reserve(manifest.entry.size() + 2);
+    for (const std::string& lib : std::views::values(manifest.entry)) referenced.push_back(lib);
+    if (manifest.ui.has_value()) referenced.push_back(manifest.ui->bundle);
+    if (manifest.optionsSchema.has_value()) referenced.push_back(*manifest.optionsSchema);
+    std::string missing;
+    for (const std::string& r : referenced) {
+        if (!files.files.contains(r)) missing += (missing.empty() ? "" : ", ") + r;
+    }
+    if (!missing.empty()) {
+        report.fail("files.referenced", "manifest names files the package lacks: " + missing);
+        return false;
+    }
+    if (manifest.optionsSchema.has_value() && !json::accept(files.files.at(*manifest.optionsSchema))) {
+        report.fail("files.referenced", *manifest.optionsSchema + " is not JSON");
+        return false;
+    }
+    report.pass("files.referenced", "every file named in the manifest is present");
+    return true;
+}
+
 }  // namespace
 
 std::optional<PackageFiles> PackageReader::read(const std::string& archiveBytes, const PackageLimits& limits,
@@ -94,42 +239,11 @@ std::optional<PackageFiles> PackageReader::read(const std::string& archiveBytes,
     while ((rc = archive_read_next_header(a.get(), &entry)) == ARCHIVE_OK) {
         std::string path = archive_entry_pathname(entry) ? archive_entry_pathname(entry) : "";
         if (path.rfind("./", 0) == 0) path = path.substr(2);
-        const auto type = archive_entry_filetype(entry);
-        if (type == AE_IFDIR) {
-            continue;
-        }
-        if (type != AE_IFREG || archive_entry_hardlink(entry) != nullptr) {
-            report.fail("archive.entries", "only regular files are allowed: " + path);
-            return std::nullopt;
-        }
-        if (!safePath(path)) {
-            report.fail("archive.paths", "unsafe path: " + path);
-            return std::nullopt;
-        }
-        if (out.files.count(path)) {
-            report.fail("archive.entries", "duplicate entry: " + path);
-            return std::nullopt;
-        }
-        if (out.files.size() + 1 > limits.maxFiles) {
-            report.fail("archive.size", "more than " + std::to_string(limits.maxFiles) + " files");
-            return std::nullopt;
-        }
-        std::string content;
-        char buf[65536];
-        la_ssize_t n = 0;
-        while ((n = archive_read_data(a.get(), buf, sizeof buf)) > 0) {
-            total += static_cast<std::size_t>(n);
-            if (total > limits.maxUnpackedBytes) {
-                report.fail("archive.size", "unpacked size over " + std::to_string(limits.maxUnpackedBytes) + " bytes");
-                return std::nullopt;
-            }
-            content.append(buf, static_cast<std::size_t>(n));
-        }
-        if (n < 0) {
-            report.fail("archive.format", std::string("corrupt entry ") + path + ": " + archive_error_string(a.get()));
-            return std::nullopt;
-        }
-        out.files.emplace(std::move(path), std::move(content));
+        if (archive_entry_filetype(entry) == AE_IFDIR) continue;
+        if (!acceptEntry(entry, path, out, limits, report)) return std::nullopt;
+        auto content = readEntryData(a.get(), path, total, limits, report);
+        if (!content) return std::nullopt;
+        out.files.emplace(std::move(path), std::move(*content));
     }
     if (rc != ARCHIVE_EOF) {
         report.fail("archive.format", std::string("corrupt archive: ") + archive_error_string(a.get()));
@@ -229,93 +343,12 @@ std::optional<VerifiedPackage> PackageVerifier::verify(const std::string& archiv
     }
 
     // Signature first: nothing else in the package is trusted before it checks out.
-    std::optional<TrustedKey> signer;
-    try {
-        const json sig = json::parse(sigIt->second);
-        if (sig.at("alg").get<std::string>() != "ed25519") throw std::invalid_argument("unsupported algorithm");
-        const std::string keyId = sig.at("keyId").get<std::string>();
-        signer = trust.find(keyId);
-        if (!signer) {
-            report.fail("signature", "signed by key " + keyId + ", which this server does not trust");
-            return std::nullopt;
-        }
-        if (!signer->key.verify(listIt->second, fromBase64(sig.at("signature").get<std::string>()))) {
-            report.fail("signature", "signature does not match the file list");
-            return std::nullopt;
-        }
-        report.pass("signature", "valid ed25519 signature by " + signer->label + " (" + keyId + ")" +
-                                     (signer->firstParty() ? ", first-party" : ", third-party: runs isolated"));
-    } catch (const std::exception& e) {
-        report.fail("signature", std::string("unreadable META/signature: ") + e.what());
-        return std::nullopt;
-    }
-
-    std::string listError;
-    const auto listed = parseFileList(listIt->second, listError);
-    if (!listError.empty()) {
-        report.fail("files.integrity", listError);
-        return std::nullopt;
-    }
-    for (const auto& [path, content] : files->files) {
-        if (path.rfind("META/", 0) == 0) {
-            if (path != kFileList && path != kSignature) {
-                report.fail("files.integrity", "unexpected file " + path);
-                return std::nullopt;
-            }
-            continue;
-        }
-        const auto it = listed.find(path);
-        if (it == listed.end()) {
-            report.fail("files.integrity", path + " is not covered by the signature");
-            return std::nullopt;
-        }
-        if (it->second != Sha256::hex(content)) {
-            report.fail("files.integrity", path + " was changed after signing");
-            return std::nullopt;
-        }
-    }
-    for (const auto& [path, hash] : listed) {
-        if (!files->files.count(path)) {
-            report.fail("files.integrity", path + " is listed but missing");
-            return std::nullopt;
-        }
-    }
-    report.pass("files.integrity", std::to_string(listed.size()) + " files match their SHA-256");
-
-    const auto manifestIt = files->files.find("manifest.json");
-    if (manifestIt == files->files.end()) {
-        report.fail("manifest.schema", "manifest.json is missing");
-        return std::nullopt;
-    }
-    json document;
-    try {
-        document = json::parse(manifestIt->second);
-    } catch (const std::exception& e) {
-        report.fail("manifest.schema", std::string("manifest.json is not JSON: ") + e.what());
-        return std::nullopt;
-    }
-    auto manifest = ManifestParser::parse(document, hostVersion, report);
+    const std::optional<TrustedKey> signer = checkSignature(sigIt->second, listIt->second, trust, report);
+    if (!signer.has_value()) return std::nullopt;
+    if (!checkIntegrity(*files, listIt->second, report)) return std::nullopt;
+    auto manifest = readManifest(*files, hostVersion, report);
     if (!manifest) return std::nullopt;
-
-    std::vector<std::string> referenced;
-    for (const auto& [platform, lib] : manifest->entry) referenced.push_back(lib);
-    if (manifest->ui) referenced.push_back(manifest->ui->bundle);
-    if (manifest->optionsSchema) referenced.push_back(*manifest->optionsSchema);
-    std::string missing;
-    for (const std::string& r : referenced) {
-        if (!files->files.count(r)) missing += (missing.empty() ? "" : ", ") + r;
-    }
-    if (!missing.empty()) {
-        report.fail("files.referenced", "manifest names files the package lacks: " + missing);
-        return std::nullopt;
-    }
-    if (manifest->optionsSchema) {
-        if (!json::accept(files->files.at(*manifest->optionsSchema))) {
-            report.fail("files.referenced", *manifest->optionsSchema + " is not JSON");
-            return std::nullopt;
-        }
-    }
-    report.pass("files.referenced", "every file named in the manifest is present");
+    if (!checkReferencedFiles(*files, *manifest, report)) return std::nullopt;
 
     return VerifiedPackage{std::move(*files), std::move(*manifest), *signer};
 }

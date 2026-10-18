@@ -59,39 +59,47 @@ json JobManager::start(const std::string& missionId, const json& mission) {
         sweep();
         jobs_[job->id] = job;
     }
-    runners_.submit([this, job, mission] {
-        {
-            std::lock_guard lock(mutex_);
-            job->state = "running";
-        }
-        bool failed = false;
-        for (std::size_t i = 0; i < job->parts.size(); ++i) {
-            if (job->cancelled) break;
-            {
-                std::lock_guard lock(mutex_);
-                job->parts[i].state = "running";
-            }
-            try {
-                PartProgress progress(mutex_, job->parts[i].progress, job->cancelled);
-                json grid = calc_.coverage(mission, linkKindFromString(job->parts[i].link), progress, cells_);
-                std::lock_guard lock(mutex_);
-                job->parts[i].state = grid.value("cached", false) ? "cached" : "done";
-                job->parts[i].progress = 1.0;
-                grid.erase("cached");
-                job->parts[i].grid = std::move(grid);
-            } catch (const std::exception& e) {
-                std::lock_guard lock(mutex_);
-                job->parts[i].state = job->cancelled ? "waiting" : "failed";
-                job->parts[i].error = e.what();
-                failed = !job->cancelled;
-                if (failed) log_.warn("coverage", "job " + job->id + " part " + job->parts[i].name + ": " + e.what());
-            }
-        }
-        std::lock_guard lock(mutex_);
-        job->state = job->cancelled ? "cancelled" : failed ? "failed" : "done";
-    });
+    runners_.submit([this, job, mission] { runJob(*job, mission); });
     std::lock_guard lock(mutex_);
     return toJson(*job);
+}
+
+void JobManager::runJob(Job& job, const json& mission) {
+    {
+        const std::lock_guard lock(mutex_);
+        job.state = "running";
+    }
+    bool failed = false;
+    for (Part& part : job.parts) {
+        if (job.cancelled) break;
+        runPart(job, part, mission, failed);
+    }
+    const std::lock_guard lock(mutex_);
+    if (job.cancelled) job.state = "cancelled";
+    else if (failed) job.state = "failed";
+    else job.state = "done";
+}
+
+void JobManager::runPart(Job& job, Part& part, const json& mission, bool& failed) {
+    {
+        const std::lock_guard lock(mutex_);
+        part.state = "running";
+    }
+    try {
+        PartProgress progress(mutex_, part.progress, job.cancelled);
+        json grid = calc_.coverage(mission, linkKindFromString(part.link), progress, cells_);
+        const std::lock_guard lock(mutex_);
+        part.state = grid.value("cached", false) ? "cached" : "done";
+        part.progress = 1.0;
+        grid.erase("cached");
+        part.grid = std::move(grid);
+    } catch (const std::exception& e) {
+        const std::lock_guard lock(mutex_);
+        part.state = job.cancelled ? "waiting" : "failed";
+        part.error = e.what();
+        failed = !job.cancelled;
+        if (failed) log_.warn("coverage", "job " + job.id + " part " + part.name + ": " + e.what());
+    }
 }
 
 std::shared_ptr<JobManager::Job> JobManager::find(const std::string& missionId, const std::string& jobId) {

@@ -54,6 +54,8 @@ private:
     using Set = std::vector<Comparator>;
 
     static void appendComparators(std::string_view token, Set& out);
+    /// One "||" alternative: space-separated comparators, all of which must match.
+    static Set parseSet(std::string_view alternative);
 
     std::string text_;
     std::vector<Set> sets_;

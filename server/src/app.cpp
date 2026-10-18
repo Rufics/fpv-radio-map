@@ -86,6 +86,37 @@ void dropUnbuiltLayers(json& map, const std::filesystem::path& dem) {
     }
 }
 
+/// The revision in an If-Match header ("3", W/"3"); HttpError 428 without one.
+int ifMatchRevision(const Req& req) {
+    std::string match = header(req, "If-Match");
+    std::erase_if(match, [](char c) { return c == '"' || c == 'W' || c == '/'; });
+    try {
+        return std::stoi(match);
+    } catch (const std::exception&) {
+        throw HttpError(428, "If-Match with the revision you edited is required");
+    }
+}
+
+/// Content type of a module's public file, by extension.
+const char* moduleFileType(const std::string& ext) {
+    if (ext == ".js" || ext == ".mjs") return "text/javascript";
+    if (ext == ".json") return "application/json";
+    if (ext == ".css") return "text/css";
+    if (ext == ".svg") return "image/svg+xml";
+    if (ext == ".png") return "image/png";
+    return "application/octet-stream";
+}
+
+/// Answers an HttpError as JSON {message, ...body}, with Retry-After on 429.
+void sendHttpError(Res& res, const HttpError& e) {
+    json b = e.body();
+    b["message"] = e.what();
+    if (e.status() == 429 && b.contains("retryAfterS")) {
+        res.set_header("Retry-After", std::to_string(b["retryAfterS"].get<long long>()));
+    }
+    sendJson(res, e.status(), b);
+}
+
 }  // namespace
 
 Application::Application(Config config, std::string ownerKeyText, bool ownerKeyIsDev, std::filesystem::path sqlDir)
@@ -342,6 +373,20 @@ void Application::requireAdmin(const Req& req) {
     if (!isAdmin(req)) throw HttpError(401, "admin token required");
 }
 
+void Application::dispatch(const std::string& rateClass, Handler handler, const Req& req, Res& res) {
+    try {
+        limiter_->take(rateClass, client(req));
+        (this->*handler)(req, res);
+    } catch (const HttpError& e) {
+        sendHttpError(res, e);
+    } catch (const json::exception& e) {
+        sendJson(res, 400, {{"message", std::string("malformed request: ") + e.what()}});
+    } catch (const std::exception& e) {
+        log_.error("http", req.method + " " + redacted(req.path) + ": " + e.what());
+        sendJson(res, 500, {{"message", "internal error"}});
+    }
+}
+
 void Application::routes() {
     httplib::Server& s = *http_;
     const int threads = config_.server.threads;
@@ -356,412 +401,460 @@ void Application::routes() {
         if (res.body.empty()) sendJson(res, res.status, {{"message", httplib::status_message(res.status)}});
     });
 
-    // Every handler runs inside this: rate limit, uniform JSON errors, Retry-After on 429.
-    using Handler = std::function<void(const Req&, Res&)>;
-    auto wrap = [this](std::string cls, Handler h) {
-        return [this, cls, h](const Req& req, Res& res) {
-            try {
-                limiter_->take(cls, client(req));
-                h(req, res);
-            } catch (const HttpError& e) {
-                json b = e.body();
-                b["message"] = e.what();
-                if (e.status() == 429 && b.contains("retryAfterS")) {
-                    res.set_header("Retry-After", std::to_string(b["retryAfterS"].get<long long>()));
-                }
-                sendJson(res, e.status(), b);
-            } catch (const json::exception& e) {
-                sendJson(res, 400, {{"message", std::string("malformed request: ") + e.what()}});
-            } catch (const std::exception& e) {
-                log_.error("http", req.method + " " + redacted(req.path) + ": " + e.what());
-                sendJson(res, 500, {{"message", "internal error"}});
-            }
+    // Every handler runs inside dispatch: rate limit, uniform JSON errors, Retry-After on 429.
+    const auto wrap = [this](std::string rateClass, Handler handler) {
+        return [this, rateClass = std::move(rateClass), handler](const Req& req, Res& res) {
+            dispatch(rateClass, handler, req, res);
         };
     };
     const std::string api = "/api/v1";
+    const std::string mission = api + R"(/missions/([A-Za-z0-9_-]+))";
+    const std::string library = api + R"(/library/([a-z-]+))";
+    const std::string libraryItem = library + R"(/([a-z0-9._-]+))";
 
-    s.Get(api + "/health", wrap("default", [this](const Req&, Res& res) {
-        sendJson(res, 200, {{"ok", true}, {"version", RFMAP_HOST_VERSION}, {"dem", dem_ != nullptr},
-                            {"landcover", landcover_ != nullptr}, {"weather", weather_->configured()}});
-    }));
+    s.Get(api + "/health", wrap("default", &Application::getHealth));
 
     // ---- missions ----
-    s.Post(api + "/missions", wrap("create", [this](const Req& req, Res& res) {
-        const json doc = body(req);
-        schemas_->require("mission", doc);
-        const AuthService::OwnerKey key = AuthService::newOwnerKey();
-        const std::string id = missions_->create(doc, key.hash);
-        const std::string sess = auth_->createSession(id, Role::Edit, std::nullopt);
-        res.set_header("ETag", "\"1\"");
-        sendJson(res, 201, {{"missionId", id}, {"ownerKey", key.plain}, {"session", sess}, {"revision", 1}});
-    }));
-
-    s.Get(api + R"(/missions/([A-Za-z0-9_-]+))", wrap("default", [this](const Req& req, Res& res) {
-        const Principal p = session(req);
-        const std::string id = req.matches[1];
-        if (p.missionId != id) throw HttpError(403, "this session belongs to another mission");
-        const auto m = missions_->get(id);
-        if (!m) throw HttpError(404, "no such mission");
-        json out = {{"mission", m->doc}, {"role", toString(p.role)}, {"revision", m->revision}};
-        if (m->lastResult) out["lastResult"] = *m->lastResult;
-        res.set_header("ETag", "\"" + std::to_string(m->revision) + "\"");
-        sendJson(res, 200, out);
-    }));
-
-    s.Put(api + R"(/missions/([A-Za-z0-9_-]+))", wrap("default", [this](const Req& req, Res& res) {
-        const Principal p = session(req);
-        const std::string id = req.matches[1];
-        if (p.missionId != id) throw HttpError(403, "this session belongs to another mission");
-        if (p.role != Role::Edit) throw HttpError(403, "this is a read-only link");
-        std::string match = header(req, "If-Match");
-        match.erase(std::remove_if(match.begin(), match.end(), [](char c) { return c == '"' || c == 'W' || c == '/'; }),
-                    match.end());
-        int expected = 0;
-        try {
-            expected = std::stoi(match);
-        } catch (const std::exception&) {
-            throw HttpError(428, "If-Match with the revision you edited is required");
-        }
-        const json doc = body(req);
-        schemas_->require("mission", doc);
-        const auto rev = missions_->save(id, doc, expected);
-        if (!rev.has_value()) {
-            const auto cur = missions_->get(id);
-            if (!cur) throw HttpError(404, "no such mission");
-            throw HttpError(409, "someone saved this mission in between", {{"revision", cur->revision}});
-        }
-        res.set_header("ETag", "\"" + std::to_string(*rev) + "\"");
-        sendJson(res, 200, {{"revision", *rev}});
-    }));
+    s.Post(api + "/missions", wrap("create", &Application::postMission));
+    s.Get(mission, wrap("default", &Application::getMission));
+    s.Put(mission, wrap("default", &Application::putMission));
 
     // ---- links (owner key) ----
-    s.Get(api + R"(/missions/([A-Za-z0-9_-]+)/links)", wrap("default", [this](const Req& req, Res& res) {
-        json out = json::array();
-        for (const auto& l : auth_->listLinks(req.matches[1], header(req, "X-Owner-Key"))) out.push_back(AuthService::linkJson(l));
-        sendJson(res, 200, out);
-    }));
-
-    s.Post(api + R"(/missions/([A-Za-z0-9_-]+)/links)", wrap("default", [this](const Req& req, Res& res) {
-        const std::string id = req.matches[1];
-        const std::string key = header(req, "X-Owner-Key");
-        auth_->requireOwner(id, key);  // before looking at the body, so strangers learn nothing
-        const json b = body(req);
-        schemas_->require("link-create", b);
-        std::optional<TimePoint> expires;
-        if (b.contains("expiresAt")) {
-            expires = parseIsoUtc(b.at("expiresAt").get<std::string>());
-            if (!expires) throw HttpError(422, "expiresAt is not ISO 8601 UTC");
-        }
-        const auto created =
-            auth_->createLink(id, key, roleFromString(b.at("role")), b.at("pin"), b.value("label", ""), expires);
-        json out = AuthService::linkJson(created.record);
-        out["token"] = created.token;
-        sendJson(res, 201, out);
-    }));
-
-    s.Delete(api + R"(/missions/([A-Za-z0-9_-]+)/links/([A-Za-z0-9_-]+))", wrap("default", [this](const Req& req, Res& res) {
-        auth_->revokeLink(req.matches[1], header(req, "X-Owner-Key"), req.matches[2]);
-        res.status = 204;
-    }));
-
+    s.Get(mission + "/links", wrap("default", &Application::getLinks));
+    s.Post(mission + "/links", wrap("default", &Application::postLink));
+    s.Delete(mission + R"(/links/([A-Za-z0-9_-]+))", wrap("default", &Application::deleteLink));
     // Public, before the PIN: what the PIN screen shows. Same rate class as opening.
-    s.Get(api + R"(/links/([A-Za-z0-9_-]+))", wrap("open", [this](const Req& req, Res& res) {
-        const LinkRecord l = auth_->peekLink(req.matches[1]);
-        const auto m = missions_->get(l.missionId);
-        json out = {{"role", toString(l.role)}, {"missionName", m ? m->doc.value("name", "") : ""}};
-        if (l.expiresAt) out["expiresAt"] = isoUtc(*l.expiresAt);
-        if (l.lockedUntil && *l.lockedUntil > clock_.now()) out["pausedUntil"] = isoUtc(*l.lockedUntil);
-        sendJson(res, 200, out);
-    }));
-
-    s.Post(api + R"(/links/([A-Za-z0-9_-]+)/open)", wrap("open", [this](const Req& req, Res& res) {
-        const json b = body(req);
-        if (!b.contains("pin") || !b.at("pin").is_string()) throw HttpError(400, "pin is required");
-        const auto opened = auth_->openLink(req.matches[1], b.at("pin"));
-        const auto m = missions_->get(opened.missionId);
-        sendJson(res, 200, {{"session", opened.session}, {"missionId", opened.missionId}, {"role", toString(opened.role)},
-                            {"missionName", m ? m->doc.value("name", "") : ""}});
-    }));
+    s.Get(api + R"(/links/([A-Za-z0-9_-]+))", wrap("open", &Application::getLink));
+    s.Post(api + R"(/links/([A-Za-z0-9_-]+)/open)", wrap("open", &Application::postLinkOpen));
 
     // ---- calc ----
-    s.Post(api + "/calc/path", wrap("calc", [this](const Req& req, Res& res) {
-        (void)session(req);
-        const json b = body(req);
-        schemas_->require("calc-path", b);
-        std::shared_lock gate(runner_->gate());
-        sendJson(res, 200, calc_->path(b));
-    }));
-
-    s.Post(api + "/calc/route", wrap("calc", [this](const Req& req, Res& res) {
-        const Principal p = session(req);
-        const json mission = body(req);
-        schemas_->require("mission", mission);
-        std::optional<int> revision;
-        const auto stored = missions_->get(p.missionId);
-        if (stored && stored->doc == mission) revision = stored->revision;
-        json result;
-        {
-            std::shared_lock gate(runner_->gate());
-            result = calc_->route(mission, revision);
-        }
-        if (revision.has_value() && p.role == Role::Edit) missions_->storeResultIfCurrent(p.missionId, mission, result);
-        sendJson(res, 200, result);
-    }));
-
-    s.Post(api + "/calc/coverage", wrap("coverage", [this](const Req& req, Res& res) {
-        const Principal p = session(req);
-        const json mission = body(req);
-        schemas_->require("mission", mission);
-        const std::size_t cells = Calculator::coverageCells(mission);
-        if (cells == 0) throw HttpError(422, "coverage needs coverage.radiusM, coverage.cellM and coverage.droneAglM");
-        if (cells > config_.coverage.maxCells) {
-            throw HttpError(422, "the grid would have " + std::to_string(cells) + " cells; this server allows " +
-                                     std::to_string(config_.coverage.maxCells) + ". Use a larger cellM or a smaller radius.");
-        }
-        if (jobs_->running() >= static_cast<std::size_t>(config_.coverage.maxJobs) * 4) {
-            throw HttpError(503, "too many coverage jobs queued; try again shortly", {{"retryAfterS", 30}});
-        }
-        sendJson(res, 202, jobs_->start(p.missionId, mission));
-    }));
-
-    s.Get(api + R"(/jobs/([A-Za-z0-9_-]+))", wrap("default", [this](const Req& req, Res& res) {
-        sendJson(res, 200, jobs_->status(session(req).missionId, req.matches[1]));
-    }));
-    s.Delete(api + R"(/jobs/([A-Za-z0-9_-]+))", wrap("default", [this](const Req& req, Res& res) {
-        jobs_->cancel(session(req).missionId, req.matches[1]);
-        res.status = 204;
-    }));
-    s.Get(api + R"(/jobs/([A-Za-z0-9_-]+)/coverage/(control|video)\.json)", wrap("default", [this](const Req& req, Res& res) {
-        sendJson(res, 200, jobs_->grid(session(req).missionId, req.matches[1], req.matches[2]));
-    }));
-
-    s.Get(api + "/elevation/profile", wrap("calc", [this](const Req& req, Res& res) {
-        if (!req.has_param("from") || !req.has_param("to")) throw HttpError(400, "from and to are required (lat,lon)");
-        const auto from = parseLatLon(req.get_param_value("from"));
-        const auto to = parseLatLon(req.get_param_value("to"));
-        const DemSource& dem = links_->requireDem();
-        const auto built = rfcore::ProfileBuilder(dem).build(from, to);
-        if (!built.profile) {
-            throw HttpError(422, "missing elevation data on part of the path; nothing is guessed",
-                            links_->missingData(built.missing, from, to));
-        }
-        const auto& smp = built.profile->samples();
-        sendJson(res, 200, LinkService::profileJson(*built.profile, (smp[1].distance - smp[0].distance).value()));
-    }));
+    s.Post(api + "/calc/path", wrap("calc", &Application::postCalcPath));
+    s.Post(api + "/calc/route", wrap("calc", &Application::postCalcRoute));
+    s.Post(api + "/calc/coverage", wrap("coverage", &Application::postCalcCoverage));
+    s.Get(api + R"(/jobs/([A-Za-z0-9_-]+))", wrap("default", &Application::getJob));
+    s.Delete(api + R"(/jobs/([A-Za-z0-9_-]+))", wrap("default", &Application::deleteJob));
+    s.Get(api + R"(/jobs/([A-Za-z0-9_-]+)/coverage/(control|video)\.json)", wrap("default", &Application::getJobGrid));
+    s.Get(api + "/elevation/profile", wrap("calc", &Application::getElevationProfile));
 
     // ---- library ----
-    auto kindOf = [this](const std::string& kind) {
-        (void)SchemaRegistry::libraryFile(kind);
-        if (kind == "radio-profiles" && !builtins_->enabled(BuiltinModules::kRadioProfiles)) {
-            throw HttpError(404, "radio profiles (rf.radio-profiles) are disabled on this server");
-        }
-        return kind;
-    };
-    s.Get(api + R"(/library/([a-z-]+))", wrap("default", [this, kindOf](const Req& req, Res& res) {
-        sendJson(res, 200, library_->list(kindOf(req.matches[1])));
-    }));
-    s.Get(api + R"(/library/([a-z-]+)/([a-z0-9._-]+))", wrap("default", [this, kindOf](const Req& req, Res& res) {
-        const auto item = library_->get(kindOf(req.matches[1]), req.matches[2]);
-        if (!item) throw HttpError(404, "no such library item");
-        sendJson(res, 200, *item);
-    }));
-    s.Get(api + R"(/library/([a-z-]+)/([a-z0-9._-]+)/history)", wrap("default", [this, kindOf](const Req& req, Res& res) {
-        sendJson(res, 200, library_->history(kindOf(req.matches[1]), req.matches[2]));
-    }));
-    s.Post(api + R"(/library/([a-z-]+))", wrap("admin", [this, kindOf](const Req& req, Res& res) {
-        requireAdmin(req);
-        sendJson(res, 201, library_->add(kindOf(req.matches[1]), body(req), "admin@" + client(req)));
-    }));
-    s.Put(api + R"(/library/([a-z-]+)/([a-z0-9._-]+))", wrap("admin", [this, kindOf](const Req& req, Res& res) {
-        requireAdmin(req);
-        sendJson(res, 200, library_->update(kindOf(req.matches[1]), req.matches[2], body(req), "admin@" + client(req)));
-    }));
+    s.Get(library, wrap("default", &Application::getLibraryList));
+    s.Get(libraryItem, wrap("default", &Application::getLibraryItem));
+    s.Get(libraryItem + "/history", wrap("default", &Application::getLibraryHistory));
+    s.Post(library, wrap("admin", &Application::postLibraryItem));
+    s.Put(libraryItem, wrap("admin", &Application::putLibraryItem));
 
     // ---- weather ----
-    s.Get(api + "/weather/point", wrap("default", [this](const Req& req, Res& res) {
-        const double lat = queryNumber(req, "lat"), lon = queryNumber(req, "lon");
-        if (lat < -90 || lat > 90 || lon < -180 || lon > 180) throw HttpError(400, "lat/lon out of range");
-        TimePoint t = Clock::now();
-        if (req.has_param("timeUtc")) {
-            const auto parsed = parseIsoUtc(req.get_param_value("timeUtc"));
-            if (!parsed) throw HttpError(400, "timeUtc is not ISO 8601");
-            t = *parsed;
-        }
-        const ForecastAt f = weather_->at(lat, lon, t);
-        json out = f.point;
-        out["notes"] = json::array();
-        for (const auto& n : f.notes) out["notes"].push_back({{"what", n.what}, {"detail", n.detail}});
-        sendJson(res, 200, out);
-    }));
-    s.Get(api + "/weather/horizon", wrap("default", [this](const Req&, Res& res) {
-        const rfcore::GeoPoint probe = dem_ ? dem_->raster().centre() : rfcore::GeoPoint{0.0, 0.0};
-        sendJson(res, 200, weather_->horizon(probe.latitudeDeg, probe.longitudeDeg));
-    }));
+    s.Get(api + "/weather/point", wrap("default", &Application::getWeatherPoint));
+    s.Get(api + "/weather/horizon", wrap("default", &Application::getWeatherHorizon));
 
-    s.Get(api + "/config/map", wrap("default", [this](const Req&, Res& res) { sendJson(res, 200, mapConfig()); }));
+    s.Get(api + "/config/map", wrap("default", &Application::getMapConfig));
 
     // ---- modules ----
-    s.Get(api + "/modules", wrap("default", [this](const Req& req, Res& res) { sendJson(res, 200, moduleList(isAdmin(req))); }));
-
-    s.Get(api + R"(/modules/([a-z0-9._-]+)/(.+))", wrap("default", [this](const Req& req, Res& res) {
-        const std::string id = req.matches[1];
-        const std::string path = req.matches[2];
-        std::optional<std::filesystem::path> file;
-        bool alpha = false;
-        {
-            std::shared_lock gate(runner_->gate());
-            // publicFile serves ui/ and the options schema only, never lib/.
-            file = registry_->publicFile(id, path);
-            if (const auto* m = registry_->instance(id)) alpha = m->manifest().lifecycle == rfmod::Lifecycle::Alpha;
-        }
-        if (!file) throw HttpError(404, "no such module file");
-        if (alpha && !isAdmin(req) && !(req.has_param("grant") && grantValid(id, req.get_param_value("grant")))) {
-            throw HttpError(404, "no such module file");
-        }
-        std::ifstream in(*file, std::ios::binary);
-        std::ostringstream content;
-        content << in.rdbuf();
-        const std::string ext = file->extension().string();
-        const char* type = ext == ".js" || ext == ".mjs" ? "text/javascript"
-                           : ext == ".json"              ? "application/json"
-                           : ext == ".css"               ? "text/css"
-                           : ext == ".svg"               ? "image/svg+xml"
-                           : ext == ".png"               ? "image/png"
-                                                         : "application/octet-stream";
-        res.set_header("X-Content-Type-Options", "nosniff");
-        res.set_header("Cache-Control", alpha ? "private, no-store" : "public, max-age=300");
-        res.status = 200;
-        res.set_content(content.str(), type);
-    }));
+    s.Get(api + "/modules", wrap("default", &Application::getModules));
+    s.Get(api + R"(/modules/([a-z0-9._-]+)/(.+))", wrap("default", &Application::getModuleFile));
 
     // ---- admin ----
-    s.Post(api + "/admin/modules", wrap("admin", [this](const Req& req, Res& res) {
-        requireAdmin(req);
-        const bool install = !req.has_param("install") || req.get_param_value("install") != "false";
-        rfmod::ValidationReport report;
-        {
-            std::unique_lock gate(runner_->gate());
-            report = registry_->upload(req.body, install);
-        }
-        log_.info("modules", std::string("upload ") + (report.ok() ? "passed" : "refused") + (install ? ", install" : ", check only"));
-        sendJson(res, 200, report.toJson());
-    }));
-    s.Put(api + R"(/admin/modules/([a-z0-9._-]+))", wrap("admin", [this](const Req& req, Res& res) {
-        requireAdmin(req);
-        const std::string id = req.matches[1];
-        const json b = body(req);
-        std::optional<bool> enabled;
-        if (b.contains("enabled")) enabled = b.at("enabled").get<bool>();
-        std::optional<json> options;
-        if (b.contains("options")) options = b.at("options");
-        if (builtins_->isBuiltin(id)) {
-            builtins_->set(id, enabled, options);
-        } else {
-            std::unique_lock gate(runner_->gate());
-            try {
-                if (options) registry_->setOptions(id, *options);
-                if (enabled.has_value()) registry_->setEnabled(id, *enabled);
-            } catch (const std::invalid_argument& e) {
-                throw HttpError(422, e.what());
-            }
-        }
-        sendJson(res, 200, moduleList(true));
-    }));
-    s.Delete(api + R"(/admin/modules/([a-z0-9._-]+))", wrap("admin", [this](const Req& req, Res& res) {
-        requireAdmin(req);
-        if (builtins_->isBuiltin(req.matches[1])) throw HttpError(422, "built-in modules can be disabled, not removed");
+    s.Post(api + "/admin/modules", wrap("admin", &Application::postAdminModule));
+    s.Put(api + R"(/admin/modules/([a-z0-9._-]+))", wrap("admin", &Application::putAdminModule));
+    s.Delete(api + R"(/admin/modules/([a-z0-9._-]+))", wrap("admin", &Application::deleteAdminModule));
+    s.Get(api + "/admin/modules/notices", wrap("admin", &Application::getAdminNotices));
+    s.Get(api + "/admin/keys", wrap("admin", &Application::getAdminKeys));
+    s.Post(api + "/admin/keys", wrap("admin", &Application::postAdminKey));
+    s.Delete(api + R"(/admin/keys/([0-9a-f]+))", wrap("admin", &Application::deleteAdminKey));
+    s.Get(api + "/admin/cache", wrap("admin", &Application::getAdminCache));
+    s.Put(api + "/admin/cache", wrap("admin", &Application::putAdminCache));
+    s.Delete(api + "/admin/cache", wrap("admin", &Application::deleteAdminCache));
+}
+
+void Application::getHealth(const Req&, Res& res) {
+    sendJson(res, 200, {{"ok", true}, {"version", RFMAP_HOST_VERSION}, {"dem", dem_ != nullptr},
+                        {"landcover", landcover_ != nullptr}, {"weather", weather_->configured()}});
+}
+
+// ---- missions ----
+
+void Application::postMission(const Req& req, Res& res) {
+    const json doc = body(req);
+    schemas_->require("mission", doc);
+    const AuthService::OwnerKey key = AuthService::newOwnerKey();
+    const std::string id = missions_->create(doc, key.hash);
+    const std::string sess = auth_->createSession(id, Role::Edit, std::nullopt);
+    res.set_header("ETag", "\"1\"");
+    sendJson(res, 201, {{"missionId", id}, {"ownerKey", key.plain}, {"session", sess}, {"revision", 1}});
+}
+
+void Application::getMission(const Req& req, Res& res) {
+    const Principal p = session(req);
+    const std::string id = req.matches[1];
+    if (p.missionId != id) throw HttpError(403, "this session belongs to another mission");
+    const auto m = missions_->get(id);
+    if (!m) throw HttpError(404, "no such mission");
+    json out = {{"mission", m->doc}, {"role", toString(p.role)}, {"revision", m->revision}};
+    if (m->lastResult.has_value()) out["lastResult"] = *m->lastResult;
+    res.set_header("ETag", "\"" + std::to_string(m->revision) + "\"");
+    sendJson(res, 200, out);
+}
+
+void Application::putMission(const Req& req, Res& res) {
+    const Principal p = session(req);
+    const std::string id = req.matches[1];
+    if (p.missionId != id) throw HttpError(403, "this session belongs to another mission");
+    if (p.role != Role::Edit) throw HttpError(403, "this is a read-only link");
+    const int expected = ifMatchRevision(req);
+    const json doc = body(req);
+    schemas_->require("mission", doc);
+    const auto rev = missions_->save(id, doc, expected);
+    if (!rev.has_value()) {
+        const auto cur = missions_->get(id);
+        if (!cur) throw HttpError(404, "no such mission");
+        throw HttpError(409, "someone saved this mission in between", {{"revision", cur->revision}});
+    }
+    res.set_header("ETag", "\"" + std::to_string(*rev) + "\"");
+    sendJson(res, 200, {{"revision", *rev}});
+}
+
+// ---- links (owner key) ----
+
+void Application::getLinks(const Req& req, Res& res) {
+    json out = json::array();
+    for (const auto& l : auth_->listLinks(req.matches[1], header(req, "X-Owner-Key"))) out.push_back(AuthService::linkJson(l));
+    sendJson(res, 200, out);
+}
+
+void Application::postLink(const Req& req, Res& res) {
+    const std::string id = req.matches[1];
+    const std::string key = header(req, "X-Owner-Key");
+    auth_->requireOwner(id, key);  // before looking at the body, so strangers learn nothing
+    const json b = body(req);
+    schemas_->require("link-create", b);
+    std::optional<TimePoint> expires;
+    if (b.contains("expiresAt")) {
+        expires = parseIsoUtc(b.at("expiresAt").get<std::string>());
+        if (!expires.has_value()) throw HttpError(422, "expiresAt is not ISO 8601 UTC");
+    }
+    const auto created =
+        auth_->createLink(id, key, roleFromString(b.at("role")), b.at("pin"), b.value("label", ""), expires);
+    json out = AuthService::linkJson(created.record);
+    out["token"] = created.token;
+    sendJson(res, 201, out);
+}
+
+void Application::deleteLink(const Req& req, Res& res) {
+    auth_->revokeLink(req.matches[1], header(req, "X-Owner-Key"), req.matches[2]);
+    res.status = 204;
+}
+
+void Application::getLink(const Req& req, Res& res) {
+    const LinkRecord l = auth_->peekLink(req.matches[1]);
+    const auto m = missions_->get(l.missionId);
+    json out = {{"role", toString(l.role)}, {"missionName", m ? m->doc.value("name", "") : ""}};
+    if (l.expiresAt.has_value()) out["expiresAt"] = isoUtc(*l.expiresAt);
+    if (l.lockedUntil.has_value() && *l.lockedUntil > clock_.now()) out["pausedUntil"] = isoUtc(*l.lockedUntil);
+    sendJson(res, 200, out);
+}
+
+void Application::postLinkOpen(const Req& req, Res& res) {
+    const json b = body(req);
+    if (!b.contains("pin") || !b.at("pin").is_string()) throw HttpError(400, "pin is required");
+    const auto opened = auth_->openLink(req.matches[1], b.at("pin"));
+    const auto m = missions_->get(opened.missionId);
+    sendJson(res, 200, {{"session", opened.session}, {"missionId", opened.missionId}, {"role", toString(opened.role)},
+                        {"missionName", m ? m->doc.value("name", "") : ""}});
+}
+
+// ---- calc ----
+
+void Application::postCalcPath(const Req& req, Res& res) {
+    (void)session(req);
+    const json b = body(req);
+    schemas_->require("calc-path", b);
+    const std::shared_lock gate(runner_->gate());
+    sendJson(res, 200, calc_->path(b));
+}
+
+void Application::postCalcRoute(const Req& req, Res& res) {
+    const Principal p = session(req);
+    const json mission = body(req);
+    schemas_->require("mission", mission);
+    std::optional<int> revision;
+    if (const auto stored = missions_->get(p.missionId); stored.has_value() && stored->doc == mission) {
+        revision = stored->revision;
+    }
+    json result;
+    {
+        std::shared_lock gate(runner_->gate());
+        result = calc_->route(mission, revision);
+    }
+    if (revision.has_value() && p.role == Role::Edit) missions_->storeResultIfCurrent(p.missionId, mission, result);
+    sendJson(res, 200, result);
+}
+
+void Application::postCalcCoverage(const Req& req, Res& res) {
+    const Principal p = session(req);
+    const json mission = body(req);
+    schemas_->require("mission", mission);
+    const std::size_t cells = Calculator::coverageCells(mission);
+    if (cells == 0) throw HttpError(422, "coverage needs coverage.radiusM, coverage.cellM and coverage.droneAglM");
+    if (cells > config_.coverage.maxCells) {
+        throw HttpError(422, "the grid would have " + std::to_string(cells) + " cells; this server allows " +
+                                 std::to_string(config_.coverage.maxCells) + ". Use a larger cellM or a smaller radius.");
+    }
+    if (jobs_->running() >= static_cast<std::size_t>(config_.coverage.maxJobs) * 4) {
+        throw HttpError(503, "too many coverage jobs queued; try again shortly", {{"retryAfterS", 30}});
+    }
+    sendJson(res, 202, jobs_->start(p.missionId, mission));
+}
+
+void Application::getJob(const Req& req, Res& res) {
+    sendJson(res, 200, jobs_->status(session(req).missionId, req.matches[1]));
+}
+
+void Application::deleteJob(const Req& req, Res& res) {
+    jobs_->cancel(session(req).missionId, req.matches[1]);
+    res.status = 204;
+}
+
+void Application::getJobGrid(const Req& req, Res& res) {
+    sendJson(res, 200, jobs_->grid(session(req).missionId, req.matches[1], req.matches[2]));
+}
+
+void Application::getElevationProfile(const Req& req, Res& res) {
+    if (!req.has_param("from") || !req.has_param("to")) throw HttpError(400, "from and to are required (lat,lon)");
+    const auto from = parseLatLon(req.get_param_value("from"));
+    const auto to = parseLatLon(req.get_param_value("to"));
+    const DemSource& dem = links_->requireDem();
+    const auto built = rfcore::ProfileBuilder(dem).build(from, to);
+    if (!built.profile.has_value()) {
+        throw HttpError(422, "missing elevation data on part of the path; nothing is guessed",
+                        links_->missingData(built.missing, from, to));
+    }
+    const auto& smp = built.profile->samples();
+    sendJson(res, 200, LinkService::profileJson(*built.profile, (smp[1].distance - smp[0].distance).value()));
+}
+
+// ---- library ----
+
+std::string Application::libraryKind(const std::string& kind) const {
+    (void)SchemaRegistry::libraryFile(kind);
+    if (kind == "radio-profiles" && !builtins_->enabled(BuiltinModules::kRadioProfiles)) {
+        throw HttpError(404, "radio profiles (rf.radio-profiles) are disabled on this server");
+    }
+    return kind;
+}
+
+void Application::getLibraryList(const Req& req, Res& res) {
+    sendJson(res, 200, library_->list(libraryKind(req.matches[1])));
+}
+
+void Application::getLibraryItem(const Req& req, Res& res) {
+    const auto item = library_->get(libraryKind(req.matches[1]), req.matches[2]);
+    if (!item) throw HttpError(404, "no such library item");
+    sendJson(res, 200, *item);
+}
+
+void Application::getLibraryHistory(const Req& req, Res& res) {
+    sendJson(res, 200, library_->history(libraryKind(req.matches[1]), req.matches[2]));
+}
+
+void Application::postLibraryItem(const Req& req, Res& res) {
+    requireAdmin(req);
+    sendJson(res, 201, library_->add(libraryKind(req.matches[1]), body(req), "admin@" + client(req)));
+}
+
+void Application::putLibraryItem(const Req& req, Res& res) {
+    requireAdmin(req);
+    sendJson(res, 200, library_->update(libraryKind(req.matches[1]), req.matches[2], body(req), "admin@" + client(req)));
+}
+
+// ---- weather ----
+
+void Application::getWeatherPoint(const Req& req, Res& res) {
+    const double lat = queryNumber(req, "lat");
+    const double lon = queryNumber(req, "lon");
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) throw HttpError(400, "lat/lon out of range");
+    TimePoint t = Clock::now();
+    if (req.has_param("timeUtc")) {
+        const auto parsed = parseIsoUtc(req.get_param_value("timeUtc"));
+        if (!parsed) throw HttpError(400, "timeUtc is not ISO 8601");
+        t = *parsed;
+    }
+    const ForecastAt f = weather_->at(lat, lon, t);
+    json out = f.point;
+    out["notes"] = json::array();
+    for (const auto& n : f.notes) out["notes"].push_back({{"what", n.what}, {"detail", n.detail}});
+    sendJson(res, 200, out);
+}
+
+void Application::getWeatherHorizon(const Req&, Res& res) {
+    const rfcore::GeoPoint probe = dem_ ? dem_->raster().centre() : rfcore::GeoPoint{0.0, 0.0};
+    sendJson(res, 200, weather_->horizon(probe.latitudeDeg, probe.longitudeDeg));
+}
+
+void Application::getMapConfig(const Req&, Res& res) { sendJson(res, 200, mapConfig()); }
+
+// ---- modules ----
+
+void Application::getModules(const Req& req, Res& res) { sendJson(res, 200, moduleList(isAdmin(req))); }
+
+void Application::getModuleFile(const Req& req, Res& res) {
+    const std::string id = req.matches[1];
+    const std::string path = req.matches[2];
+    std::optional<std::filesystem::path> file;
+    bool alpha = false;
+    {
+        std::shared_lock gate(runner_->gate());
+        // publicFile serves ui/ and the options schema only, never lib/.
+        file = registry_->publicFile(id, path);
+        if (const auto* m = registry_->instance(id)) alpha = m->manifest().lifecycle == rfmod::Lifecycle::Alpha;
+    }
+    if (!file.has_value()) throw HttpError(404, "no such module file");
+    if (alpha && !isAdmin(req) && !(req.has_param("grant") && grantValid(id, req.get_param_value("grant")))) {
+        throw HttpError(404, "no such module file");
+    }
+    const std::ifstream in(*file, std::ios::binary);
+    std::ostringstream content;
+    content << in.rdbuf();
+    res.set_header("X-Content-Type-Options", "nosniff");
+    res.set_header("Cache-Control", alpha ? "private, no-store" : "public, max-age=300");
+    res.status = 200;
+    res.set_content(content.str(), moduleFileType(file->extension().string()));
+}
+
+// ---- admin ----
+
+void Application::postAdminModule(const Req& req, Res& res) {
+    requireAdmin(req);
+    const bool install = !req.has_param("install") || req.get_param_value("install") != "false";
+    rfmod::ValidationReport report;
+    {
+        std::unique_lock gate(runner_->gate());
+        report = registry_->upload(req.body, install);
+    }
+    log_.info("modules", std::string("upload ") + (report.ok() ? "passed" : "refused") + (install ? ", install" : ", check only"));
+    sendJson(res, 200, report.toJson());
+}
+
+void Application::putAdminModule(const Req& req, Res& res) {
+    requireAdmin(req);
+    const std::string id = req.matches[1];
+    const json b = body(req);
+    std::optional<bool> enabled;
+    if (b.contains("enabled")) enabled = b.at("enabled").get<bool>();
+    std::optional<json> options;
+    if (b.contains("options")) options = b.at("options");
+    if (builtins_->isBuiltin(id)) {
+        builtins_->set(id, enabled, options);
+    } else {
         std::unique_lock gate(runner_->gate());
         try {
-            registry_->remove(req.matches[1]);
+            if (options.has_value()) registry_->setOptions(id, *options);
+            if (enabled.has_value()) registry_->setEnabled(id, *enabled);
         } catch (const std::invalid_argument& e) {
             throw HttpError(422, e.what());
         }
-        res.status = 204;
-    }));
-    s.Get(api + "/admin/modules/notices", wrap("admin", [this](const Req& req, Res& res) {
-        requireAdmin(req);
-        std::shared_lock gate(runner_->gate());
-        sendJson(res, 200, registry_->notices());
-    }));
+    }
+    sendJson(res, 200, moduleList(true));
+}
 
-    auto keyList = [this] {
-        json out = json::array();
-        for (const auto& k : trust_->keys()) {
-            out.push_back({{"id", k.key.id()}, {"label", k.label}, {"key", k.key.toText()}, {"builtIn", k.builtIn},
-                           {"firstParty", k.firstParty()}});
-        }
-        return out;
-    };
-    s.Get(api + "/admin/keys", wrap("admin", [this, keyList](const Req& req, Res& res) {
-        requireAdmin(req);
-        std::shared_lock gate(runner_->gate());
-        sendJson(res, 200, keyList());
-    }));
-    s.Post(api + "/admin/keys", wrap("admin", [this, keyList](const Req& req, Res& res) {
-        requireAdmin(req);
-        const json b = body(req);
-        std::unique_lock gate(runner_->gate());
-        try {
-            trust_->add(rfmod::PublicKey::fromText(b.at("key").get<std::string>()), b.value("label", ""));
-        } catch (const std::invalid_argument& e) {
-            throw HttpError(422, e.what());
-        }
-        registry_->reload();
-        sendJson(res, 201, keyList());
-    }));
-    s.Delete(api + R"(/admin/keys/([0-9a-f]+))", wrap("admin", [this](const Req& req, Res& res) {
-        requireAdmin(req);
-        std::unique_lock gate(runner_->gate());
-        try {
-            trust_->remove(req.matches[1]);
-        } catch (const std::invalid_argument& e) {
-            throw HttpError(409, e.what());
-        }
-        // Modules signed with the removed key stop loading now, not only at the next start.
-        registry_->reload();
-        res.status = 204;
-    }));
+void Application::deleteAdminModule(const Req& req, Res& res) {
+    requireAdmin(req);
+    if (builtins_->isBuiltin(req.matches[1])) throw HttpError(422, "built-in modules can be disabled, not removed");
+    std::unique_lock gate(runner_->gate());
+    try {
+        registry_->remove(req.matches[1]);
+    } catch (const std::invalid_argument& e) {
+        throw HttpError(422, e.what());
+    }
+    res.status = 204;
+}
 
-    s.Get(api + "/admin/cache", wrap("admin", [this](const Req& req, Res& res) {
-        requireAdmin(req);
-        sendJson(res, 200, cacheTiers());
-    }));
-    s.Put(api + "/admin/cache", wrap("admin", [this](const Req& req, Res& res) {
-        requireAdmin(req);
-        const json b = body(req);
-        if (!b.is_array()) throw HttpError(422, "send [{id, limitBytes?, limitRows?}]");
-        ResultCache::Limits l = results_->limits();
-        std::size_t demLimit = blocks_->stats().limitBytes;
-        for (const json& t : b) {
-            const std::string id = t.at("id");
-            if (id == "dem-blocks") demLimit = t.value("limitBytes", demLimit);
-            else if (id == "results-memory") l.memoryBytes = t.value("limitBytes", l.memoryBytes);
-            else if (id == "results-table") {
-                l.tableBytes = t.value("limitBytes", l.tableBytes);
-                l.tableRows = t.value("limitRows", l.tableRows);
-            } else throw HttpError(422, "unknown cache tier " + id);
-        }
-        blocks_->setLimit(demLimit);
-        results_->setLimits(l);
-        const json stored = {{"demBlocksBytes", demLimit}, {"resultMemoryBytes", l.memoryBytes},
-                             {"resultTableRows", l.tableRows}, {"resultTableBytes", l.tableBytes}};
-        db_->tx([&stored](pqxx::work& w) {
-            w.exec_params("insert into settings(key, value) values ('cache.limits', $1::jsonb) "
-                          "on conflict (key) do update set value = excluded.value", stored.dump());
-        });
-        sendJson(res, 200, cacheTiers());
-    }));
-    s.Delete(api + "/admin/cache", wrap("admin", [this](const Req& req, Res& res) {
-        requireAdmin(req);
-        const std::string tier = req.has_param("tier") ? req.get_param_value("tier") : "all";
-        if (tier == "dem-blocks" || tier == "all") blocks_->clear();
-        if (tier == "results-memory" || tier == "all") results_->clearMemory();
-        if (tier == "results-table" || tier == "all") results_->clearTable();
-        if (tier != "all" && tier != "dem-blocks" && tier != "results-memory" && tier != "results-table") {
-            throw HttpError(422, "unknown cache tier " + tier);
-        }
-        res.status = 204;
-    }));
+void Application::getAdminNotices(const Req& req, Res& res) {
+    requireAdmin(req);
+    const std::shared_lock gate(runner_->gate());
+    sendJson(res, 200, registry_->notices());
+}
+
+json Application::trustedKeys() const {
+    json out = json::array();
+    for (const auto& k : trust_->keys()) {
+        out.push_back({{"id", k.key.id()}, {"label", k.label}, {"key", k.key.toText()}, {"builtIn", k.builtIn},
+                       {"firstParty", k.firstParty()}});
+    }
+    return out;
+}
+
+void Application::getAdminKeys(const Req& req, Res& res) {
+    requireAdmin(req);
+    const std::shared_lock gate(runner_->gate());
+    sendJson(res, 200, trustedKeys());
+}
+
+void Application::postAdminKey(const Req& req, Res& res) {
+    requireAdmin(req);
+    const json b = body(req);
+    std::unique_lock gate(runner_->gate());
+    try {
+        trust_->add(rfmod::PublicKey::fromText(b.at("key").get<std::string>()), b.value("label", ""));
+    } catch (const std::invalid_argument& e) {
+        throw HttpError(422, e.what());
+    }
+    registry_->reload();
+    sendJson(res, 201, trustedKeys());
+}
+
+void Application::deleteAdminKey(const Req& req, Res& res) {
+    requireAdmin(req);
+    std::unique_lock gate(runner_->gate());
+    try {
+        trust_->remove(req.matches[1]);
+    } catch (const std::invalid_argument& e) {
+        throw HttpError(409, e.what());
+    }
+    // Modules signed with the removed key stop loading now, not only at the next start.
+    registry_->reload();
+    res.status = 204;
+}
+
+void Application::getAdminCache(const Req& req, Res& res) {
+    requireAdmin(req);
+    sendJson(res, 200, cacheTiers());
+}
+
+void Application::putAdminCache(const Req& req, Res& res) {
+    requireAdmin(req);
+    const json b = body(req);
+    if (!b.is_array()) throw HttpError(422, "send [{id, limitBytes?, limitRows?}]");
+    ResultCache::Limits l = results_->limits();
+    std::size_t demLimit = blocks_->stats().limitBytes;
+    for (const json& t : b) {
+        if (const std::string id = t.at("id"); id == "dem-blocks") demLimit = t.value("limitBytes", demLimit);
+        else if (id == "results-memory") l.memoryBytes = t.value("limitBytes", l.memoryBytes);
+        else if (id == "results-table") {
+            l.tableBytes = t.value("limitBytes", l.tableBytes);
+            l.tableRows = t.value("limitRows", l.tableRows);
+        } else throw HttpError(422, "unknown cache tier " + id);
+    }
+    blocks_->setLimit(demLimit);
+    results_->setLimits(l);
+    const json stored = {{"demBlocksBytes", demLimit}, {"resultMemoryBytes", l.memoryBytes},
+                         {"resultTableRows", l.tableRows}, {"resultTableBytes", l.tableBytes}};
+    db_->tx([&stored](pqxx::work& w) {
+        w.exec_params("insert into settings(key, value) values ('cache.limits', $1::jsonb) "
+                      "on conflict (key) do update set value = excluded.value", stored.dump());
+    });
+    sendJson(res, 200, cacheTiers());
+}
+
+void Application::deleteAdminCache(const Req& req, Res& res) {
+    requireAdmin(req);
+    const std::string tier = req.has_param("tier") ? req.get_param_value("tier") : "all";
+    if (tier == "dem-blocks" || tier == "all") blocks_->clear();
+    if (tier == "results-memory" || tier == "all") results_->clearMemory();
+    if (tier == "results-table" || tier == "all") results_->clearTable();
+    if (tier != "all" && tier != "dem-blocks" && tier != "results-memory" && tier != "results-table") {
+        throw HttpError(422, "unknown cache tier " + tier);
+    }
+    res.status = 204;
 }
 
 }  // namespace rfmap

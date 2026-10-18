@@ -94,8 +94,17 @@ private:
     void start();
     void stop(bool kill);
     void send(const json& message);
-    /// Reads worker messages until `done` returns true, answering callbacks on the way.
+    /// Reads worker messages until one of `type` (and `id`, except for "ready") arrives,
+    /// answering callbacks on the way.
     json waitFor(const std::string& type, long long id, long long deadlineMs);
+    /// Handles the complete lines in outBuffer_; returns the awaited message if one of them is it.
+    std::optional<json> handleBufferedMessages(const std::string& type, long long id);
+    /// Runs a host call the worker asked for and sends the result back.
+    void answerCallback(const json& msg);
+    /// Forwards the complete lines the worker wrote to stderr to the host log.
+    void logBufferedStderr();
+    /// Waits up to a second (and never past the deadline) for worker output and buffers it.
+    void readWorkerOutput(long long deadlineMs);
 
     Manifest manifest_;
     std::filesystem::path library_;
