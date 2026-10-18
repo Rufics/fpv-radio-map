@@ -2,7 +2,7 @@
 import unittest
 
 from clang_tidy import (ROOT, annotations, changed_files, escape_annotation, main, parse_finding, repo_relative,
-                        select, translation_units)
+                        select, shard, translation_units)
 
 BUILD = ROOT / "build-tidy"
 UNITS = ["core/rf-core/src/geodesy.cpp", "platform/rfmod/src/crypto.cpp"]
@@ -39,6 +39,20 @@ class SelectTest(unittest.TestCase):
                      "platform/rfmod/cmake/embed_schema.cmake", "tools/ci/clang_tidy.py"):
             with self.subTest(path=path):
                 self.assertEqual(select(UNITS, [path]), UNITS)
+
+
+class ShardTest(unittest.TestCase):
+    def test_shards_split_the_units_without_overlap(self):
+        units = [f"f{i}.cpp" for i in range(7)]
+        shards = [shard(units, f"{k}/3") for k in (1, 2, 3)]
+        self.assertEqual(shards[0], ["f0.cpp", "f3.cpp", "f6.cpp"])
+        self.assertEqual(sorted(unit for part in shards for unit in part), units)
+        self.assertEqual(shard(units, "1/1"), units)
+
+    def test_shard_must_be_k_of_n(self):
+        for spec in ("0/3", "4/3", "1/0", "1", "a/b", "1/3/4", "-1/3", "100/100"):
+            with self.subTest(spec=spec), self.assertRaises(ValueError):
+                shard(["a.cpp"], spec)
 
 
 class ChangedFilesTest(unittest.TestCase):

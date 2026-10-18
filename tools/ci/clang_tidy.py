@@ -2,13 +2,14 @@
 """Runs clang-tidy over the C++ sources of a configured build, with the checks in .clang-tidy.
 
     python3 -I tools/ci/clang_tidy.py --build-dir build-tidy [--base <commit>] [--jobs N]
-                                      [--clang-tidy clang-tidy-18]
+                                      [--shard K/N] [--clang-tidy clang-tidy-18]
 
 The build directory, a folder directly under the repository root, must hold compile_commands.json
 (CMAKE_EXPORT_COMPILE_COMMANDS=ON) and any generated headers. Every translation unit of this
 repository in it is checked, fetched dependencies and generated files excepted. With --base only
 the sources changed since that commit are checked, unless a change can affect any file: a header,
-.clang-tidy, a CMake file or this script then checks everything.
+.clang-tidy, a CMake file or this script then checks everything. With --shard K/N only every
+N-th of those files, starting at the K-th, is checked, so that N CI jobs can share the work.
 
 Each finding is printed as clang-tidy prints it and, on GitHub Actions, also as an error
 annotation on its line. The exit code is 1 when clang-tidy reported anything, 2 on a usage
@@ -32,6 +33,7 @@ SKIPPED_DIRS = ("_deps", "generated")
 REVISION = re.compile(r"[0-9a-f]{7,64}|HEAD(\^\d?|~\d{1,3})?")
 CLANG_TIDY_NAME = re.compile(r"clang-tidy(-\d+)?")
 BUILD_DIR_NAME = re.compile(r"\w[\w.-]{0,63}")
+SHARD = re.compile(r"(\d{1,2})/(\d{1,2})")
 LEVELS = (": error: ", ": warning: ")
 TIMEOUT_SECONDS = 600
 MAX_LINE = 4096
@@ -86,6 +88,15 @@ def select(units, changed):
     return [unit for unit in units if unit in wanted]
 
 
+def shard(units, spec):
+    """The units of shard `K/N` (1 <= K <= N): every N-th unit, starting at the K-th."""
+    match = SHARD.fullmatch(spec)
+    index, count = (int(match.group(1)), int(match.group(2))) if match else (0, 0)
+    if not 1 <= index <= count:
+        raise ValueError(f"--shard must be K/N with 1 <= K <= N, got {spec!r}")
+    return units[index - 1::count]
+
+
 def changed_files(base):
     """Files changed between base and HEAD, from git."""
     if not REVISION.fullmatch(base):
@@ -134,6 +145,7 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--build-dir", required=True, help="CMake build folder, directly under the repository root")
     parser.add_argument("--base", help="check only the files changed since this commit (hash, HEAD^1, ...)")
+    parser.add_argument("--shard", help="check only shard K of N of the files, as K/N")
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1, help="parallel clang-tidy runs")
     parser.add_argument("--clang-tidy", default="clang-tidy", help="clang-tidy or clang-tidy-<version>, from PATH")
     return parser.parse_args(argv)
@@ -155,6 +167,12 @@ def main(argv=None):
     with open(build_dir / "compile_commands.json", encoding="utf-8") as f:
         units = translation_units(json.load(f), build_dir)
     units = select(units, changed_files(args.base) if args.base else None)
+    if args.shard:
+        try:
+            units = shard(units, args.shard)
+        except ValueError as e:
+            print(e, file=sys.stderr)
+            return 2
     if not units:
         print("No C++ sources to check.")
         return 0

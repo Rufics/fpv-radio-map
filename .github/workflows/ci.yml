@@ -67,12 +67,18 @@ jobs:
   # the build, the tests and everything after them are skipped. Configures with Clang to get the
   # compile database and builds only the generated headers. A pull request checks the sources it
   # changes, or everything when it changes a header or the build; other runs check everything.
+  # The files are split across four runners; the gate fails when any of them finds anything.
   clang-tidy:
-    name: C++ static analysis
+    name: C++ static analysis (${{ matrix.shard }}/4)
     needs: changes
     if: needs.changes.outputs.cpp == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    strategy:
+      # Every part runs to the end, so one run reports all the findings.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -90,7 +96,7 @@ jobs:
       # On a pull request HEAD is the merge commit and HEAD^1 the base branch it was merged onto.
       - name: clang-tidy
         run: >-
-          python3 -I tools/ci/clang_tidy.py --build-dir build-tidy --clang-tidy clang-tidy-18
+          python3 -I tools/ci/clang_tidy.py --build-dir build-tidy --clang-tidy clang-tidy-18 --shard ${{ matrix.shard }}/4
           ${{ github.event_name == 'pull_request' && '--base HEAD^1' || '' }}
 
   cpp:
