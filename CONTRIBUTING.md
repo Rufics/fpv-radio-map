@@ -102,6 +102,10 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
   minute (longer every night in `.github/workflows/fuzz.yml`; see [Fuzz testing](docs/dev/fuzzing.md));
 - the pull request title against Conventional Commits (its own check, re-run when the title is edited).
 
+A separate workflow (`.github/workflows/sonar.yml`) runs the SonarQube Cloud analysis with C++,
+Python and TypeScript coverage; its quality gate shows on the pull request. See
+[SonarQube Cloud](docs/dev/sonarcloud.md).
+
 ### The CI report
 
 The comment on the pull request is kept up to date on every push. It starts with one line: passed

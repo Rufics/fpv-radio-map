@@ -39,6 +39,7 @@
     "@angular/compiler-cli": "^22.2.0",
     "@types/d3-contour": "^3.0.6",
     "@types/geojson": "^7946.0.16",
+    "@vitest/coverage-v8": "^5.0.5",
     "jsdom": "^30.0.0",
     "ng-packagr": "^22.2.0",
     "playwright-core": "^1.64.1",

@@ -1,0 +1,116 @@
+# SonarQube Cloud analysis with coverage, for pull requests from branches of this repository and
+# every push to main. The settings are in sonar-project.properties; the one-time setup (automatic
+# analysis off, the SONAR_TOKEN secret) is in docs/admin/sonarcloud.md.
+#
+# The analysis needs the SONAR_TOKEN secret, which pull requests from forks and Dependabot never
+# get, so their runs skip it; ci.yml still tests them. The token is passed to the scanner step
+# only, never to the steps that build and run the pull request's code. Without the secret the
+# analysis is skipped instead of failing, so the workflow is harmless until the setup is done.
+name: SonarQube Cloud
+
+on:
+  pull_request:
+    paths-ignore:
+      - docs/**
+      - "**.md"
+      - LICENSE
+  push:
+    branches: [main]
+    paths-ignore:
+      - docs/**
+      - "**.md"
+      - LICENSE
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonar-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  token:
+    name: SonarQube Cloud token
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - id: check
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::SONAR_TOKEN is not set: the SonarQube Cloud analysis is skipped."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  analysis:
+    name: SonarQube Cloud analysis
+    needs: token
+    if: needs.token.outputs.present == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      # Full history, so new code and blame information are right.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/cpp-deps
+        with:
+          extra: gcovr python3-coverage
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # C++: one instrumented build gives both the compile database the analyser reads and the
+      # coverage, filtered like the coverage job in ci.yml.
+      - name: Configure C++
+        run: >-
+          cmake -S . -B build-sonar -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON -DRFMAP_COVERAGE=ON
+      - name: Build C++
+        run: cmake --build build-sonar
+      - name: Test C++
+        run: ctest --test-dir build-sonar --output-on-failure
+      - name: C++ coverage
+        run: |
+          mkdir -p sonar-reports
+          gcovr --root . -j "$(nproc)" \
+            --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
+            --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' \
+            --exclude '.*/tests/.*' \
+            --sonarqube sonar-reports/cpp-coverage.xml \
+            build-sonar
+
+      - name: Python coverage
+        run: |
+          python3 -I -m coverage run --branch --source=tools/ci --omit='*_test.py' \
+            -m unittest discover -s tools/ci -p '*_test.py'
+          python3 -I -m coverage xml -o sonar-reports/python-coverage.xml
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Web coverage
+        working-directory: web
+        run: |
+          npm run sync-schemas
+          npm run ng -- test ui-kit --watch=false --coverage --coverage-reporters=lcovonly
+          npm run ng -- test fpv-app --watch=false --coverage --coverage-reporters=lcovonly
+      - name: Merge web coverage
+        run: >-
+          python3 -I tools/ci/sonar_lcov.py --base web --output sonar-reports/web.lcov
+          web/coverage/ui-kit/lcov.info web/coverage/fpv-app/lcov.info
+
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
