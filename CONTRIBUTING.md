@@ -78,6 +78,8 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
 - C++: everything under `ctest`, including the server integration test against PostgreSQL 16 + PostGIS
   and the signed-package upload checks of every FPV module;
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
+- fuzzing: changes to the C++ tree replay the fuzz corpus and fuzz every target for a minute
+  (`.github/workflows/fuzz.yml`, longer every night; see [Fuzz testing](docs/dev/fuzzing.md));
 - the pull request title against Conventional Commits (its own check, re-run when the title is edited);
 - copied code: the changed files are matched file by file and snippet by snippet against the SCANOSS
   open source knowledge base (`.github/workflows/code-origin.yml`, also weekly over the whole tree).

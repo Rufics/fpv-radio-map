@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "example.body-shadow",
+  "version": "1.0.0",
+  "title": "Body shadow loss",
+  "description": "Adds the loss the pilot's own body causes when it stands between the ground antenna and the drone. The value is the user's, measured or taken from a study; the module does not invent one.",
+  "author": "rfmap examples",
+  "license": "MIT",
+  "lifecycle": "stable",
+  "abi": 1,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["loss.contributor"],
+  "methods": ["loss.contribute"],
+  "entry": { "linux-x86_64": "lib/libbody_shadow.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 64, "timeoutMs": 2000 }
+}

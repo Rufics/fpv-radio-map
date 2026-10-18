@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "fpv.min-altitude",
+  "version": "1.0.0",
+  "title": "Minimum altitude along the route",
+  "description": "For each evaluated link, the lowest height above ground along the route that keeps 60 % of the first Fresnel zone clear from the pilot's antenna, and a suggested height per leg where the plan is lower.",
+  "author": "rfmap",
+  "license": "MIT",
+  "lifecycle": "beta",
+  "abi": 1,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["route.analysis"],
+  "methods": ["route.analyze"],
+  "entry": { "linux-x86_64": "lib/libfpv_min_altitude.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 256, "timeoutMs": 120000 }
+}

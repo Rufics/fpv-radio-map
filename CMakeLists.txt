@@ -12,6 +12,9 @@ list(APPEND CMAKE_MODULE_PATH /usr/share/cmake/geographiclib)
 
 option(RFMAP_BUILD_TESTS "Build unit tests" ON)
 option(RFMAP_BUILD_SERVER "Build the HTTP server" ON)
+# Fuzz targets (fuzz/). With Clang they are libFuzzer binaries and the whole tree is built with
+# AddressSanitizer and UndefinedBehaviorSanitizer; with other compilers they only replay the corpus.
+option(RFMAP_BUILD_FUZZERS "Build fuzz targets" OFF)
 
 if(MSVC)
   add_compile_options(/W4 /permissive-)
@@ -25,6 +28,11 @@ if(RFMAP_BUILD_TESTS)
   find_package(GTest REQUIRED)
 endif()
 
+if(RFMAP_BUILD_FUZZERS)
+  enable_testing()
+  include(fuzz/sanitizers.cmake)
+endif()
+
 add_subdirectory(core/rf-core)
 add_subdirectory(core/rf-ext)
 add_subdirectory(platform/rfmod)
@@ -33,3 +41,6 @@ if(RFMAP_BUILD_SERVER)
   add_subdirectory(server)
 endif()
 add_subdirectory(modules/fpv)
+if(RFMAP_BUILD_FUZZERS)
+  add_subdirectory(fuzz)
+endif()

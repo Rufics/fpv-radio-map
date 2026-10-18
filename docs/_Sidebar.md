@@ -15,4 +15,5 @@
 **Extending it**
 
 - [Writing a module](modules/developer-guide.md)
+- [Fuzz testing](dev/fuzzing.md)
 - [Contributing](../CONTRIBUTING.md)
