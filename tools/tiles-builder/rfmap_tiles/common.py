@@ -8,18 +8,24 @@ so re-running any command is safe (idempotent); --force rebuilds.
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as _dt
 import hashlib
+import http.client
+import ipaddress
 import json
 import math
 import os
 import re
 import shlex
 import shutil
+import socket
+import ssl
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,50 +67,251 @@ def run(cmd: list[str], *, capture: bool = False, env: dict | None = None, cwd: 
 
 
 # --------------------------------------------------------------------------- command-line values
-# The build reads and writes only under DATA (the container's /data volume) and downloads only
-# from the fixed URLs in sources.py. A value from the command line never becomes a path, a URL
-# or a command argument itself: it only selects one of those trusted values.
+# Every value from the command line is validated before it reaches a path, a URL or a command:
+#  * paths are canonicalised with os.path.realpath and must lie inside the directory the build was
+#    started from (/data in the image), so an argument cannot point the build at other files;
+#  * text and numbers that go on a tool's command line must match a strict character set and may
+#    not start with "-", so they cannot add options to the command;
+#  * URLs must be https, use URL characters only, and resolve to public addresses.
 
-DATA = Path("/data")
 INPUTS_DIR = "inputs"
-
-_HEAP_UNITS = {"k": "k", "m": "m", "g": "g"}
-
-
-def input_file(text: str) -> Path:
-    """argparse type: a file in /data/inputs, given by name or by its path in the container.
-    Returns that directory's own entry, so the path used later is never the text typed."""
-    inputs = DATA / INPUTS_DIR
-    given = Path(text)
-    if "/" in text and given.parent.resolve() != inputs.resolve():
-        raise argparse_error(f"{text}: input files must be in {inputs}")
-    if inputs.is_dir():
-        for entry in inputs.iterdir():
-            if entry.name == given.name and entry.is_file():
-                return entry
-    raise argparse_error(f"{text}: no such file in {inputs} (put input files in <data>/inputs/)")
+_ARG_TEXT = r"^[A-Za-z0-9_.,/:=+-]+$"
+_URL_TEXT = r"^https://[A-Za-z0-9._~:/?#@!$&'()*+,;=%{}\[\]-]+$"
 
 
-def inputs_entry(name: str) -> Path:
-    """The /data/inputs entry called `name`, taken from the directory listing at the point of use,
-    so a path handed to a tool always comes from the volume and not from the command line."""
-    inputs = DATA / INPUTS_DIR
-    for entry in inputs.iterdir() if inputs.is_dir() else ():
-        if entry.name == name and entry.is_file():
-            return entry
-    raise BuildError(f"{name}: no longer in {inputs}")
+def safe_arg(value: object, what: str) -> str:
+    """`value` as command-line text: letters, digits and _ . , / : = + - only, not starting with "-"."""
+    text = str(value)
+    if not re.match(_ARG_TEXT, text) or text.startswith("-"):
+        raise BuildError(f"{what} {text!r}: use only letters, digits and _ . , / : = + - "
+                         "(and do not start with -)")
+    return text
+
+
+def safe_int(value: object, what: str) -> int:
+    """An integer from the command line, validated as safe_arg text first."""
+    text = safe_arg(value, what)
+    if not re.match(r"^\d+$", text, re.ASCII):
+        raise BuildError(f"{what} must be a whole number >= 0 (got {text!r})")
+    return int(text)
+
+
+def safe_float(value: object, what: str) -> float:
+    """A number from the command line, validated as safe_arg text first."""
+    text = safe_arg(value, what)
+    if not re.match(r"^\d+(\.\d+)?([eE][-+]?\d+)?$", text, re.ASCII):
+        raise BuildError(f"{what} must be a number >= 0 (got {text!r})")
+    return float(text)
+
+
+def safe_path(path: str | os.PathLike, what: str) -> Path:
+    """`path` resolved with os.path.realpath, refused unless it lies inside the working directory
+    and its characters pass safe_arg (so the path can be handed to a tool as an argument)."""
+    resolved = os.path.realpath(path)
+    base_dir = os.path.realpath(os.getcwd())
+    prefix = base_dir if base_dir.endswith(os.sep) else base_dir + os.sep  # "/" stays "/"
+    if resolved != base_dir and not resolved.startswith(prefix):
+        raise BuildError(f"{what} {str(path)!r} is outside the directory the build was started from "
+                         f"({base_dir}); start the build from a directory that contains it")
+    if not re.match(_ARG_TEXT, resolved):
+        raise BuildError(f"{what} {resolved!r}: paths may use only letters, digits and _ . , / : = + -")
+    return Path(resolved)
+
+
+def safe_url(text: str, what: str) -> str:
+    """An https URL from the command line: URL characters only, and its host must be public."""
+    if not re.match(_URL_TEXT, text):
+        raise BuildError(f"{what} must be an https:// URL without spaces or quotes (got {text!r})")
+    public_host(text)
+    return text
+
+
+def _located(path: str | os.PathLike) -> str:
+    """A relative file name that does not exist here is looked up in inputs/ as well."""
+    text = os.fspath(path)
+    if os.path.isabs(text) or os.path.exists(text):
+        return text
+    return os.path.join(INPUTS_DIR, text)
+
+
+def safe_file(path: str | os.PathLike, what: str) -> Path:
+    """safe_path for an existing regular file (a bare name may also be in inputs/)."""
+    resolved = safe_path(_located(path), what)
+    if not resolved.is_file():
+        raise BuildError(f"{what}: not a file: {path}")
+    return resolved
+
+
+def existing_file(text: str) -> str:
+    """argparse type: an existing regular file, here or in inputs/ (checked again with safe_file
+    where it is used)."""
+    if not Path(_located(text)).is_file():
+        raise argparse_error(f"not a file: {text} (looked in the current directory and in {INPUTS_DIR}/)")
+    return text
+
+
+def directory(text: str) -> str:
+    """argparse type: a directory to create or reuse (checked again with safe_path where it is used)."""
+    if Path(text).expanduser().exists() and not Path(text).expanduser().is_dir():
+        raise argparse_error(f"not a directory: {text}")
+    return text
+
+
+def https_url(text: str) -> str:
+    """argparse type: an https URL with a host. Placeholders such as {z} may appear in the path."""
+    parts = urllib.parse.urlsplit(text)
+    if parts.scheme != "https" or not parts.hostname:
+        raise argparse_error(f"must be an https:// URL: {text}")
+    return text
 
 
 def heap_size(text: str) -> str:
     """argparse type: a JVM heap size such as 4g or 2048m."""
-    m = re.fullmatch(r"([1-9]\d{0,6})([kKmMgG])", text)
-    if not m:
+    if not re.fullmatch(r"[1-9]\d{0,6}[kKmMgG]", text, re.ASCII):
         raise argparse_error(f"must be a size such as 4g or 2048m: {text}")
-    return f"{int(m.group(1))}{_HEAP_UNITS[m.group(2).lower()]}"
+    return text
 
 
 def argparse_error(message: str) -> argparse.ArgumentTypeError:
     return argparse.ArgumentTypeError(message)
+
+
+def public_address(url: str) -> tuple[str, str]:
+    """(host, address) for an https URL whose host resolves only to public addresses. The build
+    fetches URLs from the command line, so it refuses loopback, private and link-local targets,
+    and a host it cannot resolve itself (even when a proxy could)."""
+    host = urllib.parse.urlsplit(url).hostname or ""
+    try:
+        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+    except socket.gaierror as e:
+        raise BuildError(f"cannot resolve {host}: {e}; download the file yourself and pass it as a local file")
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0])
+        if not address.is_global:
+            raise BuildError(f"{host} resolves to {address}, which is not a public address")
+    return host, infos[0][4][0]
+
+
+def public_host(url: str) -> str:
+    return public_address(url)[0]
+
+
+class _PublicRedirect(urllib.request.HTTPRedirectHandler):
+    """Follows a redirect only to an https URL on a public host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.startswith("https://"):
+            raise BuildError(f"refusing a redirect to a non-https URL: {newurl}")
+        public_host(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_PublicRedirect)
+
+
+def open_url(req: urllib.request.Request, timeout: int = 60):
+    """urllib.request.urlopen, with every redirect hop checked by _PublicRedirect."""
+    return _OPENER.open(req, timeout=timeout)
+
+
+class _PinnedConnection(http.client.HTTPSConnection):
+    """An HTTPS connection to one checked address. TLS and the Host header use the host name,
+    and an http proxy is asked to CONNECT to the address, so the proxy does not resolve it."""
+
+    def __init__(self, host: str, port: int, address: str, proxy: tuple[str, int, str] | None, timeout: int):
+        super().__init__(host, port, timeout=timeout)
+        self._address, self._proxy = address, proxy
+
+    def connect(self) -> None:
+        target = f"[{self._address}]:{self.port}" if ":" in self._address else f"{self._address}:{self.port}"
+        if self._proxy is None:
+            sock = socket.create_connection((self._address, self.port), self.timeout)
+        else:
+            proxy_host, proxy_port, auth = self._proxy
+            sock = socket.create_connection((proxy_host, proxy_port), self.timeout)
+            sock.sendall(f"CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n{auth}\r\n".encode("ascii"))
+            reply = b""
+            while not reply.endswith(b"\r\n\r\n") and len(reply) < 16384:
+                chunk = sock.recv(1)
+                if not chunk:
+                    break
+                reply += chunk
+            status = reply.split(b"\r\n", 1)[0]
+            if status.split()[1:2] != [b"200"]:
+                sock.close()
+                raise OSError(f"proxy refused CONNECT {target}: {status.decode('latin-1')}")
+        context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+        context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
+        self.sock = context.wrap_socket(sock, server_hostname=self.host)
+
+
+def _https_proxy(host: str) -> tuple[str, int, str] | None:
+    """(host, port, Proxy-Authorization header line) of the http proxy for host, or None."""
+    url = urllib.request.getproxies().get("https")
+    if not url or urllib.request.proxy_bypass(host):
+        return None
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme != "http" or not parts.hostname:
+        raise BuildError("https_proxy must be a full proxy URL with the http scheme and a host name")
+    auth = ""
+    if parts.username:
+        token = f"{urllib.parse.unquote(parts.username)}:{urllib.parse.unquote(parts.password or '')}"
+        auth = f"Proxy-Authorization: Basic {base64.b64encode(token.encode()).decode('ascii')}\r\n"
+    return parts.hostname, parts.port or 8080, auth
+
+
+class PinnedPool:
+    """Keep-alive HTTPS connections for many requests to one host. The host is resolved and
+    checked once (public_address), and every connection goes to that address, so a later DNS
+    answer cannot send a request elsewhere. Redirects are not followed."""
+
+    def __init__(self, url: str, timeout: int = 60):
+        self.host, self.address = public_address(url)
+        self.port = urllib.parse.urlsplit(url).port or 443
+        self.timeout = timeout
+        self._idle: list[_PinnedConnection] = []
+
+    def _path(self, url: str) -> str:
+        parts = urllib.parse.urlsplit(url)
+        if parts.scheme != "https" or parts.hostname != self.host or (parts.port or 443) != self.port:
+            raise BuildError(f"{url}: not on {self.host}:{self.port}")
+        return (parts.path or "/") + ("?" + parts.query if parts.query else "")
+
+    def _connection(self) -> tuple[_PinnedConnection, bool]:
+        """An idle connection (reused=True) or a new one to the checked address."""
+        if self._idle:
+            return self._idle.pop(), True
+        return _PinnedConnection(self.host, self.port, self.address, _https_proxy(self.host), self.timeout), False
+
+    def get(self, url: str) -> tuple[int, bytes]:
+        """(status, body) of a GET; raises OSError or http.client.HTTPException on a transport error."""
+        path = self._path(url)
+        while True:
+            conn, reused = self._connection()
+            try:
+                conn.request("GET", path, headers={"User-Agent": USER_AGENT})
+                r = conn.getresponse()
+                body = r.read()
+            except (ConnectionResetError, BrokenPipeError):
+                conn.close()
+                if not reused:
+                    raise
+                # The server closed an idle keep-alive connection: retry on a new one.
+                continue
+            except BaseException:
+                conn.close()
+                raise
+            if r.will_close:
+                conn.close()
+            else:
+                self._idle.append(conn)
+            return r.status, body
+
+    def close(self) -> None:
+        while self._idle:
+            self._idle.pop().close()
 
 
 # --------------------------------------------------------------------------- bbox
@@ -118,6 +325,8 @@ class BBox:
 
     @classmethod
     def parse(cls, text: str) -> "BBox":
+        if not re.match(r"^[-+0-9.,eE]+$", text):
+            raise BuildError(f"--bbox must be minLon,minLat,maxLon,maxLat (got {text!r})")
         try:
             parts = [float(p) for p in text.split(",")]
         except ValueError:
@@ -181,9 +390,9 @@ class Dirs:
         return self.out / ".meta"
 
     @classmethod
-    def make(cls) -> "Dirs":
-        d = DATA
-        dirs = cls(data=d, out=d / "out", cache=d / "cache", work=d / "work")
+    def make(cls, data: str, out: str | None = None) -> "Dirs":
+        d = safe_path(data, "--data")
+        dirs = cls(data=d, out=safe_path(out, "--out") if out else d / "out", cache=d / "cache", work=d / "work")
         for p in (dirs.out, dirs.cache, dirs.work, dirs.meta):
             p.mkdir(parents=True, exist_ok=True)
         return dirs
@@ -203,7 +412,7 @@ def http_status(url: str, timeout: int = 60) -> int:
     req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": USER_AGENT})
     for attempt in range(4):
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with open_url(req, timeout=timeout) as r:
                 return r.status
         except urllib.error.HTTPError as e:
             if e.code in (403, 404):  # S3 answers 403 for missing keys on some buckets
@@ -217,8 +426,10 @@ def http_status(url: str, timeout: int = 60) -> int:
     return 0
 
 
-def download(url: str, dest: Path, *, refresh: bool = False) -> Path:
-    """Download url to dest with curl (resume + retries). Skips if dest exists."""
+def download(url: str, dest: Path, *, refresh: bool = False, untrusted: bool = False) -> Path:
+    """Download url to dest with curl (resume + retries). Skips if dest exists.
+    An untrusted URL (from the command line) is fetched from the public address checked here,
+    pinned with --resolve, and redirects are not followed."""
     if dest.exists() and dest.stat().st_size > 0 and not refresh:
         log(f"cached: {dest}")
         return dest
@@ -226,16 +437,27 @@ def download(url: str, dest: Path, *, refresh: bool = False) -> Path:
     part = dest.with_name(dest.name + ".part")
     if refresh and part.exists():
         part.unlink()
-    # https only, redirects included.
-    run(["curl", "-fL", "--proto", "=https", "--proto-redir", "=https", "--retry", "5", "--retry-delay", "5",
-         "--retry-all-errors", "-C", "-", "-A", USER_AGENT, "-o", str(part), "--url", url])
+    # https only, redirects included for the fixed sources.
+    follow = ["-L", "--proto-redir", "=https"]
+    if untrusted:
+        host, address = public_address(url)
+        port = urllib.parse.urlsplit(url).port or 443
+        pinned = f"[{address}]" if ":" in address else address
+        # --connect-to sends the connection (or a proxy's CONNECT) to the checked address while
+        # TLS stays on the host name. -L with --max-redirs 0 makes curl fail on a redirect
+        # instead of saving its body.
+        follow = ["-L", "--max-redirs", "0", "--connect-to", f"{host}:{port}:{pinned}:{port}"]
+    # A refused redirect is not retried: --retry-all-errors is for the fixed sources only.
+    retry = ["--retry", "5", "--retry-delay", "5"] + ([] if untrusted else ["--retry-all-errors"])
+    run(["curl", "-f", *follow, "--proto", "=https", *retry,
+         "-C", "-", "-A", USER_AGENT, "-o", str(part), "--url", url])
     os.replace(part, dest)
     return dest
 
 
 def fetch_text(url: str, timeout: int = 60) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with open_url(req, timeout=timeout) as r:
         return r.read().decode("utf-8")
 
 

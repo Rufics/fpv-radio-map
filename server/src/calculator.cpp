@@ -351,7 +351,7 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     }
     for (const auto& f : failures) {
         const bool seen = std::any_of(result["moduleFailures"].begin(), result["moduleFailures"].end(),
-                                      [&](const json& j) { return j.value("module", "") == f.module; });
+                                      [&](const json& j) { return j.value("module", "") == f.moduleId; });
         if (!seen) result["moduleFailures"].push_back(f.toJson());
     }
     runRouteModules(mission, result, ctx);
@@ -474,7 +474,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     grid["forecastTier"] = forecastTier(ctx);
     for (const auto& f : failures) {
         const bool seen = std::any_of(grid["moduleFailures"].begin(), grid["moduleFailures"].end(),
-                                      [&](const json& j) { return j.value("module", "") == f.module; });
+                                      [&](const json& j) { return j.value("module", "") == f.moduleId; });
         if (!seen) grid["moduleFailures"].push_back(f.toJson());
     }
 
