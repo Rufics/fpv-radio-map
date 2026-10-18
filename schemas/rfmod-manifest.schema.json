@@ -25,7 +25,7 @@
         "message": { "type": "string", "minLength": 10 }
       }
     },
-    "abi": { "type": "integer", "const": 1 },
+    "abi": { "type": "integer", "const": 2 },
     "host": { "type": "string", "description": "Host version range, for example \">=0.1.0 <1.0.0\"" },
     "requires": { "type": "array", "items": { "$ref": "#/definitions/dependency" } },
     "optional": { "type": "array", "items": { "$ref": "#/definitions/dependency" } },

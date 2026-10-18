@@ -35,8 +35,69 @@ bool sameGeometry(const Mission& a, const Mission& b) {
     return true;
 }
 
-json compare(const json& missionA, const json& compareOpt, const IWorld& world, double stepM,
-             const std::function<std::unique_ptr<ILinkEvaluator>(const json&)>& evalFor, json& reasons) {
+/// One side of a comparison: its drone samples, link evaluator and ground end.
+struct Scenario {
+    const std::vector<RoutePoint>& samples;
+    const ILinkEvaluator& eval;
+    End ground;
+};
+
+/// Both scenarios on one link. Points and the better/worse counts are filled only when aligned.
+struct LinkComparison {
+    WorstMargin a;
+    WorstMargin b;
+    json points = json::array();
+    std::size_t better = 0;
+    std::size_t worse = 0;
+};
+
+LinkComparison compareLink(const std::string& link, const Scenario& sa, const Scenario& sb, bool aligned) {
+    LinkComparison c;
+    for (std::size_t i = 0; i < sa.samples.size(); ++i) {
+        const double m = sa.eval.marginDb(link, sa.ground, {sa.samples[i].position, sa.samples[i].aglM});
+        if (m < c.a.marginDb) c.a = {m, link, i};
+        if (aligned) c.points.push_back({{"lat", sa.samples[i].position.lat}, {"lon", sa.samples[i].position.lon},
+                                         {"aMarginDb", m}});
+    }
+    for (std::size_t i = 0; i < sb.samples.size(); ++i) {
+        const double m = sb.eval.marginDb(link, sb.ground, {sb.samples[i].position, sb.samples[i].aglM});
+        if (m < c.b.marginDb) c.b = {m, link, i};
+        if (!aligned) continue;
+        const double d = m - c.points[i].at("aMarginDb").get<double>();
+        c.points[i]["bMarginDb"] = m;
+        c.points[i]["deltaDb"] = d;
+        if (d > 0.0) ++c.better;
+        if (d < 0.0) ++c.worse;
+    }
+    return c;
+}
+
+json linkJson(const LinkComparison& c, bool aligned) {
+    json l = json::object();
+    l["a"] = {{"worstMarginDb", c.a.marginDb}, {"sample", c.a.sample}};
+    l["b"] = {{"worstMarginDb", c.b.marginDb}, {"sample", c.b.sample}};
+    l["deltaWorstDb"] = c.b.marginDb - c.a.marginDb;
+    if (aligned) {
+        l["points"] = c.points;
+        l["pointsBetter"] = c.better;
+        l["pointsWorse"] = c.worse;
+    }
+    return l;
+}
+
+/// Links both missions evaluate, in mission A's order.
+std::vector<std::string> commonLinks(const Mission& a, const Mission& b) {
+    std::vector<std::string> links;
+    const std::vector<std::string> lb = b.links();
+    for (const std::string& l : a.links()) {
+        if (std::find(lb.begin(), lb.end(), l) != lb.end()) links.push_back(l);
+    }
+    return links;
+}
+
+template <typename EvalFor>
+json compare(const json& missionA, const json& compareOpt, const IWorld& world, double stepM, const EvalFor& evalFor,
+             json& reasons) {
     json missionB = missionA;
     missionB.merge_patch(compareOpt.at("patch"));
     const std::string name = compareOpt.value("name", "B");
@@ -47,55 +108,22 @@ json compare(const json& missionA, const json& compareOpt, const IWorld& world, 
     const std::vector<RoutePoint> samplesB = routeSamples(routeB, stepM);
     const auto evalA = evalFor(missionA);
     const auto evalB = evalFor(missionB);
-    const End groundA{a.pilot.position, a.pilot.aglM}, groundB{b.pilot.position, b.pilot.aglM};
+    const Scenario sa{samplesA, *evalA, {a.pilot.position, a.pilot.aglM}};
+    const Scenario sb{samplesB, *evalB, {b.pilot.position, b.pilot.aglM}};
     const bool aligned = sameGeometry(a, b);
-
-    std::vector<std::string> links;
-    const std::vector<std::string> lb = b.links();
-    for (const std::string& l : a.links()) {
-        if (std::find(lb.begin(), lb.end(), l) != lb.end()) links.push_back(l);
-    }
 
     json out = {{"name", name}, {"mission", missionB}, {"aligned", aligned}, {"stepM", stepM}, {"links", json::object()}};
     if (!aligned) {
         out["notes"] = {"The two scenarios fly different routes, so only their worst margins are compared, "
                         "not point by point."};
     }
-    for (const std::string& link : links) {
-        json l = json::object();
-        WorstMargin wa, wb;
-        json points = json::array();
-        std::size_t better = 0, worse = 0;
-        for (std::size_t i = 0; i < samplesA.size(); ++i) {
-            const double m = evalA->marginDb(link, groundA, {samplesA[i].position, samplesA[i].aglM});
-            if (m < wa.marginDb) wa = {m, link, i};
-            if (aligned) points.push_back({{"lat", samplesA[i].position.lat}, {"lon", samplesA[i].position.lon},
-                                           {"aMarginDb", m}});
-        }
-        for (std::size_t i = 0; i < samplesB.size(); ++i) {
-            const double m = evalB->marginDb(link, groundB, {samplesB[i].position, samplesB[i].aglM});
-            if (m < wb.marginDb) wb = {m, link, i};
-            if (aligned) {
-                const double d = m - points[i].at("aMarginDb").get<double>();
-                points[i]["bMarginDb"] = m;
-                points[i]["deltaDb"] = d;
-                if (d > 0.0) ++better;
-                if (d < 0.0) ++worse;
-            }
-        }
-        l["a"] = {{"worstMarginDb", wa.marginDb}, {"sample", wa.sample}};
-        l["b"] = {{"worstMarginDb", wb.marginDb}, {"sample", wb.sample}};
-        l["deltaWorstDb"] = wb.marginDb - wa.marginDb;
-        if (aligned) {
-            l["points"] = points;
-            l["pointsBetter"] = better;
-            l["pointsWorse"] = worse;
-        }
-        out["links"][link] = l;
+    for (const std::string& link : commonLinks(a, b)) {
+        const LinkComparison c = compareLink(link, sa, sb, aligned);
+        out["links"][link] = linkJson(c, aligned);
         reasons.push_back(reason(kId, "info",
-                                 "Scenario " + name + ", " + link + ": worst margin " + num(wb.marginDb, 1) + " dB against " +
-                                     num(wa.marginDb, 1) + " dB now (" + (wb.marginDb >= wa.marginDb ? "+" : "") +
-                                     num(wb.marginDb - wa.marginDb, 1) + " dB)."));
+                                 "Scenario " + name + ", " + link + ": worst margin " + num(c.b.marginDb, 1) + " dB against " +
+                                     num(c.a.marginDb, 1) + " dB now (" + (c.b.marginDb >= c.a.marginDb ? "+" : "") +
+                                     num(c.b.marginDb - c.a.marginDb, 1) + " dB)."));
     }
     return out;
 }
@@ -137,7 +165,7 @@ std::vector<RoutePoint> exportVertices(const Route& route, double stepM) {
 
 std::string toKml(const Mission& mission, const Route& route, const IWorld& world, const ExportSettings& s) {
     const std::string mode = s.altitude == AltitudeMode::Absolute ? "absolute" : "relativeToGround";
-    auto placemark = [&](const Waypoint& w) {
+    auto placemark = [&mode, &world, &s](const Waypoint& w) {
         return "<Placemark><name>" + xmlEscape(w.label) + "</name><Point><altitudeMode>" + mode +
                "</altitudeMode><coordinates>" + kmlCoord(w.position, altitudeOf(w, world, s.altitude)) +
                "</coordinates></Point></Placemark>\n";
@@ -159,7 +187,7 @@ std::string toKml(const Mission& mission, const Route& route, const IWorld& worl
 
 std::string toGpx(const Mission& mission, const Route& route, const IWorld& world, const ExportSettings& s) {
     // GPX has no height above ground: <ele> is always our DEM ground plus AGL.
-    auto point = [&](const char* tag, const Waypoint& w) {
+    auto point = [&world](const char* tag, const Waypoint& w) {
         return std::string("<") + tag + " " + latLonAttrs(w.position) + "><ele>" +
                num(altitudeOf(w, world, AltitudeMode::Absolute), 3) + "</ele><name>" + xmlEscape(w.label) +
                "</name><desc>" + num(w.aglM, 3) + " m above ground</desc></" + tag + ">\n";

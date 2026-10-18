@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <functional>
 
 namespace fpv::battery {
 namespace {
@@ -13,8 +12,8 @@ constexpr double kDeg = rfcore::constants::kPi / 180.0;
 
 // Adaptive Simpson to a relative tolerance close to double precision. The integrand is smooth
 // (the course along a geodesic changes slowly), so this converges to the exact integral.
-double simpson(const std::function<double(double)>& f, double a, double b, double fa, double fm, double fb,
-               double whole, double tol, int depth) {
+template <typename F>
+double simpson(const F& f, double a, double b, double fa, double fm, double fb, double whole, double tol, int depth) {
     const double m = (a + b) / 2.0;
     const double lm = (a + m) / 2.0, rm = (m + b) / 2.0;
     const double flm = f(lm), frm = f(rm);
@@ -26,7 +25,8 @@ double simpson(const std::function<double(double)>& f, double a, double b, doubl
            simpson(f, m, b, fm, frm, fb, right, tol / 2.0, depth - 1);
 }
 
-double integrate(const std::function<double(double)>& f, double a, double b) {
+template <typename F>
+double integrate(const F& f, double a, double b) {
     if (b <= a) return 0.0;
     const double fa = f(a), fb = f(b), fm = f((a + b) / 2.0);
     const double whole = (b - a) / 6.0 * (fa + 4.0 * fm + fb);
@@ -122,7 +122,8 @@ double EnergyModel::groundSpeedMps(double courseDeg) const {
 double EnergyModel::cruiseWh(const LatLon& a, double azimuthDeg, double length) const {
     // ∫ P / Vg(course(x)) dx along the geodesic; the course at x comes from the geodesic itself.
     const auto seconds = integrate(
-        [&](double x) { return 1.0 / groundSpeedMps(world_.direct(a, azimuthDeg, x).azimuthDeg); }, 0.0, length);
+        [this, &a, azimuthDeg](double x) { return 1.0 / groundSpeedMps(world_.direct(a, azimuthDeg, x).azimuthDeg); },
+        0.0, length);
     return power_ * seconds / 3600.0;
 }
 
@@ -202,7 +203,7 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
     if (!mission.returnToPilot || p.neededWh <= p.usableWh) return p;
 
     // Turn-back: the farthest point on the way out from which the direct flight home still fits.
-    auto costAt = [&](double s) {
+    auto costAt = [this, &route, &mission](double s) {
         const RoutePoint pt = route.at(s);
         return model_.routeWh(route, s) + model_.segmentWh(pt.position, pt.aglM, mission.pilot.position, mission.pilot.aglM);
     };

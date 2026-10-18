@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,10 +13,10 @@ using Bytes = std::vector<std::uint8_t>;
 
 /// SHA-256 helpers (libsodium).
 struct Sha256 {
-    static std::array<std::uint8_t, 32> digest(const void* data, std::size_t size);
-    static std::string hex(const void* data, std::size_t size);
-    static std::string hex(const Bytes& data) { return hex(data.data(), data.size()); }
-    static std::string hex(std::string_view data) { return hex(data.data(), data.size()); }
+    static std::array<std::uint8_t, 32> digest(std::span<const std::uint8_t> data);
+    static std::string hex(std::span<const std::uint8_t> data);
+    /// Hashes the bytes of `data` as they are (binary-safe).
+    static std::string hex(std::string_view data);
 };
 
 std::string toBase64(const std::uint8_t* data, std::size_t size);

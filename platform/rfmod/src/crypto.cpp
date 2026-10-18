@@ -26,19 +26,23 @@ std::string_view stripPrefix(std::string_view text, std::string_view prefix) {
 
 }  // namespace
 
-std::array<std::uint8_t, 32> Sha256::digest(const void* data, std::size_t size) {
+std::array<std::uint8_t, 32> Sha256::digest(std::span<const std::uint8_t> data) {
     ensureSodium();
     std::array<std::uint8_t, 32> out{};
-    crypto_hash_sha256(out.data(), static_cast<const unsigned char*>(data), size);
+    crypto_hash_sha256(out.data(), data.data(), data.size());
     return out;
 }
 
-std::string Sha256::hex(const void* data, std::size_t size) {
-    const auto d = digest(data, size);
+std::string Sha256::hex(std::span<const std::uint8_t> data) {
+    const auto d = digest(data);
     std::string out(d.size() * 2 + 1, '\0');
     sodium_bin2hex(out.data(), out.size(), d.data(), d.size());
     out.pop_back();
     return out;
+}
+
+std::string Sha256::hex(std::string_view data) {
+    return hex(std::span(reinterpret_cast<const std::uint8_t*>(data.data()), data.size()));
 }
 
 std::string toBase64(const std::uint8_t* data, std::size_t size) {
@@ -76,7 +80,7 @@ PublicKey PublicKey::fromText(std::string_view text) { return fromBytes(fromBase
 
 std::string PublicKey::toText() const { return std::string(kPublicPrefix) + toBase64(key_.data(), key_.size()); }
 
-std::string PublicKey::id() const { return Sha256::hex(key_.data(), key_.size()).substr(0, 16); }
+std::string PublicKey::id() const { return Sha256::hex(key_).substr(0, 16); }
 
 bool PublicKey::verify(std::string_view message, const Bytes& signature) const {
     ensureSodium();
@@ -102,11 +106,8 @@ SecretKey SecretKey::fromText(std::string_view text) {
 }
 
 SecretKey::~SecretKey() { sodium_memzero(key_.data(), key_.size()); }
-SecretKey::SecretKey(const SecretKey& other) : key_(other.key_) {}
-SecretKey& SecretKey::operator=(const SecretKey& other) {
-    key_ = other.key_;
-    return *this;
-}
+SecretKey::SecretKey(const SecretKey& other) = default;
+SecretKey& SecretKey::operator=(const SecretKey& other) = default;
 
 std::string SecretKey::toText() const { return std::string(kSecretPrefix) + toBase64(key_.data(), key_.size()); }
 

@@ -129,7 +129,7 @@ TEST(RecursionGuard, LinkEvaluateIsRefusedInsideLossContribute) {
     log.setQuiet(true);
     ServerHostServices host(nullptr, nullptr, nullptr, nullptr, log);
     std::string refusal;
-    FakeModule m("acme.loop", [&](const std::string&, const json&) -> json {
+    FakeModule m("acme.loop", [&host, &refusal](const std::string&, const json&) -> json {
         try {
             (void)host.call("acme.loop", "link.evaluate", {{"frequencyHz", 2.4e9}});
         } catch (const std::exception& e) {
