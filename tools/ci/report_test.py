@@ -1,15 +1,33 @@
 """Tests of the CI report builder: python3 -I -m unittest discover -s tools/ci -p '*_test.py'"""
+import contextlib
+import io
 import json
 import os
 import re
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
+import report
 from junit import TestCase
-from report import (MARKER, TestDetails, build_report, changed_line_coverage, code_block, component_of, html_text,
-                    md, normalize_jobs, parse_coverage, parse_diff, parse_junit, read_capped)
-
+from report import (
+    MARKER,
+    AllTestsList,
+    TestDetails,
+    build_report,
+    changed_line_coverage,
+    code_block,
+    component_of,
+    html_text,
+    md,
+    normalize_jobs,
+    parse_coverage,
+    parse_diff,
+    parse_junit,
+    parse_web_coverage,
+    read_capped,
+)
 
 A_CPP = "core/rf-core/src/a.cpp"
 
@@ -227,6 +245,96 @@ class TestDetailsTest(unittest.TestCase):
     def test_summaries_without_cases_have_no_module_table(self):
         suite = {"file": "cpp.xml", "label": "C++", "total": 1, "passed": 1, "skipped": 0, "failed": []}
         self.assertEqual(TestDetails([suite]).modules_section(), [])
+
+
+WEB_LCOV = """SF:projects/ui-kit/src/lib/charts/link-view.ts
+FNDA:1,view
+DA:1,1
+DA:2,0
+end_of_record
+SF:projects/fpv-app/src/app/core/core.ts
+FNDA:0,boot
+DA:5,0
+end_of_record
+SF:projects/fpv-app/src/app/tests/fake.ts
+DA:1,1
+end_of_record
+SF:projects/fpv-app/src/app/core/core.spec.ts
+DA:1,1
+end_of_record
+"""
+
+
+class WebCoverageTest(unittest.TestCase):
+    def test_projects_changed_lines_and_folders(self):
+        web = parse_web_coverage(WEB_LCOV)
+        self.assertEqual(sorted(web), ["web/projects/fpv-app/src/app/core/core.ts",
+                                       "web/projects/ui-kit/src/lib/charts/link-view.ts"])
+        diff = parse_diff("+++ b/web/projects/ui-kit/src/lib/charts/link-view.ts\n@@ -0,0 +1,2 @@\n")
+        out = build_report(jobs={"web": {"result": "success"}}, web_coverage=web, diff=diff, sha="0123456789abcdef",
+                           repo="o/r", web_coverage_url="https://github.com/o/r/actions/runs/1/artifacts/2")
+        self.assertIn("web line coverage **33.3%** · changed lines **50.0%** covered", out)
+        self.assertIn("| fpv-app | 🔴 0.0% <sub>0/1</sub> | 0.0% <sub>0/1</sub> |", out)
+        self.assertIn("| ui-kit | 🔴 50.0% <sub>1/2</sub> | 100.0% <sub>1/1</sub> |", out)
+        self.assertIn("| **All web** | 🔴 **33.3%** <sub>1/3</sub>", out)
+        self.assertIn("| ui-kit/charts | 🔴 50.0%", out)
+        self.assertIn("[2](https://github.com/o/r/blob/0123456789abcdef/web/projects/ui-kit/src/lib/charts/"
+                      "link-view.ts#L2)", out)
+        self.assertIn("[HTML web coverage report](https://github.com/o/r/actions/runs/1/artifacts/2)", out)
+        self.assertEqual(out.count("Coverage is reported, not enforced"), 1)
+
+    def test_no_changed_web_line(self):
+        out = build_report(web_coverage=parse_web_coverage(WEB_LCOV), diff={})
+        self.assertIn("this pull request changes no executable web line", out)
+
+
+class AllTestsTest(unittest.TestCase):
+    def test_every_test_in_a_table_per_module_failures_first(self):
+        suites = [cpp_suite(TestCase("B.ok", "passed", "rf-core", 0.5), failed_case("why", "rf-core", "Z.bad"),
+                            TestCase("S.off", "skipped", "server"))]
+        out = AllTestsList(suites).render()
+        self.assertTrue(out.startswith("### All tests (3)"))
+        self.assertIn("<details><summary>❌ C++: rf-core: 2 tests, 1 failed</summary>", out)
+        self.assertIn("<details><summary>✅ C++: server: 1 test</summary>", out)
+        self.assertLess(out.index("| Z.bad | ❌ | 0.50 s |"), out.index("| B.ok | ✅ | 0.50 s |"))
+        self.assertIn("| S.off | ⏭️ | 0.00 s |", out)
+
+    def test_list_is_cut_at_its_limit(self):
+        cases = [TestCase(f"T.{i}", "passed", f"fpv.m{i}") for i in range(50)]
+        out = AllTestsList([cpp_suite(*cases)], limit=1000).render()
+        self.assertIn("the list is cut here", out)
+        self.assertLess(len(out), 1500)
+
+    def test_without_results(self):
+        self.assertIn("No test results were found.", AllTestsList([]).render())
+
+
+class MainTest(unittest.TestCase):
+    def run_main(self, argv):
+        old_cwd, old_argv = Path.cwd(), sys.argv
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            Path("tests").mkdir()
+            Path("tests/cpp.xml").write_text('<testsuite tests="1"><testcase name="A.b"/></testsuite>')
+            Path("coverage-web").mkdir()
+            Path("coverage-web/web.lcov").write_text(WEB_LCOV)
+            sys.argv = ["report.py", *argv]
+            out = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(out):
+                    report.main()
+            finally:
+                os.chdir(old_cwd)
+                sys.argv = old_argv
+        return out.getvalue()
+
+    def test_report_and_all_tests(self):
+        self.assertIn("web line coverage", self.run_main([]))
+        self.assertIn("| A.b | ✅ |", self.run_main(["--all-tests"]))
+
+    def test_unknown_arguments_are_refused(self):
+        with self.assertRaises(SystemExit):
+            self.run_main(["--other"])
 
 
 if __name__ == "__main__":

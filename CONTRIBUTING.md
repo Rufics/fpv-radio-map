@@ -109,7 +109,7 @@ Python and TypeScript coverage; its quality gate shows on the pull request. See
 ### The CI report
 
 The comment on the pull request is kept up to date on every push. It starts with one line: passed
-or failed, the number of tests, the C++ line coverage, and how much of the changed C++ lines the
+or failed, the number of tests, the C++ and web line coverage, and how much of the changed lines the
 tests run. Below it:
 
 - failed tests, open at the top, when there are any: each folds out to the reason (the failed
@@ -120,9 +120,12 @@ tests run. Below it:
   `fpv.<module>`, `server`, the example module), both web projects and the Python CI tools;
 - C++ line and function coverage for core (`rf-core`, `rf-ext`), the FPV modules, the platform
   (`rfmod`) and the server, with a per-component breakdown folded away;
+- web line and function coverage for `ui-kit` and `fpv-app` from the Vitest (V8) run, with a
+  breakdown per folder folded away;
 - the changed lines that no test runs, linked to the exact lines of the commit. This list is the
   one to look at before asking for a review;
-- links to the workflow run and the browsable HTML coverage report (kept for 7 days).
+- links to the workflow run, whose summary lists every test of the run in a folded table per
+  module, and to the browsable HTML coverage reports of C++ and web (kept for 7 days).
 
 Coverage is reported, not enforced: 🟢 is 80% or more, 🟡 60–80%, 🔴 below 60%. Test code, the
 example module and the sandboxed module worker are not counted. The same report is in the run
