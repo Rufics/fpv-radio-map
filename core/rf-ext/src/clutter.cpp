@@ -38,12 +38,33 @@ std::optional<LandCover> landCoverFromCode(int code) {
 
 ClutterConditioner::ClutterConditioner(std::map<LandCover, ClassSetting> settings) : settings_(std::move(settings)) {}
 
+namespace {
+
+void addSource(std::vector<std::string>& sources, const std::string& s) {
+    if (!s.empty() && std::ranges::find(sources, s) == sources.end()) sources.push_back(s);
+}
+
+/// Obstacle height of one sample in an enabled class: the raster's where it has one, else the
+/// admin setting. Records where the height came from.
+std::optional<rfcore::Metres> classHeight(const ClassSetting& set, LandCover cls, const rfcore::ProfileSample& s,
+                                          std::vector<std::string>& sources) {
+    std::optional<rfcore::Metres> h;
+    if (set.raster) {
+        h = set.raster->height(s.position);
+        if (h.has_value()) addSource(sources, set.raster->name());
+    }
+    if (!h.has_value() && set.height.has_value()) {
+        h = set.height;
+        addSource(sources, landCoverName(cls) + ": " + (set.heightSource.empty() ? "admin setting" : set.heightSource));
+    }
+    return h;
+}
+
+}  // namespace
+
 ClutterConditioner::Report ClutterConditioner::apply(rfcore::TerrainProfile& profile) const {
     Report r;
     auto& samples = profile.mutableSamples();
-    auto addSource = [&r](const std::string& s) {
-        if (!s.empty() && std::find(r.sources.begin(), r.sources.end(), s) == r.sources.end()) r.sources.push_back(s);
-    };
     for (std::size_t i = 1; i + 1 < samples.size(); ++i) {
         rfcore::ProfileSample& s = samples[i];
         if (!s.landCover.has_value()) {
@@ -57,16 +78,7 @@ ClutterConditioner::Report ClutterConditioner::apply(rfcore::TerrainProfile& pro
         }
         const auto it = settings_.find(*cls);
         if (it == settings_.end() || !it->second.enabled) continue;
-        const ClassSetting& set = it->second;
-        std::optional<rfcore::Metres> h;
-        if (set.raster) {
-            h = set.raster->height(s.position);
-            if (h) addSource(set.raster->name());
-        }
-        if (!h && set.height) {
-            h = set.height;
-            addSource(landCoverName(*cls) + ": " + (set.heightSource.empty() ? "admin setting" : set.heightSource));
-        }
+        const std::optional<rfcore::Metres> h = classHeight(it->second, *cls, s, r.sources);
         if (!h) {
             ++r.samplesWithoutHeight;
             continue;

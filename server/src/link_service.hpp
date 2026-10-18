@@ -123,6 +123,9 @@ public:
 
 private:
     struct Budget;
+    /// rf.clutter on the profile: the admin's class heights minus the mission's disabled classes.
+    void applyClutter(rfcore::TerrainProfile& profile, std::vector<rfcore::UncertaintyNote>& notes,
+                      const CalcContext& ctx) const;
     [[nodiscard]] LinkEvaluation run(const PreparedPath& path, const Budget& b, const CalcContext& ctx, bool withBand,
                                      bool withProfile) const;
 
