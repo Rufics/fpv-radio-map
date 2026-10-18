@@ -10,6 +10,9 @@ from report import (MARKER, build_report, changed_line_coverage, component_of, m
                     parse_coverage, parse_diff, parse_junit, read_capped)
 
 
+A_CPP = "core/rf-core/src/a.cpp"
+
+
 def gcovr(*files):
     return json.dumps({"gcovr/format_version": "0.6", "files": list(files)})
 
@@ -32,7 +35,7 @@ class JunitTest(unittest.TestCase):
 
 class CoverageTest(unittest.TestCase):
     def test_paths_are_grouped_into_areas(self):
-        self.assertEqual(component_of("core/rf-core/src/a.cpp"), ("Core", "rf-core"))
+        self.assertEqual(component_of(A_CPP), ("Core", "rf-core"))
         self.assertEqual(component_of("core/rf-ext/src/a.cpp"), ("Core", "rf-ext"))
         self.assertEqual(component_of("modules/fpv/relay/src/relay.cpp"), ("FPV modules", "fpv.relay"))
         self.assertEqual(component_of("modules/fpv/common/include/fpv/world.hpp"), ("FPV modules", "fpv common"))
@@ -42,13 +45,13 @@ class CoverageTest(unittest.TestCase):
 
     def test_each_line_counts_once_and_unsafe_paths_are_dropped(self):
         files = parse_coverage(gcovr(
-            cov_file("core/rf-core/src/a.cpp", {1: 1, 2: 0}, [("f", 1), ("g", 0)]),
-            {"file": "core/rf-core/src/a.cpp", "lines": [{"line_number": 2, "count": 3}], "functions": []},
+            cov_file(A_CPP, {1: 1, 2: 0}, [("f", 1), ("g", 0)]),
+            {"file": A_CPP, "lines": [{"line_number": 2, "count": 3}], "functions": []},
             cov_file("../etc/passwd", {1: 1}),
             cov_file("server/src/<b>.cpp", {1: 1}),
         ))
-        self.assertEqual(list(files), ["core/rf-core/src/a.cpp"])
-        a = files["core/rf-core/src/a.cpp"]
+        self.assertEqual(list(files), [A_CPP])
+        a = files[A_CPP]
         self.assertEqual((a["lines"], a["linesCovered"], a["functions"], a["functionsCovered"]), (2, 2, 2, 1))
         self.assertEqual(parse_coverage("not json"), {})
 
@@ -68,11 +71,11 @@ class DiffTest(unittest.TestCase):
             "@@ -1,2 +0,0 @@",
         ])
         changed = parse_diff(diff)
-        self.assertEqual(changed, {"core/rf-core/src/a.cpp": {2, 3, 4, 10}})
-        files = parse_coverage(gcovr(cov_file("core/rf-core/src/a.cpp", {2: 1, 3: 0, 4: 0, 10: 5, 11: 0})))
+        self.assertEqual(changed, {A_CPP: {2, 3, 4, 10}})
+        files = parse_coverage(gcovr(cov_file(A_CPP, {2: 1, 3: 0, 4: 0, 10: 5, 11: 0})))
         c = changed_line_coverage(files, changed)
         self.assertEqual((c["total"], c["covered"]), (4, 2))
-        self.assertEqual(c["uncovered"], [{"path": "core/rf-core/src/a.cpp", "from": 3, "to": 4}])
+        self.assertEqual(c["uncovered"], [{"path": A_CPP, "from": 3, "to": 4}])
 
 
 class JobsTest(unittest.TestCase):
@@ -118,7 +121,7 @@ class InputTest(unittest.TestCase):
 class ReportTest(unittest.TestCase):
     def test_passing_run_with_coverage(self):
         coverage = parse_coverage(gcovr(
-            cov_file("core/rf-core/src/a.cpp", {1: 1, 2: 1, 3: 1, 4: 0}),
+            cov_file(A_CPP, {1: 1, 2: 1, 3: 1, 4: 0}),
             cov_file("modules/fpv/relay/src/r.cpp", {1: 1, 2: 0}),
         ))
         out = build_report(
@@ -126,7 +129,7 @@ class ReportTest(unittest.TestCase):
                   "coverage": {"result": "success"}, "web": {"result": "skipped"}},
             suites=[{"file": "cpp.xml", "label": "C++", "total": 5, "passed": 5, "skipped": 0, "failed": []}],
             coverage=coverage,
-            diff=parse_diff("+++ b/core/rf-core/src/a.cpp\n@@ -0,0 +3,2 @@\n"),
+            diff=parse_diff(f"+++ b/{A_CPP}\n@@ -0,0 +3,2 @@\n"),
             sha="0123456789abcdef",
             commit="fedcba9876543210",
             repo="o/r",

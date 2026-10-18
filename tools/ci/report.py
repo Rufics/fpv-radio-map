@@ -39,19 +39,21 @@ JOB_NAMES = {"cpp": "C++ build and tests", "coverage": "C++ coverage", "web": "W
 HIDDEN_JOBS = {"changes", "report", "Changed parts", "Test report"}
 SUITES = {"cpp.xml": "C++", "web-ui-kit.xml": "Web: ui-kit", "web-fpv-app.xml": "Web: fpv-app"}
 ICONS = {"success": "✅", "skipped": "⏭️", "cancelled": "🚫", "failure": "❌"}
+DETAILS_END = "</details>"
+FPV = "FPV modules"
 
 # Coverage areas, most specific prefix first. Files that match none count in "All C++" only.
 COMPONENTS = [
     ("core/rf-core/", "Core", "rf-core"),
     ("core/rf-ext/", "Core", "rf-ext"),
     ("platform/rfmod/", "Platform", "rfmod"),
-    ("modules/fpv/common/", "FPV modules", "fpv common"),
-    ("modules/fpv/", "FPV modules", None),  # fpv.<module folder>
+    ("modules/fpv/common/", FPV, "fpv common"),
+    ("modules/fpv/", FPV, None),  # fpv.<module folder>
     ("server/", "Server", "server"),
 ]
 AREAS = [
     ("Core", "Core: rf-core, rf-ext"),
-    ("FPV modules", "FPV modules"),
+    (FPV, FPV),
     ("Platform", "Platform: rfmod"),
     ("Server", "Server"),
 ]
@@ -143,21 +145,41 @@ def _unescape_xml(s):
     return s
 
 
+FAILED_BODY = re.compile(r"<(failure|error)\b")
+FAILED_STATUS = re.compile(r'\sstatus="fail(ed)?"')
+SKIPPED_BODY = re.compile(r"<skipped\b")
+SKIPPED_STATUS = re.compile(r'\sstatus="(notrun|disabled|skipped)"')
+
+
+def _case_name(attrs):
+    name = _unescape_xml(_attr(attrs, "name") or "?")
+    cls = _unescape_xml(_attr(attrs, "classname") or "")
+    return f"{cls} › {name}" if cls and cls != name else name
+
+
+def _outcome(attrs, body):
+    """"failed", "skipped" or "passed" for one test case."""
+    if FAILED_BODY.search(body) or FAILED_STATUS.search(attrs):
+        return "failed"
+    if SKIPPED_BODY.search(body) or SKIPPED_STATUS.search(attrs):
+        return "skipped"
+    return "passed"
+
+
+def _declared_total(xml):
+    """The test count the runner wrote on the root element, or 0."""
+    root = ROOT.search(xml)
+    return max(as_int(_attr(root.group(0), "tests")), 0) if root else 0
+
+
 def parse_junit(xml):
     """Totals and failed test names of one JUnit file."""
     cases = TESTCASE.findall(xml)
-    failed, skipped = [], 0
-    for attrs, _, body in cases:
-        name = _unescape_xml(_attr(attrs, "name") or "?")
-        cls = _unescape_xml(_attr(attrs, "classname") or "")
-        if re.search(r"<(failure|error)\b", body) or re.search(r'\sstatus="fail(ed)?"', attrs):
-            failed.append(f"{cls} › {name}" if cls and cls != name else name)
-        elif re.search(r"<skipped\b", body) or re.search(r'\sstatus="(notrun|disabled|skipped)"', attrs):
-            skipped += 1
+    outcomes = [(_outcome(attrs, body), attrs) for attrs, _, body in cases]
+    failed = [_case_name(attrs) for outcome, attrs in outcomes if outcome == "failed"]
+    skipped = sum(1 for outcome, _ in outcomes if outcome == "skipped")
     # Prefer the count the runner wrote on the root element; fall back to counting cases.
-    root = ROOT.search(xml)
-    total = max(as_int(_attr(root.group(0), "tests")) if root else 0, 0) or len(cases)
-    total = max(total, len(failed) + skipped)
+    total = max(_declared_total(xml) or len(cases), len(failed) + skipped)
     return {"total": total, "failed": failed, "skipped": skipped, "passed": total - len(failed) - skipped}
 
 
@@ -358,12 +380,21 @@ def _headline(ctx):
     at = f" for {ctx['sha'][:7]}" if ctx["sha"] else ""
     out = []
     if failed_jobs or failed_tests:
-        what = (plural(len(failed_tests), "test") if failed_tests else ", ".join(j["name"] for j in failed_jobs)) + " failed"
+        what = plural(len(failed_tests), "test") if failed_tests else ", ".join(j["name"] for j in failed_jobs)
+        what += " failed"
         out.append(f"### ❌ CI failed{at}: {md(what, 300)}")
     else:
         out.append(f"### ✅ CI passed{at}")
         if not ctx["ran"]:
             out += ["", "Nothing to build: this change touches only files the tests do not cover, such as docs."]
+    facts = _key_facts(ctx)
+    if facts:
+        out += ["", " · ".join(facts)]
+    out.append("")
+    return out
+
+
+def _key_facts(ctx):
     facts = []
     if ctx["suites"]:
         facts.append(f"**{sum(s['passed'] for s in ctx['suites'])}** tests passed")
@@ -373,10 +404,7 @@ def _headline(ctx):
     if ctx["changed"] and ctx["changed"]["total"]:
         c = ctx["changed"]
         facts.append(f"changed lines **{fmt_pct(pct(c['covered'], c['total']))}** covered")
-    if facts:
-        out += ["", " · ".join(facts)]
-    out.append("")
-    return out
+    return facts
 
 
 def _failed_tests(failed):
@@ -386,7 +414,7 @@ def _failed_tests(failed):
     out += [f"- {md(suite, 40)}: {md(name, 300)}" for suite, name in failed[:MAX_LISTED]]
     if len(failed) > MAX_LISTED:
         out.append(f"- … and {len(failed) - MAX_LISTED} more")
-    return out + ["", "</details>", ""]
+    return out + ["", DETAILS_END, ""]
 
 
 def _suites_of(job, suites):
@@ -464,8 +492,19 @@ def _changed_lines(changed, repo, commit):
     if missing:
         out += ["", f"<details><summary>{plural(missing, 'changed line')} not run by any test</summary>", ""]
         out += _uncovered_list(changed["uncovered"], repo, commit)
-        out += ["", "</details>"]
+        out += ["", DETAILS_END]
     return out + [""]
+
+
+def _line_link(repo, commit, path, u):
+    """A line range of a file, linked to the commit when the repository and commit are known."""
+    if u["from"] == u["to"]:
+        text, anchor = f"{u['from']}", f"L{u['from']}"
+    else:
+        text, anchor = f"{u['from']}-{u['to']}", f"L{u['from']}-L{u['to']}"
+    if not (repo and commit):
+        return text
+    return f"[{text}](https://github.com/{repo}/blob/{commit}/{path}#{anchor})"
 
 
 def _uncovered_list(uncovered, repo, commit):
@@ -473,16 +512,9 @@ def _uncovered_list(uncovered, repo, commit):
     by_file = {}
     for u in uncovered:
         by_file.setdefault(u["path"], []).append(u)
-
-    def link(path, u):
-        single = u["from"] == u["to"]
-        text = f"{u['from']}" if single else f"{u['from']}-{u['to']}"
-        anchor = f"L{u['from']}" if single else f"L{u['from']}-L{u['to']}"
-        return f"[{text}](https://github.com/{repo}/blob/{commit}/{path}#{anchor})" if repo and commit else text
-
     out = []
     for path, ranges in list(by_file.items())[:MAX_LISTED]:
-        shown = [link(path, u) for u in ranges[:10]]
+        shown = [_line_link(repo, commit, path, u) for u in ranges[:10]]
         if len(ranges) > 10:
             shown.append(f"… {len(ranges) - 10} more")
         # safe_path() admits no backtick, so the path is shown as code without escaping.
@@ -501,7 +533,7 @@ def _components(components):
         lp = pct(c["linesCovered"], c["lines"])
         out.append(f"| {md(c['component'], 60)} | {dot(lp)} {fmt_pct(lp)} <sub>{c['linesCovered']}/{c['lines']}</sub> "
                    f"| {fmt_pct(pct(c['functionsCovered'], c['functions']))} |")
-    return out + ["", "</details>", ""]
+    return out + ["", DETAILS_END, ""]
 
 
 def _footer(run_url, coverage_url):
