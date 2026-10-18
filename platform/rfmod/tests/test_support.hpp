@@ -34,7 +34,7 @@ inline nlohmann::json baseManifest(const std::string& id, const std::string& ver
             {"version", version},
             {"title", "Test module"},
             {"lifecycle", "beta"},
-            {"abi", 1},
+            {"abi", RFMOD_ABI_VERSION},
             {"requires", nlohmann::json::array()},
             {"provides", {"loss.contributor"}},
             {"entry", {{currentPlatform(), "lib/libmod.so"}}}};

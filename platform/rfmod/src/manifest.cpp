@@ -129,7 +129,8 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
         return std::nullopt;
     }
 
-    check("abi", m.abi == 1, "module ABI " + std::to_string(m.abi) + ", host supports 1");
+    check("abi", m.abi == RFMOD_ABI_VERSION,
+          "module ABI " + std::to_string(m.abi) + ", host supports " + std::to_string(RFMOD_ABI_VERSION));
 
     if (m.hostRange) {
         check("host.version", m.hostRange->contains(hostVersion),

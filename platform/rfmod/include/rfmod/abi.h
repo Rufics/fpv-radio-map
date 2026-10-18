@@ -1,10 +1,12 @@
 /*
- * rfmod C ABI, version 1.
+ * rfmod C ABI, version 2.
  *
  * The only binary boundary between the rfmap host and a module. Everything that crosses it
  * is a NUL-terminated UTF-8 JSON string, so modules can be built with any compiler or
  * standard library. The ABI version changes only when this struct layout changes; new
  * features are new JSON methods, which keeps old modules loading.
+ *
+ * Version 2 replaced the untyped host context pointer with the opaque rfmod_host_context.
  */
 #ifndef RFMOD_ABI_H
 #define RFMOD_ABI_H
@@ -15,7 +17,7 @@
 extern "C" {
 #endif
 
-#define RFMOD_ABI_VERSION 1u
+enum rfmod_abi { RFMOD_ABI_VERSION = 2 };
 
 #if defined(_WIN32)
 #define RFMOD_EXPORT __declspec(dllexport)
@@ -33,14 +35,18 @@ enum rfmod_status {
 
 enum rfmod_log_level { RFMOD_LOG_DEBUG = 0, RFMOD_LOG_INFO = 1, RFMOD_LOG_WARN = 2, RFMOD_LOG_ERROR = 3 };
 
+/* Host state handed back to every host callback. Only the host knows its layout; a module
+ * passes the pointer through unchanged and never dereferences it. */
+typedef struct rfmod_host_context rfmod_host_context;
+
 /* Services the host offers to a module. */
 typedef struct rfmod_host {
     uint32_t abi_version;
-    void* context;
+    rfmod_host_context* context;
     /* Call a host method (for example "link.evaluate"). On success *response_json points to a
      * host-owned string valid until the next call on this thread. */
-    int (*call)(void* context, const char* method, const char* request_json, const char** response_json);
-    void (*log)(void* context, int level, const char* message);
+    int (*call)(rfmod_host_context* context, const char* method, const char* request_json, const char** response_json);
+    void (*log)(rfmod_host_context* context, int level, const char* message);
 } rfmod_host;
 
 /* What a module offers to the host. */
@@ -56,9 +62,9 @@ typedef struct rfmod_module {
     void (*shutdown)(void);
 } rfmod_module;
 
-/* The single exported symbol. */
+/* The single exported symbol, and the name to look it up by. */
 typedef const rfmod_module* (*rfmod_get_module_fn)(void);
-#define RFMOD_ENTRY_SYMBOL "rfmod_get_module"
+static const char RFMOD_ENTRY_SYMBOL[] = "rfmod_get_module";
 
 #ifdef __cplusplus
 }

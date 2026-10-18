@@ -27,14 +27,17 @@
 #include <stdexcept>
 #include <vector>
 
-#ifndef RFMAP_HOST_VERSION
-#define RFMAP_HOST_VERSION "0.1.0"
-#endif
-
 namespace fs = std::filesystem;
 using rfmod::json;
 
 namespace {
+
+// The build passes the project version; a stand-alone build of this file falls back to 0.1.0.
+#ifdef RFMAP_HOST_VERSION
+constexpr const char* kHostVersion = RFMAP_HOST_VERSION;
+#else
+constexpr const char* kHostVersion = "0.1.0";
+#endif
 
 struct Args {
     std::vector<std::string> positional;
@@ -157,7 +160,7 @@ int cmdCheck(const Args& a) {
     const rfmod::TrustStore trust = trustFrom(a);
     rfmod::ValidationReport r;
     (void)rfmod::PackageVerifier::verify(readFile(a.positional[0]), trust,
-                                         rfmod::Version::parse(a.get("--host-version", RFMAP_HOST_VERSION)), r);
+                                         rfmod::Version::parse(a.get("--host-version", kHostVersion)), r);
     return printReport(r);
 }
 
@@ -198,7 +201,7 @@ int cmdTest(const Args& a, const char* argv0) {
     cfg.workerExecutable =
         a.get("--worker", (fs::canonical("/proc/self/exe").parent_path() / "rfmod-worker").string());
     (void)argv0;
-    cfg.hostVersion = rfmod::Version::parse(a.get("--host-version", RFMAP_HOST_VERSION));
+    cfg.hostVersion = rfmod::Version::parse(a.get("--host-version", kHostVersion));
     int rc = 1;
     {
         rfmod::ModuleRegistry registry(cfg, trust, host);
@@ -240,7 +243,7 @@ int cmdNew(const Args& a) {
                            {"author", ""},
                            {"license", "MIT"},
                            {"lifecycle", "alpha"},
-                           {"abi", 1},
+                           {"abi", RFMOD_ABI_VERSION},
                            {"host", ">=0.1.0 <1.0.0"},
                            {"requires", json::array()},
                            {"provides", {"loss.contributor"}},

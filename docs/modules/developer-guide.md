@@ -50,7 +50,7 @@ The fields that matter most:
 | `id` | Namespaced, lower case: `acme.rain`. The `fpv.*`, `rf.*` and `example.*` prefixes belong to the owner. |
 | `version` | SemVer. An upload must be newer than what is installed. |
 | `lifecycle` | `alpha`, `beta`, `stable` or `deprecated` (section 8). |
-| `abi` | Always `1` for now. |
+| `abi` | Always `2` for now (the `RFMOD_ABI_VERSION` in `abi.h`). |
 | `host` | Range of host versions you support, for example `>=0.1.0 <1.0.0`. |
 | `requires` / `optional` | Other modules, with version ranges (`^1.2.0`, `>=1.0.0 <2.0.0`, `~1.4.0`, `a || b`). Required ones must be installed first. Optional ones may be missing; check with the host at run time. |
 | `provides` | What you add: `loss.contributor`, `route.analysis`, `coverage.analysis`, `library.kind`, `ui.panel`. |
