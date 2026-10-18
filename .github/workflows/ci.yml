@@ -241,13 +241,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       # One LCOV with paths from the repository root, as for SonarQube Cloud. Vitest writes no
-      # coverage for a project whose tests failed, so this step may find nothing to merge.
+      # coverage for a project whose tests failed, so only the reports that exist are merged.
       - name: Collect coverage
         if: success() || failure()
-        continue-on-error: true
         working-directory: .
         run: >-
-          python3 -I tools/ci/sonar_lcov.py --base web --output coverage-web/web.lcov
+          python3 -I tools/ci/sonar_lcov.py --base web --output coverage-web/web.lcov --skip-missing
           web/coverage/ui-kit/lcov.info web/coverage/fpv-app/lcov.info
       # Lines this pull request adds or changes, for a run where the C++ coverage job does not run.
       - name: List the changed lines

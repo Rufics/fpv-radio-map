@@ -65,6 +65,17 @@ class CommandTest(unittest.TestCase):
     def test_missing_report_is_a_usage_error(self):
         self.assertEqual(self.run_command("--base", "web", "--output", "out/web.lcov", "web/none.info"), 2)
 
+    def test_missing_reports_can_be_skipped(self):
+        code = self.run_command("--base", "web", "--output", "out/web.lcov", "--skip-missing",
+                                "web/coverage/ui-kit/lcov.info", "web/none.info")
+        self.assertEqual(code, 0)
+        self.assertIn("ui-kit", (self.root / "out/web.lcov").read_text(encoding="utf-8"))
+        self.assertEqual(self.run_command("--base", "web", "--output", "out/none.lcov", "--skip-missing",
+                                          "web/none.info"), 0)
+        self.assertFalse((self.root / "out/none.lcov").exists())
+        self.assertEqual(self.run_command("--base", "web", "--output", "out/x.lcov", "--skip-missing",
+                                          "../outside.info"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
