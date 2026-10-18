@@ -18,6 +18,9 @@ on:
       - .github/workflows/wiki.yml
       - .github/workflows/release.yml
       - .github/workflows/code-origin.yml
+      - .github/workflows/ci-report.yml
+      - .github/CODEOWNERS
+      - .github/pull_request_template.md
       - scanoss.json
       - tools/wiki/**
       - .githooks/**
@@ -34,7 +37,6 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
-      pull-requests: write
 
   images:
     name: Docker images and smoke test

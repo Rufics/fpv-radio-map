@@ -73,10 +73,12 @@ git config core.hooksPath .githooks      # once per clone
 
 ## Checks
 
-Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a test report comment:
+Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a CI report comment:
 
-- C++: everything under `ctest`, including the server integration test against PostgreSQL 16 + PostGIS
-  and the signed-package upload checks of every FPV module;
+- C++: everything under `ctest` on the Release build, including the server integration test against
+  PostgreSQL 16 + PostGIS and the signed-package upload checks of every FPV module;
+- C++ coverage: the same tests on an instrumented build, reported per area (core, FPV modules,
+  platform, server) and for the lines the pull request changes;
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
 - the pull request title against Conventional Commits (its own check, re-run when the title is edited);
 - copied code: the changed files are matched file by file and snippet by snippet against the SCANOSS
@@ -84,6 +86,49 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
   Only fingerprints are sent. A match marks the `Policy Check: Undeclared` or `Policy Check: Copyleft`
   run as action required; accept a reviewed match in `scanoss.json`. Pull requests from forks are
   not scanned (their token cannot write checks); the weekly run covers them once merged.
+
+### The CI report
+
+The comment on the pull request is kept up to date on every push. It starts with one line: passed
+or failed, the number of tests, the C++ line coverage, and how much of the changed C++ lines the
+tests run. Below it:
+
+- a table of the checks, each linked to its log, with the test counts;
+- failed tests by name, open at the top, when there are any;
+- C++ line and function coverage for core (`rf-core`, `rf-ext`), the FPV modules, the platform
+  (`rfmod`) and the server, with a per-component breakdown folded away;
+- the changed lines that no test runs, linked to the exact lines of the commit. This list is the
+  one to look at before asking for a review;
+- links to the workflow run and the browsable HTML coverage report (kept for 7 days).
+
+Coverage is reported, not enforced: 🟢 is 80% or more, 🟡 60–80%, 🔴 below 60%. Test code, the
+example module and the sandboxed module worker are not counted. The same report is in the run
+summary of the `Test report` job.
+
+To see coverage locally:
+
+```
+sudo apt-get install -y gcovr
+cmake -S . -B build-cov -G Ninja -DCMAKE_BUILD_TYPE=Debug -DRFMAP_COVERAGE=ON
+cmake --build build-cov && ctest --test-dir build-cov
+gcovr --root . --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' \
+  --exclude '.*/tests/.*' --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
+  --html-details build-cov/coverage.html build-cov
+```
+
+### Pull requests from forks
+
+Fork pull requests run exactly the same checks before they can be merged, with no secrets and a
+read-only token:
+
+- A maintainer approves the workflow runs of an outside contributor's pull request before they
+  start. Until then the checks show as waiting; this is expected.
+- `ci.yml` runs your code and only uploads its results. The `CI report` workflow
+  (`.github/workflows/ci-report.yml`) then runs from `main`, reads those results as data and posts
+  the comment. Nothing from the pull request runs with write access, and changing either workflow
+  in a pull request has no effect on that pull request's report.
+- Changes to `.github/`, `tools/ci/`, `deploy/` and the signing keys need a review by a code owner
+  (`.github/CODEOWNERS`).
 
 Only the parts a pull request can affect are built: changes to `web/` run the web job, changes to
 the C++ tree run the C++ job, and changes to docs alone run neither. A file the rules in `ci.yml`

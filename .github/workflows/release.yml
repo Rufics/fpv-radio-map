@@ -88,7 +88,6 @@ jobs:
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
-      pull-requests: write
 
   release:
     name: Build, sign and release v${{ needs.plan.outputs.version }}
