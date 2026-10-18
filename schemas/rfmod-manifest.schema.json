@@ -7,8 +7,8 @@
   "additionalProperties": false,
   "properties": {
     "schema": { "const": "rfmod/v1" },
-    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9-]*)+$", "description": "Namespaced id, for example fpv.battery or acme.rain" },
-    "version": { "type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$" },
+    "id": { "type": "string", "maxLength": 128, "pattern": "^[a-z][a-z0-9]{0,63}(\\.[a-z][a-z0-9-]{0,63}){1,8}$", "description": "Namespaced id, for example fpv.battery or acme.rain" },
+    "version": { "type": "string", "maxLength": 128, "pattern": "^(0|[1-9][0-9]{0,9})\\.(0|[1-9][0-9]{0,9})\\.(0|[1-9][0-9]{0,9})(-[0-9A-Za-z.-]{1,96})?$" },
     "title": { "type": "string", "minLength": 3, "maxLength": 60 },
     "description": { "type": "string", "maxLength": 600 },
     "author": { "type": "string" },
@@ -39,18 +39,18 @@
       "type": "object",
       "description": "Shared library per platform, path inside the package.",
       "minProperties": 1,
-      "additionalProperties": { "type": "string", "pattern": "^lib/[A-Za-z0-9_./-]+$" }
+      "additionalProperties": { "type": "string", "maxLength": 255, "pattern": "^lib/[A-Za-z0-9_./-]{1,251}$" }
     },
     "ui": {
       "type": "object",
       "required": ["bundle", "slots"],
       "additionalProperties": false,
       "properties": {
-        "bundle": { "type": "string", "pattern": "^ui/[A-Za-z0-9_./-]+\\.js$" },
+        "bundle": { "type": "string", "maxLength": 255, "pattern": "^ui/[A-Za-z0-9_./-]{1,249}\\.js$" },
         "slots": { "type": "array", "items": { "enum": ["header.actions", "side.panels", "map.layers", "map.overlays", "bottom.drawer", "verdict.reasons"] } }
       }
     },
-    "optionsSchema": { "type": "string", "pattern": "^schema/[A-Za-z0-9_./-]+\\.json$" },
+    "optionsSchema": { "type": "string", "maxLength": 255, "pattern": "^schema/[A-Za-z0-9_./-]{1,243}\\.json$" },
     "limits": {
       "type": "object",
       "additionalProperties": false,

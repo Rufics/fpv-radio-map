@@ -25,6 +25,18 @@ public:
     std::vector<SchemaRegistry::Problem> problems;
 };
 
+// The validator's format checks (date-time, uri, ...) use std::regex, which recurses once per
+// character: a long enough string in a request body overflows the stack. No valid value of these
+// formats comes near the limit, so longer strings are refused before the regex sees them.
+constexpr std::size_t kMaxFormattedLength = 2048;
+
+void boundedFormatCheck(const std::string& format, const std::string& value) {
+    if (value.size() > kMaxFormattedLength) {
+        throw std::invalid_argument("longer than " + std::to_string(kMaxFormattedLength) + " characters");
+    }
+    nlohmann::json_schema::default_string_format_check(format, value);
+}
+
 }  // namespace
 
 const std::vector<std::string>& SchemaRegistry::libraryKinds() {
@@ -58,8 +70,7 @@ void SchemaRegistry::add(const std::string& name, const json& schema) {
         }
         out = readJson(dir / rel);
     };
-    auto v = std::make_unique<nlohmann::json_schema::json_validator>(loader,
-                                                                     nlohmann::json_schema::default_string_format_check);
+    auto v = std::make_unique<nlohmann::json_schema::json_validator>(loader, boundedFormatCheck);
     v->set_root_schema(schema);
     std::lock_guard lock(mutex_);
     validators_[name] = std::move(v);

@@ -57,6 +57,8 @@ TEST(Crypto, KeysRoundTripAndSign) {
     EXPECT_FALSE(pk.verify("hellO", sig));
     EXPECT_EQ(SecretKey::fromText(sk.toText()).publicKey(), pk);
     EXPECT_THROW((void)PublicKey::fromText("rfmod-ed25519-pub:AAAA"), std::invalid_argument);
+    EXPECT_TRUE(fromBase64("").empty());
+    EXPECT_THROW((void)PublicKey::fromText("rfmod-ed25519-pub:"), std::invalid_argument);
     // Dev key pair from the repository matches itself.
     EXPECT_EQ(ownerSecret().publicKey(), PublicKey::fromText(ownerPublicText()));
 }

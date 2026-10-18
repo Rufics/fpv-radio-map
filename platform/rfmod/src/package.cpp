@@ -34,6 +34,12 @@ bool safePath(const std::string& p) {
     return true;
 }
 
+/// libarchive's message for the last error, which is null when it set none.
+std::string archiveError(archive* a) {
+    const char* message = archive_error_string(a);
+    return message ? message : "unknown error";
+}
+
 struct ArchiveReadDeleter {
     void operator()(archive* a) const { archive_read_free(a); }
 };
@@ -84,7 +90,7 @@ std::optional<PackageFiles> PackageReader::read(const std::string& archiveBytes,
     archive_read_support_filter_gzip(a.get());
     archive_read_support_format_tar(a.get());
     if (archive_read_open_memory(a.get(), archiveBytes.data(), archiveBytes.size()) != ARCHIVE_OK) {
-        report.fail("archive.format", std::string("not a gzip tar: ") + archive_error_string(a.get()));
+        report.fail("archive.format", std::string("not a gzip tar: ") + archiveError(a.get()));
         return std::nullopt;
     }
     PackageFiles out;
@@ -126,13 +132,13 @@ std::optional<PackageFiles> PackageReader::read(const std::string& archiveBytes,
             content.append(buf, static_cast<std::size_t>(n));
         }
         if (n < 0) {
-            report.fail("archive.format", std::string("corrupt entry ") + path + ": " + archive_error_string(a.get()));
+            report.fail("archive.format", std::string("corrupt entry ") + path + ": " + archiveError(a.get()));
             return std::nullopt;
         }
         out.files.emplace(std::move(path), std::move(content));
     }
     if (rc != ARCHIVE_EOF) {
-        report.fail("archive.format", std::string("corrupt archive: ") + archive_error_string(a.get()));
+        report.fail("archive.format", std::string("corrupt archive: ") + archiveError(a.get()));
         return std::nullopt;
     }
     report.pass("archive", std::to_string(out.files.size()) + " files, " + std::to_string(total) + " bytes unpacked");
@@ -167,7 +173,7 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
     archive_write_add_filter_gzip(a.get());
     // The gzip header stores the current time unless told not to, which makes packing depend on the clock.
     if (archive_write_set_filter_option(a.get(), "gzip", "timestamp", nullptr) != ARCHIVE_OK) {
-        throw std::runtime_error(std::string("archive: ") + archive_error_string(a.get()));
+        throw std::runtime_error("archive: " + archiveError(a.get()));
     }
     archive_write_set_format_pax_restricted(a.get());
     std::string out;
@@ -178,7 +184,7 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
     };
     auto closeCb = [](archive*, void*) -> int { return ARCHIVE_OK; };
     if (archive_write_open(a.get(), &out, openCb, writeCb, closeCb) != ARCHIVE_OK) {
-        throw std::runtime_error(std::string("archive: ") + archive_error_string(a.get()));
+        throw std::runtime_error("archive: " + archiveError(a.get()));
     }
     for (const auto& [path, content] : files.files) {
         archive_entry* e = archive_entry_new();
@@ -190,12 +196,12 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
         if (archive_write_header(a.get(), e) != ARCHIVE_OK ||
             archive_write_data(a.get(), content.data(), content.size()) != static_cast<la_ssize_t>(content.size())) {
             archive_entry_free(e);
-            throw std::runtime_error(std::string("archive: ") + archive_error_string(a.get()));
+            throw std::runtime_error("archive: " + archiveError(a.get()));
         }
         archive_entry_free(e);
     }
     if (archive_write_close(a.get()) != ARCHIVE_OK) {
-        throw std::runtime_error(std::string("archive: ") + archive_error_string(a.get()));
+        throw std::runtime_error("archive: " + archiveError(a.get()));
     }
     return out;
 }
