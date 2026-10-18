@@ -16,6 +16,24 @@ welcome. By taking part you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 All documentation, UI text, code comments, commit messages, issues and pull requests are in English.
 
+## Code style
+
+C++ is written object-oriented: behaviour lives in classes with one clear responsibility, and
+state that several steps share is a class's members, not parameters passed from function to
+function. Keep the cognitive load low, within the limits SonarCloud enforces on every pull request:
+
+- cognitive complexity at most 25 per function;
+- at most 3 nested `if`, `for`, `do`, `while` and `switch` statements.
+
+A function that grows past them is split into named steps, usually methods of a small class.
+Locally, `clang-tidy` reports the complexity of a build configured with
+`-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`:
+
+```
+clang-tidy -p build --checks='-*,readability-function-cognitive-complexity' \
+  --config='{CheckOptions: {readability-function-cognitive-complexity.Threshold: 25}}' <files>
+```
+
 ## Documentation
 
 Documentation lives in `docs/`. After every change on `main` it is published to the
