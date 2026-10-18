@@ -28,8 +28,10 @@ class LcovRebaserTest(unittest.TestCase):
 
 class RepositoryPathsTest(unittest.TestCase):
     def test_refuses_paths_outside_the_repository(self):
-        with tempfile.TemporaryDirectory() as root, self.assertRaises(ValueError):
-            RepositoryPaths(root).resolve("../elsewhere/lcov.info")
+        with tempfile.TemporaryDirectory() as root:
+            paths = RepositoryPaths(root)
+            with self.assertRaises(ValueError):
+                paths.resolve("../elsewhere/lcov.info")
 
     def test_relative_folder(self):
         with tempfile.TemporaryDirectory() as root:

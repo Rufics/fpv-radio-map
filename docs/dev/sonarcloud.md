@@ -1,6 +1,6 @@
 # SonarQube Cloud
 
-The code is analysed by [SonarQube Cloud](https://sonarcloud.io/project/overview?id=rufics_fpv-radio-map)
+The code is analysed by [SonarQube Cloud](https://sonarcloud.io/project/overview?id=Rufics_fpv-radio-map)
 on every pull request from a branch of this repository and on every push to `main`. The analysis
 runs in GitHub Actions (`.github/workflows/sonar.yml`), not as SonarQube Cloud's automatic
 analysis, because only a CI run can hand it the C++ compile database and the coverage reports.
