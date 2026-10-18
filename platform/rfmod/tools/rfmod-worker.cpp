@@ -14,7 +14,7 @@
 #include <unistd.h>
 
 #include <cerrno>
-#include <cstdio>
+#include <iostream>
 #include <string>
 
 namespace {
@@ -146,7 +146,7 @@ int run(const char* library) {
 
 int main(int argc, char** argv) {
     if (argc != 3) {
-        (void)std::fprintf(stderr, "rfmod-worker is started by the rfmap host, not by hand\n");
+        std::cerr << "rfmod-worker is started by the rfmap host, not by hand\n";
         return 64;
     }
     // stderr goes to the host's log, so a malformed message from the host is reported there
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
     try {
         return run(argv[1]);
     } catch (const json::exception& e) {
-        (void)std::fprintf(stderr, "rfmod-worker: %s\n", e.what());
+        std::cerr << "rfmod-worker: " << e.what() << '\n';
         return 70;
     }
 }

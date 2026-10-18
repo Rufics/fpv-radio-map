@@ -4,11 +4,11 @@
     python3 -I tools/ci/clang_tidy.py --build-dir build-tidy [--base <commit>] [--jobs N]
                                       [--clang-tidy clang-tidy-18]
 
-The build directory must hold compile_commands.json (CMAKE_EXPORT_COMPILE_COMMANDS=ON) and any
-generated headers. Every translation unit of this repository in it is checked, fetched
-dependencies and generated files excepted. With --base only the sources changed since that commit
-are checked, unless a change can affect any file: a header, .clang-tidy, a CMake file or this
-script then checks everything.
+The build directory, a folder directly under the repository root, must hold compile_commands.json
+(CMAKE_EXPORT_COMPILE_COMMANDS=ON) and any generated headers. Every translation unit of this
+repository in it is checked, fetched dependencies and generated files excepted. With --base only
+the sources changed since that commit are checked, unless a change can affect any file: a header,
+.clang-tidy, a CMake file or this script then checks everything.
 
 Each finding is printed as clang-tidy prints it and, on GitHub Actions, also as an error
 annotation on its line. The exit code is 1 when clang-tidy reported anything, 2 on a usage
@@ -31,6 +31,7 @@ CHECK_ALL = re.compile(r"\.(h|hh|hpp|hxx|inl|cmake)$|(^|/)(CMakeLists\.txt|\.cla
 SKIPPED_DIRS = ("_deps", "generated")
 REVISION = re.compile(r"[0-9a-f]{7,64}|HEAD(\^\d?|~\d{1,3})?")
 CLANG_TIDY_NAME = re.compile(r"clang-tidy(-\d+)?")
+BUILD_DIR_NAME = re.compile(r"\w[\w.-]{0,63}")
 LEVELS = (": error: ", ": warning: ")
 TIMEOUT_SECONDS = 600
 MAX_LINE = 4096
@@ -41,7 +42,7 @@ def repo_relative(path):
     """The path relative to the repository, or None for a file outside it. Only the text of the
     path is looked at, never the file system."""
     rel = os.path.relpath(os.path.abspath(path), ROOT_TEXT)
-    if rel == os.curdir or rel == os.pardir or rel.startswith(os.pardir + os.sep) or os.path.isabs(rel):
+    if rel in {os.curdir, os.pardir} or rel.startswith(os.pardir + os.sep) or os.path.isabs(rel):
         return None
     return Path(rel).as_posix()
 
@@ -131,7 +132,7 @@ def run_one(clang_tidy, build_dir, unit):
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--build-dir", required=True, type=Path, help="CMake build directory")
+    parser.add_argument("--build-dir", required=True, help="CMake build folder, directly under the repository root")
     parser.add_argument("--base", help="check only the files changed since this commit (hash, HEAD^1, ...)")
     parser.add_argument("--jobs", type=int, default=os.cpu_count() or 1, help="parallel clang-tidy runs")
     parser.add_argument("--clang-tidy", default="clang-tidy", help="clang-tidy or clang-tidy-<version>, from PATH")
@@ -140,6 +141,9 @@ def parse_args(argv):
 
 def main(argv=None):
     args = parse_args(argv)
+    if not BUILD_DIR_NAME.fullmatch(args.build_dir) or ".." in args.build_dir:
+        print(f"--build-dir must name a folder under the repository root, got {args.build_dir!r}", file=sys.stderr)
+        return 2
     if not CLANG_TIDY_NAME.fullmatch(args.clang_tidy):
         print(f"--clang-tidy must be clang-tidy or clang-tidy-<version>, got {args.clang_tidy!r}", file=sys.stderr)
         return 2
@@ -147,7 +151,7 @@ def main(argv=None):
     if clang_tidy is None:
         print(f"{args.clang_tidy} is not installed", file=sys.stderr)
         return 2
-    build_dir = Path(os.path.abspath(args.build_dir))
+    build_dir = ROOT / args.build_dir
     with open(build_dir / "compile_commands.json", encoding="utf-8") as f:
         units = translation_units(json.load(f), build_dir)
     units = select(units, changed_files(args.base) if args.base else None)

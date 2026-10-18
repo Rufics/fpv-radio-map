@@ -70,6 +70,13 @@ class ParseTest(unittest.TestCase):
                 self.assertIsNone(repo_relative(path))
 
 
+class BuildDirTest(unittest.TestCase):
+    def test_only_folders_under_the_root(self):
+        for name in ("/tmp/build", "../build", "a/b", "..", "build..x", ".hidden"):
+            with self.subTest(name=name):
+                self.assertEqual(main(["--build-dir", name, "--clang-tidy", "clang-tidy"]), 2)
+
+
 class AnnotationTest(unittest.TestCase):
     def test_one_annotation_per_distinct_finding(self):
         path = ROOT / "core/rf-core/include/rfcore/geodesy.hpp"
