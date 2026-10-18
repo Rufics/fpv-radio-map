@@ -12,6 +12,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,12 @@ class GDALRasterBand;
 class OGRCoordinateTransformation;
 
 namespace rfmap {
+
+/// A raster file that cannot be opened, read or placed on the WGS84 ellipsoid.
+class RasterError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 /// One decoded block of a raster band, as 32-bit floats (DEM heights and land cover codes both
 /// fit exactly).

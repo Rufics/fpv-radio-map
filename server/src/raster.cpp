@@ -34,8 +34,8 @@ GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), c
         GDALSetCacheMax64(16 << 20);
     });
     dataset_ = static_cast<GDALDataset*>(GDALOpen(file.c_str(), GA_ReadOnly));
-    if (!dataset_) throw std::runtime_error("cannot open raster " + file.string());
-    if (dataset_->GetRasterCount() < 1) throw std::runtime_error(file.string() + " has no bands");
+    if (!dataset_) throw RasterError("cannot open raster " + file.string());
+    if (dataset_->GetRasterCount() < 1) throw RasterError(file.string() + " has no bands");
     band_ = dataset_->GetRasterBand(1);
     width_ = dataset_->GetRasterXSize();
     height_ = dataset_->GetRasterYSize();
@@ -45,13 +45,13 @@ GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), c
     if (hasNoData) noData_ = nd;
 
     std::array<double, 6> gt{};
-    if (dataset_->GetGeoTransform(gt.data()) != CE_None) throw std::runtime_error(file.string() + " has no geotransform");
+    if (dataset_->GetGeoTransform(gt.data()) != CE_None) throw RasterError(file.string() + " has no geotransform");
     if (!GDALInvGeoTransform(gt.data(), inverse_.data())) {
-        throw std::runtime_error(file.string() + ": geotransform not invertible");
+        throw RasterError(file.string() + ": geotransform not invertible");
     }
 
     const OGRSpatialReference* srs = dataset_->GetSpatialRef();
-    if (!srs) throw std::runtime_error(file.string() + " has no coordinate reference system");
+    if (!srs) throw RasterError(file.string() + " has no coordinate reference system");
     OGRSpatialReference wgs84;
     wgs84.SetWellKnownGeogCS("WGS84");
     wgs84.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
@@ -59,7 +59,7 @@ GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), c
     target.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
     if (!target.IsSame(&wgs84)) {
         toRaster_ = OGRCreateCoordinateTransformation(&wgs84, &target);
-        if (!toRaster_) throw std::runtime_error(file.string() + ": cannot transform from WGS84");
+        if (!toRaster_) throw RasterError(file.string() + ": cannot transform from WGS84");
     }
 
     // Pixel centre positions back in WGS84, to measure the pixel pitch on the ellipsoid.
@@ -109,7 +109,7 @@ std::shared_ptr<const RasterBlock> GdalRaster::block(int bx, int by) const {
         std::lock_guard lock(ioMutex_);
         if (band_->RasterIO(GF_Read, bx * blockW_, by * blockH_, b->width, b->height, b->values.data(), b->width,
                             b->height, GDT_Float32, 0, 0) != CE_None) {
-            throw std::runtime_error("read error in " + file_.string());
+            throw RasterError("read error in " + file_.string());
         }
     }
     cache_.put(key, b);

@@ -361,14 +361,11 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     return result;
 }
 
-/// What every pool thread of one coverage calculation shares. Rows are handed out one at a
-/// time, and each cell's margin lands in its own slot.
-struct Calculator::CoverageRun {
-    const ResolvedLink& link;
-    const CalcContext& ctx;
-    const Terminal& pilot;
-    const std::function<void(double)>& progress;
-    const std::function<bool()>& cancelled;
+namespace {
+
+/// The lat/lon-regular coverage grid: its size, north-west corner, cell pitch in degrees,
+/// and the radius and drone height every cell is evaluated with.
+struct CoverageGrid {
     std::size_t rows;
     std::size_t cols;
     double north;
@@ -377,6 +374,19 @@ struct Calculator::CoverageRun {
     double dLon;
     double radius;
     double agl;
+};
+
+}  // namespace
+
+/// What every pool thread of one coverage calculation shares. Rows are handed out one at a
+/// time, and each cell's margin lands in its own slot.
+struct Calculator::CoverageRun {
+    const ResolvedLink& link;
+    const CalcContext& ctx;
+    const Terminal& pilot;
+    const std::function<void(double)>& progress;
+    const std::function<bool()>& cancelled;
+    CoverageGrid grid;
     std::vector<std::optional<double>> margins{};
     std::vector<std::optional<double>> worstBand{};
     std::atomic<std::size_t> nextRow{0};
@@ -390,35 +400,35 @@ struct Calculator::CoverageRun {
 
 void Calculator::coverageWorker(CoverageRun& run) {
     try {
-        for (std::size_t r = run.nextRow++; r < run.rows; r = run.nextRow++) {
+        for (std::size_t r = run.nextRow++; r < run.grid.rows; r = run.nextRow++) {
             if (run.cancelled()) return;
             std::shared_lock gate(modules_.gate());
             const CalcContextScope scope(run.ctx);
             coverageRow(run, r);
-            run.progress(static_cast<double>(++run.doneRows) / static_cast<double>(run.rows));
+            run.progress(static_cast<double>(++run.doneRows) / static_cast<double>(run.grid.rows));
         }
     } catch (...) {
         std::lock_guard lock(run.failMutex);
         if (!run.error) run.error = std::current_exception();
-        run.nextRow = run.rows;
+        run.nextRow = run.grid.rows;
     }
 }
 
 void Calculator::coverageRow(CoverageRun& run, std::size_t r) const {
-    for (std::size_t c = 0; c < run.cols; ++c) {
-        const rfcore::GeoPoint centre{run.north - (static_cast<double>(r) + 0.5) * run.dLat,
-                                      run.west + (static_cast<double>(c) + 0.5) * run.dLon};
-        if (const double d = run.geo.inverse(run.pilot.position, centre).distance.value(); !(d > 0.0) || d > run.radius) {
+    for (std::size_t c = 0; c < run.grid.cols; ++c) {
+        const rfcore::GeoPoint centre{run.grid.north - (static_cast<double>(r) + 0.5) * run.grid.dLat,
+                                      run.grid.west + (static_cast<double>(c) + 0.5) * run.grid.dLon};
+        if (const double d = run.geo.inverse(run.pilot.position, centre).distance.value(); !(d > 0.0) || d > run.grid.radius) {
             continue;
         }
-        const PreparedPath p = links_.prepare(run.pilot, Terminal{centre, run.agl}, run.ctx);
+        const PreparedPath p = links_.prepare(run.pilot, Terminal{centre, run.grid.agl}, run.ctx);
         if (!p.complete()) {
             ++run.missingCells;
             continue;
         }
         LinkEvaluation e = links_.evaluate(p, run.link, run.ctx, builtins_.enabled(BuiltinModules::kUncertainty), false);
-        run.margins[r * run.cols + c] = e.marginDb;
-        if (e.result.contains("band")) run.worstBand[r * run.cols + c] = e.result["band"]["worstDb"].get<double>();
+        run.margins[r * run.grid.cols + c] = e.marginDb;
+        if (e.result.contains("band")) run.worstBand[r * run.grid.cols + c] = e.result["band"]["worstDb"].get<double>();
         if (!e.failures.empty()) {
             std::lock_guard lock(run.failMutex);
             run.failures.insert(run.failures.end(), e.failures.begin(), e.failures.end());
@@ -462,7 +472,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     const double north = lat0 + (static_cast<double>(half) + 0.5) * dLat;
     const double west = pilot.position.longitudeDeg - (static_cast<double>(half) + 0.5) * dLon;
 
-    CoverageRun run{link, ctx, pilot, progress, cancelled, rows, cols, north, west, dLat, dLon, radius, agl};
+    CoverageRun run{link, ctx, pilot, progress, cancelled, {rows, cols, north, west, dLat, dLon, radius, agl}};
     run.margins.resize(cols * rows);
     run.worstBand.resize(cols * rows);
     std::vector<std::future<void>> parts;
