@@ -155,7 +155,7 @@ struct ModuleAdapter {
         }
     }
 
-    static void freeString(char* s) {
+    static void freeString(const char* s) {
         // Releases the string copy() lent; the map entry owns it.
         Lent& l = lent();
         const std::lock_guard lock(l.mutex);
