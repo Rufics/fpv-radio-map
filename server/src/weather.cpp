@@ -62,6 +62,14 @@ TimePoint unixTime(const json& v) {
     return Clock::from_time_t(static_cast<std::time_t>(s));
 }
 
+/// Whole seconds from `from` to `to`. The clock counts nanoseconds in 64 bits, about 292 years, so
+/// two times the forecast may hold (1900 to 2200) cannot be subtracted in its own units.
+std::int64_t secondsBetween(TimePoint from, TimePoint to) {
+    using std::chrono::floor;
+    using std::chrono::seconds;
+    return floor<seconds>(to).time_since_epoch().count() - floor<seconds>(from).time_since_epoch().count();
+}
+
 std::string unreadable(const std::exception& e) { return std::format("unreadable forecast response: {}", e.what()); }
 
 json hourlyOf(const json& response) {
@@ -72,7 +80,7 @@ json timesOf(const json& hourly) { return hourly.is_object() ? hourly.value("tim
 
 /// The forecast hour nearest to `time`, when the response reaches it.
 std::optional<std::size_t> hourIndex(const json& times, TimePoint time) {
-    const double idx = std::round(std::chrono::duration<double>(time - unixTime(times.front())).count() / 3600.0);
+    const double idx = std::round(static_cast<double>(secondsBetween(unixTime(times.front()), time)) / 3600.0);
     if (idx < 0 || idx >= static_cast<double>(times.size())) return std::nullopt;
     return static_cast<std::size_t>(idx);
 }
@@ -266,7 +274,7 @@ std::optional<ForecastAt> WeatherService::fromResponse(const json& r, const Conf
     setIfPresent(p, "precipitationMmPerHour", out.rainMmPerHour);
     if (run) {
         p["runUtc"] = isoUtc(*run);
-        p["stale"] = clock_.now() - *run > std::chrono::hours(cfg_.staleAfterHours);
+        p["stale"] = secondsBetween(*run, clock_.now()) > std::int64_t{cfg_.staleAfterHours} * 3600;
     }
     if (const auto est = rfext::refractionForPath(out.column, rfext::Metres(surface))) {
         p["refractivityGradientPerKm"] = est->gradientPerKm;
@@ -274,7 +282,7 @@ std::optional<ForecastAt> WeatherService::fromResponse(const json& r, const Conf
         p["effectiveEarthFactor"] =
             rfcore::EarthModel::factorFromRefractivityGradient(est->gradientPerKm, rfcore::Metres(meanRadius(lat)));
     }
-    addForecastNotes(out, std::chrono::duration_cast<std::chrono::minutes>(time - valid).count(), levels);
+    addForecastNotes(out, secondsBetween(valid, time) / 60, levels);
     return out;
 }
 

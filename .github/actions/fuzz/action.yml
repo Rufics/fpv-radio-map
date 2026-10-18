@@ -1,0 +1,64 @@
+# Fuzzes every C++ fuzz target (fuzz/, docs/dev/fuzzing.md). The fuzz binaries are the only thing
+# built here, a Clang tree with libFuzzer and the sanitizers, and only when the cache holds none
+# for these sources: a run on unchanged code takes them from the cache and only fuzzes. A crash
+# fails the step and its input is attached to the run as the fuzz-crashes artifact.
+name: Fuzz the C++ targets
+description: Builds the fuzz binaries unless cached, then fuzzes each target for a while.
+inputs:
+  seconds:
+    description: Seconds to fuzz each target
+    required: true
+  merge:
+    description: "1 to minimise the corpus and keep it in the cache for later runs"
+    required: false
+    default: "0"
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/cpp-deps
+      with:
+        extra: clang-18 libclang-rt-18-dev
+    - id: binaries
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: build-fuzz/fuzz/*_fuzzer
+        key: fuzz-bin-${{ hashFiles('CMakeLists.txt', 'core/**', 'platform/**', 'server/**', 'schemas/**', 'fuzz/**', '.github/actions/cpp-deps/action.yml', '.github/actions/fuzz/action.yml') }}
+    - name: Build the fuzz binaries
+      if: steps.binaries.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER=clang++-18 \
+          -DRFMAP_BUILD_FUZZERS=ON -DRFMAP_BUILD_TESTS=OFF
+        cmake --build build-fuzz --target rfmap_fuzzers
+    - if: steps.binaries.outputs.cache-hit != 'true'
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: build-fuzz/fuzz/*_fuzzer
+        key: ${{ steps.binaries.outputs.cache-primary-key }}
+    - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: build-fuzz/fuzz-work/corpus
+        key: fuzz-corpus-${{ github.run_id }}
+        restore-keys: fuzz-corpus-
+    # libFuzzer runs every checked-in seed and regression input first, so a bug that came back
+    # fails here even on cached binaries.
+    - name: Fuzz
+      shell: bash
+      env:
+        FUZZ_SECONDS: ${{ inputs.seconds }}
+        FUZZ_MERGE: ${{ inputs.merge }}
+      run: python3 fuzz/run.py
+    - if: always() && inputs.merge == '1'
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: build-fuzz/fuzz-work/corpus
+        key: fuzz-corpus-${{ github.run_id }}
+    - if: failure()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: fuzz-crashes
+        path: |
+          build-fuzz/fuzz-work/crashes/
+          build-fuzz/fuzz-work/*.log
+        if-no-files-found: ignore
+        retention-days: 14

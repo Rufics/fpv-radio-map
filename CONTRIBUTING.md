@@ -80,8 +80,8 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
 - C++ coverage: the same tests on an instrumented build, reported per area (core, FPV modules,
   platform, server) and for the lines the pull request changes;
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
-- fuzzing: changes to the C++ tree replay the fuzz corpus and fuzz every target for a minute
-  (`.github/workflows/fuzz.yml`, longer every night; see [Fuzz testing](docs/dev/fuzzing.md));
+- fuzzing: once the C++ build passed, every fuzz target replays its corpus and is fuzzed for a
+  minute (longer every night in `.github/workflows/fuzz.yml`; see [Fuzz testing](docs/dev/fuzzing.md));
 - the pull request title against Conventional Commits (its own check, re-run when the title is edited).
 
 ### The CI report

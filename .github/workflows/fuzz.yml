@@ -1,22 +1,11 @@
-# Fuzz testing of the C++ parsers and the radio maths (fuzz/, docs/dev/fuzzing.md).
-#
-# Pull requests that change C++ replay the corpus and fuzz every target for a minute. A nightly
-# run fuzzes ten minutes per target and keeps the corpus it grew in the Actions cache, so later
-# runs, pull requests included, start from it. A crash fails the run; the input that caused it is
-# uploaded as an artifact. Fix the bug and add the input to fuzz/corpus/<target>/ in the same PR.
+# Nightly fuzzing of the C++ parsers and the radio maths (fuzz/, docs/dev/fuzzing.md). Pull
+# requests and pushes to main fuzz each target for a minute in ci.yml, after the C++ build passed.
+# This run fuzzes ten minutes per target, or what the manual run asks for, and keeps the corpus it
+# grew in the Actions cache, so every later run starts from it. The fuzz binaries come from the
+# cache main's CI filled; they are built here only when it holds none for the current sources.
 name: Fuzz
 
 on:
-  pull_request:
-    paths:
-      - core/**
-      - platform/**
-      - server/src/**
-      - schemas/**
-      - fuzz/**
-      - CMakeLists.txt
-      - .github/actions/cpp-deps/**
-      - .github/workflows/fuzz.yml
   schedule:
     - cron: "40 1 * * *"
   workflow_dispatch:
@@ -29,52 +18,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: fuzz-${{ github.event.pull_request.number || github.ref }}
+  group: fuzz-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   fuzz:
-    name: Fuzz C++
+    name: Fuzz C++ (nightly)
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      FUZZ_SECONDS: ${{ github.event_name == 'pull_request' && '60' || inputs.seconds || '600' }}
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/cpp-deps
+      - uses: ./.github/actions/fuzz
         with:
-          extra: clang-18 libclang-rt-18-dev
-      - name: Configure
-        run: >
-          cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
-          -DCMAKE_CXX_COMPILER=clang++-18 -DRFMAP_BUILD_FUZZERS=ON -DRFMAP_BUILD_TESTS=OFF
-      - name: Build
-        run: cmake --build build-fuzz --target rfmap_fuzzers
-      # Every seed and every input that once found a bug.
-      - name: Replay the corpus
-        run: ctest --test-dir build-fuzz -L fuzz --output-on-failure
-      - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
-        with:
-          path: build-fuzz/fuzz-work/corpus
-          key: fuzz-corpus-${{ github.run_id }}
-          restore-keys: fuzz-corpus-
-      - name: Fuzz
-        env:
-          FUZZ_MERGE: ${{ github.event_name != 'pull_request' && '1' || '0' }}
-        run: python3 fuzz/run.py
-      - if: always() && github.event_name != 'pull_request'
-        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
-        with:
-          path: build-fuzz/fuzz-work/corpus
-          key: fuzz-corpus-${{ github.run_id }}
-      - if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: fuzz-crashes
-          path: |
-            build-fuzz/fuzz-work/crashes/
-            build-fuzz/fuzz-work/*.log
-          if-no-files-found: ignore
-          retention-days: 14
+          seconds: ${{ inputs.seconds || '600' }}
+          merge: "1"

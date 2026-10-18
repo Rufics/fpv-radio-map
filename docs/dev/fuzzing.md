@@ -66,10 +66,13 @@ the sanitizers but cannot fuzz. Put an input there to replay it.
 
 ## In CI
 
-`.github/workflows/fuzz.yml` runs on pull requests that change C++ (corpus replay, then one minute
-per target) and every night (ten minutes per target, or what the manual run asks for). The
-nightly run keeps the corpus it grew in the Actions cache, so every later run starts from it. A
-crash fails the run, and the crashing input is attached to it as the `fuzz-crashes` artifact.
+The `Fuzz C++` job of `.github/workflows/ci.yml` runs on every pull request and push to main once
+the C++ build and tests passed, and fuzzes each target for a minute. `.github/workflows/fuzz.yml`
+fuzzes ten minutes per target every night, or what the manual run asks for, and keeps the corpus
+it grew in the Actions cache, so every later run starts from it. Both go through
+`.github/actions/fuzz`: it builds only the fuzz binaries, and takes them from the cache when the
+sources did not change. A crash fails the run, and the crashing input is attached to it as the
+`fuzz-crashes` artifact.
 
 ## When the fuzzer finds a bug
 

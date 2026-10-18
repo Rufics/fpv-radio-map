@@ -52,10 +52,10 @@ jobs:
               .github/workflows/ci-report.yml|.github/CODEOWNERS|.github/pull_request_template.md) ;;
               .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*) ;;
               .dockerignore|.gitignore) ;;
-              fuzz/*|.github/workflows/fuzz.yml) ;;  # built and run by fuzz.yml
+              .github/workflows/fuzz.yml) ;;
               web/*) web=true ;;
               schemas/*|.github/workflows/ci.yml) cpp=true; web=true ;;
-              core/*|platform/*|modules/*|server/*|examples/*|data/*|CMakeLists.txt|.github/actions/cpp-deps/*) cpp=true ;;
+              core/*|platform/*|modules/*|server/*|examples/*|data/*|fuzz/*|CMakeLists.txt|.github/actions/cpp-deps/*|.github/actions/fuzz/*) cpp=true ;;
               *) echo "No rule for $f: building everything."; cpp=true; web=true ;;
             esac
           done
@@ -192,12 +192,28 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Fuzzes each target for a minute, and only once the C++ build and tests passed. The fuzz
+  # binaries are its own small build, taken from the cache when the sources did not change.
+  fuzz:
+    name: Fuzz C++
+    needs: cpp
+    if: needs.cpp.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/fuzz
+        with:
+          seconds: "60"
+
   # The gate: the one required check, red when any job above failed. Also writes the report to
   # the run summary and hands it to the comment job below.
   report:
     name: Test report
     if: always()
-    needs: [changes, cpp, coverage, web]
+    needs: [changes, cpp, coverage, fuzz, web]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -248,7 +264,7 @@ jobs:
   # is still in the run summary.
   comment:
     name: Post the CI report
-    needs: [changes, cpp, coverage, web, report]
+    needs: [changes, cpp, coverage, fuzz, web, report]
     if: >-
       always() &&
       !contains(needs.*.result, 'cancelled') &&
