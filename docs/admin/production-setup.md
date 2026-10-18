@@ -271,8 +271,8 @@ the admin token; see the [API reference](../api/openapi.yaml).
 
 ## 8. TLS
 
-Share links, PINs and the admin token must not travel over plain HTTP. Put a TLS reverse proxy
-in front of `web`, and let only that proxy reach it.
+Share links, PINs and the admin token must not travel over plain HTTP. Put your TLS reverse
+proxy (or load balancer) in front of `web`, and let only that proxy reach it.
 
 Bind `web` to localhost. In `deploy/.env`:
 
@@ -284,40 +284,41 @@ RFMAP_HTTP_PORT=127.0.0.1:8088
 cd ~/fpv-radio-map/deploy && docker compose up -d
 ```
 
-Then install Caddy (<https://caddyserver.com/docs/install>) and put this in
-`/etc/caddy/Caddyfile`, with your domain:
+Point the proxy at `http://127.0.0.1:8088` for your domain. It must:
 
+- forward every path (`/`, `/api/`, `/tiles/`) and keep the `Range` header;
+- not compress `.pmtiles` responses;
+- add the visitor's address to `X-Forwarded-For` (nginx:
+  `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`).
+
+**Tell `web` the proxy's address,** or rfmap-server sees every visitor with the proxy's address
+and all visitors share the per-address rate limits. A proxy on this machine reaches `web` from
+the Docker network's gateway, in `172.16.0.0/12`. Create `deploy/nginx-realip.conf`:
+
+```nginx
+# Your reverse proxy, as nginx sees it. nginx takes the client's address from the
+# X-Forwarded-For header only on connections from these addresses.
+set_real_ip_from 172.16.0.0/12;
+real_ip_header X-Forwarded-For;
 ```
-maps.example.org {
-	reverse_proxy 127.0.0.1:8088
-}
-```
 
-```sh
-sudo systemctl reload caddy
-```
-
-Caddy gets and renews the certificate by itself, and passes HTTP Range requests through without
-compressing them, as PMTiles need. Any other proxy works too: forward everything to
-`127.0.0.1:8088`, keep the `Range` header, and do not gzip `.pmtiles`.
-
-**Known limitation.** Behind a proxy on the same host, rfmap-server sees every visitor with the
-proxy's address, so all visitors share the per-address rate limits (`rateLimits` in
-[the configuration](deploy.md#3-configuration)). The PIN lockout counts per share link and is
-not affected. If your users get `429 Too Many Requests`, raise the limits with
-`deploy/docker-compose.override.yml`, which Compose reads next to `docker-compose.yml`:
+and `deploy/docker-compose.override.yml`, which Compose reads next to `docker-compose.yml`:
 
 ```yaml
 services:
-  rfmap-server:
-    environment:
-      RFMAP__RATELIMITS__OPEN: '{"perMinute": 60, "burst": 30}'
-      RFMAP__RATELIMITS__CALC: '{"perMinute": 600, "burst": 120}'
-      RFMAP__RATELIMITS__COVERAGE: '{"perMinute": 30, "burst": 10}'
+  web:
+    volumes:
+      - ./nginx-realip.conf:/etc/nginx/conf.d/realip.conf:ro
 ```
 
-Then run `docker compose up -d`. The defaults are in
-[`server.example.json`](../../server/config/server.example.json).
+```sh
+cd ~/fpv-radio-map/deploy && docker compose up -d
+```
+
+Check it: open the site through the proxy, then run `docker compose logs web | tail -3`. Each
+line must start with your own address, not `172.x.x.x`. A proxy on another machine, and the
+address range to use when the gateway is not in `172.16.0.0/12`, are covered under
+[Behind a reverse proxy](deploy.md#behind-a-reverse-proxy).
 
 ## 9. Weather
 
