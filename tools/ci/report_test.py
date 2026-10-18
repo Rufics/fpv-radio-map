@@ -6,8 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from report import (MARKER, build_report, changed_line_coverage, component_of, md, normalize_jobs,
-                    parse_coverage, parse_diff, parse_junit, read_capped)
+from junit import TestCase
+from report import (MARKER, TestDetails, build_report, changed_line_coverage, code_block, component_of, html_text,
+                    md, normalize_jobs, parse_coverage, parse_diff, parse_junit, read_capped)
 
 
 A_CPP = "core/rf-core/src/a.cpp"
@@ -30,7 +31,9 @@ class JunitTest(unittest.TestCase):
         r = parse_junit('<testsuites tests="3"><testcase classname="A" name="ok"/>'
                         '<testcase classname="A" name="bad"><failure/></testcase>'
                         '<testcase name="off"><skipped/></testcase></testsuites>')
+        cases = r.pop("cases")
         self.assertEqual(r, {"total": 3, "failed": ["A › bad"], "skipped": 1, "passed": 1})
+        self.assertEqual([c.outcome for c in cases], ["passed", "failed", "skipped"])
 
 
 class CoverageTest(unittest.TestCase):
@@ -148,7 +151,7 @@ class ReportTest(unittest.TestCase):
                      "failed": ["Geo › <b>Breaks</b>"]}],
         )
         self.assertRegex(out, r"(?m)^### ❌ CI failed: 1 test failed$")
-        self.assertIn("- C++: Geo › &lt;b&gt;Breaks&lt;/b&gt;", out)
+        self.assertIn("- C++ · Geo › &lt;b&gt;Breaks&lt;/b&gt;", out)
 
     def test_build_failing_before_its_tests_says_so(self):
         out = build_report(jobs={"cpp": {"result": "failure"}})
@@ -160,6 +163,70 @@ class ReportTest(unittest.TestCase):
                                  "web": {"result": "skipped"}})
         self.assertIn("Nothing to build", out)
         self.assertNotIn("| Check |", out)
+
+
+def failed_case(reason, module="rf-core", name="Units.Adds"):
+    return TestCase(name=name, outcome="failed", module=module, seconds=0.5, reason=reason)
+
+
+def cpp_suite(*cases):
+    failed = [c.name for c in cases if c.failed]
+    return {"file": "cpp.xml", "label": "C++", "total": len(cases), "passed": len(cases) - len(failed),
+            "skipped": 0, "failed": failed, "cases": list(cases)}
+
+
+class TestDetailsTest(unittest.TestCase):
+    def test_failure_shows_its_reason_and_links_its_line(self):
+        reason = "core/rf-core/tests/units_test.cpp:11: Failure\nExpected equality"
+        out = build_report(jobs={"cpp": {"result": "failure"}}, suites=[cpp_suite(failed_case(reason))],
+                           sha="0123456789abcdef", repo="o/r")
+        self.assertIn("<details open><summary><b>Failed tests</b> (1)</summary>", out)
+        self.assertIn("<details><summary>C++ · rf-core · Units.Adds</summary>", out)
+        self.assertIn("[`core/rf-core/tests/units_test.cpp:11`](https://github.com/o/r/blob/0123456789abcdef/"
+                      "core/rf-core/tests/units_test.cpp#L11)", out)
+        self.assertIn(f"```text\n{reason}\n```", out)
+
+    def test_reason_cannot_close_its_code_block(self):
+        self.assertEqual(code_block("a ``` b ```` c"), ["`````text", "a ``` b ```` c", "`````"])
+
+    def test_summary_text_is_plain(self):
+        s = html_text('<img src=x> "q" @maintainer http://evil')
+        self.assertNotIn("<img", s)
+        self.assertNotIn('"', s)
+        self.assertNotIn("@maintainer", s)
+        self.assertNotIn("://", s)
+
+    def test_reasons_stop_at_the_budget(self):
+        cases = [failed_case("x" * 2900, name=f"T.{i}") for i in range(15)]
+        out = "\n".join(TestDetails([cpp_suite(*cases)]).failures_section())
+        self.assertLess(len(out), 35000)
+        self.assertIn("The reason is in the log of the workflow run.", out)
+
+    def test_many_failures_are_cut(self):
+        cases = [failed_case("", name=f"T.{i}") for i in range(25)]
+        out = "\n".join(TestDetails([cpp_suite(*cases)]).failures_section())
+        self.assertIn("… and 5 more failed tests", out)
+
+    def test_modules_follow_the_coverage_areas(self):
+        suites = [
+            cpp_suite(TestCase("S.a", "passed", "server", 1.0), failed_case("why", "fpv.relay"),
+                      TestCase("C.a", "passed", "rf-core", 0.25), TestCase("U.a", "skipped", None)),
+            {"file": "web-ui-kit.xml", "label": "Web: ui-kit", "total": 1, "passed": 1, "skipped": 0, "failed": [],
+             "cases": [TestCase("btn", "passed")]},
+        ]
+        section = TestDetails(suites).modules_section()
+        rows = [line for line in section if line.startswith("| ") and "Module" not in line]
+        self.assertEqual(rows, [
+            "| C++: rf-core | ✅ | 1 | 0 | 0 | 0.2 s |",
+            "| C++: fpv.relay | ❌ | 0 | **1** | 0 | 0.5 s |",
+            "| C++: server | ✅ | 1 | 0 | 0 | 1.0 s |",
+            "| C++ | ✅ | 0 | 0 | 1 | 0.0 s |",
+            "| Web: ui-kit | ✅ | 1 | 0 | 0 | 0.0 s |",
+        ])
+
+    def test_summaries_without_cases_have_no_module_table(self):
+        suite = {"file": "cpp.xml", "label": "C++", "total": 1, "passed": 1, "skipped": 0, "failed": []}
+        self.assertEqual(TestDetails([suite]).modules_section(), [])
 
 
 if __name__ == "__main__":

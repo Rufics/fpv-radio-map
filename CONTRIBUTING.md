@@ -112,8 +112,12 @@ The comment on the pull request is kept up to date on every push. It starts with
 or failed, the number of tests, the C++ line coverage, and how much of the changed C++ lines the
 tests run. Below it:
 
+- failed tests, open at the top, when there are any: each folds out to the reason (the failed
+  assertion of GoogleTest, the message and stack of Vitest or Python) and a link to the line it
+  points at, so you rarely need to open the job log;
 - a table of the checks, each linked to its log, with the test counts;
-- failed tests by name, open at the top, when there are any;
+- the test counts per module, folded away: each C++ module (`rf-core`, `rf-ext`, `rfmod`, every
+  `fpv.<module>`, `server`, the example module), both web projects and the Python CI tools;
 - C++ line and function coverage for core (`rf-core`, `rf-ext`), the FPV modules, the platform
   (`rfmod`) and the server, with a per-component breakdown folded away;
 - the changed lines that no test runs, linked to the exact lines of the commit. This list is the
@@ -123,6 +127,12 @@ tests run. Below it:
 Coverage is reported, not enforced: 🟢 is 80% or more, 🟡 60–80%, 🔴 below 60%. Test code, the
 example module and the sandboxed module worker are not counted. The same report is in the run
 summary of the `Test report` job.
+
+The test details come from the JUnit files of the runs: `ctest --output-junit`, the Vitest junit
+reporter and `tools/ci/unittest_junit.py` for the Python tools. A C++ test belongs to the module
+named by its first CTest label, so a new test target needs `PROPERTIES LABELS <module>` on its
+`gtest_discover_tests()` (or `LABELS` on its `add_test()`); `ctest -L <module>` runs one module
+locally.
 
 To see coverage locally:
 

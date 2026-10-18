@@ -6,7 +6,8 @@
 The script takes no arguments and reads only fixed names under the current directory, so no
 input can point it at another file:
 
-    tests/*.xml             JUnit results (ctest --output-junit, vitest junit reporter)
+    tests/*.xml             JUnit results (ctest --output-junit, vitest junit reporter,
+                            unittest_junit.py); see junit.py
     coverage/coverage.json  gcovr JSON report of the instrumented C++ build
     coverage/changes.diff   `git diff --unified=0` of the pull request
     coverage/commit.txt     the commit the coverage was measured on; uncovered lines link to it
@@ -29,6 +30,11 @@ import re
 import sys
 from pathlib import Path
 
+# `python3 -I` leaves the script's folder off the path; junit.py sits next to this file in the
+# trusted checkout, never in the data folder this script runs in.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from junit import JUnitParser, SourceLocation, TestCase  # noqa: E402
+
 MARKER = "<!-- rfmap-ci-report -->"
 MAX_INPUT_BYTES = 64 * 1024 * 1024
 MAX_LISTED = 20
@@ -38,7 +44,12 @@ JOB_NAMES = {"clang-tidy": "C++ static analysis", "cpp": "C++ build and tests", 
              "fuzz": "Fuzz C++", "web": "Web build and tests"}
 # Jobs that only orchestrate the run; they are not results worth a row.
 HIDDEN_JOBS = {"changes", "report", "Changed parts", "Test report"}
-SUITES = {"cpp.xml": "C++", "web-ui-kit.xml": "Web: ui-kit", "web-fpv-app.xml": "Web: fpv-app"}
+SUITES = {"cpp.xml": "C++", "web-ui-kit.xml": "Web: ui-kit", "web-fpv-app.xml": "Web: fpv-app",
+          "python-ci.xml": "Python: tools/ci"}
+# CTest labels (the module of a C++ test) in the order of the coverage areas.
+TEST_MODULE_ORDER = ("rf-core", "rf-ext", "rfmod", "fpv", "server", "example")
+# The failure excerpts of one report, so the comment stays far below GitHub's 65536 characters.
+MAX_REASONS_CHARS = 30000
 ICONS = {"success": "✅", "skipped": "⏭️", "cancelled": "🚫", "failure": "❌"}
 DETAILS_END = "</details>"
 FPV = "FPV modules"
@@ -131,57 +142,15 @@ def as_int(v):
 # --------------------------------------------------------------------------------------------
 # Tests (JUnit)
 
-TESTCASE = re.compile(r"<testcase\b([^>]*?)(/>|>(.*?)</testcase>)", re.S)
-ROOT = re.compile(r"<testsuites?\b[^>]*>")
-
-
-def _attr(tag, name):
-    m = re.search(rf'\s{name}="([^"]*)"', tag)
-    return m.group(1) if m else None
-
-
-def _unescape_xml(s):
-    for a, b in (("&quot;", '"'), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
-        s = s.replace(a, b)
-    return s
-
-
-FAILED_BODY = re.compile(r"<(failure|error)\b")
-FAILED_STATUS = re.compile(r'\sstatus="fail(ed)?"')
-SKIPPED_BODY = re.compile(r"<skipped\b")
-SKIPPED_STATUS = re.compile(r'\sstatus="(notrun|disabled|skipped)"')
-
-
-def _case_name(attrs):
-    name = _unescape_xml(_attr(attrs, "name") or "?")
-    cls = _unescape_xml(_attr(attrs, "classname") or "")
-    return f"{cls} › {name}" if cls and cls != name else name
-
-
-def _outcome(attrs, body):
-    """"failed", "skipped" or "passed" for one test case."""
-    if FAILED_BODY.search(body) or FAILED_STATUS.search(attrs):
-        return "failed"
-    if SKIPPED_BODY.search(body) or SKIPPED_STATUS.search(attrs):
-        return "skipped"
-    return "passed"
-
-
-def _declared_total(xml):
-    """The test count the runner wrote on the root element, or 0."""
-    root = ROOT.search(xml)
-    return max(as_int(_attr(root.group(0), "tests")), 0) if root else 0
-
-
 def parse_junit(xml):
-    """Totals and failed test names of one JUnit file."""
-    cases = TESTCASE.findall(xml)
-    outcomes = [(_outcome(attrs, body), attrs) for attrs, _, body in cases]
-    failed = [_case_name(attrs) for outcome, attrs in outcomes if outcome == "failed"]
-    skipped = sum(1 for outcome, _ in outcomes if outcome == "skipped")
+    """Totals, failed test names and the test cases of one JUnit file."""
+    parsed = JUnitParser().parse(xml)
+    failed = [c.name for c in parsed.cases if c.failed]
+    skipped = sum(1 for c in parsed.cases if c.skipped)
     # Prefer the count the runner wrote on the root element; fall back to counting cases.
-    total = max(_declared_total(xml) or len(cases), len(failed) + skipped)
-    return {"total": total, "failed": failed, "skipped": skipped, "passed": total - len(failed) - skipped}
+    total = max(parsed.declared_total or len(parsed.cases), len(failed) + skipped)
+    return {"total": total, "failed": failed, "skipped": skipped, "passed": total - len(failed) - skipped,
+            "cases": list(parsed.cases)}
 
 
 def read_suites():
@@ -347,6 +316,133 @@ def normalize_jobs(value):
 
 
 # --------------------------------------------------------------------------------------------
+# Test details
+
+
+def html_text(text, limit=200):
+    """Plain text for an HTML element such as <summary>: no tags, links or mentions."""
+    s = re.sub(r"[\x00-\x1f\x7f]+", " ", str(text)).strip()
+    if len(s) > limit:
+        s = s[: limit - 1] + "…"
+    s = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return s.replace("@", "@&#8203;").replace("://", ":&#8203;//")
+
+
+def code_block(text):
+    """A fenced block that no backtick run in the text can close."""
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return [f"{fence}text", text, fence]
+
+
+class ModuleTally:
+    """Test counts of one module of a suite."""
+
+    def __init__(self, label):
+        self.label = label
+        self.passed = self.failed = self.skipped = 0
+        self.seconds = 0.0
+
+    def add(self, case):
+        if case.failed:
+            self.failed += 1
+        elif case.skipped:
+            self.skipped += 1
+        else:
+            self.passed += 1
+        self.seconds += case.seconds
+
+    def row(self):
+        icon = ICONS["failure"] if self.failed else ICONS["success"]
+        failed = f"**{self.failed}**" if self.failed else "0"
+        return (f"| {md(self.label, 80)} | {icon} | {self.passed} | {failed} | {self.skipped} "
+                f"| {self.seconds:.1f} s |")
+
+
+class TestDetails:
+    """The failed tests with their reasons, and the test counts per module."""
+
+    def __init__(self, suites, repo=None, commit=None):
+        self.suites = suites
+        self.repo = repo
+        self.commit = commit
+        self.failed = [(s["label"], c) for s in suites for c in self.cases_of(s) if c.failed]
+
+    @staticmethod
+    def cases_of(suite):
+        """The test cases of a suite; a summary without them still lists its failed names."""
+        if suite.get("cases"):
+            return suite["cases"]
+        return [TestCase(name=n, outcome="failed") for n in suite.get("failed", [])]
+
+    def failures_section(self):
+        if not self.failed:
+            return []
+        out = [f"<details open><summary><b>Failed tests</b> ({len(self.failed)})</summary>", ""]
+        budget = MAX_REASONS_CHARS
+        for suite, case in self.failed[:MAX_LISTED]:
+            lines, used = self._failure(suite, case, budget)
+            out += lines
+            budget -= used
+        if len(self.failed) > MAX_LISTED:
+            out += [f"… and {len(self.failed) - MAX_LISTED} more failed tests; see the workflow run.", ""]
+        return out + [DETAILS_END, ""]
+
+    def _failure(self, suite, case, budget):
+        """The lines of one failed test, and how much of the reason budget they use."""
+        where = " · ".join(p for p in (suite, case.module, case.name) if p)
+        if not case.reason:
+            return [f"- {md(where, 400)}", ""], 0
+        out = [f"<details><summary>{html_text(where, 400)}</summary>", ""]
+        location = SourceLocation.find(case.reason)
+        if location and safe_path(location[0]):
+            out += [self._location_link(*location), ""]
+        if len(case.reason) <= budget:
+            out += [*code_block(case.reason), ""]
+            used = len(case.reason)
+        else:
+            out += ["The reason is in the log of the workflow run.", ""]
+            used = 0
+        return out + [DETAILS_END, ""], used
+
+    def _location_link(self, path, line):
+        text = f"`{path}:{line}`"
+        if not (self.repo and self.commit):
+            return text
+        return f"[{text}](https://github.com/{self.repo}/blob/{self.commit}/{path}#L{line})"
+
+    def modules_section(self):
+        tallies = self._tallies()
+        if not tallies:
+            return []
+        out = ["<details><summary>Tests per module</summary>", "",
+               "| Module | Result | Passed | Failed | Skipped | Time |", "|---|:---:|---:|---:|---:|---:|"]
+        out += [t.row() for t in tallies]
+        return out + ["", DETAILS_END, ""]
+
+    def _tallies(self):
+        tallies = {}
+        for suite in self.suites:
+            for case in suite.get("cases") or []:
+                label = self._module_label(suite["label"], case.module)
+                tallies.setdefault(label, ModuleTally(label)).add(case)
+        return sorted(tallies.values(), key=lambda t: self._order(t.label))
+
+    @staticmethod
+    def _module_label(suite, module):
+        return f"{suite}: {module}" if module else suite
+
+    @staticmethod
+    def _order(label):
+        """C++ modules in the order of the coverage areas, then the other suites by name."""
+        suite, _, module = label.partition(": ")
+        if suite != "C++":
+            return (1, len(TEST_MODULE_ORDER), label)
+        rank = next((i for i, p in enumerate(TEST_MODULE_ORDER) if module.startswith(p)), len(TEST_MODULE_ORDER))
+        return (0, rank, label)
+
+
+# --------------------------------------------------------------------------------------------
 # Report
 
 
@@ -362,12 +458,14 @@ def build_report(jobs=None, suites=(), coverage=None, diff=None, sha=None, commi
     ctx["commit"] = checked(SAFE_SHA, commit) or ctx["sha"]
     ctx["cov"] = summarize_coverage(coverage) if coverage else None
     ctx["changed"] = changed_line_coverage(coverage, diff) if ctx["cov"] and diff is not None else None
-    ctx["failed_tests"] = [(s["label"], n) for s in ctx["suites"] for n in s["failed"]]
+    details = TestDetails(ctx["suites"], ctx["repo"], ctx["commit"])
+    ctx["failed_tests"] = details.failed
     ctx["ran"] = any(j["result"] != "skipped" for j in ctx["jobs"]) or bool(ctx["suites"])
 
-    lines = [MARKER, *_headline(ctx), *_failed_tests(ctx["failed_tests"])]
+    lines = [MARKER, *_headline(ctx), *details.failures_section()]
     if ctx["ran"]:
         lines += _jobs_table(ctx)
+    lines += details.modules_section()
     if ctx["cov"]:
         lines += _coverage_section(ctx)
     lines += _footer(checked(SAFE_URL, run_url), checked(SAFE_URL, coverage_url))
@@ -406,16 +504,6 @@ def _key_facts(ctx):
         c = ctx["changed"]
         facts.append(f"changed lines **{fmt_pct(pct(c['covered'], c['total']))}** covered")
     return facts
-
-
-def _failed_tests(failed):
-    if not failed:
-        return []
-    out = ["<details open><summary><b>Failed tests</b></summary>", ""]
-    out += [f"- {md(suite, 40)}: {md(name, 300)}" for suite, name in failed[:MAX_LISTED]]
-    if len(failed) > MAX_LISTED:
-        out.append(f"- … and {len(failed) - MAX_LISTED} more")
-    return out + ["", DETAILS_END, ""]
 
 
 def _suites_of(job, suites):
