@@ -4,9 +4,10 @@
 # builds and signs the FPV modules with the owner key, creates the tag and the GitHub release with
 # generated notes and the signed packages, and publishes the Docker images with that version.
 #
-# Needs, in Settings → Secrets and variables → Actions:
-#   variable RFMAP_OWNER_PUBKEY      contents of owner.pub   (rfmod keygen --out owner)
-#   secret   RFMAP_OWNER_SECRET_KEY  contents of owner.secret
+# Needs:
+#   repository variable RFMAP_OWNER_PUBKEY        contents of owner.pub   (rfmod keygen --out owner)
+#   secret RFMAP_OWNER_SECRET_KEY in the `release` environment: contents of owner.secret
+# Only the release job enters that environment, so no other job or workflow can read the key.
 # A release never falls back to the public development key.
 name: Release
 
@@ -39,14 +40,12 @@ jobs:
         run: |
           echo "::error::Releases are made from main only (this run is on $GITHUB_REF)."
           exit 1
-      - name: Owner key is configured
+      - name: Owner public key is configured
         if: inputs.dry_run == false
         env:
           PUB: ${{ vars.RFMAP_OWNER_PUBKEY }}
-          SECRET_SET: ${{ secrets.RFMAP_OWNER_SECRET_KEY != '' }}
         run: |
           case "$PUB" in rfmod-ed25519-pub:*) ;; *) echo "::error::Set the repository variable RFMAP_OWNER_PUBKEY to the contents of owner.pub."; exit 1;; esac
-          [ "$SECRET_SET" = true ] || { echo "::error::Set the repository secret RFMAP_OWNER_SECRET_KEY to the contents of owner.secret."; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -86,6 +85,7 @@ jobs:
     needs: plan
     if: needs.plan.outputs.version != '' && inputs.dry_run == false
     uses: ./.github/workflows/ci.yml
+    # ci.yml's comment job asks for pull-requests: write; it runs on pull requests only.
     permissions:
       contents: read
       pull-requests: write
@@ -94,6 +94,9 @@ jobs:
     name: Build, sign and release v${{ needs.plan.outputs.version }}
     needs: [plan, ci]
     runs-on: ubuntu-24.04
+    # The only job that reads the signing key. The environment allows main only and can require a
+    # maintainer's approval (docs/maintainers/repository-settings.md).
+    environment: release
     permissions:
       contents: write
       issues: write
@@ -101,6 +104,11 @@ jobs:
     env:
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
+      - name: Owner secret key is configured
+        env:
+          SECRET_SET: ${{ secrets.RFMAP_OWNER_SECRET_KEY != '' }}
+        run: |
+          [ "$SECRET_SET" = true ] || { echo "::error::Set the secret RFMAP_OWNER_SECRET_KEY in the release environment to the contents of owner.secret."; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
