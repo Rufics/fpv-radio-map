@@ -80,12 +80,7 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
 - C++ coverage: the same tests on an instrumented build, reported per area (core, FPV modules,
   platform, server) and for the lines the pull request changes;
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
-- the pull request title against Conventional Commits (its own check, re-run when the title is edited);
-- copied code: the changed files are matched file by file and snippet by snippet against the SCANOSS
-  open source knowledge base (`.github/workflows/code-origin.yml`, also weekly over the whole tree).
-  Only fingerprints are sent. A match marks the `Policy Check: Undeclared` or `Policy Check: Copyleft`
-  run as action required; accept a reviewed match in `scanoss.json`. Pull requests from forks are
-  not scanned (their token cannot write checks); the weekly run covers them once merged.
+- the pull request title against Conventional Commits (its own check, re-run when the title is edited).
 
 ### The CI report
 
