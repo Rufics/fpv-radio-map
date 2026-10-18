@@ -284,7 +284,10 @@ RFMAP_HTTP_PORT=127.0.0.1:8088
 cd ~/fpv-radio-map/deploy && docker compose up -d
 ```
 
-Point the proxy at `http://127.0.0.1:8088` for your domain. It must:
+Run the proxy on the host (a system package), not in a container behind published ports:
+there Docker hides the address of every IPv6 visitor, and under rootless Docker of every
+visitor, so they would all share one rate limit. Point it at `http://127.0.0.1:8088` for your
+domain. It must:
 
 - forward every path (`/`, `/api/`, `/tiles/`) and keep the `Range` header;
 - not compress `.pmtiles` responses;
@@ -316,7 +319,9 @@ cd ~/fpv-radio-map/deploy && docker compose up -d
 ```
 
 Check it: open the site through the proxy, then run `docker compose logs web | tail -3`. Each
-line must start with your own address, not `172.x.x.x`. A proxy on another machine, and the
+line must start with your own address, not `172.x.x.x`. Keep `RFMAP_HTTP_PORT` on `127.0.0.1`
+with this file in place: on a public port, visitors that Docker forwards from the gateway
+could set their own address. A proxy on another machine, and the
 address range to use when the gateway is not in `172.16.0.0/12`, are covered under
 [Behind a reverse proxy](deploy.md#behind-a-reverse-proxy).
 

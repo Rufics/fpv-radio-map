@@ -95,8 +95,15 @@ file.
    Docker gives its networks addresses in `172.16.0.0/12` by default. Trust that whole range, so
    the setting survives a `docker compose down`, which can give the network a new address. If
    the gateway is outside that range, use the network's subnet
-   (`{{(index .IPAM.Config 0).Subnet}}`) instead. For a proxy on another machine, use that
-   machine's address, and let only it reach the published port (firewall).
+   (`{{(index .IPAM.Config 0).Subnet}}`) instead. Under rootless Docker the proxy may show up
+   with yet another address: use the one the first field of a `docker compose logs web` line
+   shows for a request through the proxy. For a proxy on another machine, use that machine's
+   address, and let only it reach the published port (firewall).
+
+   Trust the Docker range only while `RFMAP_HTTP_PORT` is bound to `127.0.0.1`. If the port is
+   published on a public address, visitors that Docker forwards through `docker-proxy` (IPv6
+   visitors when the Docker daemon has IPv6 off, which is the default, and every visitor under
+   rootless Docker) also arrive from the gateway, and could set their own `X-Forwarded-For`.
 2. Write `deploy/nginx-realip.conf`:
 
    ```nginx
@@ -117,7 +124,15 @@ file.
    `docker compose logs web` start with your own address.
 
 The proxy must add the visitor's address as the last `X-Forwarded-For` entry. nginx does that
-with `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`. Visitors cannot pick their
+with `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
+
+The proxy itself must see the visitors' real addresses. Run it on the host, as a system
+service, or in a container with `network_mode: host`. A proxy in a container behind published
+ports (`80:80`, `443:443`) sees the same `docker-proxy` gateway address for every IPv6 visitor
+when the Docker daemon has IPv6 off, and for every visitor under rootless Docker. With an AAAA
+record on the domain, all IPv6 visitors would then share one rate limit. If the proxy has to
+stay in such a container, enable IPv6 in the Docker daemon and on the proxy's network (see
+<https://docs.docker.com/engine/daemon/ipv6/>), or publish no AAAA record. Visitors cannot pick their
 address by sending the header themselves: nginx in `web` uses it only on connections from the
 trusted addresses, and takes the last entry, which the proxy wrote. Trust only addresses your
 proxy uses: anyone who can connect from a trusted address can choose their rate-limit bucket.
