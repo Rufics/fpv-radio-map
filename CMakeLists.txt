@@ -12,12 +12,23 @@ list(APPEND CMAKE_MODULE_PATH /usr/share/cmake/geographiclib)
 
 option(RFMAP_BUILD_TESTS "Build unit tests" ON)
 option(RFMAP_BUILD_SERVER "Build the HTTP server" ON)
+option(RFMAP_COVERAGE "Instrument the build for line coverage (GCC or Clang, CI only)" OFF)
 
 if(MSVC)
   add_compile_options(/W4 /permissive-)
 else()
   # -ffp-contract=off keeps results identical across compilers: no fused multiply-add reordering.
   add_compile_options(-Wall -Wextra -Wpedantic -Wconversion -Wshadow -ffp-contract=off)
+endif()
+
+if(RFMAP_COVERAGE)
+  if(MSVC)
+    message(FATAL_ERROR "RFMAP_COVERAGE needs GCC or Clang.")
+  endif()
+  # No optimisation, so every source line maps to code. Atomic counters keep the counts right in
+  # the multi-threaded server and coverage code.
+  add_compile_options(--coverage -O0 -g -fprofile-update=atomic)
+  add_link_options(--coverage)
 endif()
 
 if(RFMAP_BUILD_TESTS)
