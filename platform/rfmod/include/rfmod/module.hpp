@@ -87,9 +87,9 @@ struct ModuleAdapter {
     /// Null if memory runs out, so no exception crosses the ABI.
     static char* copy(const std::string& s) noexcept {
         try {
-            auto out = std::make_unique<char[]>(s.size() + 1);
-            std::memcpy(out.get(), s.c_str(), s.size() + 1);
-            return out.release();
+            char* out = std::allocator<char>().allocate(s.size() + 1);
+            std::memcpy(out, s.c_str(), s.size() + 1);
+            return out;
         } catch (const std::bad_alloc&) {
             return nullptr;
         }
@@ -141,8 +141,9 @@ struct ModuleAdapter {
     }
 
     static void freeString(char* s) {
-        // Takes back the ownership copy() released; the destructor frees the string.
-        const std::unique_ptr<char[]> owned(s);
+        // Hands back what copy() allocated. Its size is the string plus the terminator, since
+        // every string it copies is JSON text, which never holds a raw NUL.
+        if (s) std::allocator<char>().deallocate(s, std::strlen(s) + 1);
     }
 
     static void shutdown() {
