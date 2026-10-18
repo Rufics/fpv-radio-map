@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <fstream>
@@ -43,9 +44,11 @@ GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), c
     const double nd = band_->GetNoDataValue(&hasNoData);
     if (hasNoData) noData_ = nd;
 
-    double gt[6];
-    if (dataset_->GetGeoTransform(gt) != CE_None) throw std::runtime_error(file.string() + " has no geotransform");
-    if (!GDALInvGeoTransform(gt, inverse_)) throw std::runtime_error(file.string() + ": geotransform not invertible");
+    std::array<double, 6> gt{};
+    if (dataset_->GetGeoTransform(gt.data()) != CE_None) throw std::runtime_error(file.string() + " has no geotransform");
+    if (!GDALInvGeoTransform(gt.data(), inverse_.data())) {
+        throw std::runtime_error(file.string() + ": geotransform not invertible");
+    }
 
     const OGRSpatialReference* srs = dataset_->GetSpatialRef();
     if (!srs) throw std::runtime_error(file.string() + " has no coordinate reference system");

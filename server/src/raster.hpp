@@ -4,6 +4,7 @@
 
 #include <rfcore/terrain_profile.hpp>
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -59,7 +60,7 @@ private:
     GDALDataset* dataset_ = nullptr;
     GDALRasterBand* band_ = nullptr;
     OGRCoordinateTransformation* toRaster_ = nullptr;  ///< null when the raster is in WGS84 lon/lat
-    double inverse_[6]{};
+    std::array<double, 6> inverse_{};
     int width_ = 0, height_ = 0, blockW_ = 0, blockH_ = 0;
     std::optional<double> noData_;
     rfcore::Metres resolution_{0.0};
