@@ -7,7 +7,7 @@
   "author": "rfmap examples",
   "license": "MIT",
   "lifecycle": "stable",
-  "abi": 1,
+  "abi": 2,
   "host": ">=0.1.0 <1.0.0",
   "requires": [],
   "provides": ["loss.contributor"],
