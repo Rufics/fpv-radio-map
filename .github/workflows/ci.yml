@@ -86,8 +86,8 @@ jobs:
           retention-days: 7
 
   # The same tests on an instrumented build (-O0 --coverage), so the Release job above stays the
-  # gate for the binaries that ship. Runs on the pull request's head commit, not the merge
-  # commit, so the line numbers match the "Files changed" view and the links in the report.
+  # gate for the binaries that ship. Like every job here it tests the merge commit; the report
+  # links the uncovered lines to that commit, so the line numbers match.
   coverage:
     name: C++ coverage
     needs: changes
@@ -96,9 +96,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-          fetch-depth: 0
+          fetch-depth: 2
       - uses: ./.github/actions/cpp-deps
         with:
           extra: gcovr
@@ -123,12 +122,13 @@ jobs:
             --html-details coverage/html/index.html --html-title 'fpv-radio-map C++ coverage' \
             --print-summary \
             build
-      # Lines this pull request adds or changes, numbered as in its head commit.
+      # Lines this pull request adds or changes: the merge commit against its first parent, the
+      # base branch it was merged onto.
       - name: List the changed lines
         if: success() || failure()
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-        run: git diff --unified=0 --no-color --no-ext-diff --no-renames "$BASE...HEAD" > coverage/changes.diff
+        run: |
+          git diff --unified=0 --no-color --no-ext-diff --no-renames HEAD^1 HEAD > coverage/changes.diff
+          git rev-parse HEAD > coverage/commit.txt
       - if: success() || failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -136,6 +136,7 @@ jobs:
           path: |
             coverage/coverage.json
             coverage/changes.diff
+            coverage/commit.txt
           if-no-files-found: ignore
           retention-days: 7
       - if: success() || failure()
@@ -215,7 +216,7 @@ jobs:
         run: |
           node tools/ci/report.mjs --jobs "$NEEDS" --results "$RESULTS/tests" \
             --coverage "$RESULTS/coverage/coverage.json" --diff "$RESULTS/coverage/changes.diff" \
-            --sha "$REPORT_SHA" --repo "$GITHUB_REPOSITORY" --run-url "$REPORT_RUN_URL" >> "$GITHUB_STEP_SUMMARY"
+            --commit-file "$RESULTS/coverage/commit.txt" --sha "$REPORT_SHA" --repo "$GITHUB_REPOSITORY" --run-url "$REPORT_RUN_URL" >> "$GITHUB_STEP_SUMMARY"
       - name: Fail when a job failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1

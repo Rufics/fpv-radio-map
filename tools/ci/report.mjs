@@ -9,6 +9,7 @@
 // --results   folder of JUnit XML files (ctest --output-junit, vitest junit reporter).
 // --coverage  gcovr JSON report (gcovr --json) of the instrumented C++ build.
 // --diff      `git diff --unified=0` of the pull request, for the coverage of the changed lines.
+// --commit-file  the commit the coverage was measured on; the uncovered lines link to it.
 //
 // Every input may come from a pull request of a fork, so it is treated as untrusted data: sizes
 // are capped, nothing is executed, and every string that reaches the Markdown is escaped.
@@ -75,7 +76,7 @@ export function md(text, max = 200) {
 }
 
 /** Repository paths that are safe to show and to put in a URL. */
-const SAFE_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.+/-]{0,300}$/;
+const SAFE_PATH = /^\w[\w.+/-]{0,300}$/;
 export const safePath = (p) => typeof p === 'string' && SAFE_PATH.test(p) && !p.split('/').includes('..');
 
 const SAFE_SHA = /^[0-9a-f]{7,64}$/;
@@ -96,7 +97,11 @@ function readCapped(file) {
 
 const pct = (covered, total) => (total ? (100 * covered) / total : undefined);
 const fmtPct = (p) => (p === undefined ? '–' : `${p.toFixed(1)}%`);
-const dot = (p) => (p === undefined ? '⚪' : p >= 80 ? '🟢' : p >= 60 ? '🟡' : '🔴');
+function dot(p) {
+  if (p === undefined) return '⚪';
+  if (p >= 80) return '🟢';
+  return p >= 60 ? '🟡' : '🔴';
+}
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 // ---------------------------------------------------------------------------------------------
@@ -232,21 +237,29 @@ export function summarizeCoverage(files) {
 /** Added or modified line numbers per file of a unified diff: Map<path, Set<line>>. */
 export function parseDiff(diff) {
   const changed = new Map();
-  let current;
+  let lines;
   for (const line of diff.split('\n')) {
-    if (line.startsWith('+++ ')) {
-      const m = line.match(/^\+\+\+ b\/(.+)$/);
-      current = m && safePath(m[1]) ? m[1] : undefined;
-      if (current && !changed.has(current)) changed.set(current, new Set());
-      continue;
-    }
-    const h = current && line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
-    if (!h) continue;
-    const start = Number(h[1]);
-    const count = h[2] === undefined ? 1 : Number(h[2]);
-    for (let n = start; n < start + Math.min(count, 100000); n++) changed.get(current).add(n);
+    if (line.startsWith('+++ ')) lines = diffTarget(changed, line);
+    else if (lines) addHunk(lines, line);
   }
   return changed;
+}
+
+/** The changed-line set of the file a `+++` header names, or undefined for one not to track. */
+function diffTarget(changed, header) {
+  const path = (header.match(/^\+\+\+ b\/(.+)$/) ?? [])[1];
+  if (!safePath(path)) return undefined;
+  if (!changed.has(path)) changed.set(path, new Set());
+  return changed.get(path);
+}
+
+/** Adds the new-side lines of a hunk header (`@@ -a,b +c,d @@`); ignores any other line. */
+function addHunk(lines, line) {
+  const h = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+  if (!h) return;
+  const start = Number(h[1]);
+  const count = Math.min(h[2] === undefined ? 1 : Number(h[2]), 100000);
+  for (let n = start; n < start + count; n++) lines.add(n);
 }
 
 /** Coverage of the changed executable lines, with the uncovered ones as line ranges per file. */
@@ -294,13 +307,14 @@ export function normalizeJobs(input) {
 // ---------------------------------------------------------------------------------------------
 // Report
 
-export function buildReport({ jobs: rawJobs = {}, suites = [], coverage, diff, sha, repo, runUrl, coverageUrl } = {}) {
+export function buildReport({ jobs: rawJobs = {}, suites = [], coverage, diff, sha, commit, repo, runUrl, coverageUrl } = {}) {
   const ctx = {
     jobs: normalizeJobs(rawJobs),
     suites,
     sha: SAFE_SHA.test(sha ?? '') ? sha : undefined,
     repo: SAFE_REPO.test(repo ?? '') ? repo : undefined,
   };
+  ctx.commit = SAFE_SHA.test(commit ?? '') ? commit : ctx.sha;
   ctx.cov = coverage?.size ? summarizeCoverage(coverage) : undefined;
   ctx.changed = ctx.cov && diff ? changedLineCoverage(coverage, diff) : undefined;
   ctx.diff = diff;
@@ -359,7 +373,8 @@ function suiteCounts(s, prefixed) {
   const counts = [`${s.passed} passed`];
   if (s.failed.length) counts.push(`**${s.failed.length} failed**`);
   if (s.skipped) counts.push(`${s.skipped} skipped`);
-  return `${prefixed ? `${md(s.label, 40)}: ` : ''}${counts.join(', ')}`;
+  const prefix = prefixed ? `${md(s.label, 40)}: ` : '';
+  return prefix + counts.join(', ');
 }
 
 function jobDetails(job, { suites, cov }) {
@@ -389,11 +404,11 @@ function coverageRow(label, t, strong = false) {
   return `| ${b(label)} | ${dot(lp)} ${b(fmtPct(lp))} <sub>${t.linesCovered}/${t.lines}</sub> | ${b(fmtPct(fp))} <sub>${t.functionsCovered}/${t.functions}</sub> |`;
 }
 
-function coverageSection({ cov, changed, diff, repo, sha }) {
+function coverageSection({ cov, changed, diff, repo, commit }) {
   const out = ['#### C++ coverage', '', '| Area | Lines | Functions |', '|---|---:|---:|'];
   for (const a of AREAS) if (cov.areas.has(a.name)) out.push(coverageRow(a.label, cov.areas.get(a.name)));
   out.push(coverageRow('All C++', cov.total, true), '');
-  if (changed?.total) out.push(...changedLinesSection(changed, repo, sha));
+  if (changed?.total) out.push(...changedLinesSection(changed, repo, commit));
   else if (diff) out.push('**Changed lines:** this pull request changes no executable C++ line.', '');
   out.push(...componentsSection(cov.components));
   out.push('<sub>🟢 80% or more · 🟡 60–80% · 🔴 below 60%. Coverage is reported, not enforced. Test code is not counted.</sub>', '');
@@ -470,6 +485,7 @@ if (process.argv[1] && import.meta.url.endsWith(basename(process.argv[1]))) {
       repo: { type: 'string' },
       'run-url': { type: 'string' },
       'coverage-url': { type: 'string' },
+      'commit-file': { type: 'string' },
     },
   });
   const coverageJson = readCapped(o.coverage);
@@ -481,6 +497,7 @@ if (process.argv[1] && import.meta.url.endsWith(basename(process.argv[1]))) {
       coverage: coverageJson === undefined ? undefined : parseCoverage(coverageJson),
       diff: diffText === undefined ? undefined : parseDiff(diffText),
       sha: o.sha,
+      commit: readCapped(o['commit-file'])?.trim(),
       repo: o.repo,
       runUrl: o['run-url'],
       coverageUrl: o['coverage-url'],

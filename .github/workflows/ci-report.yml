@@ -110,6 +110,7 @@ jobs:
         run: |
           node tools/ci/report.mjs --jobs-file "$JOBS_FILE" --results "$DATA/tests" \
             --coverage "$DATA/coverage/coverage.json" --diff "$DATA/coverage/changes.diff" \
+            --commit-file "$DATA/coverage/commit.txt" \
             --sha "$HEAD_SHA" --repo "$GITHUB_REPOSITORY" --run-url "$RUN_URL" --coverage-url "$COVERAGE_URL" > "$REPORT_FILE"
           cat "$REPORT_FILE" >> "$GITHUB_STEP_SUMMARY"
 

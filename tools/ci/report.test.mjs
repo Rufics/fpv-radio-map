@@ -105,13 +105,14 @@ test('a passing run with coverage', () => {
     coverage,
     diff: parseDiff('+++ b/core/rf-core/src/a.cpp\n@@ -0,0 +3,2 @@\n'),
     sha: '0123456789abcdef',
+    commit: 'fedcba9876543210',
     repo: 'o/r',
   });
   assert.ok(out.startsWith(`${MARKER}\n### ✅ CI passed for 0123456`));
   assert.match(out, /\*\*5\*\* tests passed · C\+\+ line coverage \*\*66\.7%\*\* · changed lines \*\*50\.0%\*\* covered/);
   assert.match(out, /\| Core: rf-core, rf-ext \| 🟡 75\.0% <sub>3\/4<\/sub>/);
   assert.match(out, /\| FPV modules \| 🔴 50\.0% <sub>1\/2<\/sub>/);
-  assert.match(out, /`core\/rf-core\/src\/a\.cpp`: \[4\]\(https:\/\/github\.com\/o\/r\/blob\/0123456789abcdef\/core\/rf-core\/src\/a\.cpp#L4\)/);
+  assert.match(out, /`core\/rf-core\/src\/a\.cpp`: \[4\]\(https:\/\/github\.com\/o\/r\/blob\/fedcba9876543210\/core\/rf-core\/src\/a\.cpp#L4\)/);
   assert.match(out, /\| Web build and tests \| ⏭️ skipped \| not affected by this change \|/);
 });
 
