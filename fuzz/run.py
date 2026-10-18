@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Fuzzes every target in a fuzz build for a while, several at once.
+"""Fuzzes every target in the fuzz build for a while, several at once.
 
-    fuzz/run.py BUILD_DIR SECONDS_PER_TARGET [--work DIR] [--merge] [TARGET ...]
+    fuzz/run.py SECONDS_PER_TARGET [--merge] [TARGET ...]
 
-New inputs go to WORK/corpus/<target> (default WORK: BUILD_DIR/fuzz-work), crashes to
-WORK/crashes/<target>, logs to WORK/<target>.log. The checked-in seeds under fuzz/corpus are read,
-never written. --merge minimises each target's corpus afterwards, which keeps the CI cache small.
+The fuzz build is build-fuzz/ at the repository root (docs/dev/fuzzing.md). New inputs go to
+build-fuzz/fuzz-work/corpus/<target>, crashes to build-fuzz/fuzz-work/crashes/<target>, logs to
+build-fuzz/fuzz-work/<target>.log. The checked-in seeds under fuzz/corpus are read, never written.
+--merge minimises each target's corpus afterwards, which keeps the CI cache small.
 Exits 1 when any target crashed and lists the inputs that did it.
+
+The paths are fixed rather than arguments, so nothing on the command line can point the script
+at other files.
 """
 
 import argparse
@@ -19,6 +23,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parent
+BUILD = SRC.parent / "build-fuzz"
+WORK = BUILD / "fuzz-work"
 
 # Extra libFuzzer flags per target: dictionaries, and room for the long inputs that found bugs.
 OPTIONS = {
@@ -32,12 +38,12 @@ OPTIONS = {
 }
 
 
-def fuzz_one(binary: Path, target: str, seconds: int, work: Path, merge: bool) -> bool:
-    corpus = work / "corpus" / target
-    crashes = work / "crashes" / target
+def fuzz_one(binary: Path, target: str, seconds: int, merge: bool) -> bool:
+    corpus = WORK / "corpus" / target
+    crashes = WORK / "crashes" / target
     corpus.mkdir(parents=True, exist_ok=True)
     crashes.mkdir(parents=True, exist_ok=True)
-    log = work / f"{target}.log"
+    log = WORK / f"{target}.log"
     flags = OPTIONS.get(target, [])
     with log.open("w") as out:
         rc = subprocess.run(
@@ -54,7 +60,7 @@ def fuzz_one(binary: Path, target: str, seconds: int, work: Path, merge: bool) -
         merged = corpus.with_name(target + ".merged")
         shutil.rmtree(merged, ignore_errors=True)
         merged.mkdir()
-        with (work / f"{target}.merge.log").open("w") as out:
+        with (WORK / f"{target}.merge.log").open("w") as out:
             subprocess.run([str(binary), *flags, "-merge=1", str(merged), str(corpus)],
                            stdout=out, stderr=subprocess.STDOUT, check=True)
         shutil.rmtree(corpus)
@@ -64,27 +70,27 @@ def fuzz_one(binary: Path, target: str, seconds: int, work: Path, merge: bool) -
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("build", type=Path)
     parser.add_argument("seconds", type=int)
     parser.add_argument("targets", nargs="*")
-    parser.add_argument("--work", type=Path)
     parser.add_argument("--merge", action="store_true")
     args = parser.parse_args()
 
-    work = (args.work or args.build / "fuzz-work").resolve()
-    work.mkdir(parents=True, exist_ok=True)
-    binaries = {p.name.removesuffix("_fuzzer"): p for p in sorted((args.build / "fuzz").glob("*_fuzzer"))}
-    targets = args.targets or list(binaries)
-    unknown = [t for t in targets if t not in binaries]
+    binaries = {p.name.removesuffix("_fuzzer"): p for p in sorted((BUILD / "fuzz").glob("*_fuzzer"))}
+    if not binaries:
+        parser.error(f"no fuzz targets in {BUILD}; build them first (docs/dev/fuzzing.md)")
+    unknown = sorted(set(args.targets) - set(binaries))
     if unknown:
-        parser.error("no such fuzz target in the build: " + ", ".join(unknown))
+        parser.error("no such fuzz target: " + ", ".join(unknown))
+    # Names come from the build, never from the command line.
+    targets = [name for name in binaries if not args.targets or name in args.targets]
 
+    WORK.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
-        results = list(pool.map(lambda t: fuzz_one(binaries[t], t, args.seconds, work, args.merge), targets))
+        results = list(pool.map(lambda t: fuzz_one(binaries[t], t, args.seconds, args.merge), targets))
     if all(results):
         return 0
     print("Crashing inputs:")
-    for f in sorted((work / "crashes").rglob("*")):
+    for f in sorted((WORK / "crashes").rglob("*")):
         if f.is_file():
             print(f"  {f}")
     return 1

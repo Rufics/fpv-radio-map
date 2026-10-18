@@ -47,7 +47,7 @@ ctest --test-dir build-fuzz -L fuzz
 Fuzz every target for five minutes, as many at once as there are CPU cores:
 
 ```
-python3 fuzz/run.py build-fuzz 300
+python3 fuzz/run.py 300
 ```
 
 Or one target by hand:

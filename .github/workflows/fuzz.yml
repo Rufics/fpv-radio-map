@@ -51,33 +51,33 @@ jobs:
             libpqxx-dev libgdal-dev libcpp-httplib-dev
       - name: Configure
         run: >
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
           -DCMAKE_CXX_COMPILER=clang++-18 -DRFMAP_BUILD_FUZZERS=ON -DRFMAP_BUILD_TESTS=OFF
       - name: Build
-        run: cmake --build build --target rfmap_fuzzers
+        run: cmake --build build-fuzz --target rfmap_fuzzers
       # Every seed and every input that once found a bug.
       - name: Replay the corpus
-        run: ctest --test-dir build -L fuzz --output-on-failure
+        run: ctest --test-dir build-fuzz -L fuzz --output-on-failure
       - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
-          path: fuzz-work/corpus
+          path: build-fuzz/fuzz-work/corpus
           key: fuzz-corpus-${{ github.run_id }}
           restore-keys: fuzz-corpus-
       - name: Fuzz
         env:
           MERGE: ${{ github.event_name != 'pull_request' && '--merge' || '' }}
-        run: python3 fuzz/run.py build "$SECONDS_PER_TARGET" --work fuzz-work $MERGE
+        run: python3 fuzz/run.py "$SECONDS_PER_TARGET" $MERGE
       - if: always() && github.event_name != 'pull_request'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
-          path: fuzz-work/corpus
+          path: build-fuzz/fuzz-work/corpus
           key: fuzz-corpus-${{ github.run_id }}
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-crashes
           path: |
-            fuzz-work/crashes/
-            fuzz-work/*.log
+            build-fuzz/fuzz-work/crashes/
+            build-fuzz/fuzz-work/*.log
           if-no-files-found: ignore
           retention-days: 14
