@@ -1,0 +1,1764 @@
+        -:    0:Source:/home/user/fpv-radio-map/platform/rfmod/tools/rfmod-worker.cpp
+        -:    0:Graph:build-cov/platform/rfmod/CMakeFiles/rfmod-worker.dir/tools/rfmod-worker.cpp.gcno
+        -:    0:Data:build-cov/platform/rfmod/CMakeFiles/rfmod-worker.dir/tools/rfmod-worker.cpp.gcda
+        -:    0:Runs:0
+        -:    1:// rfmod-worker: runs one third-party module in its own process.
+        -:    2://
+        -:    3:// Started by IsolatedModule with resource limits already applied. Talks newline-delimited JSON
+        -:    4:// on fd 3; the module's own stdout and stderr go to the host log. Usage (host only):
+        -:    5://   rfmod-worker <library.so> <memoryMb>
+        -:    6:
+        -:    7:#include "rfmod/abi.h"
+        -:    8:
+        -:    9:#include <nlohmann/json.hpp>
+        -:   10:
+        -:   11:#include <dlfcn.h>
+        -:   12:#include <sched.h>
+        -:   13:#include <sys/prctl.h>
+        -:   14:#include <unistd.h>
+        -:   15:
+        -:   16:#include <cerrno>
+        -:   17:#include <iostream>
+        -:   18:#include <string>
+        -:   19:
+        -:   20:namespace {
+        -:   21:
+        -:   22:using json = nlohmann::json;
+        -:   23:constexpr int kFd = 3;
+        -:   24:
+        -:   25:std::string inbox;
+        -:   26:
+function (anonymous namespace)::sendLine(nlohmann::json_abi_v3_11_3::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long, unsigned long, double, std::allocator, nlohmann::json_abi_v3_11_3::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&) called 0 returned 0% blocks executed 0%
+    #####:   27:void sendLine(const json& msg) {
+    #####:   28:    const std::string line = msg.dump() + "\n";
+    %%%%%:   28-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:   28-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:   28-block  2
+call    6 never executed
+    $$$$$:   28-block  3
+call    7 never executed
+    $$$$$:   28-block  4
+    #####:   29:    std::size_t off = 0;
+    #####:   30:    while (off < line.size()) {
+    %%%%%:   30-block  0
+call    0 never executed
+branch  1 never executed
+branch  2 never executed (fallthrough)
+    #####:   31:        const ssize_t n = write(kFd, line.data() + off, line.size() - off);
+    %%%%%:   31-block  0
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed (fallthrough)
+branch  4 never executed (throw)
+    #####:   32:        if (n < 0 && errno == EINTR) continue;
+    %%%%%:   32-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:   32-block  1
+branch  2 never executed (fallthrough)
+branch  3 never executed
+    %%%%%:   32-block  2
+    #####:   33:        if (n <= 0) _exit(1);
+    %%%%%:   33-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:   33-block  1
+call    2 never executed
+    #####:   34:        off += static_cast<std::size_t>(n);
+    %%%%%:   34-block  0
+        -:   35:    }
+    #####:   36:}
+    %%%%%:   36-block  0
+call    0 never executed
+    $$$$$:   36-block  1
+call    1 never executed
+        -:   37:
+function (anonymous namespace)::readLine() called 0 returned 0% blocks executed 0%
+    #####:   38:json readLine() {
+    %%%%%:   38-block  0
+        -:   39:    for (;;) {
+    #####:   40:        const auto nl = inbox.find('\n');
+    %%%%%:   40-block  0
+call    0 never executed
+    #####:   41:        if (nl != std::string::npos) {
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    #####:   42:            const std::string line = inbox.substr(0, nl);
+    %%%%%:   42-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:   43:            inbox.erase(0, nl + 1);
+    %%%%%:   43-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:   44:            return json::parse(line);
+    %%%%%:   44-block  0
+call    0 never executed
+call    1 never executed
+branch  2 never executed (fallthrough)
+branch  3 never executed (throw)
+    %%%%%:   44-block  1
+call    4 never executed
+    %%%%%:   44-block  2
+    $$$$$:   44-block  3
+call    5 never executed
+    $$$$$:   44-block  4
+    #####:   45:        }
+call    0 never executed
+    $$$$$:   45-block  0
+call    1 never executed
+        -:   46:        char buf[65536];
+    #####:   47:        const ssize_t n = read(kFd, buf, sizeof buf);
+    %%%%%:   47-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:   48:        if (n < 0 && errno == EINTR) continue;
+    %%%%%:   48-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:   48-block  1
+branch  2 never executed (fallthrough)
+branch  3 never executed
+    %%%%%:   48-block  2
+    %%%%%:   48-block  3
+    #####:   49:        if (n <= 0) _exit(0);  // host went away
+    %%%%%:   49-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:   49-block  1
+call    2 never executed
+    #####:   50:        inbox.append(buf, static_cast<std::size_t>(n));
+    %%%%%:   50-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:   51:    }
+    %%%%%:   51-block  0
+        -:   52:}
+        -:   53:
+        -:   54:long long nextCallback = 1;
+        -:   55:
+function (anonymous namespace)::hostCall(rfmod_host_context*, char const*, char const*, char const**) called 0 returned 0% blocks executed 0%
+    #####:   56:int hostCall(rfmod_host_context*, const char* method, const char* request, const char** response) {
+    #####:   57:    thread_local std::string last;
+    %%%%%:   57-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:   57-block  1
+call    2 never executed
+call    3 never executed
+    #####:   58:    const long long id = nextCallback++;
+    #####:   59:    json req;
+    %%%%%:   59-block  0
+call    0 never executed
+        -:   60:    try {
+    #####:   61:        req = request && *request ? json::parse(request) : json::object();
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:   61-block  0
+branch  2 never executed (fallthrough)
+branch  3 never executed
+    %%%%%:   61-block  1
+call    4 never executed
+call    5 never executed
+branch  6 never executed (fallthrough)
+branch  7 never executed (throw)
+    %%%%%:   61-block  2
+call    8 never executed
+branch  9 never executed (fallthrough)
+branch 10 never executed (throw)
+    %%%%%:   61-block  3
+call   11 never executed
+call   12 never executed
+branch 13 never executed (fallthrough)
+branch 14 never executed
+    %%%%%:   61-block  4
+call   15 never executed
+    $$$$$:   61-block  5
+branch 16 never executed (fallthrough)
+branch 17 never executed
+    $$$$$:   61-block  6
+call   18 never executed
+    $$$$$:   61-block  7
+    $$$$$:   61-block  8
+    =====:   62:    } catch (const json::exception& e) {
+    $$$$$:   62-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    $$$$$:   62-block  1
+call    2 never executed
+    =====:   63:        last = e.what();
+call    0 never executed
+call    1 never executed
+branch  2 never executed (fallthrough)
+branch  3 never executed (throw)
+    =====:   64:        *response = last.c_str();
+    $$$$$:   64-block  0
+call    0 never executed
+    =====:   65:        return RFMOD_ERR_BAD_REQUEST;
+    =====:   66:    }
+call    0 never executed
+    $$$$$:   66-block  0
+call    1 never executed
+    #####:   67:    sendLine({{"t", "cb"}, {"id", id}, {"method", method ? method : ""}, {"request", req}});
+    %%%%%:   67-block  0
+    %%%%%:   67-block  1
+    %%%%%:   67-block  2
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:   67-block  3
+call    3 never executed
+    %%%%%:   67-block  4
+branch  4 never executed (fallthrough)
+branch  5 never executed
+    %%%%%:   67-block  5
+call    6 never executed
+    %%%%%:   67-block  6
+    %%%%%:   67-block  7
+call    7 never executed
+    %%%%%:   67-block  8
+call    8 never executed
+    %%%%%:   67-block  9
+call    9 never executed
+    %%%%%:   67-block 10
+call   10 never executed
+    $$$$$:   67-block 11
+call   11 never executed
+    $$$$$:   67-block 12
+    $$$$$:   67-block 13
+branch 12 never executed (fallthrough)
+branch 13 never executed
+    $$$$$:   67-block 14
+call   14 never executed
+    $$$$$:   67-block 15
+    $$$$$:   67-block 16
+call   15 never executed
+    $$$$$:   67-block 17
+    $$$$$:   67-block 18
+call   16 never executed
+    $$$$$:   67-block 19
+    $$$$$:   67-block 20
+    $$$$$:   67-block 21
+call   17 never executed
+    $$$$$:   67-block 22
+    $$$$$:   67-block 23
+call   18 never executed
+    $$$$$:   67-block 24
+    $$$$$:   67-block 25
+        -:   68:    for (;;) {
+    #####:   69:        const json msg = readLine();
+    #####:   70:        if (msg.value("t", "") == "cbr" && msg.value("id", 0LL) == id) {
+    %%%%%:   70-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:   70-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:   70-block  2
+branch  6 never executed (fallthrough)
+branch  7 never executed
+    %%%%%:   70-block  3
+call    8 never executed
+branch  9 never executed (fallthrough)
+branch 10 never executed (throw)
+    %%%%%:   70-block  4
+branch 11 never executed (fallthrough)
+branch 12 never executed
+    %%%%%:   70-block  5
+    %%%%%:   70-block  6
+    %%%%%:   70-block  7
+branch 13 never executed (fallthrough)
+branch 14 never executed
+    %%%%%:   70-block  8
+call   15 never executed
+    %%%%%:   70-block  9
+branch 16 never executed (fallthrough)
+branch 17 never executed
+    $$$$$:   70-block 10
+    $$$$$:   70-block 11
+branch 18 never executed (fallthrough)
+branch 19 never executed
+    $$$$$:   70-block 12
+call   20 never executed
+    $$$$$:   70-block 13
+    #####:   71:            if (msg.value("ok", false)) {
+    %%%%%:   71-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:   71-block  1
+branch  3 never executed (fallthrough)
+branch  4 never executed
+    $$$$$:   71-block  2
+    #####:   72:                last = msg.value("result", json()).dump();
+    %%%%%:   72-block  0
+call    0 never executed
+call    1 never executed
+branch  2 never executed (fallthrough)
+branch  3 never executed (throw)
+    %%%%%:   72-block  1
+call    4 never executed
+branch  5 never executed (fallthrough)
+branch  6 never executed (throw)
+    %%%%%:   72-block  2
+call    7 never executed
+call    8 never executed
+call    9 never executed
+call   10 never executed
+    $$$$$:   72-block  3
+call   11 never executed
+    $$$$$:   72-block  4
+call   12 never executed
+    $$$$$:   72-block  5
+    $$$$$:   72-block  6
+    $$$$$:   72-block  7
+    #####:   73:                *response = last.c_str();
+call    0 never executed
+    #####:   74:                return RFMOD_OK;
+        -:   75:            }
+    #####:   76:            last = msg.value("error", std::string("host call failed"));
+    %%%%%:   76-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:   76-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:   76-block  2
+call    6 never executed
+call    7 never executed
+call    8 never executed
+    $$$$$:   76-block  3
+call    9 never executed
+    $$$$$:   76-block  4
+    $$$$$:   76-block  5
+    $$$$$:   76-block  6
+    #####:   77:            *response = last.c_str();
+    %%%%%:   77-block  0
+call    0 never executed
+    #####:   78:            return RFMOD_ERR_HOST_CALL;
+        -:   79:        }
+        -:   80:        // The host sends nothing else while it waits for us; anything else is a protocol error.
+    #####:   81:        _exit(2);
+    %%%%%:   81-block  0
+call    0 never executed
+    #####:   82:    }
+    %%%%%:   82-block  0
+call    0 never executed
+    $$$$$:   82-block  1
+call    1 never executed
+    #####:   83:}
+    %%%%%:   83-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:   83-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:   83-block  2
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed (throw)
+    %%%%%:   83-block  3
+call    9 never executed
+branch 10 never executed (fallthrough)
+branch 11 never executed (throw)
+    %%%%%:   83-block  4
+call   12 never executed
+call   13 never executed
+branch 14 never executed (fallthrough)
+branch 15 never executed (throw)
+    %%%%%:   83-block  5
+call   16 never executed
+branch 17 never executed (fallthrough)
+branch 18 never executed (throw)
+    %%%%%:   83-block  6
+branch 19 never executed (fallthrough)
+branch 20 never executed
+    %%%%%:   83-block  7
+call   21 never executed
+branch 22 never executed (fallthrough)
+branch 23 never executed (throw)
+    %%%%%:   83-block  8
+call   24 never executed
+branch 25 never executed (fallthrough)
+branch 26 never executed (throw)
+    %%%%%:   83-block  9
+call   27 never executed
+branch 28 never executed (fallthrough)
+branch 29 never executed (throw)
+    %%%%%:   83-block 10
+call   30 never executed
+branch 31 never executed (fallthrough)
+branch 32 never executed (throw)
+    %%%%%:   83-block 11
+call   33 never executed
+branch 34 never executed (fallthrough)
+branch 35 never executed (throw)
+    %%%%%:   83-block 12
+call   36 never executed
+branch 37 never executed (fallthrough)
+branch 38 never executed (throw)
+    %%%%%:   83-block 13
+branch 39 never executed (fallthrough)
+branch 40 never executed
+    %%%%%:   83-block 14
+    %%%%%:   83-block 15
+branch 41 never executed (fallthrough)
+branch 42 never executed
+    %%%%%:   83-block 16
+    %%%%%:   83-block 17
+branch 43 never executed (fallthrough)
+branch 44 never executed
+    %%%%%:   83-block 18
+    %%%%%:   83-block 19
+branch 45 never executed (fallthrough)
+branch 46 never executed
+    %%%%%:   83-block 20
+call   47 never executed
+branch 48 never executed (fallthrough)
+branch 49 never executed (throw)
+    %%%%%:   83-block 21
+call   50 never executed
+    $$$$$:   83-block 22
+branch 51 never executed (fallthrough)
+branch 52 never executed
+    $$$$$:   83-block 23
+branch 53 never executed (fallthrough)
+branch 54 never executed
+    $$$$$:   83-block 24
+    $$$$$:   83-block 25
+branch 55 never executed (fallthrough)
+branch 56 never executed
+    $$$$$:   83-block 26
+call   57 never executed
+    $$$$$:   83-block 27
+    $$$$$:   83-block 28
+branch 58 never executed (fallthrough)
+branch 59 never executed
+    $$$$$:   83-block 29
+branch 60 never executed (fallthrough)
+branch 61 never executed
+    $$$$$:   83-block 30
+    $$$$$:   83-block 31
+branch 62 never executed (fallthrough)
+branch 63 never executed
+    $$$$$:   83-block 32
+call   64 never executed
+    $$$$$:   83-block 33
+    $$$$$:   83-block 34
+branch 65 never executed (fallthrough)
+branch 66 never executed
+    $$$$$:   83-block 35
+branch 67 never executed (fallthrough)
+branch 68 never executed
+    $$$$$:   83-block 36
+    $$$$$:   83-block 37
+branch 69 never executed (fallthrough)
+branch 70 never executed
+    $$$$$:   83-block 38
+call   71 never executed
+    $$$$$:   83-block 39
+    $$$$$:   83-block 40
+branch 72 never executed (fallthrough)
+branch 73 never executed
+    $$$$$:   83-block 41
+branch 74 never executed (fallthrough)
+branch 75 never executed
+    $$$$$:   83-block 42
+    $$$$$:   83-block 43
+branch 76 never executed (fallthrough)
+branch 77 never executed
+    $$$$$:   83-block 44
+call   78 never executed
+    $$$$$:   83-block 45
+    $$$$$:   83-block 46
+branch 79 never executed (fallthrough)
+branch 80 never executed
+    $$$$$:   83-block 47
+    $$$$$:   83-block 48
+branch 81 never executed (fallthrough)
+branch 82 never executed
+    $$$$$:   83-block 49
+call   83 never executed
+    $$$$$:   83-block 50
+call   84 never executed
+        -:   84:
+function (anonymous namespace)::hostLog(rfmod_host_context*, int, char const*) called 0 returned 0% blocks executed 0%
+    #####:   85:void hostLog(rfmod_host_context*, int level, const char* message) {
+    #####:   86:    sendLine({{"t", "log"}, {"level", level}, {"message", message ? message : ""}});
+    %%%%%:   86-block  0
+    %%%%%:   86-block  1
+    %%%%%:   86-block  2
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:   86-block  3
+call    3 never executed
+    %%%%%:   86-block  4
+branch  4 never executed (fallthrough)
+branch  5 never executed
+    %%%%%:   86-block  5
+call    6 never executed
+    %%%%%:   86-block  6
+    %%%%%:   86-block  7
+call    7 never executed
+    %%%%%:   86-block  8
+call    8 never executed
+    %%%%%:   86-block  9
+call    9 never executed
+    $$$$$:   86-block 10
+call   10 never executed
+    $$$$$:   86-block 11
+    $$$$$:   86-block 12
+branch 11 never executed (fallthrough)
+branch 12 never executed
+    $$$$$:   86-block 13
+call   13 never executed
+    $$$$$:   86-block 14
+    $$$$$:   86-block 15
+call   14 never executed
+    $$$$$:   86-block 16
+    $$$$$:   86-block 17
+    $$$$$:   86-block 18
+call   15 never executed
+    $$$$$:   86-block 19
+    $$$$$:   86-block 20
+call   16 never executed
+    $$$$$:   86-block 21
+    #####:   87:}
+    %%%%%:   87-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:   87-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:   87-block  2
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed (throw)
+    %%%%%:   87-block  3
+call    9 never executed
+branch 10 never executed (fallthrough)
+branch 11 never executed (throw)
+    %%%%%:   87-block  4
+call   12 never executed
+call   13 never executed
+branch 14 never executed (fallthrough)
+branch 15 never executed (throw)
+    %%%%%:   87-block  5
+call   16 never executed
+branch 17 never executed (fallthrough)
+branch 18 never executed (throw)
+    %%%%%:   87-block  6
+branch 19 never executed (fallthrough)
+branch 20 never executed
+    %%%%%:   87-block  7
+call   21 never executed
+branch 22 never executed (fallthrough)
+branch 23 never executed (throw)
+    %%%%%:   87-block  8
+call   24 never executed
+branch 25 never executed (fallthrough)
+branch 26 never executed (throw)
+    %%%%%:   87-block  9
+call   27 never executed
+branch 28 never executed (fallthrough)
+branch 29 never executed (throw)
+    %%%%%:   87-block 10
+branch 30 never executed (fallthrough)
+branch 31 never executed
+    %%%%%:   87-block 11
+    %%%%%:   87-block 12
+branch 32 never executed (fallthrough)
+branch 33 never executed
+    %%%%%:   87-block 13
+    %%%%%:   87-block 14
+branch 34 never executed (fallthrough)
+branch 35 never executed
+    %%%%%:   87-block 15
+    $$$$$:   87-block 16
+branch 36 never executed (fallthrough)
+branch 37 never executed
+    $$$$$:   87-block 17
+branch 38 never executed (fallthrough)
+branch 39 never executed
+    $$$$$:   87-block 18
+    $$$$$:   87-block 19
+branch 40 never executed (fallthrough)
+branch 41 never executed
+    $$$$$:   87-block 20
+call   42 never executed
+    $$$$$:   87-block 21
+    $$$$$:   87-block 22
+branch 43 never executed (fallthrough)
+branch 44 never executed
+    $$$$$:   87-block 23
+branch 45 never executed (fallthrough)
+branch 46 never executed
+    $$$$$:   87-block 24
+    $$$$$:   87-block 25
+branch 47 never executed (fallthrough)
+branch 48 never executed
+    $$$$$:   87-block 26
+call   49 never executed
+    $$$$$:   87-block 27
+    $$$$$:   87-block 28
+branch 50 never executed (fallthrough)
+branch 51 never executed
+    $$$$$:   87-block 29
+branch 52 never executed (fallthrough)
+branch 53 never executed
+    $$$$$:   87-block 30
+    $$$$$:   87-block 31
+branch 54 never executed (fallthrough)
+branch 55 never executed
+    $$$$$:   87-block 32
+call   56 never executed
+    $$$$$:   87-block 33
+    $$$$$:   87-block 34
+branch 57 never executed (fallthrough)
+branch 58 never executed
+    $$$$$:   87-block 35
+    $$$$$:   87-block 36
+branch 59 never executed (fallthrough)
+branch 60 never executed
+    $$$$$:   87-block 37
+call   61 never executed
+        -:   88:
+        -:   89:/// The worker after its arguments are checked. Returns the exit code.
+function (anonymous namespace)::run(char const*) called 0 returned 0% blocks executed 0%
+    #####:   90:int run(const char* library) {
+        -:   91:
+        -:   92:    // Hardening that does not need privileges. Each result is reported to the host as it is.
+    #####:   93:    const bool noNewPrivs = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0;
+    %%%%%:   93-block  0
+call    0 never executed
+        -:   94:    // A new user+network namespace leaves the module with only a loopback device and no route out.
+        -:   95:    // Where the kernel or container forbids unprivileged namespaces this fails and we say so.
+    #####:   96:    const bool netIsolated = unshare(CLONE_NEWUSER | CLONE_NEWNET) == 0;
+call    0 never executed
+        -:   97:
+    #####:   98:    const json init = readLine();
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+function (anonymous namespace)::run(char const*)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)#1}::operator()(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) const called 0 returned 0% blocks executed 0%
+    #####:   99:    auto fail = [](const std::string& message) {
+    #####:  100:        sendLine({{"t", "ready"}, {"status", 1}, {"message", message}});
+    %%%%%:  100-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  100-block  1
+call    3 never executed
+    %%%%%:  100-block  2
+branch  4 never executed (fallthrough)
+branch  5 never executed
+    %%%%%:  100-block  3
+call    6 never executed
+    %%%%%:  100-block  4
+    %%%%%:  100-block  5
+call    7 never executed
+    %%%%%:  100-block  6
+call    8 never executed
+    %%%%%:  100-block  7
+call    9 never executed
+    $$$$$:  100-block  8
+call   10 never executed
+    $$$$$:  100-block  9
+    $$$$$:  100-block 10
+branch 11 never executed (fallthrough)
+branch 12 never executed
+    $$$$$:  100-block 11
+call   13 never executed
+    $$$$$:  100-block 12
+    $$$$$:  100-block 13
+call   14 never executed
+    $$$$$:  100-block 14
+    $$$$$:  100-block 15
+call   15 never executed
+    $$$$$:  100-block 16
+    $$$$$:  100-block 17
+    $$$$$:  100-block 18
+call   16 never executed
+    $$$$$:  100-block 19
+    #####:  101:        return 1;
+    %%%%%:  101-block  0
+    #####:  102:    };
+    %%%%%:  102-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  102-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:  102-block  2
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed (throw)
+    %%%%%:  102-block  3
+call    9 never executed
+branch 10 never executed (fallthrough)
+branch 11 never executed (throw)
+    %%%%%:  102-block  4
+call   12 never executed
+call   13 never executed
+branch 14 never executed (fallthrough)
+branch 15 never executed (throw)
+    %%%%%:  102-block  5
+call   16 never executed
+branch 17 never executed (fallthrough)
+branch 18 never executed (throw)
+    %%%%%:  102-block  6
+call   19 never executed
+branch 20 never executed (fallthrough)
+branch 21 never executed (throw)
+    %%%%%:  102-block  7
+call   22 never executed
+branch 23 never executed (fallthrough)
+branch 24 never executed (throw)
+    %%%%%:  102-block  8
+call   25 never executed
+branch 26 never executed (fallthrough)
+branch 27 never executed (throw)
+    %%%%%:  102-block  9
+branch 28 never executed (fallthrough)
+branch 29 never executed
+    %%%%%:  102-block 10
+    %%%%%:  102-block 11
+branch 30 never executed (fallthrough)
+branch 31 never executed
+    %%%%%:  102-block 12
+    %%%%%:  102-block 13
+branch 32 never executed (fallthrough)
+branch 33 never executed
+    %%%%%:  102-block 14
+    $$$$$:  102-block 15
+branch 34 never executed (fallthrough)
+branch 35 never executed
+    $$$$$:  102-block 16
+branch 36 never executed (fallthrough)
+branch 37 never executed
+    $$$$$:  102-block 17
+    $$$$$:  102-block 18
+branch 38 never executed (fallthrough)
+branch 39 never executed
+    $$$$$:  102-block 19
+call   40 never executed
+    $$$$$:  102-block 20
+    $$$$$:  102-block 21
+branch 41 never executed (fallthrough)
+branch 42 never executed
+    $$$$$:  102-block 22
+branch 43 never executed (fallthrough)
+branch 44 never executed
+    $$$$$:  102-block 23
+    $$$$$:  102-block 24
+branch 45 never executed (fallthrough)
+branch 46 never executed
+    $$$$$:  102-block 25
+call   47 never executed
+    $$$$$:  102-block 26
+    $$$$$:  102-block 27
+branch 48 never executed (fallthrough)
+branch 49 never executed
+    $$$$$:  102-block 28
+branch 50 never executed (fallthrough)
+branch 51 never executed
+    $$$$$:  102-block 29
+    $$$$$:  102-block 30
+branch 52 never executed (fallthrough)
+branch 53 never executed
+    $$$$$:  102-block 31
+call   54 never executed
+    $$$$$:  102-block 32
+    $$$$$:  102-block 33
+branch 55 never executed (fallthrough)
+branch 56 never executed
+    $$$$$:  102-block 34
+    $$$$$:  102-block 35
+branch 57 never executed (fallthrough)
+branch 58 never executed
+    $$$$$:  102-block 36
+call   59 never executed
+    #####:  103:    if (init.value("t", "") != "init") return fail("expected init");
+    %%%%%:  103-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  103-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:  103-block  2
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed
+    %%%%%:  103-block  3
+call    9 never executed
+branch 10 never executed (fallthrough)
+branch 11 never executed (throw)
+    %%%%%:  103-block  4
+call   12 never executed
+branch 13 never executed (fallthrough)
+branch 14 never executed (throw)
+    %%%%%:  103-block  5
+    %%%%%:  103-block  6
+call   15 never executed
+    %%%%%:  103-block  7
+    $$$$$:  103-block  8
+call   16 never executed
+    $$$$$:  103-block  9
+    $$$$$:  103-block 10
+call   17 never executed
+    $$$$$:  103-block 11
+    $$$$$:  103-block 12
+        -:  104:
+    #####:  105:    void* handle = dlopen(library, RTLD_NOW | RTLD_LOCAL);
+    %%%%%:  105-block  0
+call    0 never executed
+    #####:  106:    if (!handle) return fail(std::string("dlopen: ") + dlerror());
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:  106-block  0
+call    2 never executed
+    %%%%%:  106-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:  106-block  2
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed (throw)
+    %%%%%:  106-block  3
+call    9 never executed
+branch 10 never executed (fallthrough)
+branch 11 never executed (throw)
+    %%%%%:  106-block  4
+    %%%%%:  106-block  5
+call   12 never executed
+call   13 never executed
+    %%%%%:  106-block  6
+    $$$$$:  106-block  7
+call   14 never executed
+    $$$$$:  106-block  8
+call   15 never executed
+    $$$$$:  106-block  9
+    $$$$$:  106-block 10
+    $$$$$:  106-block 11
+    #####:  107:    auto entry = reinterpret_cast<rfmod_get_module_fn>(dlsym(handle, RFMOD_ENTRY_SYMBOL));
+    %%%%%:  107-block  0
+call    0 never executed
+    #####:  108:    if (!entry) return fail(std::string("library does not export ") + RFMOD_ENTRY_SYMBOL);
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:  108-block  0
+call    2 never executed
+branch  3 never executed (fallthrough)
+branch  4 never executed (throw)
+    %%%%%:  108-block  1
+call    5 never executed
+branch  6 never executed (fallthrough)
+branch  7 never executed (throw)
+    %%%%%:  108-block  2
+call    8 never executed
+branch  9 never executed (fallthrough)
+branch 10 never executed (throw)
+    %%%%%:  108-block  3
+    %%%%%:  108-block  4
+call   11 never executed
+call   12 never executed
+    %%%%%:  108-block  5
+    $$$$$:  108-block  6
+call   13 never executed
+    $$$$$:  108-block  7
+call   14 never executed
+    $$$$$:  108-block  8
+    $$$$$:  108-block  9
+    $$$$$:  108-block 10
+    #####:  109:    const rfmod_module* api = entry();
+    %%%%%:  109-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:  110:    if (!api || api->abi_version != RFMOD_ABI_VERSION) return fail("library speaks a different rfmod ABI");
+    %%%%%:  110-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    %%%%%:  110-block  1
+branch  2 never executed (fallthrough)
+branch  3 never executed
+    %%%%%:  110-block  2
+call    4 never executed
+branch  5 never executed (fallthrough)
+branch  6 never executed (throw)
+    %%%%%:  110-block  3
+call    7 never executed
+branch  8 never executed (fallthrough)
+branch  9 never executed (throw)
+    %%%%%:  110-block  4
+    %%%%%:  110-block  5
+call   10 never executed
+    %%%%%:  110-block  6
+    $$$$$:  110-block  7
+call   11 never executed
+    $$$$$:  110-block  8
+    $$$$$:  110-block  9
+        -:  111:
+        -:  112:    static rfmod_host host{RFMOD_ABI_VERSION, nullptr, &hostCall, &hostLog};
+    #####:  113:    const std::string options = init.value("options", json::object()).dump();
+    %%%%%:  113-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  113-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:  113-block  2
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed (throw)
+    %%%%%:  113-block  3
+call    9 never executed
+call   10 never executed
+    $$$$$:  113-block  4
+call   11 never executed
+    $$$$$:  113-block  5
+call   12 never executed
+    $$$$$:  113-block  6
+    $$$$$:  113-block  7
+    #####:  114:    if (api->init(&host, options.c_str()) != RFMOD_OK) return fail("module init returned an error");
+call    0 never executed
+call    1 never executed
+branch  2 never executed (fallthrough)
+branch  3 never executed (throw)
+    %%%%%:  114-block  0
+branch  4 never executed (fallthrough)
+branch  5 never executed
+    %%%%%:  114-block  1
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed (throw)
+    %%%%%:  114-block  2
+call    9 never executed
+branch 10 never executed (fallthrough)
+branch 11 never executed (throw)
+    %%%%%:  114-block  3
+    %%%%%:  114-block  4
+call   12 never executed
+    %%%%%:  114-block  5
+    $$$$$:  114-block  6
+call   13 never executed
+    $$$$$:  114-block  7
+    $$$$$:  114-block  8
+        -:  115:
+    #####:  116:    sendLine({{"t", "ready"},
+    %%%%%:  116-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  116-block  1
+call    3 never executed
+    %%%%%:  116-block  2
+branch  4 never executed (fallthrough)
+branch  5 never executed
+    %%%%%:  116-block  3
+call    6 never executed
+    %%%%%:  116-block  4
+    %%%%%:  116-block  5
+call    7 never executed
+    %%%%%:  116-block  6
+    %%%%%:  116-block  7
+call    8 never executed
+    %%%%%:  116-block  8
+    %%%%%:  116-block  9
+call    9 never executed
+    %%%%%:  116-block 10
+call   10 never executed
+    %%%%%:  116-block 11
+call   11 never executed
+    %%%%%:  116-block 12
+call   12 never executed
+    %%%%%:  116-block 13
+call   13 never executed
+    $$$$$:  116-block 14
+call   14 never executed
+    $$$$$:  116-block 15
+    $$$$$:  116-block 16
+branch 15 never executed (fallthrough)
+branch 16 never executed
+    $$$$$:  116-block 17
+call   17 never executed
+    $$$$$:  116-block 18
+    $$$$$:  116-block 19
+call   18 never executed
+    $$$$$:  116-block 20
+    $$$$$:  116-block 21
+call   19 never executed
+    $$$$$:  116-block 22
+    $$$$$:  116-block 23
+call   20 never executed
+    $$$$$:  116-block 24
+    $$$$$:  116-block 25
+call   21 never executed
+    $$$$$:  116-block 26
+    $$$$$:  116-block 27
+call   22 never executed
+    $$$$$:  116-block 28
+    $$$$$:  116-block 29
+call   23 never executed
+    $$$$$:  116-block 30
+    $$$$$:  116-block 31
+call   24 never executed
+    $$$$$:  116-block 32
+    $$$$$:  116-block 33
+    #####:  117:              {"status", 0},
+    $$$$$:  117-block  0
+    #####:  118:              {"manifest", std::string(api->manifest_json())},
+    %%%%%:  118-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  118-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:  118-block  2
+call    6 never executed
+    $$$$$:  118-block  3
+call    7 never executed
+    $$$$$:  118-block  4
+    $$$$$:  118-block  5
+        -:  119:              {"sandbox", {{"noNewPrivileges", noNewPrivs}, {"networkIsolated", netIsolated}}}});
+        -:  120:
+        -:  121:    for (;;) {
+    #####:  122:        const json msg = readLine();
+    %%%%%:  122-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:  123:        const std::string t = msg.value("t", "");
+    %%%%%:  123-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:  124:        if (t == "shutdown") break;
+    %%%%%:  124-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  124-block  1
+branch  3 never executed (fallthrough)
+branch  4 never executed
+    %%%%%:  124-block  2
+    #####:  125:        if (t != "invoke") continue;
+    %%%%%:  125-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  125-block  1
+branch  3 never executed (fallthrough)
+branch  4 never executed
+    %%%%%:  125-block  2
+    #####:  126:        char* response = nullptr;
+    #####:  127:        const std::string method = msg.value("method", "");
+    %%%%%:  127-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:  128:        const std::string request = msg.value("request", json::object()).dump();
+    %%%%%:  128-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  128-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:  128-block  2
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed (throw)
+    %%%%%:  128-block  3
+call    9 never executed
+call   10 never executed
+    $$$$$:  128-block  4
+call   11 never executed
+    $$$$$:  128-block  5
+call   12 never executed
+    $$$$$:  128-block  6
+    $$$$$:  128-block  7
+    #####:  129:        const int rc = api->invoke(method.c_str(), request.c_str(), &response);
+call    0 never executed
+call    1 never executed
+call    2 never executed
+branch  3 never executed (fallthrough)
+branch  4 never executed (throw)
+    #####:  130:        json body;
+    %%%%%:  130-block  0
+call    0 never executed
+    #####:  131:        if (response) {
+branch  0 never executed (fallthrough)
+branch  1 never executed
+        -:  132:            try {
+    #####:  133:                body = json::parse(response);
+    %%%%%:  133-block  0
+call    0 never executed
+call    1 never executed
+branch  2 never executed (fallthrough)
+branch  3 never executed (throw)
+    %%%%%:  133-block  1
+call    4 never executed
+call    5 never executed
+call    6 never executed
+    $$$$$:  133-block  2
+call    7 never executed
+    $$$$$:  133-block  3
+    $$$$$:  133-block  4
+    =====:  134:            } catch (const json::exception&) {
+    $$$$$:  134-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    $$$$$:  134-block  1
+call    2 never executed
+    =====:  135:                body = {{"error", {{"code", "internal"}, {"message", "module returned invalid JSON"}}}};
+    $$$$$:  135-block  0
+call    0 never executed
+call    1 never executed
+    $$$$$:  135-block  1
+branch  2 never executed (fallthrough)
+branch  3 never executed
+    $$$$$:  135-block  2
+call    4 never executed
+    $$$$$:  135-block  3
+    $$$$$:  135-block  4
+call    5 never executed
+    $$$$$:  135-block  5
+    $$$$$:  135-block  6
+call    6 never executed
+    $$$$$:  135-block  7
+    $$$$$:  135-block  8
+call    7 never executed
+    $$$$$:  135-block  9
+call    8 never executed
+    $$$$$:  135-block 10
+    $$$$$:  135-block 11
+branch  9 never executed (fallthrough)
+branch 10 never executed
+    $$$$$:  135-block 12
+call   11 never executed
+    $$$$$:  135-block 13
+    $$$$$:  135-block 14
+call   12 never executed
+    $$$$$:  135-block 15
+    $$$$$:  135-block 16
+call   13 never executed
+    $$$$$:  135-block 17
+    $$$$$:  135-block 18
+call   14 never executed
+    $$$$$:  135-block 19
+    $$$$$:  135-block 20
+call   15 never executed
+    $$$$$:  135-block 21
+    $$$$$:  135-block 22
+    =====:  136:            }
+    $$$$$:  136-block  0
+call    0 never executed
+    #####:  137:            api->free_string(response);
+    %%%%%:  137-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+        -:  138:        }
+    #####:  139:        sendLine({{"t", "res"}, {"id", msg.value("id", 0LL)}, {"status", rc}, {"body", body}});
+    %%%%%:  139-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  139-block  1
+call    3 never executed
+    %%%%%:  139-block  2
+branch  4 never executed (fallthrough)
+branch  5 never executed
+    %%%%%:  139-block  3
+call    6 never executed
+    %%%%%:  139-block  4
+    %%%%%:  139-block  5
+call    7 never executed
+    %%%%%:  139-block  6
+call    8 never executed
+    %%%%%:  139-block  7
+call    9 never executed
+    %%%%%:  139-block  8
+call   10 never executed
+    $$$$$:  139-block  9
+call   11 never executed
+    $$$$$:  139-block 10
+    $$$$$:  139-block 11
+branch 12 never executed (fallthrough)
+branch 13 never executed
+    $$$$$:  139-block 12
+call   14 never executed
+    $$$$$:  139-block 13
+    $$$$$:  139-block 14
+call   15 never executed
+    $$$$$:  139-block 15
+    $$$$$:  139-block 16
+call   16 never executed
+    $$$$$:  139-block 17
+    $$$$$:  139-block 18
+call   17 never executed
+    $$$$$:  139-block 19
+    $$$$$:  139-block 20
+    $$$$$:  139-block 21
+    $$$$$:  139-block 22
+call   18 never executed
+    $$$$$:  139-block 23
+    $$$$$:  139-block 24
+    #####:  140:    }
+call    0 never executed
+call    1 never executed
+    %%%%%:  140-block  0
+call    2 never executed
+branch  3 never executed
+branch  4 never executed
+branch  5 never executed
+    %%%%%:  140-block  1
+    %%%%%:  140-block  2
+call    6 never executed
+branch  7 never executed
+branch  8 never executed
+branch  9 never executed
+    %%%%%:  140-block  3
+    $$$$$:  140-block  4
+call   10 never executed
+    $$$$$:  140-block  5
+call   11 never executed
+    $$$$$:  140-block  6
+call   12 never executed
+    $$$$$:  140-block  7
+call   13 never executed
+    $$$$$:  140-block  8
+call   14 never executed
+    #####:  141:    api->shutdown();
+    %%%%%:  141-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    #####:  142:    return 0;
+    %%%%%:  142-block  0
+    #####:  143:}
+    %%%%%:  143-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  143-block  1
+call    3 never executed
+branch  4 never executed (fallthrough)
+branch  5 never executed (throw)
+    %%%%%:  143-block  2
+call    6 never executed
+branch  7 never executed (fallthrough)
+branch  8 never executed (throw)
+    %%%%%:  143-block  3
+call    9 never executed
+branch 10 never executed (fallthrough)
+branch 11 never executed (throw)
+    %%%%%:  143-block  4
+call   12 never executed
+call   13 never executed
+branch 14 never executed (fallthrough)
+branch 15 never executed (throw)
+    %%%%%:  143-block  5
+call   16 never executed
+branch 17 never executed (fallthrough)
+branch 18 never executed (throw)
+    %%%%%:  143-block  6
+    %%%%%:  143-block  7
+call   19 never executed
+branch 20 never executed (fallthrough)
+branch 21 never executed (throw)
+    %%%%%:  143-block  8
+call   22 never executed
+branch 23 never executed (fallthrough)
+branch 24 never executed (throw)
+    %%%%%:  143-block  9
+call   25 never executed
+branch 26 never executed (fallthrough)
+branch 27 never executed (throw)
+    %%%%%:  143-block 10
+call   28 never executed
+branch 29 never executed (fallthrough)
+branch 30 never executed (throw)
+    %%%%%:  143-block 11
+call   31 never executed
+call   32 never executed
+branch 33 never executed (fallthrough)
+branch 34 never executed (throw)
+    %%%%%:  143-block 12
+call   35 never executed
+branch 36 never executed (fallthrough)
+branch 37 never executed (throw)
+    %%%%%:  143-block 13
+call   38 never executed
+call   39 never executed
+branch 40 never executed (fallthrough)
+branch 41 never executed (throw)
+    %%%%%:  143-block 14
+call   42 never executed
+branch 43 never executed (fallthrough)
+branch 44 never executed (throw)
+    %%%%%:  143-block 15
+call   45 never executed
+branch 46 never executed (fallthrough)
+branch 47 never executed (throw)
+    %%%%%:  143-block 16
+call   48 never executed
+branch 49 never executed (fallthrough)
+branch 50 never executed (throw)
+    %%%%%:  143-block 17
+branch 51 never executed (fallthrough)
+branch 52 never executed
+    %%%%%:  143-block 18
+branch 53 never executed (fallthrough)
+branch 54 never executed
+    %%%%%:  143-block 19
+branch 55 never executed (fallthrough)
+branch 56 never executed
+    %%%%%:  143-block 20
+    %%%%%:  143-block 21
+branch 57 never executed (fallthrough)
+branch 58 never executed
+    %%%%%:  143-block 22
+    %%%%%:  143-block 23
+branch 59 never executed (fallthrough)
+branch 60 never executed
+    %%%%%:  143-block 24
+    %%%%%:  143-block 25
+branch 61 never executed (fallthrough)
+branch 62 never executed
+    %%%%%:  143-block 26
+    %%%%%:  143-block 27
+branch 63 never executed (fallthrough)
+branch 64 never executed
+    %%%%%:  143-block 28
+    %%%%%:  143-block 29
+call   65 never executed
+branch 66 never executed (fallthrough)
+branch 67 never executed (throw)
+    %%%%%:  143-block 30
+call   68 never executed
+branch 69 never executed (fallthrough)
+branch 70 never executed (throw)
+    %%%%%:  143-block 31
+call   71 never executed
+branch 72 never executed (fallthrough)
+branch 73 never executed (throw)
+    %%%%%:  143-block 32
+call   74 never executed
+branch 75 never executed (fallthrough)
+branch 76 never executed (throw)
+    %%%%%:  143-block 33
+call   77 never executed
+branch 78 never executed (fallthrough)
+branch 79 never executed (throw)
+    %%%%%:  143-block 34
+call   80 never executed
+call   81 never executed
+branch 82 never executed (fallthrough)
+branch 83 never executed (throw)
+    %%%%%:  143-block 35
+call   84 never executed
+branch 85 never executed (fallthrough)
+branch 86 never executed (throw)
+    %%%%%:  143-block 36
+call   87 never executed
+call   88 never executed
+branch 89 never executed (fallthrough)
+branch 90 never executed (throw)
+    %%%%%:  143-block 37
+call   91 never executed
+branch 92 never executed (fallthrough)
+branch 93 never executed (throw)
+    %%%%%:  143-block 38
+call   94 never executed
+branch 95 never executed (fallthrough)
+branch 96 never executed (throw)
+    %%%%%:  143-block 39
+call   97 never executed
+branch 98 never executed (fallthrough)
+branch 99 never executed (throw)
+    %%%%%:  143-block 40
+call   100 never executed
+branch 101 never executed (fallthrough)
+branch 102 never executed (throw)
+    %%%%%:  143-block 41
+branch 103 never executed (fallthrough)
+branch 104 never executed
+    %%%%%:  143-block 42
+    %%%%%:  143-block 43
+branch 105 never executed (fallthrough)
+branch 106 never executed
+    %%%%%:  143-block 44
+    %%%%%:  143-block 45
+branch 107 never executed (fallthrough)
+branch 108 never executed
+    %%%%%:  143-block 46
+    %%%%%:  143-block 47
+branch 109 never executed (fallthrough)
+branch 110 never executed
+    %%%%%:  143-block 48
+call   111 never executed
+    %%%%%:  143-block 49
+call   112 never executed
+    %%%%%:  143-block 50
+call   113 never executed
+    $$$$$:  143-block 51
+branch 114 never executed (fallthrough)
+branch 115 never executed
+    $$$$$:  143-block 52
+branch 116 never executed (fallthrough)
+branch 117 never executed
+    $$$$$:  143-block 53
+branch 118 never executed (fallthrough)
+branch 119 never executed
+    $$$$$:  143-block 54
+branch 120 never executed (fallthrough)
+branch 121 never executed
+    $$$$$:  143-block 55
+    $$$$$:  143-block 56
+branch 122 never executed (fallthrough)
+branch 123 never executed
+    $$$$$:  143-block 57
+call   124 never executed
+    $$$$$:  143-block 58
+    $$$$$:  143-block 59
+branch 125 never executed (fallthrough)
+branch 126 never executed
+    $$$$$:  143-block 60
+branch 127 never executed (fallthrough)
+branch 128 never executed
+    $$$$$:  143-block 61
+    $$$$$:  143-block 62
+branch 129 never executed (fallthrough)
+branch 130 never executed
+    $$$$$:  143-block 63
+call   131 never executed
+    $$$$$:  143-block 64
+    $$$$$:  143-block 65
+branch 132 never executed (fallthrough)
+branch 133 never executed
+    $$$$$:  143-block 66
+    $$$$$:  143-block 67
+branch 134 never executed (fallthrough)
+branch 135 never executed
+    $$$$$:  143-block 68
+call   136 never executed
+    $$$$$:  143-block 69
+    $$$$$:  143-block 70
+branch 137 never executed (fallthrough)
+branch 138 never executed
+    $$$$$:  143-block 71
+    $$$$$:  143-block 72
+branch 139 never executed (fallthrough)
+branch 140 never executed
+    $$$$$:  143-block 73
+call   141 never executed
+    $$$$$:  143-block 74
+    $$$$$:  143-block 75
+branch 142 never executed (fallthrough)
+branch 143 never executed
+    $$$$$:  143-block 76
+branch 144 never executed (fallthrough)
+branch 145 never executed
+    $$$$$:  143-block 77
+    $$$$$:  143-block 78
+branch 146 never executed (fallthrough)
+branch 147 never executed
+    $$$$$:  143-block 79
+call   148 never executed
+    $$$$$:  143-block 80
+    $$$$$:  143-block 81
+branch 149 never executed (fallthrough)
+branch 150 never executed
+    $$$$$:  143-block 82
+branch 151 never executed (fallthrough)
+branch 152 never executed
+    $$$$$:  143-block 83
+    $$$$$:  143-block 84
+branch 153 never executed (fallthrough)
+branch 154 never executed
+    $$$$$:  143-block 85
+call   155 never executed
+    $$$$$:  143-block 86
+    $$$$$:  143-block 87
+branch 156 never executed (fallthrough)
+branch 157 never executed
+    $$$$$:  143-block 88
+branch 158 never executed (fallthrough)
+branch 159 never executed
+    $$$$$:  143-block 89
+    $$$$$:  143-block 90
+branch 160 never executed (fallthrough)
+branch 161 never executed
+    $$$$$:  143-block 91
+call   162 never executed
+    $$$$$:  143-block 92
+    $$$$$:  143-block 93
+branch 163 never executed (fallthrough)
+branch 164 never executed
+    $$$$$:  143-block 94
+    $$$$$:  143-block 95
+branch 165 never executed (fallthrough)
+branch 166 never executed
+    $$$$$:  143-block 96
+call   167 never executed
+call   168 never executed
+branch 169 never executed (fallthrough)
+branch 170 never executed (throw)
+    $$$$$:  143-block 97
+call   171 never executed
+branch 172 never executed (fallthrough)
+branch 173 never executed (throw)
+    $$$$$:  143-block 98
+call   174 never executed
+branch 175 never executed (fallthrough)
+branch 176 never executed (throw)
+    $$$$$:  143-block 99
+call   177 never executed
+branch 178 never executed (fallthrough)
+branch 179 never executed (throw)
+    $$$$$:  143-block 100
+call   180 never executed
+branch 181 never executed (fallthrough)
+branch 182 never executed (throw)
+    $$$$$:  143-block 101
+call   183 never executed
+branch 184 never executed (fallthrough)
+branch 185 never executed (throw)
+    $$$$$:  143-block 102
+call   186 never executed
+branch 187 never executed (fallthrough)
+branch 188 never executed (throw)
+    $$$$$:  143-block 103
+call   189 never executed
+branch 190 never executed (fallthrough)
+branch 191 never executed (throw)
+    $$$$$:  143-block 104
+call   192 never executed
+branch 193 never executed (fallthrough)
+branch 194 never executed (throw)
+    $$$$$:  143-block 105
+call   195 never executed
+branch 196 never executed (fallthrough)
+branch 197 never executed (throw)
+    $$$$$:  143-block 106
+branch 198 never executed (fallthrough)
+branch 199 never executed
+    $$$$$:  143-block 107
+branch 200 never executed (fallthrough)
+branch 201 never executed
+    $$$$$:  143-block 108
+branch 202 never executed (fallthrough)
+branch 203 never executed
+    $$$$$:  143-block 109
+    $$$$$:  143-block 110
+branch 204 never executed (fallthrough)
+branch 205 never executed
+    $$$$$:  143-block 111
+call   206 never executed
+    $$$$$:  143-block 112
+branch 207 never executed (fallthrough)
+branch 208 never executed
+    $$$$$:  143-block 113
+branch 209 never executed (fallthrough)
+branch 210 never executed
+    $$$$$:  143-block 114
+branch 211 never executed (fallthrough)
+branch 212 never executed
+    $$$$$:  143-block 115
+branch 213 never executed (fallthrough)
+branch 214 never executed
+    $$$$$:  143-block 116
+    $$$$$:  143-block 117
+branch 215 never executed (fallthrough)
+branch 216 never executed
+    $$$$$:  143-block 118
+call   217 never executed
+    $$$$$:  143-block 119
+    $$$$$:  143-block 120
+branch 218 never executed (fallthrough)
+branch 219 never executed
+    $$$$$:  143-block 121
+branch 220 never executed (fallthrough)
+branch 221 never executed
+    $$$$$:  143-block 122
+    $$$$$:  143-block 123
+branch 222 never executed (fallthrough)
+branch 223 never executed
+    $$$$$:  143-block 124
+call   224 never executed
+    $$$$$:  143-block 125
+    $$$$$:  143-block 126
+branch 225 never executed (fallthrough)
+branch 226 never executed
+    $$$$$:  143-block 127
+    $$$$$:  143-block 128
+branch 227 never executed (fallthrough)
+branch 228 never executed
+    $$$$$:  143-block 129
+call   229 never executed
+    $$$$$:  143-block 130
+    $$$$$:  143-block 131
+branch 230 never executed (fallthrough)
+branch 231 never executed
+    $$$$$:  143-block 132
+    $$$$$:  143-block 133
+branch 232 never executed (fallthrough)
+branch 233 never executed
+    $$$$$:  143-block 134
+call   234 never executed
+    $$$$$:  143-block 135
+    $$$$$:  143-block 136
+branch 235 never executed (fallthrough)
+branch 236 never executed
+    $$$$$:  143-block 137
+    $$$$$:  143-block 138
+branch 237 never executed (fallthrough)
+branch 238 never executed
+    $$$$$:  143-block 139
+call   239 never executed
+    $$$$$:  143-block 140
+branch 240 never executed (fallthrough)
+branch 241 never executed
+    $$$$$:  143-block 141
+branch 242 never executed (fallthrough)
+branch 243 never executed
+    $$$$$:  143-block 142
+    $$$$$:  143-block 143
+branch 244 never executed (fallthrough)
+branch 245 never executed
+    $$$$$:  143-block 144
+call   246 never executed
+    $$$$$:  143-block 145
+    $$$$$:  143-block 146
+branch 247 never executed (fallthrough)
+branch 248 never executed
+    $$$$$:  143-block 147
+branch 249 never executed (fallthrough)
+branch 250 never executed
+    $$$$$:  143-block 148
+    $$$$$:  143-block 149
+branch 251 never executed (fallthrough)
+branch 252 never executed
+    $$$$$:  143-block 150
+call   253 never executed
+    $$$$$:  143-block 151
+    $$$$$:  143-block 152
+branch 254 never executed (fallthrough)
+branch 255 never executed
+    $$$$$:  143-block 153
+branch 256 never executed (fallthrough)
+branch 257 never executed
+    $$$$$:  143-block 154
+    $$$$$:  143-block 155
+branch 258 never executed (fallthrough)
+branch 259 never executed
+    $$$$$:  143-block 156
+call   260 never executed
+    $$$$$:  143-block 157
+    $$$$$:  143-block 158
+branch 261 never executed (fallthrough)
+branch 262 never executed
+    $$$$$:  143-block 159
+branch 263 never executed (fallthrough)
+branch 264 never executed
+    $$$$$:  143-block 160
+    $$$$$:  143-block 161
+branch 265 never executed (fallthrough)
+branch 266 never executed
+    $$$$$:  143-block 162
+call   267 never executed
+    $$$$$:  143-block 163
+    $$$$$:  143-block 164
+branch 268 never executed (fallthrough)
+branch 269 never executed
+    $$$$$:  143-block 165
+    $$$$$:  143-block 166
+branch 270 never executed (fallthrough)
+branch 271 never executed
+    $$$$$:  143-block 167
+call   272 never executed
+    $$$$$:  143-block 168
+call   273 never executed
+    $$$$$:  143-block 169
+call   274 never executed
+        -:  144:
+        -:  145:}  // namespace
+        -:  146:
+function main called 0 returned 0% blocks executed 0%
+    #####:  147:int main(int argc, char** argv) {
+    #####:  148:    if (argc != 3) {
+    %%%%%:  148-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    #####:  149:        std::cerr << "rfmod-worker is started by the rfmap host, not by hand\n";
+    %%%%%:  149-block  0
+call    0 never executed
+    #####:  150:        return 64;
+        -:  151:    }
+        -:  152:    // stderr goes to the host's log, so a malformed message from the host is reported there
+        -:  153:    // instead of aborting.
+        -:  154:    try {
+    #####:  155:        return run(argv[1]);
+    %%%%%:  155-block  0
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    %%%%%:  155-block  1
+    =====:  156:    } catch (const json::exception& e) {
+    $$$$$:  156-block  0
+branch  0 never executed (fallthrough)
+branch  1 never executed
+    $$$$$:  156-block  1
+call    2 never executed
+    =====:  157:        std::cerr << "rfmod-worker: " << e.what() << '\n';
+call    0 never executed
+branch  1 never executed (fallthrough)
+branch  2 never executed (throw)
+    $$$$$:  157-block  0
+call    3 never executed
+call    4 never executed
+branch  5 never executed (fallthrough)
+branch  6 never executed (throw)
+    $$$$$:  157-block  1
+call    7 never executed
+branch  8 never executed (fallthrough)
+branch  9 never executed (throw)
+    =====:  158:        return 70;
+    =====:  159:    }
+    $$$$$:  159-block  0
+call    0 never executed
+    $$$$$:  159-block  1
+call    1 never executed
+        -:  160:}

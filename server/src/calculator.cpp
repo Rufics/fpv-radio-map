@@ -50,12 +50,15 @@ std::string label(const json& p, const std::string& fallback) {
     return l.empty() ? fallback : l;
 }
 
+/// Adds a failing module to `list` unless it is listed already.
+void appendModuleFailure(json& list, const ModuleFailure& f) {
+    const bool seen = std::ranges::any_of(list, [&f](const json& j) { return j.value("module", "") == f.moduleId; });
+    if (!seen) list.push_back(f.toJson());
+}
+
 /// Adds each failing module to `list` once, keeping the entries already there.
 void appendModuleFailures(json& list, const std::vector<ModuleFailure>& failures) {
-    for (const auto& f : failures) {
-        const bool seen = std::ranges::any_of(list, [&f](const json& j) { return j.value("module", "") == f.moduleId; });
-        if (!seen) list.push_back(f.toJson());
-    }
+    for (const auto& f : failures) appendModuleFailure(list, f);
 }
 
 // ---- route legs ----
@@ -146,20 +149,18 @@ json missingDataLeg(json leg, const LegScan& scan, const DemSource& dem, std::si
 /// result.moduleFailures (once per module, like its loss term failures) and gives nothing.
 std::optional<json> analyzeRoute(const ModuleRunner::Active& a, const json& req, json& result) {
     json resp;
+    std::string failure;
     try {
         resp = a.instance->invoke("route.analyze", req);
+        if (!resp.is_object()) failure = "route.analyze did not return an object";
     } catch (const rfmod::ModuleError& e) {
-        appendModuleFailures(result["moduleFailures"], {{a.id, e.code() + ": " + e.what()}});
-        return std::nullopt;
+        failure = e.code() + ": " + e.what();
     } catch (const std::exception& e) {
-        appendModuleFailures(result["moduleFailures"], {{a.id, e.what()}});
-        return std::nullopt;
+        failure = e.what();
     }
-    if (!resp.is_object()) {
-        appendModuleFailures(result["moduleFailures"], {{a.id, "route.analyze did not return an object"}});
-        return std::nullopt;
-    }
-    return resp;
+    if (failure.empty()) return resp;
+    appendModuleFailure(result["moduleFailures"], {a.id, failure});
+    return std::nullopt;
 }
 
 /// A module's reason with "leg": i belongs to that leg; the rest to the route.
