@@ -65,6 +65,7 @@ LEGEND = ("<sub>🟢 80% or more · 🟡 60–80% · 🔴 below 60%. Coverage is
           "Test code is not counted.</sub>")
 ICONS = {"success": "✅", "skipped": "⏭️", "cancelled": "🚫", "failure": "❌"}
 DETAILS_END = "</details>"
+COVERAGE_ALIGN = "|---|---:|---:|"
 FPV = "FPV modules"
 
 # Coverage areas, most specific prefix first. Files that match none count in "All C++" only.
@@ -536,7 +537,7 @@ class WebCoverageSection:
 
     def lines(self):
         areas = self.summary["areas"]
-        out = ["#### Web coverage", "", "| Project | Lines | Functions |", "|---|---:|---:|"]
+        out = ["#### Web coverage", "", "| Project | Lines | Functions |", COVERAGE_ALIGN]
         out += [_coverage_row(md(name, 60), areas[name]) for name in sorted(areas)]
         out += [_coverage_row("All web", self.summary["total"], strong=True), ""]
         if self.changed and self.changed["total"]:
@@ -673,7 +674,7 @@ def _coverage_row(label, t, strong=False):
 
 def _coverage_section(ctx):
     cov, changed = ctx["cov"], ctx["changed"]
-    out = ["#### C++ coverage", "", "| Area | Lines | Functions |", "|---|---:|---:|"]
+    out = ["#### C++ coverage", "", "| Area | Lines | Functions |", COVERAGE_ALIGN]
     out += [_coverage_row(label, cov["areas"][name]) for name, label in AREAS if name in cov["areas"]]
     out += [_coverage_row("All C++", cov["total"], strong=True), ""]
     if changed and changed["total"]:
@@ -727,7 +728,7 @@ def _components(components, order):
     """The coverage of each component, folded away, grouped by area in the given order."""
     if not components:
         return []
-    out = ["<details><summary>Coverage per component</summary>", "", "| Component | Lines | Functions |", "|---|---:|---:|"]
+    out = ["<details><summary>Coverage per component</summary>", "", "| Component | Lines | Functions |", COVERAGE_ALIGN]
     for c in sorted(components, key=lambda c: (order.index(c["area"]), c["component"])):
         lp = pct(c["linesCovered"], c["lines"])
         out.append(f"| {md(c['component'], 60)} | {dot(lp)} {fmt_pct(lp)} <sub>{c['linesCovered']}/{c['lines']}</sub> "
