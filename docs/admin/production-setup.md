@@ -93,8 +93,7 @@ finished files are skipped, and interrupted downloads resume.
 
 **Satellite imagery is optional,** and you must check its licence first. See
 [Satellite](tiles-builder.md#4-run) for the command and the licence notes. Without it, the map
-offers no satellite layer and the browser console shows one 404 for `satellite.pmtiles`;
-everything else works.
+has no satellite view; everything else works.
 
 **Check the result:**
 
