@@ -1,6 +1,6 @@
 # Building map data (rfmap/tiles-builder)
 
-This guide is for the person who runs the FPV Radio Map server. It produces the map files the site serves from our own server: basemap, hillshade, contours, satellite, the calculation DEM and the landcover (clutter) raster. Tool details are in [`tools/tiles-builder/README.md`](../../tools/tiles-builder/README.md).
+This guide is for the person who runs the FPV Radio Map server. It produces the map files the site serves from our own server: basemap, hillshade, contours, satellite, the calculation DEM and the landcover (clutter) raster. Tool details are in [`tools/tiles-builder/README.md`](../../tools/tiles-builder/README.md). To set up a whole server, follow [Production server, step by step](production-setup.md).
 
 > Estimates in this guide are marked **(estimate)**. They come from small test runs and the tools' general behaviour, not from measuring a full country.
 
@@ -64,6 +64,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-buil
 - For a mosaic you downloaded yourself, put the GeoTIFF/COG in `data/inputs/` and pass `--sat-file <name> --sat-mosaic <mosaic>` instead of `--sat-provider`. `--sat-mosaic` takes one of the EOX names above or `copernicus-sentinel-2` (any Sentinel-2 imagery, together with `--sat-data-year <year>`). The name, licence note and attribution come from the mosaic table in `rfmap_tiles/sources.py`; to use a mosaic that is not listed, add it there.
 - **Check the licence yourself before publishing.** Sentinel-2 cloudless mosaics are published under different licences per provider and per year. EOX lists the 2016 mosaic as CC BY 4.0 and the later years as CC BY-NC-SA 4.0 (non-commercial); some tile services forbid bulk downloading altogether. Read the provider's current licence and terms of service, then pass `--sat-licence-checked`. Without it the manifest records the licence as `UNVERIFIED`.
 - The download is rate-limited (`--sat-rate`, default 4 requests/s) and refuses jobs above `--sat-max-tiles`.
+- With `satellite.pmtiles` built, the web app shows a **Map / Satellite** switch on the map. Without it there is no switch, and the browser does not ask for the file.
 
 Running the same command again is safe. Finished outputs with unchanged inputs are skipped. Interrupted downloads resume from `data/cache`.
 
