@@ -360,8 +360,7 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     return result;
 }
 
-json Calculator::coverage(const json& mission, LinkKind kind, const std::function<void(double)>& progress,
-                          const std::function<bool()>& cancelled, ThreadPool& pool) {
+json Calculator::coverage(const json& mission, LinkKind kind, CoverageProgress& progress, ThreadPool& pool) {
     const CalcContext ctx = contextFor(mission);
     if (!mission.at("links").contains(toString(kind))) throw HttpError(422, "the mission has no " + toString(kind) + " link");
     const ResolvedLink link = links_.resolve(mission.at("links").at(toString(kind)), kind);
@@ -405,7 +404,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     auto worker = [&] {
         try {
             for (std::size_t r; (r = nextRow++) < rows;) {
-                if (cancelled()) return;
+                if (progress.cancelled()) return;
                 std::shared_lock gate(modules_.gate());
                 const CalcContextScope scope(ctx);
                 for (std::size_t c = 0; c < cols; ++c) {
@@ -426,7 +425,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
                         failures.insert(failures.end(), e.failures.begin(), e.failures.end());
                     }
                 }
-                progress(static_cast<double>(++doneRows) / static_cast<double>(rows));
+                progress.report(static_cast<double>(++doneRows) / static_cast<double>(rows));
             }
         } catch (...) {
             std::lock_guard lock(failMutex);
@@ -438,7 +437,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     for (int t = 0; t < pool.size(); ++t) parts.push_back(pool.submit(worker));
     for (auto& f : parts) f.get();
     if (error) std::rethrow_exception(error);
-    if (cancelled()) throw std::runtime_error("cancelled");
+    if (progress.cancelled()) throw std::runtime_error("cancelled");
 
     json marginJson = json::array(), worstJson = json::array();
     std::vector<bool> reachable(cols * rows, false);

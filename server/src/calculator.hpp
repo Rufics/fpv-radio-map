@@ -10,9 +10,18 @@
 #include "weather.hpp"
 
 #include <atomic>
-#include <functional>
 
 namespace rfmap {
+
+/// Where a coverage calculation reports its progress and learns that it should stop.
+class CoverageProgress {
+public:
+    virtual ~CoverageProgress() = default;
+    /// Called with 0..1 as rows finish, from the calculation's worker threads.
+    virtual void report(double fraction) = 0;
+    /// Polled between rows; true stops the calculation.
+    [[nodiscard]] virtual bool cancelled() const = 0;
+};
 
 /// The three calculations of the API: one path, a whole route, a coverage grid. Every result
 /// carries the hash of all its inputs and is cached under it.
@@ -31,9 +40,8 @@ public:
     /// POST /calc/route → RouteResult. `revision` is the stored mission's revision, if known.
     json route(const json& mission, std::optional<int> revision);
 
-    /// One link's coverage grid. `progress` gets 0..1; `cancelled` is polled between rows.
-    json coverage(const json& mission, LinkKind kind, const std::function<void(double)>& progress,
-                  const std::function<bool()>& cancelled, ThreadPool& pool);
+    /// One link's coverage grid. `progress` gets 0..1 and is polled for cancelling between rows.
+    json coverage(const json& mission, LinkKind kind, CoverageProgress& progress, ThreadPool& pool);
     /// Cells a coverage request would compute, for the size limit.
     [[nodiscard]] static std::size_t coverageCells(const json& mission);
 

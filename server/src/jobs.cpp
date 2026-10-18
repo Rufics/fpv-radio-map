@@ -4,6 +4,27 @@
 
 namespace rfmap {
 
+namespace {
+
+/// One part's progress, written under the manager's lock; cancelling is the job's flag.
+class PartProgress final : public CoverageProgress {
+public:
+    PartProgress(std::mutex& mutex, double& progress, const std::atomic<bool>& cancelled)
+        : mutex_(mutex), progress_(progress), cancelled_(cancelled) {}
+    void report(double fraction) override {
+        std::lock_guard lock(mutex_);
+        progress_ = fraction;
+    }
+    [[nodiscard]] bool cancelled() const override { return cancelled_.load(); }
+
+private:
+    std::mutex& mutex_;
+    double& progress_;
+    const std::atomic<bool>& cancelled_;
+};
+
+}  // namespace
+
 JobManager::JobManager(Calculator& calc, int jobThreads, int cellThreads, int keepMinutes, Logger& log)
     : calc_(calc), keepMinutes_(keepMinutes), log_(log), cells_(cellThreads), runners_(jobThreads) {}
 
@@ -51,13 +72,8 @@ json JobManager::start(const std::string& missionId, const json& mission) {
                 job->parts[i].state = "running";
             }
             try {
-                json grid = calc_.coverage(
-                    mission, linkKindFromString(job->parts[i].link),
-                    [&](double p) {
-                        std::lock_guard lock(mutex_);
-                        job->parts[i].progress = p;
-                    },
-                    [&] { return job->cancelled.load(); }, cells_);
+                PartProgress progress(mutex_, job->parts[i].progress, job->cancelled);
+                json grid = calc_.coverage(mission, linkKindFromString(job->parts[i].link), progress, cells_);
                 std::lock_guard lock(mutex_);
                 job->parts[i].state = grid.value("cached", false) ? "cached" : "done";
                 job->parts[i].progress = 1.0;

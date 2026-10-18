@@ -29,7 +29,8 @@ public:
     ThreadPool(const ThreadPool&) = delete;
     ThreadPool& operator=(const ThreadPool&) = delete;
 
-    std::future<void> submit(std::function<void()> task) {
+    template <class Task>
+    std::future<void> submit(Task task) {
         auto p = std::make_shared<std::packaged_task<void()>>(std::move(task));
         auto f = p->get_future();
         {
