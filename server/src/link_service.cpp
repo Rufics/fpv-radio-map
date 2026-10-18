@@ -239,7 +239,7 @@ LinkEvaluation LinkService::evaluate(const PreparedPath& path, const ResolvedLin
     }
     const auto t1 = tiltOf(link.groundAntenna.value("polarization", ""));
     const auto t2 = tiltOf(link.airAntenna.value("polarization", ""));
-    if (t1 && t2 && *t1 == *t2) {
+    if (t1.has_value() && t2.has_value() && *t1 == *t2) {
         b.tiltDeg = t1;
     } else {
         b.notes.push_back({"Polarisation", "ground and air antennas differ in polarisation; the mismatch loss is not "
@@ -320,12 +320,12 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
     dopt.useEmpiricalCorrection = ctx.optionsFor("rf.core").value("useEmpiricalCorrection", false);
     rfcore::LinkEvaluator evaluator{rfcore::EarthModel(k), rfcore::BullingtonDiffraction(dopt)};
 
-    if (weatherOn && ctx.forecast && ctx.forecast->covered() && ctx.forecast->rainMmPerHour &&
+    if (weatherOn && ctx.forecast && ctx.forecast->covered() && ctx.forecast->rainMmPerHour.has_value() &&
         *ctx.forecast->rainMmPerHour > 0.0) {
         if (b.frequency.value() < 1e9) {
             notes.push_back({"Rain", "ITU-R P.838-3 covers 1-1000 GHz; rain loss at " + fmt(b.frequency.value() / 1e6) +
                                          " MHz is not computed (forecast " + fmt(*ctx.forecast->rainMmPerHour) + " mm/h)"});
-        } else if (b.tiltDeg) {
+        } else if (b.tiltDeg.has_value()) {
             evaluator.addContributor(std::make_shared<rfext::RainContributor>(*ctx.forecast->rainMmPerHour, *b.tiltDeg,
                                                                               ctx.forecast->sourceLabel));
         }
@@ -349,7 +349,7 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
     for (const auto& n : r.uncertainty) uncertainty.push_back({{"what", n.what}, {"detail", n.detail}});
     for (const auto& n : notes) uncertainty.push_back({{"what", n.what}, {"detail", n.detail}});
     const DemSource& dem = requireDem();
-    if (!dem.statedErrorM()) {
+    if (!dem.statedErrorM().has_value()) {
         uncertainty.push_back({{"what", "Terrain data"},
                                {"detail", "the DEM's stated vertical error is not configured on this server "
                                           "(data.demStatedErrorM), so no terrain error is carried"}});
@@ -475,7 +475,7 @@ json LinkService::profileJson(const rfcore::TerrainProfile& p, double stepM) {
     for (const auto& s : p.samples()) {
         json j = pointJson(s, s.distance.value());
         j["uncertaintyM"] = s.uncertainty.value();
-        if (s.landCover) j["landCover"] = *s.landCover;
+        if (s.landCover.has_value()) j["landCover"] = *s.landCover;
         pts.push_back(std::move(j));
     }
     return {{"source", p.sourceName()}, {"lengthM", p.length().value()}, {"stepM", stepM}, {"points", pts}};

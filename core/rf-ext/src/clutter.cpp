@@ -46,7 +46,7 @@ ClutterConditioner::Report ClutterConditioner::apply(rfcore::TerrainProfile& pro
     };
     for (std::size_t i = 1; i + 1 < samples.size(); ++i) {
         rfcore::ProfileSample& s = samples[i];
-        if (!s.landCover) {
+        if (!s.landCover.has_value()) {
             ++r.samplesWithoutCover;
             continue;
         }

@@ -118,7 +118,7 @@ public:
 
     double groundMsl(const LatLon& p) const override {
         const auto h = terrain_(p);
-        if (!h) throw MissingTerrain("no terrain data");
+        if (!h.has_value()) throw MissingTerrain("no terrain data");
         return *h;
     }
 

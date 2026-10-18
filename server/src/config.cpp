@@ -184,7 +184,7 @@ Config Config::fromJson(json doc) {
 
     if (c.server.port <= 0 || c.server.port > 65535) throw std::invalid_argument("server.port out of range");
     if (c.auth.pinMaxAttempts < 1) throw std::invalid_argument("auth.pinMaxAttempts must be >= 1");
-    if (c.data.demStatedErrorM && !(*c.data.demStatedErrorM >= 0.0)) {
+    if (c.data.demStatedErrorM.has_value() && !(*c.data.demStatedErrorM >= 0.0)) {
         throw std::invalid_argument("data.demStatedErrorM must be >= 0");
     }
 

@@ -135,7 +135,7 @@ Application::Application(Config config, std::string ownerKeyText, bool ownerKeyI
         dem_ = std::make_shared<DemSource>(raster, name, config_.data.demStatedErrorM, config_.data.demStatedErrorSource);
         log_.info("terrain", "DEM " + config_.data.dem.string() + " (" + raster->dataType() + ", step " +
                                  std::to_string(raster->nativeResolution().value()) + " m): " + name);
-        if (!config_.data.demStatedErrorM) {
+        if (!config_.data.demStatedErrorM.has_value()) {
             log_.warn("terrain", "data.demStatedErrorM is not set: results carry no terrain error");
         }
     } else {
@@ -425,7 +425,7 @@ void Application::routes() {
         const json doc = body(req);
         schemas_->require("mission", doc);
         const auto rev = missions_->save(id, doc, expected);
-        if (!rev) {
+        if (!rev.has_value()) {
             const auto cur = missions_->get(id);
             if (!cur) throw HttpError(404, "no such mission");
             throw HttpError(409, "someone saved this mission in between", {{"revision", cur->revision}});
@@ -504,7 +504,7 @@ void Application::routes() {
             std::shared_lock gate(runner_->gate());
             result = calc_->route(mission, revision);
         }
-        if (revision && p.role == Role::Edit) missions_->storeResultIfCurrent(p.missionId, mission, result);
+        if (revision.has_value() && p.role == Role::Edit) missions_->storeResultIfCurrent(p.missionId, mission, result);
         sendJson(res, 200, result);
     }));
 
@@ -660,7 +660,7 @@ void Application::routes() {
             std::unique_lock gate(runner_->gate());
             try {
                 if (options) registry_->setOptions(id, *options);
-                if (enabled) registry_->setEnabled(id, *enabled);
+                if (enabled.has_value()) registry_->setEnabled(id, *enabled);
             } catch (const std::invalid_argument& e) {
                 throw HttpError(422, e.what());
             }
