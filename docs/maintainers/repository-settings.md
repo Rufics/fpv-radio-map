@@ -12,7 +12,7 @@ without giving pull request code any secret or write access.
 | `ci.yml`, fork or Dependabot | `pull_request` | yes | read-only | none |
 | `ci.yml`, comment job, branches of this repository | `pull_request` | **no**: posts the finished report as text with `gh` | `pull-requests: write` | none |
 | `pr-title.yml` | `pull_request` | yes (commitlint config) | read-only | none |
-| `ci-report.yml`, forks and Dependabot | `workflow_run` after CI | **no**: main's code, PR artifacts read as data | `pull-requests: write` | none |
+| `ci-report.yml`, forks | `workflow_run` after CI | **no**: main's code, PR artifacts read as data | `pull-requests: write` | none |
 | CodeQL, SonarCloud, Gitar | GitHub apps | analyse only | app's own | app's own |
 
 The rule behind it: a job that runs pull request code never gets write access or secrets, and a

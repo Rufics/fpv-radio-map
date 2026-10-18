@@ -236,10 +236,10 @@ jobs:
 
   # One comment per pull request, updated on every run. The only job with write access, and it
   # checks out and runs no code: it reads the finished report as text and posts it with the gh
-  # CLI. Only for branches of this repository: forks and runs started by Dependabot get a
-  # read-only token, and ci-report.yml, which checks the same actor, comments for them. A run
-  # cancelled by a newer push leaves the comment to that push's run. Not a required check, so a
-  # failed comment never blocks a merge.
+  # CLI. Only for branches of this repository; ci-report.yml comments on forks' pull requests. A
+  # run cancelled by a newer push leaves the comment to that push's run. Runs started by
+  # Dependabot get a read-only token, so their comment fails without failing the run; the report
+  # is still in the run summary.
   comment:
     name: Post the CI report
     needs: [changes, cpp, coverage, web, report]
@@ -247,9 +247,9 @@ jobs:
       always() &&
       !contains(needs.*.result, 'cancelled') &&
       github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.actor != 'dependabot[bot]'
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
+    continue-on-error: true
     permissions:
       pull-requests: write
     steps:
