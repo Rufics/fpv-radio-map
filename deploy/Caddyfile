@@ -1,0 +1,8 @@
+# TLS in front of FPV Radio Map: the caddy service in docker-compose.yml, on when .env sets
+# COMPOSE_PROFILES=tls. Caddy gets and renews the certificate for RFMAP_DOMAIN by itself.
+{$RFMAP_DOMAIN} {
+	# web's proxy port. Caddy sets X-Forwarded-For to the address the client connected from and
+	# ignores one the client sends; nginx passes it on, so rate limits count per client.
+	# No `encode`: PMTiles are read with Range requests and must not be compressed.
+	reverse_proxy web:8081
+}

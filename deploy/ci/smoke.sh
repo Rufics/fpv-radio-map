@@ -34,3 +34,24 @@ check "admin cache"        "$base/api/v1/admin/cache" -H "Authorization: Bearer 
 code=$(curl -s -o /dev/null -w '%{http_code}' "$base/api/v1/admin/cache")
 [ "$code" = 401 ] || { echo "FAIL admin without token: HTTP $code (want 401)"; exit 1; }
 echo "ok   admin without token is refused"
+
+# Rate limits count per client address; the "open" class (public link lookup) allows a burst of 5.
+# Port 8080: a client cannot pick its address with X-Forwarded-For.
+limited=no
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Forwarded-For: 198.51.100.$i" "$base/api/v1/links/smoke-unknown")
+  if [ "$code" = 429 ]; then limited=yes; fi
+done
+[ "$limited" = yes ] || { echo "FAIL public port: a forged X-Forwarded-For escaped the rate limit"; exit 1; }
+echo "ok   public port ignores a forged X-Forwarded-For"
+# Port 8081 (the TLS proxy's, never published): the proxy's X-Forwarded-For names the client,
+# so one client hitting the limit leaves the next one alone.
+proxied() {  # proxied CLIENT_ADDRESS -> HTTP status of a link lookup through port 8081
+  compose exec -T web wget -q -S -O /dev/null --header "X-Forwarded-For: $1" \
+    http://127.0.0.1:8081/api/v1/links/smoke-unknown 2>&1 | awk '$1 ~ /^HTTP\// {code=$2} END {print code}'
+}
+for i in 1 2 3 4 5 6 7 8 9 10; do a=$(proxied 203.0.113.1); done
+[ "$a" = 429 ] || { echo "FAIL proxy port: client A was not limited (HTTP $a)"; exit 1; }
+b=$(proxied 203.0.113.2)
+[ "$b" = 404 ] || { echo "FAIL proxy port: client B shares client A's limit (HTTP $b)"; exit 1; }
+echo "ok   proxy port counts rate limits per client"

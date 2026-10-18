@@ -272,53 +272,31 @@ the admin token; see the [API reference](../api/openapi.yaml).
 
 ## 8. TLS
 
-Share links, PINs and the admin token must not travel over plain HTTP. Put a TLS reverse proxy
-in front of `web`, and let only that proxy reach it.
+Share links, PINs and the admin token must not travel over plain HTTP. The stack has a TLS
+proxy built in: the `caddy` service, which gets and renews a Let's Encrypt certificate by itself.
 
-Bind `web` to localhost. In `deploy/.env`:
+1. Point your domain's DNS record at the server, and open ports 80 and 443 in its firewall.
+2. In `deploy/.env`, turn the proxy on and keep the plain HTTP port local:
 
-```
-RFMAP_HTTP_PORT=127.0.0.1:8088
-```
+   ```
+   COMPOSE_PROFILES=tls
+   RFMAP_DOMAIN=maps.example.org
+   RFMAP_HTTP_PORT=127.0.0.1:8088
+   ```
 
-```sh
-cd ~/fpv-radio-map/deploy && docker compose up -d
-```
+3. Start it and watch the certificate arrive:
 
-Then install Caddy (<https://caddyserver.com/docs/install>) and put this in
-`/etc/caddy/Caddyfile`, with your domain:
+   ```sh
+   cd ~/fpv-radio-map/deploy && docker compose up -d
+   docker compose logs -f caddy   # wait for "certificate obtained successfully", then Ctrl+C
+   ```
 
-```
-maps.example.org {
-	reverse_proxy 127.0.0.1:8088
-}
-```
+Open `https://maps.example.org`. Rate limits keep counting per visitor behind the proxy: Caddy
+tells nginx the visitor's address on a port that is not published, and ignores an address a
+visitor makes up. For a test on your own machine, `RFMAP_DOMAIN=localhost` gives a certificate
+from Caddy's local authority, which the browser warns about.
 
-```sh
-sudo systemctl reload caddy
-```
-
-Caddy gets and renews the certificate by itself, and passes HTTP Range requests through without
-compressing them, as PMTiles need. Any other proxy works too: forward everything to
-`127.0.0.1:8088`, keep the `Range` header, and do not gzip `.pmtiles`.
-
-**Known limitation.** Behind a proxy on the same host, rfmap-server sees every visitor with the
-proxy's address, so all visitors share the per-address rate limits (`rateLimits` in
-[the configuration](deploy.md#3-configuration)). The PIN lockout counts per share link and is
-not affected. If your users get `429 Too Many Requests`, raise the limits with
-`deploy/docker-compose.override.yml`, which Compose reads next to `docker-compose.yml`:
-
-```yaml
-services:
-  rfmap-server:
-    environment:
-      RFMAP__RATELIMITS__OPEN: '{"perMinute": 60, "burst": 30}'
-      RFMAP__RATELIMITS__CALC: '{"perMinute": 600, "burst": 120}'
-      RFMAP__RATELIMITS__COVERAGE: '{"perMinute": 30, "burst": 10}'
-```
-
-Then run `docker compose up -d`. The defaults are in
-[`server.example.json`](../../server/config/server.example.json).
+Already running a reverse proxy? See [TLS](deploy.md#tls) for the port to point it at.
 
 ## 9. Weather
 
@@ -396,4 +374,5 @@ After a `git pull` that changes `tools/tiles-builder`, build its image again (st
 | Image build: `certificate verify failed` | A TLS-intercepting proxy. Pass its CA as a build secret, see [Start](deploy.md#2-start). |
 | `health` shows `"dem":false` | `RFMAP_TILES_DIR` does not point at the directory that holds `dem.cog.tif`. Write the full path (`/home/<you>/rfmap-data/out`, not `~/...`) and run `docker compose up -d`. |
 | Map is empty, `/tiles/...` answers 404 | Same as above, for the `web` container. |
+| `caddy` log shows certificate errors | The domain does not point at this server yet, or ports 80 and 443 are closed or taken. Check `dig +short <domain>` and the firewall, then `docker compose restart caddy`. |
 | Module upload: `signature` check fails | The module was signed with a different key than the one the server was built with. Sign it with your `owner.secret` (step 6). |
