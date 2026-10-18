@@ -76,6 +76,16 @@ json calcPathSchema() {
             {"oneOf", {{{"required", {"kind", "link"}}}, {{"required", {"links"}}}}}};
 }
 
+/// Drops the map layers the tiles-builder manifest next to `dem` does not list, so the client
+/// shows no satellite view it cannot load. Without a manifest every layer stays.
+void dropUnbuiltLayers(json& map, const std::filesystem::path& dem) {
+    const auto files = manifestFiles(dem);
+    if (!files) return;
+    for (const char* layer : {"basemap", "satellite", "hillshade", "contours"}) {
+        if (!files->contains(std::string(layer) + ".pmtiles")) map.erase(layer);
+    }
+}
+
 }  // namespace
 
 Application::Application(Config config, std::string ownerKeyText, bool ownerKeyIsDev, std::filesystem::path sqlDir)
@@ -285,8 +295,10 @@ json Application::mapConfig() const {
                 {"zoom", 11}};
     // The satellite credit is the operator's: it comes from the manifest the tiles-builder wrote.
     if (!config_.data.dem.empty()) {
-        const auto attributions = manifestAttributions(config_.data.dem);
-        if (!attributions.empty()) out["attribution"] = attributions;
+        if (const auto attributions = manifestAttributions(config_.data.dem); !attributions.empty()) {
+            out["attribution"] = attributions;
+        }
+        dropUnbuiltLayers(out, config_.data.dem);
     }
     if (dem_) {
         const rfcore::GeoPoint c = dem_->raster().centre();

@@ -65,6 +65,7 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-buil
 - For any other mosaic, download it as a GeoTIFF/COG into `data/inputs/` and pass `--sat-file <name>` instead of `--sat-provider`.
 - **Check the licence yourself before publishing.** Sentinel-2 cloudless mosaics are published under different licences per provider and per year. EOX lists the 2016 mosaic as CC BY 4.0 and the later years as CC BY-NC-SA 4.0 (non-commercial); some tile services forbid bulk downloading altogether. Read the provider's current licence and terms of service. If you leave out `--sat-licence` or `--sat-attribution`, the manifest records the licence as `UNVERIFIED`.
 - The download is rate-limited (`--sat-rate`, default 4 requests/s) and refuses jobs above `--sat-max-tiles`.
+- With `satellite.pmtiles` built, the web app shows a **Map / Satellite** switch on the map. Without it there is no switch, and the browser does not ask for the file.
 
 Running the same command again is safe. Finished outputs with unchanged inputs are skipped. Interrupted downloads resume from `data/cache`.
 

@@ -49,7 +49,9 @@ paths:
     get:
       summary: >-
         Map sources for the client (PMTiles under /tiles, glyphs, attribution, start view). Defaults are
-        the tiles-builder file names; a `map` object in the server config is merged over them (RFC 7386).
+        the tiles-builder file names. When a tiles-builder manifest.json lies next to the DEM, only the
+        layers it lists are included (no `satellite` without satellite.pmtiles). A `map` object in the
+        server config is merged over the result (RFC 7386).
       responses:
         '200':
           description: Map configuration

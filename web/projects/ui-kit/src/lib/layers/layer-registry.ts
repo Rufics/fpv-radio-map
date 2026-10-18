@@ -11,6 +11,8 @@ export interface LayerEntry {
 @Injectable()
 export class LayerRegistry {
   private readonly entries = signal<readonly LayerEntry[]>([]);
+  /** Ids of the layers whose sources and style layers are on the map. */
+  private readonly attached = new Set<string>();
   private map?: MlMap;
   private ready = false;
 
@@ -47,14 +49,15 @@ export class LayerRegistry {
       entry = { def, visible: false };
     }
     this.entries.update((list) => [...list, entry]);
-    if (this.map && this.ready) this.attachOne(entry);
+    if (this.map && this.ready && this.wanted(entry)) this.attachOne(entry);
     return () => this.unregister(def.id);
   }
 
   unregister(id: string): void {
     const entry = this.entries().find((e) => e.def.id === id);
     if (!entry) return;
-    if (this.map && this.ready) entry.def.detach(this.map);
+    if (this.map && this.ready && this.attached.has(id)) entry.def.detach(this.map);
+    this.attached.delete(id);
     this.entries.update((list) => list.filter((e) => e !== entry));
   }
 
@@ -79,7 +82,10 @@ export class LayerRegistry {
       }),
     );
     if (this.map && this.ready) {
-      for (const e of this.entries()) e.def.setVisible(this.map, e.visible);
+      for (const e of this.sorted(this.entries())) {
+        if (this.attached.has(e.def.id)) e.def.setVisible(this.map, e.visible);
+        else if (this.wanted(e)) this.attachOne(e);
+      }
     }
   }
 
@@ -91,12 +97,20 @@ export class LayerRegistry {
   connect(map: MlMap): void {
     this.map = map;
     this.ready = true;
-    for (const e of this.sorted(this.entries())) this.attachOne(e);
+    for (const e of this.sorted(this.entries())) {
+      if (this.wanted(e)) this.attachOne(e);
+    }
   }
 
   disconnect(): void {
     this.map = undefined;
     this.ready = false;
+    this.attached.clear();
+  }
+
+  /** Whether a layer belongs on the map now: always, or once shown for lazy layers. */
+  private wanted(entry: LayerEntry): boolean {
+    return !entry.def.lazy || entry.visible;
   }
 
   private attachOne(entry: LayerEntry): void {
@@ -106,6 +120,7 @@ export class LayerRegistry {
     try {
       entry.def.attach(map, beforeId);
       entry.def.setVisible(map, entry.visible);
+      this.attached.add(entry.def.id);
     } catch (e) {
       console.error(`Layer "${entry.def.id}" could not be added`, e);
     }
