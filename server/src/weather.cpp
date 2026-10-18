@@ -5,6 +5,7 @@
 #include <httplib.h>
 
 #include <cmath>
+#include <format>
 #include <sstream>
 
 namespace rfmap {
@@ -61,7 +62,7 @@ TimePoint unixTime(const json& v) {
     return Clock::from_time_t(static_cast<std::time_t>(s));
 }
 
-std::string unreadable(const std::exception& e) { return std::string("unreadable forecast response: ") + e.what(); }
+std::string unreadable(const std::exception& e) { return std::format("unreadable forecast response: {}", e.what()); }
 
 json hourlyOf(const json& response) {
     return response.is_object() ? response.value("hourly", json::object()) : json::object();
@@ -221,7 +222,7 @@ std::size_t WeatherService::pressureLevels(const json& hourly, std::size_t i, do
         const double h = geometricHeight(*gh);
         // A level the model extrapolates below the ground is not air the path flies through.
         if (!(h > surface)) continue;
-        column.push_back({rfext::Metres(h), *t, static_cast<double>(level), *rh});
+        column.emplace_back(rfext::Metres(h), *t, static_cast<double>(level), *rh);
         ++levels;
     }
     return levels;
@@ -233,18 +234,20 @@ std::optional<ForecastAt> WeatherService::fromResponse(const json& r, const Conf
     const json hourly = hourlyOf(r);
     const json times = timesOf(hourly);
     if (!times.is_array() || times.empty()) return std::nullopt;
-    const auto i = hourIndex(times, time);
+    const auto index = hourIndex(times, time);
     // Last hour with the surface values the column needs.
     if (const auto last = lastCoveredHour(hourly, times); last && (!reach || *last > *reach)) reach = last;
-    const auto air = i ? surfaceAir(r, hourly, *i) : std::nullopt;
-    if (!air) return std::nullopt;
+    if (!index.has_value()) return std::nullopt;
+    const std::size_t i = *index;
+    const auto air = surfaceAir(r, hourly, i);
+    if (!air.has_value()) return std::nullopt;
 
     ForecastAt out;
-    const TimePoint valid = unixTime(times.at(*i));
+    const TimePoint valid = unixTime(times.at(i));
     const double surface = air->elevationM + 2.0;
-    out.column.push_back({rfext::Metres(surface), air->temperatureC, air->pressureHpa, air->relativeHumidity});
-    const std::size_t levels = pressureLevels(hourly, *i, surface, out.column);
-    out.rainMmPerHour = valueAt(hourly, "precipitation", *i);
+    out.column.emplace_back(rfext::Metres(surface), air->temperatureC, air->pressureHpa, air->relativeHumidity);
+    const std::size_t levels = pressureLevels(hourly, i, surface, out.column);
+    out.rainMmPerHour = valueAt(hourly, "precipitation", i);
 
     const std::string models = tier.models.empty() ? "default models" : tier.models;
     out.sourceLabel = "Open-Meteo " + models + ", valid " + isoUtc(valid) + (run ? ", run " + isoUtc(*run) : "");
@@ -258,8 +261,8 @@ std::optional<ForecastAt> WeatherService::fromResponse(const json& r, const Conf
          {"airDensityKgM3", airDensity(out.column.front())},
          {"surfaceElevationM", air->elevationM},
          {"stale", false}};
-    setIfPresent(p, "windSpeedMps", valueAt(hourly, "wind_speed_10m", *i));
-    setIfPresent(p, "windFromDeg", valueAt(hourly, "wind_direction_10m", *i));
+    setIfPresent(p, "windSpeedMps", valueAt(hourly, "wind_speed_10m", i));
+    setIfPresent(p, "windFromDeg", valueAt(hourly, "wind_direction_10m", i));
     setIfPresent(p, "precipitationMmPerHour", out.rainMmPerHour);
     if (run) {
         p["runUtc"] = isoUtc(*run);
@@ -295,9 +298,11 @@ ForecastAt WeatherService::at(double lat, double lon, TimePoint time) {
         }
         try {
             if (auto found = fromResponse(r, tier, lat, time, run, reach)) return *found;
-        } catch (const std::exception& e) {
+        } catch (const json::exception& e) {
             // A response that does not read as a forecast is a failed tier, like an unreachable service.
             lastError = unreadable(e);
+        } catch (const std::invalid_argument& e) {
+            lastError = unreadable(e);  // a time the clock cannot hold
         }
     }
     out.point["requestedUtc"] = isoUtc(time);
@@ -334,8 +339,10 @@ json WeatherService::horizon(double lat, double lon) {
             if (const auto last = lastCoveredHour(hourly, times)) {
                 out[tier.name == "long-range" ? "longRangeUntilUtc" : "hourlyUntilUtc"] = isoUtc(*last);
             }
-        } catch (const std::exception& e) {
+        } catch (const json::exception& e) {
             out["error"] = unreadable(e);
+        } catch (const std::invalid_argument& e) {
+            out["error"] = unreadable(e);  // a time the clock cannot hold
         }
     }
     return out;

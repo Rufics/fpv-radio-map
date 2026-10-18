@@ -2,6 +2,7 @@
 
 #include <nlohmann/json-schema.hpp>
 
+#include <format>
 #include <fstream>
 
 namespace rfmap {
@@ -32,7 +33,7 @@ constexpr std::size_t kMaxFormattedLength = 2048;
 
 void boundedFormatCheck(const std::string& format, const std::string& value) {
     if (value.size() > kMaxFormattedLength) {
-        throw std::invalid_argument("longer than " + std::to_string(kMaxFormattedLength) + " characters");
+        throw std::invalid_argument(std::format("longer than {} characters", kMaxFormattedLength));
     }
     nlohmann::json_schema::default_string_format_check(format, value);
 }

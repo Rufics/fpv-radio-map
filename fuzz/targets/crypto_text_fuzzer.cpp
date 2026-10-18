@@ -13,28 +13,31 @@
 using namespace rfmod;
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
-    const std::string_view text = rfmap::fuzz::asText(data, size);
+    const std::string text = rfmap::fuzz::asText(data, size);
 
     try {
         const Bytes raw = fromBase64(text);
-        RFMAP_FUZZ_CHECK(raw.size() <= text.size());
-        RFMAP_FUZZ_CHECK(fromBase64(toBase64(raw.data(), raw.size())) == raw);
+        rfmap::fuzz::check(raw.size() <= text.size());
+        rfmap::fuzz::check(fromBase64(toBase64(raw.data(), raw.size())) == raw);
     } catch (const std::invalid_argument&) {
+        // Not base64: refusing it is the documented answer.
     }
 
     try {
         const PublicKey key = PublicKey::fromText(text);
-        RFMAP_FUZZ_CHECK(PublicKey::fromText(key.toText()) == key);
-        RFMAP_FUZZ_CHECK(key.id().size() == 16);
+        rfmap::fuzz::check(PublicKey::fromText(key.toText()) == key);
+        rfmap::fuzz::check(key.id().size() == 16);
         // Garbage signatures of any length are refused, never read past their end.
         (void)key.verify(text, Bytes(text.begin(), text.end()));
     } catch (const std::invalid_argument&) {
+        // Not a public key: refusing it is the documented answer.
     }
 
     try {
         const SecretKey key = SecretKey::fromText(text);
-        RFMAP_FUZZ_CHECK(SecretKey::fromText(key.toText()).publicKey() == key.publicKey());
+        rfmap::fuzz::check(SecretKey::fromText(key.toText()).publicKey() == key.publicKey());
     } catch (const std::invalid_argument&) {
+        // Not a secret key: refusing it is the documented answer.
     }
     return 0;
 }

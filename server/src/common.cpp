@@ -1,6 +1,6 @@
 #include "common.hpp"
 
-#include <cstdio>
+#include <algorithm>
 #include <ctime>
 #include <string_view>
 
@@ -24,7 +24,7 @@ constexpr std::time_t kAfterLastSecond = 7289654400;  // 2201-01-01T00:00:00Z
 
 /// A cursor over the text being parsed.
 struct Cursor {
-    const std::string& s;
+    std::string_view s;
     std::size_t pos = 0;
 
     /// Reads exactly `n` ASCII digits.
@@ -45,7 +45,7 @@ struct Cursor {
         return true;
     }
     bool oneOf(std::string_view chars) {
-        if (pos >= s.size() || chars.find(s[pos]) == std::string_view::npos) return false;
+        if (pos >= s.size() || std::ranges::find(chars, s[pos]) == chars.end()) return false;
         ++pos;
         return true;
     }
@@ -60,7 +60,8 @@ struct IsoFields {
 
 /// YYYY-MM-DD
 bool parseDate(Cursor& c, IsoFields& f) {
-    int year = 0, month = 0;
+    int year = 0;
+    int month = 0;
     if (!c.digits(4, year) || !c.literal('-') || !c.digits(2, month) || !c.literal('-') || !c.digits(2, f.tm.tm_mday)) {
         return false;
     }
@@ -77,7 +78,11 @@ bool parseClock(Cursor& c, IsoFields& f) {
     if (!c.literal('.')) return true;
     const std::size_t from = c.pos;
     double scale = 0.1;
-    for (int d = 0; c.digits(1, d); scale /= 10.0) f.fraction += d * scale;
+    int d = 0;
+    while (c.digits(1, d)) {
+        f.fraction += d * scale;
+        scale /= 10.0;
+    }
     return c.pos > from;
 }
 
@@ -86,7 +91,8 @@ bool parseZone(Cursor& c, IsoFields& f) {
     if (c.oneOf("Zz")) return true;
     if (!c.oneOf("+-")) return false;
     const int sign = c.s[c.pos - 1] == '+' ? 1 : -1;
-    int hours = 0, minutes = 0;
+    int hours = 0;
+    int minutes = 0;
     if (!c.digits(2, hours)) return false;
     c.literal(':');
     if (!c.digits(2, minutes)) return false;

@@ -10,12 +10,11 @@
 #include <chrono>
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
-    const std::string text(reinterpret_cast<const char*>(data), size);
+    const std::string text = rfmap::fuzz::asText(data, size);
     const auto t = rfmap::parseIsoUtc(text);
     if (!t.has_value()) return 0;
     const std::string printed = rfmap::isoUtc(*t);
     const auto again = rfmap::parseIsoUtc(printed);
-    RFMAP_FUZZ_CHECK(again.has_value());
-    RFMAP_FUZZ_CHECK(*again == std::chrono::floor<std::chrono::seconds>(*t));
+    rfmap::fuzz::check(again.has_value() && *again == std::chrono::floor<std::chrono::seconds>(*t));
     return 0;
 }

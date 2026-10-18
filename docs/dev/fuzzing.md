@@ -83,5 +83,5 @@ crash fails the run, and the crashing input is attached to it as the `fuzz-crash
 Write `fuzz/targets/<name>_fuzzer.cpp` with `LLVMFuzzerTestOneInput`, add a line to
 `fuzz/CMakeLists.txt` and a few small, valid inputs in `fuzz/corpus/<name>/`. Fuzz what reads
 outside input first. Catch only the exceptions the code documents; anything else is a finding.
-`fuzz/support.hpp` has `RFMAP_FUZZ_CHECK` for properties and `ByteReader` to turn bytes into
+`fuzz/support.hpp` has `rfmap::fuzz::check` for properties and `ByteReader` to turn bytes into
 numbers.

@@ -44,7 +44,7 @@ std::map<std::string, std::string> splitSections(std::string_view text) {
         const std::size_t nameStart = pos + kMark.size();
         const std::size_t nameEnd = std::min(text.find('\n', nameStart), text.size());
         const std::size_t bodyStart = std::min(nameEnd + 1, text.size());
-        std::size_t next = text.find("\n--- ", bodyStart);
+        const std::size_t next = text.find("\n--- ", bodyStart);
         const std::size_t bodyEnd = next == std::string_view::npos ? text.size() : next;
         files.emplace(std::string(text.substr(nameStart, nameEnd - nameStart)),
                       std::string(text.substr(bodyStart, bodyEnd - bodyStart)));
@@ -82,15 +82,15 @@ std::string writeTar(const std::map<std::string, std::string>& files) {
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
     static const rfmod::Version host = rfmod::Version::parse(RFMAP_HOST_VERSION);
     static const rfmod::TrustStore trust(devKey().publicKey().toText(),
-                                         std::filesystem::temp_directory_path() / "rfmap-fuzz-no-such-keys.json");
+                                         rfmap::fuzz::noSuchKeysFile());
 
     std::map<std::string, std::string> files = splitSections(rfmap::fuzz::asText(data, size));
-    if (!files.count("META/files.sha256")) {
+    if (!files.contains("META/files.sha256")) {
         rfmod::PackageFiles content;
         content.files = files;
         files["META/files.sha256"] = rfmod::PackageWriter::fileList(content);
     }
-    if (!files.count("META/signature")) {
+    if (!files.contains("META/signature")) {
         const rfmod::Bytes sig = devKey().sign(files.at("META/files.sha256"));
         files["META/signature"] = nlohmann::json{{"alg", "ed25519"},
                                                  {"keyId", devKey().publicKey().id()},
@@ -100,6 +100,6 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 
     rfmod::ValidationReport report;
     const auto verified = rfmod::PackageVerifier::verify(writeTar(files), trust, host, report);
-    RFMAP_FUZZ_CHECK(verified.has_value() == report.ok());
+    rfmap::fuzz::check(verified.has_value() == report.ok());
     return 0;
 }

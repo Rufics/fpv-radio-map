@@ -29,18 +29,21 @@ BUILD = SRC.parent / "build-fuzz"
 WORK = BUILD / "fuzz-work"
 
 # Extra libFuzzer flags per target: dictionaries, and room for the long inputs that found bugs.
+JSON_DICT = "-dict=" + str(SRC / "dict" / "json.dict")
+SEMVER_DICT = "-dict=" + str(SRC / "dict" / "semver.dict")
+LONG_INPUTS = "-max_len=65536"
 OPTIONS = {
-    "semver": ["-dict=" + str(SRC / "dict/semver.dict")],
-    "manifest": ["-dict=" + str(SRC / "dict/json.dict"), "-max_len=65536"],
-    "mission_schema": ["-dict=" + str(SRC / "dict/json.dict"), "-max_len=65536"],
-    "weather": ["-dict=" + str(SRC / "dict/json.dict")],
-    "signed_package": ["-dict=" + str(SRC / "dict/json.dict")],
-    "iso_time": ["-max_len=65536"],
-    "package": ["-max_len=65536"],
+    "semver": [SEMVER_DICT],
+    "manifest": [JSON_DICT, LONG_INPUTS],
+    "mission_schema": [JSON_DICT, LONG_INPUTS],
+    "weather": [JSON_DICT],
+    "signed_package": [JSON_DICT],
+    "iso_time": [LONG_INPUTS],
+    "package": [LONG_INPUTS],
 }
 
 
-def fuzz_one(binary: Path, target: str, seconds: int, merge: bool) -> bool:
+def fuzz_one(binary: Path, target: str, seconds: int, *, merge: bool) -> bool:
     corpus = WORK / "corpus" / target
     crashes = WORK / "crashes" / target
     corpus.mkdir(parents=True, exist_ok=True)
@@ -51,7 +54,7 @@ def fuzz_one(binary: Path, target: str, seconds: int, merge: bool) -> bool:
         rc = subprocess.run(
             [str(binary), *flags, f"-max_total_time={seconds}", "-timeout=25", "-rss_limit_mb=2560",
              "-print_final_stats=1", f"-artifact_prefix={crashes}/", str(corpus), str(SRC / "corpus" / target)],
-            stdout=out, stderr=subprocess.STDOUT).returncode
+            stdout=out, stderr=subprocess.STDOUT, check=False).returncode
     text = log.read_text(errors="replace")
     if rc != 0:
         print(f"{target}: FAILED, see {log}\n" + "\n".join(text.splitlines()[-60:]), flush=True)
@@ -72,7 +75,7 @@ def fuzz_one(binary: Path, target: str, seconds: int, merge: bool) -> bool:
 
 def setting_seconds() -> int:
     text = os.environ.get("FUZZ_SECONDS", "60")
-    if not re.fullmatch(r"[0-9]{1,6}", text) or int(text) == 0:
+    if not re.fullmatch(r"\d{1,6}", text, re.ASCII) or int(text) == 0:
         sys.exit(f"FUZZ_SECONDS must be a whole number of seconds from 1 to 999999, not {text!r}")
     return int(text)
 
@@ -95,7 +98,7 @@ def main() -> int:
 
     WORK.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
-        results = list(pool.map(lambda t: fuzz_one(binaries[t], t, seconds, merge), targets))
+        results = list(pool.map(lambda t: fuzz_one(binaries[t], t, seconds, merge=merge), targets))
     if all(results):
         return 0
     print("Crashing inputs:")

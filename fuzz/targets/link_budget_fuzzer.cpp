@@ -33,7 +33,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     rx.requiredMargin = Decibel(in.range(0.0, 30.0));
     const double latitude = in.range(-89.0, 89.0);
     const double azimuth = in.range(0.0, 360.0);
-    const bool clutter = (in.byte() & 1) != 0;
+    const bool clutter = in.flag();
     const double treeHeight = in.range(0.0, 60.0);
 
     std::vector<ProfileSample> samples;
@@ -42,8 +42,8 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         // Steps from a centimetre to 5 km; heights from the Dead Sea to Everest.
         distance += samples.empty() ? 0.0 : in.range(0.01, 5000.0);
         const Metres ground(in.range(-430.0, 8850.0));
-        const int cover = static_cast<int>(in.byte() % 11 + 1) * 10;
-        samples.push_back({Metres(distance), ground, Metres(0.0), Metres(4.0), GeoPoint{latitude, 30.0}, cover});
+        const auto cover = static_cast<int>(in.below(11) + 1) * 10;
+        samples.emplace_back(Metres(distance), ground, Metres(0.0), Metres(4.0), GeoPoint{latitude, 30.0}, cover);
     }
 
     try {
@@ -56,10 +56,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         }
         const LinkEvaluator eval{EarthModel(k), BullingtonDiffraction()};
         const LinkResult r = eval.evaluate(profile, frequency, tx, rx);
-        RFMAP_FUZZ_CHECK(std::isfinite(r.margin.value()));
-        RFMAP_FUZZ_CHECK(r.diffraction.dominantSample < profile.samples().size());
+        rfmap::fuzz::check(std::isfinite(r.margin.value()));
+        rfmap::fuzz::check(r.diffraction.dominantSample < profile.samples().size());
     } catch (const std::invalid_argument&) {
+        // A profile the radio maths documents as unusable: refusing it is the expected answer.
     } catch (const std::runtime_error&) {
+        // A calculation the maths documents as impossible on this ground: also expected.
     }
     return 0;
 }

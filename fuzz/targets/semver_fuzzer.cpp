@@ -8,13 +8,16 @@
 
 #include <rfmod/semver.hpp>
 
+#include <algorithm>
+#include <format>
 #include <stdexcept>
 
 using rfmod::Version;
 using rfmod::VersionRange;
 
 extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size) {
-    const std::string_view text = rfmap::fuzz::asText(data, size);
+    const std::string input = rfmap::fuzz::asText(data, size);
+    const std::string_view text = input;
     const std::size_t nl = text.find('\n');
     const std::string_view versionText = text.substr(0, nl);
     const std::string_view rangeText = nl == std::string_view::npos ? std::string_view() : text.substr(nl + 1);
@@ -22,9 +25,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     const auto v = Version::tryParse(versionText);
     if (v.has_value()) {
         const Version again = Version::parse(v->str());
-        RFMAP_FUZZ_CHECK(again == *v);
-        RFMAP_FUZZ_CHECK(again.str() == v->str());
-        RFMAP_FUZZ_CHECK((*v <=> Version(v->major(), v->minor(), v->patch())) != std::strong_ordering::greater);
+        rfmap::fuzz::check(again == *v);
+        rfmap::fuzz::check(again.str() == v->str());
+        rfmap::fuzz::check((*v <=> Version(v->major(), v->minor(), v->patch())) != std::strong_ordering::greater);
     }
 
     try {
@@ -32,14 +35,15 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         if (v.has_value()) (void)r.contains(*v);
         (void)r.contains(Version(1, 0, 0));
     } catch (const std::invalid_argument&) {
+        // Not a range: refusing it is the documented answer.
     }
 
     // Single comparators that always include their own version.
     for (std::string_view op : {"=", ">=", "<=", "^", "~"}) {
-        if (!v.has_value() || versionText.find('+') != std::string_view::npos) break;
-        const std::string range = std::string(op) + v->str();
+        if (!v.has_value() || std::ranges::find(versionText, '+') != versionText.end()) break;
+        const std::string range = std::format("{}{}", op, v->str());
         try {
-            RFMAP_FUZZ_CHECK(VersionRange::parse(range).contains(*v));
+            rfmap::fuzz::check(VersionRange::parse(range).contains(*v));
         } catch (const std::invalid_argument&) {
             // Refusing a range is fine; accepting one that excludes its own version is not.
         }

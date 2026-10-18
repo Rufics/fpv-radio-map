@@ -38,7 +38,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 
     // 2026-10-18T12:00Z, the hour the seed responses cover.
     const rfmap::ForecastAt at = weather.at(50.45, 30.52, rfmap::Clock::from_time_t(1792324800));
-    RFMAP_FUZZ_CHECK(at.point.is_object());
+    rfmap::fuzz::check(at.point.is_object());
     (void)weather.horizon(50.45, 30.52);
     return 0;
 }

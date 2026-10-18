@@ -15,9 +15,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
 
     rfmod::ValidationReport report;
     const auto manifest = rfmod::ManifestParser::parse(doc, host, report);
-    RFMAP_FUZZ_CHECK(manifest.has_value() == report.ok());
+    rfmap::fuzz::check(manifest.has_value() == report.ok());
     if (manifest.has_value()) {
-        RFMAP_FUZZ_CHECK(rfmod::Version::parse(manifest->version.str()) == manifest->version);
+        rfmap::fuzz::check(rfmod::Version::parse(manifest->version.str()) == manifest->version);
     }
     return 0;
 }

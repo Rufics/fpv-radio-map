@@ -4,9 +4,9 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 #include <vector>
 
@@ -17,14 +17,14 @@ namespace {
 
 void runFile(const std::filesystem::path& file) {
     std::ifstream in(file, std::ios::binary);
-    const std::vector<char> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    LLVMFuzzerTestOneInput(reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size());
+    const std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    LLVMFuzzerTestOneInput(bytes.data(), bytes.size());
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-    if (LLVMFuzzerInitialize) LLVMFuzzerInitialize(&argc, &argv);
+    if (&LLVMFuzzerInitialize != nullptr) LLVMFuzzerInitialize(&argc, &argv);
     std::size_t runs = 0;
     for (const auto& entry : std::filesystem::recursive_directory_iterator(RFMAP_FUZZ_CORPUS)) {
         if (entry.is_regular_file()) {
@@ -32,6 +32,6 @@ int main(int argc, char** argv) {
             ++runs;
         }
     }
-    std::printf("replayed %zu inputs from %s\n", runs, RFMAP_FUZZ_CORPUS);
+    std::cout << "replayed " << runs << " inputs from " << RFMAP_FUZZ_CORPUS << '\n';
     return runs == 0 ? 1 : 0;
 }
