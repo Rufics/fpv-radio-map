@@ -11,7 +11,6 @@ without giving pull request code any secret or write access.
 |---|---|---|---|---|
 | `ci.yml` | `pull_request` | yes | read-only | none |
 | `pr-title.yml` | `pull_request` | yes (commitlint config) | read-only | none |
-| `code-origin.yml` | `pull_request`, weekly | reads files only | checks and comments; skipped on forks | none |
 | `ci-report.yml` | `workflow_run` after CI | **no**: main's code, PR artifacts read as data | `pull-requests: write` | none |
 | CodeQL, SonarCloud, Gitar | GitHub apps | analyse only | app's own | app's own |
 
@@ -21,7 +20,7 @@ a workflow that has write access never runs pull request code. `pull_request_tar
 ## Actions → General
 
 - **Actions permissions:** *Allow Rufics, and select non-Rufics, actions and reusable workflows*.
-  Tick *Allow actions created by GitHub* and allow `docker/*`, `scanoss/gha-code-scan@*`. Tick
+  Tick *Allow actions created by GitHub* and allow `docker/*`. Tick
   *Require actions to be pinned to a full-length commit SHA*; every workflow already pins its
   actions that way, and Dependabot keeps the pins current.
 - **Fork pull request workflows from outside collaborators:** *Require approval for all external

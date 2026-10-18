@@ -11,5 +11,4 @@
 /tools/ci/              @Rufics
 /deploy/                @Rufics
 /platform/rfmod/keys/   @Rufics
-/scanoss.json           @Rufics
 /CMakeLists.txt         @Rufics
