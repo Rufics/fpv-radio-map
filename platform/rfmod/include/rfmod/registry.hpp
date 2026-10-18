@@ -76,7 +76,12 @@ private:
     /// The module installed in `dir`, re-verified; nullopt (with a notice) if it fails verification.
     [[nodiscard]] std::optional<Entry> readInstalled(const std::filesystem::path& dir,
                                                      std::vector<std::string>& notices) const;
+    /// Dependency-resolution state per module id: 0 = new, 1 = visiting, 2 = done.
+    using VisitMarks = std::map<std::string, int, std::less<>>;
     void resolve();
+    /// Resolves and loads one module after its dependencies; true if it ends up active. `lock`
+    /// holds mutex_ and is released only while the module loads.
+    bool visit(const std::string& id, VisitMarks& mark, std::unique_lock<std::mutex>& lock);
     /// Takes the instance out of the entry, then shuts it down outside mutex_.
     void retire(Entry& e);
     void writeState(const Entry& e) const;
