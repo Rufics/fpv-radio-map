@@ -3,19 +3,17 @@
 For a first install, follow [Production server, step by step](production-setup.md). This page is
 the reference for each part.
 
-The stack has four parts and an optional TLS proxy, described in [`deploy/docker-compose.yml`](../../deploy/docker-compose.yml):
+The stack has four parts, described in [`deploy/docker-compose.yml`](../../deploy/docker-compose.yml):
 
 | Service | What it does |
 |---|---|
 | `postgis` | PostgreSQL 16 + PostGIS 3.4. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
 | `open-meteo` + `open-meteo-sync` | Your own Open-Meteo. The sync service downloads model runs; the API answers rfmap-server. No request leaves your network for a forecast. |
 | `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly. |
-| `web` | nginx with the built client, `/tiles` (PMTiles over HTTP Range) and a reverse proxy for `/api`. Port 8080 is published for browsers; port 8081 is for the TLS proxy and is never published. |
-| `caddy` (optional) | TLS with Let's Encrypt certificates in front of `web`. Runs only with `COMPOSE_PROFILES=tls`. |
+| `web` | nginx with the built client, `/tiles` (PMTiles over HTTP Range) and a reverse proxy for `/api`. The only service with a published port. |
 
 `postgis`, `open-meteo` and `rfmap-server` sit only on internal networks with no route out.
-Only `open-meteo-sync` (and `caddy`, for certificates) can reach the internet, and only `web`
-and `caddy` can be reached from outside.
+Only `open-meteo-sync` can reach the internet, and only `web` can be reached from outside.
 
 ## 1. Before you start
 
@@ -45,8 +43,7 @@ and `caddy` can be reached from outside.
    | `RFMAP_OWNER_PUBKEY` | Contents of `owner.pub`. |
    | `RFMAP_TILES_DIR` | Absolute path of the tiles-builder output. |
    | `RFMAP_DEM_STATED_ERROR_M`, `RFMAP_DEM_STATED_ERROR_SOURCE` | From step 2. |
-   | `RFMAP_HTTP_PORT` | Port `web` listens on (default 8088). With the TLS proxy, `127.0.0.1:8088` keeps it local. |
-   | `COMPOSE_PROFILES`, `RFMAP_DOMAIN` | `tls` and your domain to start the built-in TLS proxy; see [TLS](#tls). |
+   | `RFMAP_HTTP_PORT` | Port `web` listens on (default 8088). |
    | `OPEN_METEO_MODELS` | The Open-Meteo model to sync and to ask for (default `dwd_icon`). |
 
 ## 2. Start
@@ -76,29 +73,8 @@ json-schema-validator from GitHub and npm fetches packages. Pass it as a build s
 docker build --secret id=build_ca,src=/path/to/proxy-ca.crt -f deploy/server.Dockerfile -t rfmap-server:local ..
 ```
 
-### TLS
-
-Share links and the admin token must not travel over plain HTTP. The `caddy` service puts TLS in
-front of `web` and gets its certificate from Let's Encrypt. Point your domain at the server, open
-ports 80 and 443, and set in `.env`:
-
-```sh
-COMPOSE_PROFILES=tls
-RFMAP_DOMAIN=maps.example.org
-RFMAP_HTTP_PORT=127.0.0.1:8088
-```
-
-Then run `docker compose up -d`. Caddy talks to `web` on port 8081, and there nginx passes on the
-client address Caddy puts in `X-Forwarded-For`, so the per-address rate limits count each
-visitor separately. A client cannot pick its address: Caddy ignores the `X-Forwarded-For` a
-client sends, and on port 8080 nginx appends the address it saw. `deploy/ci/smoke.sh` checks
-both ports.
-
-Your own reverse proxy works the same way. Publish port 8081 to it only, for example
-`ports: ["127.0.0.1:8089:8081"]` for `web` in `deploy/docker-compose.override.yml`, and make the
-proxy add the client address as the last `X-Forwarded-For` entry (nginx:
-`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`). Do not compress `.pmtiles`
-responses. If the proxy uses port 8080 instead, every visitor shares the proxy's rate limits.
+Put TLS in front of `web` (your reverse proxy or load balancer). Share links and the admin
+token must not travel over plain HTTP.
 
 ## 3. Configuration
 
@@ -202,7 +178,6 @@ pinned by tag and by the digest of its multi-arch index, read from the registry 
 | `nginx` | `1.28-alpine` |
 | `postgis/postgis` | `16-3.5` |
 | `ghcr.io/open-meteo/open-meteo` | `1.7.0` |
-| `caddy` | `2.11.7` (read on 2026-10-18) |
 
 Dependabot (`.github/dependabot.yml`) opens pull requests for new minor and patch tags of the
 Dockerfile base images. It stays on long-term-support lines: Ubuntu LTS, Node.js LTS (even

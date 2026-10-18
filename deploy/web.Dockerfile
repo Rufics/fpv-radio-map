@@ -26,4 +26,4 @@ RUN sed -i -e '/^user /d' -e 's#^pid .*#pid /var/cache/nginx/nginx.pid;#' /etc/n
 USER nginx
 # Tile archives are mounted here read-only (tools/tiles-builder output).
 VOLUME ["/tiles"]
-EXPOSE 8080 8081
+EXPOSE 8080
