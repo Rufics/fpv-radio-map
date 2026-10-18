@@ -184,3 +184,20 @@ TEST(HostCalls, GeodesyIsAnsweredOnWgs84) {
     EXPECT_NEAR(dir.at("azimuthDeg").get<double>(), inv.at("azimuth2Deg").get<double>(), 1e-9);
     EXPECT_THROW(host.call("m.x", "fs.read", json::object()), std::runtime_error);
 }
+
+TEST(HostCalls, ServicesTheServerLacksAreRefusedByName) {
+    Logger log;
+    log.setQuiet(true);
+    ServerHostServices host(nullptr, nullptr, nullptr, nullptr, log);
+    const json here = {{"lat", 48.5}, {"lon", 35.2}};
+    const std::vector<std::pair<std::string, json>> calls = {
+        {"link.evaluate", {{"tx", here}, {"rx", here}}},
+        {"elevation.point", here},
+        {"profile.get", {{"from", here}, {"to", here}}},
+        {"weather.point", here},
+        {"library.get", {{"kind", "drones"}, {"id", "x"}}},
+    };
+    for (const auto& [method, request] : calls) {
+        EXPECT_THROW((void)host.call("m.x", method, request), HostCallError) << method;
+    }
+}

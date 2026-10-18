@@ -14,7 +14,7 @@ target_compile_definitions(rfmap_server_tests PRIVATE ${_defs})
 gtest_discover_tests(rfmap_server_tests)
 
 # Integration: a throw-away PostGIS cluster around one test process.
-add_executable(rfmap_server_integration integration_test.cpp)
+add_executable(rfmap_server_integration integration_test.cpp host_calls_test.cpp)
 target_link_libraries(rfmap_server_integration PRIVATE rfmap_server_lib GTest::gtest_main)
 target_compile_definitions(rfmap_server_integration PRIVATE ${_defs}
   RFMOD_WORKER="$<TARGET_FILE:rfmod-worker>"
