@@ -446,7 +446,7 @@ struct Calculator::CoverageRun {
 
 void Calculator::coverageWorker(CoverageRun& run) {
     try {
-        for (std::size_t r; (r = run.nextRow++) < run.grid.rows;) {
+        for (std::size_t r = run.nextRow++; r < run.grid.rows; r = run.nextRow++) {
             if (run.progress.cancelled()) return;
             std::shared_lock gate(modules_.gate());
             const CalcContextScope scope(run.ctx);
