@@ -8,11 +8,12 @@
 
 #include <nlohmann/json.hpp>
 
-#include <cstring>
 #include <memory>
-#include <new>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
+#include <utility>
 
 namespace rfmod {
 
@@ -83,14 +84,28 @@ struct ModuleAdapter {
         return m;
     }
 
-    /// A module-owned copy for the host; the host hands it back to freeString, never to free().
+    /// Strings lent to the host, keyed by the pointer it holds, until it hands each back to
+    /// freeString. Each string lives on its own, so its characters never move.
+    struct Lent {
+        std::mutex mutex;
+        std::unordered_map<const char*, std::unique_ptr<std::string>> strings;
+    };
+    static Lent& lent() {
+        static Lent l;
+        return l;
+    }
+
+    /// Lends `s` to the host; the host hands it back to freeString, never to free().
     /// Null if memory runs out, so no exception crosses the ABI.
-    static char* copy(const std::string& s) noexcept {
+    static char* copy(std::string s) noexcept {
         try {
-            char* out = std::allocator<char>().allocate(s.size() + 1);
-            std::memcpy(out, s.c_str(), s.size() + 1);
+            auto owned = std::make_unique<std::string>(std::move(s));
+            char* out = owned->data();
+            Lent& l = lent();
+            const std::lock_guard lock(l.mutex);
+            l.strings.emplace(out, std::move(owned));
             return out;
-        } catch (const std::bad_alloc&) {
+        } catch (const std::exception&) {
             return nullptr;
         }
     }
@@ -141,9 +156,10 @@ struct ModuleAdapter {
     }
 
     static void freeString(char* s) {
-        // Hands back what copy() allocated. Its size is the string plus the terminator, since
-        // every string it copies is JSON text, which never holds a raw NUL.
-        if (s) std::allocator<char>().deallocate(s, std::strlen(s) + 1);
+        // Releases the string copy() lent; the map entry owns it.
+        Lent& l = lent();
+        const std::lock_guard lock(l.mutex);
+        l.strings.erase(s);
     }
 
     static void shutdown() {
