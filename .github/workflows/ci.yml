@@ -242,9 +242,10 @@ jobs:
   # failed comment never blocks a merge.
   comment:
     name: Post the CI report
-    needs: report
+    needs: [changes, cpp, coverage, web, report]
     if: >-
-      !cancelled() &&
+      always() &&
+      !contains(needs.*.result, 'cancelled') &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'
