@@ -1,8 +1,19 @@
 """Tests of the clang-tidy runner: python3 -I -m unittest discover -s tools/ci -p '*_test.py'"""
+import io
+import json
+import os
+import runpy
+import subprocess
+import tempfile
+import threading
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from unittest import mock
 
-from clang_tidy import (ROOT, annotations, changed_files, escape_annotation, main, parse_finding, repo_relative,
-                        select, shard, translation_units)
+import clang_tidy
+from clang_tidy import (ROOT, TIMEOUT_SECONDS, annotations, changed_files, escape_annotation, main, parse_finding,
+                        repo_relative, run_one, select, shard, translation_units)
 
 BUILD = ROOT / "build-tidy"
 UNITS = ["core/rf-core/src/geodesy.cpp", "platform/rfmod/src/crypto.cpp"]
@@ -106,6 +117,164 @@ class AnnotationTest(unittest.TestCase):
         path = ROOT / "core/a,b:c.cpp"
         self.assertEqual(list(annotations(f"{path}:1:2: error: m")),
                          ["::error file=core/a%2Cb%3Ac.cpp,line=1,col=2::m"])
+
+
+class FakeProcesses:
+    """Stands in for subprocess.run: answers git diff and clang-tidy, and records every command line."""
+
+    def __init__(self, diff="", findings=None):
+        self.diff = diff
+        self.findings = findings or {}
+        self.commands = []
+        self._lock = threading.Lock()
+
+    def run(self, command, **kwargs):
+        with self._lock:
+            self.commands.append((command, kwargs))
+        if Path(command[0]).name == "git":
+            return subprocess.CompletedProcess(command, 0, stdout=self.diff, stderr="")
+        output = self.findings.get(command[-1])
+        return subprocess.CompletedProcess(command, 1 if output else 0, stdout=output or "", stderr="")
+
+    def checked(self):
+        """The files clang-tidy was run on, sorted."""
+        return sorted(command[-1] for command, _ in self.commands if Path(command[0]).name != "git")
+
+
+def installed(name):
+    """shutil.which() for a machine where git and every clang-tidy are installed in /usr/bin."""
+    return f"/usr/bin/{name}"
+
+
+class GitTestCase(unittest.TestCase):
+    """Replaces subprocess.run and shutil.which in the runner for one test."""
+
+    def fake(self, processes, which=installed):
+        self.enterContext(mock.patch.object(clang_tidy.subprocess, "run", processes.run))
+        self.enterContext(mock.patch.object(clang_tidy.shutil, "which", which))
+        return processes
+
+
+class ChangedFilesFromGitTest(GitTestCase):
+    def test_lists_the_changed_paths_from_git(self):
+        processes = self.fake(FakeProcesses(diff="core/a.cpp\n\ndocs/README.md\n"))
+        self.assertEqual(changed_files("HEAD^1"), ["core/a.cpp", "docs/README.md"])
+        command, kwargs = processes.commands[0]
+        self.assertEqual(command, ["/usr/bin/git", "diff", "--name-only", "--no-renames", "HEAD^1", "HEAD", "--"])
+        self.assertEqual((kwargs["cwd"], kwargs["check"]), (ROOT, True))
+
+    def test_git_must_be_installed(self):
+        processes = self.fake(FakeProcesses(), which=lambda name: None)
+        with self.assertRaisesRegex(FileNotFoundError, "git is not installed"):
+            changed_files("0123abc")
+        self.assertEqual(processes.commands, [])
+
+
+class RunOneTest(GitTestCase):
+    def test_returns_the_exit_code_and_both_streams(self):
+        def run(command, **kwargs):
+            return subprocess.CompletedProcess(command, 1, stdout="out\n", stderr="err\n")
+
+        self.enterContext(mock.patch.object(clang_tidy.subprocess, "run", run))
+        self.assertEqual(run_one("/usr/bin/clang-tidy", BUILD, UNITS[0]), (1, "out\nerr\n"))
+
+    def test_a_run_that_takes_too_long_counts_as_a_finding(self):
+        def run(command, **kwargs):
+            raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+        self.enterContext(mock.patch.object(clang_tidy.subprocess, "run", run))
+        code, output = run_one("/usr/bin/clang-tidy", BUILD, UNITS[0])
+        self.assertEqual(code, 1)
+        self.assertEqual(output, f"{UNITS[0]}: clang-tidy took longer than {TIMEOUT_SECONDS} s\n")
+
+
+class MainRunTest(GitTestCase):
+    """main() on a fake repository in a temporary folder, with git and clang-tidy faked."""
+
+    UNITS = ["core/a.cpp", "core/b.cpp", "server/c.cpp"]
+
+    def setUp(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        build = root / "build-tidy"
+        build.mkdir()
+        commands = [{"directory": str(build), "file": str(root / unit)} for unit in self.UNITS]
+        (build / "compile_commands.json").write_text(json.dumps(commands), encoding="utf-8")
+        self.root = root
+        self.enterContext(mock.patch.object(clang_tidy, "ROOT", root))
+        self.enterContext(mock.patch.object(clang_tidy, "ROOT_TEXT", str(root)))
+        self.enterContext(mock.patch.dict(os.environ, {"GITHUB_ACTIONS": "false"}))
+
+    def run_main(self, *args):
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            code = main(["--build-dir", "build-tidy", "--jobs", "2", *args])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_clang_tidy_must_be_installed(self):
+        processes = self.fake(FakeProcesses(), which=lambda name: None)
+        code, _, err = self.run_main("--clang-tidy", "clang-tidy-18")
+        self.assertEqual((code, err), (2, "clang-tidy-18 is not installed\n"))
+        self.assertEqual(processes.commands, [])
+
+    def test_clean_files_pass(self):
+        processes = self.fake(FakeProcesses())
+        code, out, _ = self.run_main()
+        self.assertEqual(code, 0)
+        self.assertEqual(out, "Checking 3 file(s) with 2 job(s).\nclang-tidy: 0 of 3 file(s) with findings.\n")
+        self.assertEqual(processes.checked(), [str(self.root / unit) for unit in self.UNITS])
+        command, kwargs = processes.commands[0]
+        self.assertEqual(command[:4], ["/usr/bin/clang-tidy", "-p", str(self.root / "build-tidy"), "--quiet"])
+        self.assertEqual(kwargs["timeout"], TIMEOUT_SECONDS)
+
+    def test_findings_fail_the_run_and_are_annotated_on_actions(self):
+        finding = f"{self.root}/core/b.cpp:3:1: warning: bad [misc-x]"
+        self.fake(FakeProcesses(findings={str(self.root / "core/b.cpp"): finding + "\n"}))
+        os.environ["GITHUB_ACTIONS"] = "true"
+        code, out, _ = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertIn(f"--- core/b.cpp\n{finding}\n", out)
+        self.assertIn("::error file=core/b.cpp,line=3,col=1::bad [misc-x]\n", out)
+        self.assertTrue(out.endswith("clang-tidy: 1 of 3 file(s) with findings.\n"))
+
+    def test_findings_are_not_annotated_outside_actions(self):
+        finding = f"{self.root}/core/a.cpp:1:1: error: bad [misc-x]"
+        self.fake(FakeProcesses(findings={str(self.root / "core/a.cpp"): finding}))
+        code, out, _ = self.run_main()
+        self.assertEqual(code, 1)
+        self.assertNotIn("::error", out)
+
+    def test_base_checks_only_the_changed_sources(self):
+        processes = self.fake(FakeProcesses(diff="server/c.cpp\ndocs/x.md\n"))
+        code, out, _ = self.run_main("--base", "HEAD~1")
+        self.assertEqual(code, 0)
+        self.assertIn("Checking 1 file(s)", out)
+        self.assertEqual(processes.checked(), [str(self.root / "server/c.cpp")])
+
+    def test_a_change_without_sources_checks_nothing(self):
+        processes = self.fake(FakeProcesses(diff="docs/x.md\n"))
+        code, out, _ = self.run_main("--base", "HEAD~1")
+        self.assertEqual((code, out), (0, "No C++ sources to check.\n"))
+        self.assertEqual(processes.checked(), [])
+
+    def test_shards_share_the_files(self):
+        processes = self.fake(FakeProcesses())
+        self.assertEqual(self.run_main("--shard", "2/2")[0], 0)
+        self.assertEqual(processes.checked(), [str(self.root / "core/b.cpp")])
+
+    def test_an_invalid_shard_is_a_usage_error(self):
+        processes = self.fake(FakeProcesses())
+        code, _, err = self.run_main("--shard", "3/2")
+        self.assertEqual(code, 2)
+        self.assertIn("--shard must be K/N", err)
+        self.assertEqual(processes.checked(), [])
+
+
+class ScriptTest(unittest.TestCase):
+    def test_runs_as_a_script(self):
+        with mock.patch.object(clang_tidy.sys, "argv", ["clang_tidy.py", "--build-dir", "../x"]), \
+                redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as exit_:
+            runpy.run_path(clang_tidy.__file__, run_name="__main__")
+        self.assertEqual(exit_.exception.code, 2)
 
 
 if __name__ == "__main__":

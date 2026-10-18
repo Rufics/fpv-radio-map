@@ -2,6 +2,7 @@
 import io
 import json
 import os
+import runpy
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -245,6 +246,11 @@ class MainTest(ApiTestCase):
         with mock.patch.object(pr_comment, "find") as find:
             self.run_main("find")
         find.assert_called_once_with()
+
+    def test_runs_as_a_script(self):
+        with mock.patch.object(pr_comment.sys, "argv", ["pr_comment.py"]), \
+                self.assertRaisesRegex(SystemExit, "usage"):
+            runpy.run_path(pr_comment.__file__, run_name="__main__")
 
 
 if __name__ == "__main__":

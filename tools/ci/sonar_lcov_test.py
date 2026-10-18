@@ -1,10 +1,14 @@
 """Tests of the LCOV merger: python3 -I -m unittest discover -s tools/ci -p '*_test.py'"""
 import contextlib
 import io
+import runpy
+import sys
 import tempfile
 import unittest
 from pathlib import Path, PurePosixPath
+from unittest import mock
 
+import sonar_lcov
 from sonar_lcov import Command, LcovRebaser, RepositoryPaths
 
 REPORT = "TN:\nSF:projects/ui-kit/src/lib/a.ts\nDA:1,1\nend_of_record\n"
@@ -64,6 +68,17 @@ class CommandTest(unittest.TestCase):
 
     def test_missing_report_is_a_usage_error(self):
         self.assertEqual(self.run_command("--base", "web", "--output", "out/web.lcov", "web/none.info"), 2)
+
+
+class ScriptTest(unittest.TestCase):
+    def test_runs_as_a_script_and_refuses_a_missing_report(self):
+        argv = ["sonar_lcov.py", "--base", "web", "--output", "out/web.lcov", "web/no-such-report.info"]
+        err = io.StringIO()
+        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(err), \
+                self.assertRaises(SystemExit) as exit_:
+            runpy.run_path(sonar_lcov.__file__, run_name="__main__")
+        self.assertEqual(exit_.exception.code, 2)
+        self.assertIn("sonar_lcov: ", err.getvalue())
 
 
 if __name__ == "__main__":

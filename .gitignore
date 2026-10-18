@@ -21,6 +21,7 @@ test-results/
 sonar-reports/
 .scannerwork/
 .coverage
+*.gcov
 test-scratch/
 .rfmod-test-*/
 wiki/

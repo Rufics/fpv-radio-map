@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Test probe options",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {
+      "enum": ["answer", "fail", "not-an-object"],
+      "default": "answer",
+      "description": "answer: well-formed answers with some odd entries; fail: every call fails; not-an-object: route.analyze answers an array"
+    }
+  }
+}
