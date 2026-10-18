@@ -143,20 +143,20 @@ json missingDataLeg(json leg, const LegScan& scan, const DemSource& dem, std::si
 // ---- route modules ----
 
 /// Calls a module's route.analyze. A failure, or an answer that is not an object, is listed in
-/// result.moduleFailures and gives nothing.
+/// result.moduleFailures (once per module, like its loss term failures) and gives nothing.
 std::optional<json> analyzeRoute(const ModuleRunner::Active& a, const json& req, json& result) {
     json resp;
     try {
         resp = a.instance->invoke("route.analyze", req);
     } catch (const rfmod::ModuleError& e) {
-        result["moduleFailures"].push_back({{"module", a.id}, {"error", e.code() + ": " + e.what()}});
+        appendModuleFailures(result["moduleFailures"], {{a.id, e.code() + ": " + e.what()}});
         return std::nullopt;
     } catch (const std::exception& e) {
-        result["moduleFailures"].push_back({{"module", a.id}, {"error", e.what()}});
+        appendModuleFailures(result["moduleFailures"], {{a.id, e.what()}});
         return std::nullopt;
     }
     if (!resp.is_object()) {
-        result["moduleFailures"].push_back({{"module", a.id}, {"error", "route.analyze did not return an object"}});
+        appendModuleFailures(result["moduleFailures"], {{a.id, "route.analyze did not return an object"}});
         return std::nullopt;
     }
     return resp;

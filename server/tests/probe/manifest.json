@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "test.probe",
+  "version": "1.0.0",
+  "title": "Test probe",
+  "description": "Server integration tests only: answers loss, route and coverage calls the way its mode option says, including the malformed answers and failures the server must survive.",
+  "author": "rfmap tests",
+  "license": "MIT",
+  "lifecycle": "stable",
+  "abi": 2,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["loss.contributor", "route.analysis", "coverage.analysis"],
+  "methods": ["loss.contribute", "route.analyze", "coverage.analyze"],
+  "entry": { "linux-x86_64": "lib/libtest_probe.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 64, "timeoutMs": 2000 }
+}
