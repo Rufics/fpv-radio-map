@@ -77,11 +77,15 @@ def find():
     head_repo = env("HEAD_REPO", REPO)
     head = f"{head_repo.split('/')[0]}:{env('HEAD_BRANCH')}"
     prs = paginate(f"/repos/{repo}/pulls", {"state": "open", "head": head})
-    pr = next((p for p in prs if p["head"]["sha"] == head_sha
-               and (p["head"].get("repo") or {}).get("full_name") == head_repo), None)
-    if not pr:
-        print(f"::notice::No open pull request has {head_sha} as its head any more; nothing to report.", file=sys.stderr)
+    matches = [p for p in prs if p["head"]["sha"] == head_sha
+               and (p["head"].get("repo") or {}).get("full_name") == head_repo]
+    # Exactly one pull request, or none: the same head opened against two base branches is
+    # ambiguous, and a report must never land on a pull request it was not built for.
+    if len(matches) != 1:
+        print(f"::notice::{len(matches)} open pull requests have {head_sha} as their head; nothing to report.",
+              file=sys.stderr)
         return
+    pr = matches[0]
     jobs = paginate(f"/repos/{repo}/actions/runs/{run_id}/jobs", {"filter": "latest"}, key="jobs")
     Path("jobs.json").write_text(json.dumps(
         [{"name": j["name"], "result": j.get("conclusion") or j.get("status"), "url": j.get("html_url")} for j in jobs]))

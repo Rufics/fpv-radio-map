@@ -78,14 +78,18 @@ workflow creates new tags; nobody can move or delete a released one.
 - Always suggest updating pull request branches.
 - Automatically delete head branches.
 
-## Recommended next step: a protected release environment
+## Environments: the release signing key
 
-The release signing key (`RFMAP_OWNER_SECRET_KEY`) is a repository secret today, so any workflow
-on any branch of this repository could read it. Moving it into an environment closes that:
+The release signing key (`RFMAP_OWNER_SECRET_KEY`) must live in the `release` environment, not in
+the repository secrets. A repository secret is readable by any workflow on any branch of this
+repository, including a pull request from a branch; an environment secret only by a job that
+enters the environment, and only from the branches the environment allows. Only the `release`
+job of `release.yml` enters it.
 
-1. Settings → Environments → New environment `release`: deployment branches *main* only, required
-   reviewer: a maintainer.
-2. Move `RFMAP_OWNER_SECRET_KEY` from the repository secrets to that environment.
-3. Add `environment: release` to the `plan` and `release` jobs of `release.yml`.
+1. Settings → Environments → `release` (GitHub creates it on the first release run; create it
+   first to set the rules): *Deployment branches and tags*: selected branches, `main` only.
+   *Required reviewers*: a maintainer. *Prevent self-review* off for a sole maintainer.
+2. Add `RFMAP_OWNER_SECRET_KEY` as an environment secret of `release`.
+3. Delete `RFMAP_OWNER_SECRET_KEY` from the repository secrets.
 
-Do the three together: the release fails its key check while the secret and the workflow disagree.
+Until step 3, the key stays readable outside the environment.

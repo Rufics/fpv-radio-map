@@ -169,8 +169,11 @@ notes. A release:
 5. publishes `fpv-radio-map-server` and `fpv-radio-map-web` images as `X.Y.Z`, `X.Y` and `latest`.
 
 It needs the repository variable `RFMAP_OWNER_PUBKEY` (contents of `owner.pub`) and the secret
-`RFMAP_OWNER_SECRET_KEY` (contents of `owner.secret`), both made with `rfmod keygen --out owner`.
-A release never signs with the public development key.
+`RFMAP_OWNER_SECRET_KEY` (contents of `owner.secret`) in the `release` environment, both made with
+`rfmod keygen --out owner`. Only the release job enters that environment, from `main`, so no pull
+request or other workflow can read the key
+([setup](docs/maintainers/repository-settings.md#environments-the-release-signing-key)). A release
+never signs with the public development key.
 
 The first release counts from a `v0.1.0` tag that the workflow puts on the first commit when the
 repository has no tag yet, so a `feat` gives 0.2.0, not semantic-release's default 1.0.0. That keeps
