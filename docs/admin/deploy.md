@@ -136,6 +136,9 @@ stay in such a container, enable IPv6 in the Docker daemon and on the proxy's ne
 address by sending the header themselves: nginx in `web` uses it only on connections from the
 trusted addresses, and takes the last entry, which the proxy wrote. Trust only addresses your
 proxy uses: anyone who can connect from a trusted address can choose their rate-limit bucket.
+With `web` on `127.0.0.1` and the Docker range trusted, that is processes on this machine and
+the stack's own containers; rfmap-server, the only other container `web` can see, already takes
+`X-Forwarded-For` from whatever connects to it, so the range adds no one new.
 
 ## 3. Configuration
 
