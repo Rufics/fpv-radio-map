@@ -3,6 +3,8 @@
 
 #include <dlfcn.h>
 
+#include <bit>
+
 /// What rfmod_host::context points to for an in-process module: which module is calling and
 /// where its calls go. Opaque to the module.
 struct rfmod_host_context {
@@ -54,7 +56,8 @@ struct InProcessModule::Library {
     }
 
     [[nodiscard]] rfmod_get_module_fn entry() const {
-        return reinterpret_cast<rfmod_get_module_fn>(dlsym(handle.get(), RFMOD_ENTRY_SYMBOL));
+        // POSIX guarantees a function symbol's address round-trips through dlsym's void*.
+        return std::bit_cast<rfmod_get_module_fn>(dlsym(handle.get(), RFMOD_ENTRY_SYMBOL));
     }
 };
 

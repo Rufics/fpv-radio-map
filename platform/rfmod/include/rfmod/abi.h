@@ -17,7 +17,8 @@
 extern "C" {
 #endif
 
-enum rfmod_abi { RFMOD_ABI_VERSION = 2 };
+/* A typed constant rather than a macro, so it has a type and a scope in both C and C++. */
+static const uint32_t RFMOD_ABI_VERSION = 2;
 
 #if defined(_WIN32)
 #define RFMOD_EXPORT __declspec(dllexport)
