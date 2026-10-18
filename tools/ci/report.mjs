@@ -174,31 +174,39 @@ export function parseCoverage(json) {
   } catch {
     return files;
   }
-  for (const f of Array.isArray(data?.files) ? data.files : []) {
+  for (const f of asArray(data?.files)) {
     const path = typeof f?.file === 'string' ? f.file.replace(/^\.\//, '') : '';
     if (!safePath(path)) continue;
-    const entry = files.get(path) ?? { ...emptyTotals(), hits: new Map(), fns: new Map() };
-    for (const l of Array.isArray(f.lines) ? f.lines : []) {
-      const n = Number(l?.line_number);
-      if (!Number.isInteger(n) || n < 1 || l['gcovr/noncode'] || l['gcovr/excluded']) continue;
-      entry.hits.set(n, Math.max(entry.hits.get(n) ?? 0, Number(l.count) || 0));
-    }
-    for (const fn of Array.isArray(f.functions) ? f.functions : []) {
-      const key = `${fn?.lineno}:${fn?.name}`;
-      const count = Number(fn?.execution_count ?? fn?.count) || 0;
-      if (fn?.['gcovr/excluded']) continue;
-      entry.fns.set(key, Math.max(entry.fns.get(key) ?? 0, count));
-    }
+    const entry = files.get(path) ?? { hits: new Map(), fns: new Map() };
+    addLineHits(entry.hits, asArray(f.lines));
+    addFunctionHits(entry.fns, asArray(f.functions));
     files.set(path, entry);
   }
-  for (const e of files.values()) {
-    e.lines = e.hits.size;
-    e.linesCovered = [...e.hits.values()].filter((c) => c > 0).length;
-    e.functions = e.fns.size;
-    e.functionsCovered = [...e.fns.values()].filter((c) => c > 0).length;
-    delete e.fns;
-  }
+  for (const [path, e] of files) files.set(path, { ...countCovered(e.hits, e.fns), hits: e.hits });
   return files;
+}
+
+const asArray = (v) => (Array.isArray(v) ? v : []);
+const maxInto = (map, key, count) => map.set(key, Math.max(map.get(key) ?? 0, count));
+
+function addLineHits(hits, lines) {
+  for (const l of lines) {
+    const n = Number(l?.line_number);
+    if (!Number.isInteger(n) || n < 1 || l['gcovr/noncode'] || l['gcovr/excluded']) continue;
+    maxInto(hits, n, Number(l.count) || 0);
+  }
+}
+
+function addFunctionHits(fns, functions) {
+  for (const fn of functions) {
+    if (fn?.['gcovr/excluded']) continue;
+    maxInto(fns, `${fn?.lineno}:${fn?.name}`, Number(fn?.execution_count ?? fn?.count) || 0);
+  }
+}
+
+function countCovered(hits, fns) {
+  const covered = (m) => [...m.values()].filter((c) => c > 0).length;
+  return { lines: hits.size, linesCovered: covered(hits), functions: fns.size, functionsCovered: covered(fns) };
 }
 
 export function summarizeCoverage(files) {
@@ -287,138 +295,164 @@ export function normalizeJobs(input) {
 // Report
 
 export function buildReport({ jobs: rawJobs = {}, suites = [], coverage, diff, sha, repo, runUrl, coverageUrl } = {}) {
-  const jobs = normalizeJobs(rawJobs);
-  sha = SAFE_SHA.test(sha ?? '') ? sha : undefined;
-  repo = SAFE_REPO.test(repo ?? '') ? repo : undefined;
-  runUrl = safeUrl(runUrl);
-  coverageUrl = safeUrl(coverageUrl);
+  const ctx = {
+    jobs: normalizeJobs(rawJobs),
+    suites,
+    sha: SAFE_SHA.test(sha ?? '') ? sha : undefined,
+    repo: SAFE_REPO.test(repo ?? '') ? repo : undefined,
+  };
+  ctx.cov = coverage?.size ? summarizeCoverage(coverage) : undefined;
+  ctx.changed = ctx.cov && diff ? changedLineCoverage(coverage, diff) : undefined;
+  ctx.diff = diff;
+  ctx.failedTests = suites.flatMap((s) => s.failed.map((n) => ({ suite: s.label, name: n })));
+  ctx.ran = ctx.jobs.some((j) => j.result !== 'skipped') || suites.length > 0;
 
-  const failedTests = suites.flatMap((s) => s.failed.map((n) => ({ suite: s.label, name: n })));
+  const lines = [
+    MARKER,
+    ...headline(ctx),
+    ...failedTestsSection(ctx.failedTests),
+    ...(ctx.ran ? jobsTable(ctx) : []),
+    ...(ctx.cov ? coverageSection(ctx) : []),
+    ...footer(safeUrl(runUrl), safeUrl(coverageUrl)),
+  ];
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+}
+
+/** The one line a developer needs to read, and the key numbers under it. */
+function headline({ jobs, suites, sha, cov, changed, failedTests, ran }) {
   const failedJobs = jobs.filter((j) => j.result === 'failure' || j.result === 'cancelled');
-  const passed = suites.reduce((n, s) => n + s.passed, 0);
-  const ran = jobs.some((j) => j.result !== 'skipped') || suites.length > 0;
-  const ok = failedJobs.length === 0 && failedTests.length === 0;
-
-  const cov = coverage?.size ? summarizeCoverage(coverage) : undefined;
-  const changed = cov && diff ? changedLineCoverage(coverage, diff) : undefined;
-
-  const lines = [MARKER];
-
-  // Headline: the one line a developer needs to read.
   const at = sha ? ` for ${sha.slice(0, 7)}` : '';
-  if (!ok) {
-    const what = failedTests.length
-      ? plural(failedTests.length, 'test') + ' failed'
-      : `${failedJobs.map((j) => j.name).join(', ')} failed`;
-    lines.push(`### ❌ CI failed${at}: ${md(what, 300)}`);
-  } else if (!ran) {
-    lines.push(`### ✅ CI passed${at}`, '', 'Nothing to build: this change touches only files the tests do not cover, such as docs.');
+  const out = [];
+  if (failedJobs.length || failedTests.length) {
+    const what = failedTests.length ? `${plural(failedTests.length, 'test')} failed` : `${failedJobs.map((j) => j.name).join(', ')} failed`;
+    out.push(`### ❌ CI failed${at}: ${md(what, 300)}`);
   } else {
-    lines.push(`### ✅ CI passed${at}`);
+    out.push(`### ✅ CI passed${at}`);
+    if (!ran) out.push('', 'Nothing to build: this change touches only files the tests do not cover, such as docs.');
   }
   const facts = [];
-  if (suites.length) facts.push(`**${passed}** tests passed`);
+  if (suites.length) facts.push(`**${suites.reduce((n, s) => n + s.passed, 0)}** tests passed`);
   if (cov) facts.push(`C++ line coverage **${fmtPct(pct(cov.total.linesCovered, cov.total.lines))}**`);
   if (changed?.total) facts.push(`changed lines **${fmtPct(pct(changed.covered, changed.total))}** covered`);
-  if (facts.length) lines.push('', facts.join(' · '));
-  lines.push('');
+  if (facts.length) out.push('', facts.join(' · '));
+  out.push('');
+  return out;
+}
 
-  if (failedTests.length) {
-    lines.push('<details open><summary><b>Failed tests</b></summary>', '');
-    for (const f of failedTests.slice(0, MAX_LISTED)) lines.push(`- ${md(f.suite, 40)}: ${md(f.name, 300)}`);
-    if (failedTests.length > MAX_LISTED) lines.push(`- … and ${failedTests.length - MAX_LISTED} more`);
-    lines.push('', '</details>', '');
+function failedTestsSection(failedTests) {
+  if (!failedTests.length) return [];
+  const out = ['<details open><summary><b>Failed tests</b></summary>', ''];
+  for (const f of failedTests.slice(0, MAX_LISTED)) out.push(`- ${md(f.suite, 40)}: ${md(f.name, 300)}`);
+  if (failedTests.length > MAX_LISTED) out.push(`- … and ${failedTests.length - MAX_LISTED} more`);
+  out.push('', '</details>', '');
+  return out;
+}
+
+/** The JUnit suites a job produced. */
+function suitesOf(job, suites) {
+  if (job.name.startsWith('C++ build')) return suites.filter((s) => s.file === 'cpp.xml');
+  if (job.name.startsWith('Web')) return suites.filter((s) => s.file.startsWith('web-'));
+  return [];
+}
+
+function suiteCounts(s, prefixed) {
+  const counts = [`${s.passed} passed`];
+  if (s.failed.length) counts.push(`**${s.failed.length} failed**`);
+  if (s.skipped) counts.push(`${s.skipped} skipped`);
+  return `${prefixed ? `${md(s.label, 40)}: ` : ''}${counts.join(', ')}`;
+}
+
+function jobDetails(job, { suites, cov }) {
+  const own = suitesOf(job, suites);
+  if (own.length) return own.map((s) => suiteCounts(s, own.length > 1 || s.label !== 'C++')).join('<br>');
+  if (job.name === JOB_NAMES.coverage && cov) return `${fmtPct(pct(cov.total.linesCovered, cov.total.lines))} of C++ lines`;
+  if (job.result === 'failure') return 'failed before any test result was written; open the log';
+  if (job.result === 'skipped') return 'not affected by this change';
+  return '';
+}
+
+/** One row per job, with the test counts of the suites it produced. */
+function jobsTable(ctx) {
+  const out = ['| Check | Result | Details |', '|---|---|---|'];
+  for (const j of ctx.jobs) {
+    const name = j.url ? `[${md(j.name, 80)}](${j.url})` : md(j.name, 80);
+    out.push(`| ${name} | ${ICONS[j.result] ?? '❔'} ${md(j.result, 20)} | ${jobDetails(j, ctx)} |`);
   }
+  out.push('');
+  return out;
+}
 
-  // One row per job, with the test counts of the suites it produced.
-  if (ran) {
-    const suitesOf = (job) =>
-      suites.filter((s) => (job.name.startsWith('C++ build') ? s.file === 'cpp.xml' : job.name.startsWith('Web') && s.file.startsWith('web-')));
-    lines.push('| Check | Result | Details |', '|---|---|---|');
-    for (const j of jobs) {
-      const icon = ICONS[j.result] ?? '❔';
-      let details = '';
-      const own = suitesOf(j);
-      if (own.length) {
-        details = own
-          .map((s) => {
-            const counts = [`${s.passed} passed`];
-            if (s.failed.length) counts.push(`**${s.failed.length} failed**`);
-            if (s.skipped) counts.push(`${s.skipped} skipped`);
-            return `${own.length > 1 || s.label !== 'C++' ? `${md(s.label, 40)}: ` : ''}${counts.join(', ')}`;
-          })
-          .join('<br>');
-      } else if (j.name === JOB_NAMES.coverage && cov) {
-        details = `${fmtPct(pct(cov.total.linesCovered, cov.total.lines))} of C++ lines`;
-      } else if (j.result === 'failure') {
-        details = 'failed before any test result was written; open the log';
-      } else if (j.result === 'skipped') {
-        details = 'not affected by this change';
-      }
-      const name = j.url ? `[${md(j.name, 80)}](${j.url})` : md(j.name, 80);
-      lines.push(`| ${name} | ${icon} ${md(j.result, 20)} | ${details} |`);
-    }
-    lines.push('');
+function coverageRow(label, t, strong = false) {
+  const lp = pct(t.linesCovered, t.lines);
+  const fp = pct(t.functionsCovered, t.functions);
+  const b = (s) => (strong ? `**${s}**` : s);
+  return `| ${b(label)} | ${dot(lp)} ${b(fmtPct(lp))} <sub>${t.linesCovered}/${t.lines}</sub> | ${b(fmtPct(fp))} <sub>${t.functionsCovered}/${t.functions}</sub> |`;
+}
+
+function coverageSection({ cov, changed, diff, repo, sha }) {
+  const out = ['#### C++ coverage', '', '| Area | Lines | Functions |', '|---|---:|---:|'];
+  for (const a of AREAS) if (cov.areas.has(a.name)) out.push(coverageRow(a.label, cov.areas.get(a.name)));
+  out.push(coverageRow('All C++', cov.total, true), '');
+  if (changed?.total) out.push(...changedLinesSection(changed, repo, sha));
+  else if (diff) out.push('**Changed lines:** this pull request changes no executable C++ line.', '');
+  out.push(...componentsSection(cov.components));
+  out.push('<sub>🟢 80% or more · 🟡 60–80% · 🔴 below 60%. Coverage is reported, not enforced. Test code is not counted.</sub>', '');
+  return out;
+}
+
+function changedLinesSection(changed, repo, sha) {
+  const p = pct(changed.covered, changed.total);
+  const missing = changed.total - changed.covered;
+  const out = [
+    `**Changed lines:** ${dot(p)} ${fmtPct(p)} covered (${changed.covered} of ${plural(changed.total, 'executable line')} this pull request adds or changes).`,
+  ];
+  if (missing) {
+    out.push('', `<details><summary>${plural(missing, 'changed line')} not run by any test</summary>`, '');
+    out.push(...uncoveredList(changed.uncovered, repo, sha));
+    out.push('', '</details>');
   }
+  out.push('');
+  return out;
+}
 
-  if (cov) {
-    lines.push('#### C++ coverage', '', '| Area | Lines | Functions |', '|---|---:|---:|');
-    const row = (label, t, strong = false) => {
-      const lp = pct(t.linesCovered, t.lines);
-      const fp = pct(t.functionsCovered, t.functions);
-      const b = (s) => (strong ? `**${s}**` : s);
-      return `| ${b(label)} | ${dot(lp)} ${b(fmtPct(lp))} <sub>${t.linesCovered}/${t.lines}</sub> | ${b(fmtPct(fp))} <sub>${t.functionsCovered}/${t.functions}</sub> |`;
-    };
-    for (const a of AREAS) if (cov.areas.has(a.name)) lines.push(row(a.label, cov.areas.get(a.name)));
-    lines.push(row('All C++', cov.total, true), '');
-
-    if (changed?.total) {
-      const p = pct(changed.covered, changed.total);
-      const missing = changed.total - changed.covered;
-      lines.push(
-        `**Changed lines:** ${dot(p)} ${fmtPct(p)} covered (${changed.covered} of ${plural(changed.total, 'executable line')} this pull request adds or changes).`,
-      );
-      if (missing) {
-        lines.push('', `<details><summary>${plural(missing, 'changed line')} not run by any test</summary>`, '');
-        const byFile = new Map();
-        for (const u of changed.uncovered) byFile.set(u.path, [...(byFile.get(u.path) ?? []), u]);
-        for (const [path, ranges] of [...byFile].slice(0, MAX_LISTED)) {
-          const shown = ranges.slice(0, 10).map((u) => {
-            const text = u.from === u.to ? `${u.from}` : `${u.from}-${u.to}`;
-            const anchor = u.from === u.to ? `L${u.from}` : `L${u.from}-L${u.to}`;
-            return repo && sha ? `[${text}](https://github.com/${repo}/blob/${sha}/${path}#${anchor})` : text;
-          });
-          if (ranges.length > 10) shown.push(`… ${ranges.length - 10} more`);
-          // safePath() admits no backtick, so the path is shown as code without escaping.
-          lines.push(`- \`${path}\`: ${shown.join(', ')}`);
-        }
-        if (byFile.size > MAX_LISTED) lines.push(`- … and ${plural(byFile.size - MAX_LISTED, 'more file')}`);
-        lines.push('', '</details>');
-      }
-      lines.push('');
-    } else if (diff) {
-      lines.push('**Changed lines:** this pull request changes no executable C++ line.', '');
-    }
-
-    const comps = cov.components.sort(
-      (a, b) => AREAS.findIndex((x) => x.name === a.area) - AREAS.findIndex((x) => x.name === b.area) || a.component.localeCompare(b.component),
-    );
-    if (comps.length) {
-      lines.push('<details><summary>Coverage per component</summary>', '', '| Component | Lines | Functions |', '|---|---:|---:|');
-      for (const c of comps) {
-        const lp = pct(c.linesCovered, c.lines);
-        lines.push(`| ${md(c.component, 60)} | ${dot(lp)} ${fmtPct(lp)} <sub>${c.linesCovered}/${c.lines}</sub> | ${fmtPct(pct(c.functionsCovered, c.functions))} |`);
-      }
-      lines.push('', '</details>', '');
-    }
-    lines.push('<sub>🟢 80% or more · 🟡 60–80% · 🔴 below 60%. Coverage is reported, not enforced. Test code is not counted.</sub>', '');
+/** Uncovered changed lines, one item per file, each range linked to the commit. */
+function uncoveredList(uncovered, repo, sha) {
+  const byFile = new Map();
+  for (const u of uncovered) byFile.set(u.path, [...(byFile.get(u.path) ?? []), u]);
+  const link = (path, u) => {
+    const text = u.from === u.to ? `${u.from}` : `${u.from}-${u.to}`;
+    const anchor = u.from === u.to ? `L${u.from}` : `L${u.from}-L${u.to}`;
+    return repo && sha ? `[${text}](https://github.com/${repo}/blob/${sha}/${path}#${anchor})` : text;
+  };
+  const out = [];
+  for (const [path, ranges] of [...byFile].slice(0, MAX_LISTED)) {
+    const shown = ranges.slice(0, 10).map((u) => link(path, u));
+    if (ranges.length > 10) shown.push(`… ${ranges.length - 10} more`);
+    // safePath() admits no backtick, so the path is shown as code without escaping.
+    out.push(`- \`${path}\`: ${shown.join(', ')}`);
   }
+  if (byFile.size > MAX_LISTED) out.push(`- … and ${plural(byFile.size - MAX_LISTED, 'more file')}`);
+  return out;
+}
 
+function componentsSection(components) {
+  if (!components.length) return [];
+  const order = (c) => AREAS.findIndex((x) => x.name === c.area);
+  const sorted = [...components].sort((a, b) => order(a) - order(b) || a.component.localeCompare(b.component));
+  const out = ['<details><summary>Coverage per component</summary>', '', '| Component | Lines | Functions |', '|---|---:|---:|'];
+  for (const c of sorted) {
+    const lp = pct(c.linesCovered, c.lines);
+    out.push(`| ${md(c.component, 60)} | ${dot(lp)} ${fmtPct(lp)} <sub>${c.linesCovered}/${c.lines}</sub> | ${fmtPct(pct(c.functionsCovered, c.functions))} |`);
+  }
+  out.push('', '</details>', '');
+  return out;
+}
+
+function footer(runUrl, coverageUrl) {
   const links = [];
   if (runUrl) links.push(`[Workflow run](${runUrl})`);
   if (coverageUrl) links.push(`[HTML coverage report](${coverageUrl})`);
-  if (links.length) lines.push(links.join(' · '));
-  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+  return links.length ? [links.join(' · ')] : [];
 }
 
 // ---------------------------------------------------------------------------------------------
