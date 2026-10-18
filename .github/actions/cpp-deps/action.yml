@@ -1,0 +1,23 @@
+# The Ubuntu 24.04 packages the C++ build and tests need, in one place for every C++ job.
+name: C++ build dependencies
+description: Installs the compilers, libraries and the PostgreSQL 16 + PostGIS test cluster.
+inputs:
+  extra:
+    description: Further apt packages, separated by spaces
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        EXTRA: ${{ inputs.extra }}
+      run: |
+        case "$EXTRA" in *[!a-z0-9.+\ -]*) echo "::error::extra must list apt package names only"; exit 1;; esac
+        sudo apt-get update
+        # shellcheck disable=SC2086 # EXTRA is a list of package names.
+        sudo apt-get install -y --no-install-recommends \
+          build-essential cmake ninja-build pkg-config \
+          libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
+          libpqxx-dev libgdal-dev gdal-bin libcpp-httplib-dev libgtest-dev \
+          postgresql-16 postgresql-16-postgis-3 $EXTRA

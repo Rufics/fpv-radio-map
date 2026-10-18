@@ -17,6 +17,9 @@ on:
       - .github/workflows/pr-title.yml
       - .github/workflows/wiki.yml
       - .github/workflows/release.yml
+      - .github/workflows/ci-report.yml
+      - .github/CODEOWNERS
+      - .github/pull_request_template.md
       - tools/wiki/**
       - .githooks/**
 
@@ -30,6 +33,7 @@ concurrency:
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
+    # ci.yml's comment job asks for pull-requests: write; it runs on pull requests only.
     permissions:
       contents: read
       pull-requests: write
