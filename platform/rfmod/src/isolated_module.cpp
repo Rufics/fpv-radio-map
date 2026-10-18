@@ -39,17 +39,17 @@ template <std::size_t N>
 /// Holds the worker for the lifetime of the object; see busy_.
 class IsolatedModule::Turn {
 public:
-    explicit Turn(IsolatedModule& module) : module_(module) {
-        std::unique_lock lock(module_.mutex_);
-        module_.idle_.wait(lock, [this] { return !module_.busy_; });
-        module_.busy_ = true;
+    explicit Turn(IsolatedModule& owner) : owner_(owner) {
+        std::unique_lock lock(owner_.mutex_);
+        owner_.idle_.wait(lock, [this] { return !owner_.busy_; });
+        owner_.busy_ = true;
     }
     ~Turn() {
         {
-            const std::lock_guard lock(module_.mutex_);
-            module_.busy_ = false;
+            const std::lock_guard lock(owner_.mutex_);
+            owner_.busy_ = false;
         }
-        module_.idle_.notify_one();
+        owner_.idle_.notify_one();
     }
     Turn(const Turn&) = delete;
     Turn& operator=(const Turn&) = delete;
@@ -57,7 +57,7 @@ public:
     Turn& operator=(Turn&&) = delete;
 
 private:
-    IsolatedModule& module_;
+    IsolatedModule& owner_;
 };
 
 IsolatedModule::IsolatedModule(Manifest manifest, std::filesystem::path library, std::filesystem::path workerExecutable,
