@@ -359,7 +359,7 @@ std::optional<ModuleRegistry::Entry> ModuleRegistry::readInstalled(const fs::pat
     }
     // The files on disk must be the signed ones.
     if (const bool intact = std::ranges::all_of(pkg->files.files,
-                                                [&](const auto& file) {
+                                                [&dir](const auto& file) {
                                                     return fs::exists(dir / file.first) &&
                                                            readFile(dir / file.first) == file.second;
                                                 });
@@ -394,7 +394,7 @@ void ModuleRegistry::resolve() {
     // mutex_ is released only while a module loads: its init is module code and may read the registry.
     std::unique_lock lock(mutex_);
     std::map<std::string, int, std::less<>> mark;  // 0 = new, 1 = visiting, 2 = done
-    std::function<bool(const std::string&)> visit = [&](const std::string& id) -> bool {
+    std::function<bool(const std::string&)> visit = [this, &visit, &mark, &lock](const std::string& id) -> bool {
         Entry& e = entries_.at(id);
         if (mark[id] == 2) return e.state == ModuleState::Active;
         if (mark[id] == 1) {

@@ -32,7 +32,8 @@ const TrustedKey& TrustStore::add(const PublicKey& key, std::string label) {
 }
 
 void TrustStore::remove(const std::string& keyId) {
-    const auto it = std::find_if(keys_.begin(), keys_.end(), [&](const TrustedKey& k) { return k.key.id() == keyId; });
+    const auto it =
+        std::find_if(keys_.begin(), keys_.end(), [&keyId](const TrustedKey& k) { return k.key.id() == keyId; });
     if (it == keys_.end()) throw std::invalid_argument("unknown key " + keyId);
     if (it->builtIn) throw std::invalid_argument("the built-in owner key cannot be removed");
     keys_.erase(it);

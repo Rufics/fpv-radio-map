@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
     const bool netIsolated = unshare(CLONE_NEWUSER | CLONE_NEWNET) == 0;
 
     const json init = readLine();
-    auto fail = [&](const std::string& message) {
+    auto fail = [](const std::string& message) {
         sendLine({{"t", "ready"}, {"status", 1}, {"message", message}});
         return 1;
     };
