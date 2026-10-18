@@ -72,7 +72,7 @@ TEST(Battery, ClimbOverTerrainCountsOnlyRises) {
     const auto base = flat();
     const LatLon mid = base.direct(a, 90.0, 1000.0).point;
     const LocalWorld ridge(
-        [&](const LatLon& p) {
+        [&base, &a](const LatLon& p) {
             const double d = base.inverse(a, p).distanceM;
             // Flat 40 m wide top, so any sampling step up to 10 m lands on it.
             return std::optional<double>(100.0 + 50.0 * std::clamp(1.0 - (std::abs(d - 1000.0) - 20.0) / 500.0, 0.0, 1.0));
