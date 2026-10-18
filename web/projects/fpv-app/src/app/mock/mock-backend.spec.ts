@@ -122,7 +122,7 @@ describe('MockBackend through the API client', () => {
     expect(saved.version).toBe(2);
     expect((await rejection(api.saveLibraryEntry('batteries', 'test-pack', { ...battery, version: 1 }))).status).toBe(409);
     expect((await rejection(api.saveLibraryEntry('batteries', 'nope', { ...battery, id: 'nope', version: 1 }))).status).toBe(404);
-    expect((await settle(api.libraryHistory('batteries', 'test-pack'))).length).toBe(1);
+    expect(await settle(api.libraryHistory('batteries', 'test-pack'))).toHaveLength(1);
     expect((await settle(api.libraryItem('batteries', 'test-pack')))['version']).toBe(2);
     expect((await rejection(api.libraryItem('batteries', 'nope'))).status).toBe(404);
   });
