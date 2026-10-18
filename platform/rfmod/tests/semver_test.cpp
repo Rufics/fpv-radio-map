@@ -38,3 +38,11 @@ TEST(Semver, Ranges) {
     EXPECT_TRUE(VersionRange::parse(">=1.0.0-rc.1").contains(Version::parse("1.0.0-rc.2")));
     EXPECT_THROW((void)VersionRange::parse(">=1.0 <2"), std::invalid_argument);
 }
+
+TEST(Semver, CaretAndTildeAtTheLargestNumber) {
+    // The upper bound would wrap around to 0 and exclude the version itself (found by fuzzing).
+    EXPECT_THROW((void)VersionRange::parse("^4294967295.0.0"), std::invalid_argument);
+    EXPECT_THROW((void)VersionRange::parse("^0.0.4294967295"), std::invalid_argument);
+    EXPECT_THROW((void)VersionRange::parse("~1.4294967295.0"), std::invalid_argument);
+    EXPECT_TRUE(VersionRange::parse("^4294967294.0.0").contains(Version::parse("4294967294.7.0")));
+}

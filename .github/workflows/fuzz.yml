@@ -1,0 +1,36 @@
+# Nightly fuzzing of the C++ parsers and the radio maths (fuzz/, docs/dev/fuzzing.md). Pull
+# requests and pushes to main fuzz each target for a minute in ci.yml, after the C++ build passed.
+# This run fuzzes ten minutes per target, or what the manual run asks for, and keeps the corpus it
+# grew in the Actions cache, so every later run starts from it. The fuzz binaries come from the
+# cache main's CI filled; they are built here only when it holds none for the current sources.
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "40 1 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to fuzz each target
+        default: "600"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    name: Fuzz C++ (nightly)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/fuzz
+        with:
+          seconds: ${{ inputs.seconds || '600' }}
+          merge: "1"

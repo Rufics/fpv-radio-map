@@ -55,6 +55,8 @@ std::string toBase64(const std::uint8_t* data, std::size_t size) {
 
 Bytes fromBase64(std::string_view text) {
     ensureSodium();
+    // An empty vector has no buffer, and libsodium requires one even for zero bytes.
+    if (text.empty()) return {};
     Bytes out(text.size());
     std::size_t len = 0;
     const char* end = nullptr;

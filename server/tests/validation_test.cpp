@@ -56,6 +56,14 @@ TEST_F(ValidationTest, MissionProblemsNameTheField) {
     EXPECT_FALSE(schemas.check("mission", badTime).empty());
 }
 
+TEST_F(ValidationTest, LongFormattedStringIsRefusedNotMatched) {
+    // The format check's regex overflowed the stack on long strings (found by fuzzing).
+    json m = goodMission();
+    m["time"] = {{"mode", "planned"}, {"utc", "2026-10-18T14:00:00." + std::string(200000, '1') + "Z"}};
+    const auto p = pointers("mission", m);
+    EXPECT_NE(std::find(p.begin(), p.end(), "/time/utc"), p.end());
+}
+
 TEST_F(ValidationTest, RequireThrows422WithTheReport) {
     json m = goodMission();
     m.erase("evaluate");
@@ -141,4 +149,21 @@ TEST(TimeTest, IsoParsing) {
     EXPECT_EQ(isoUtc(*parseIsoUtc("2026-10-18T16:30:00+02:30")), "2026-10-18T14:00:00Z");
     EXPECT_FALSE(parseIsoUtc("2026-02-31T00:00:00Z"));
     EXPECT_FALSE(parseIsoUtc("yesterday"));
+    EXPECT_EQ(isoUtc(*parseIsoUtc("2026-10-18 14:00z")), "2026-10-18T14:00:00Z");
+    EXPECT_EQ(*parseIsoUtc("2026-10-18T14:00:00.5-0130") - *parseIsoUtc("2026-10-18T15:30:00Z"),
+              std::chrono::milliseconds(500));
+    for (const char* bad : {"2026-10-18T14:00:00", "2026-10-18T14:00:00.Z", "2026-1-18T14:00Z", "2026-10-18T24:00Z",
+                            "2026-10-18T14:00:00Z ", "2026-10-18T14:00+0", "２026-10-18T14:00Z",
+                            // Years the clock cannot hold, also when an offset moves the time there.
+                            "0999-01-01T00:00Z", "2602-10-18T14:00Z", "1900-01-01T00:00+02:00",
+                            "2200-12-31T23:00-02:00"}) {
+        EXPECT_FALSE(parseIsoUtc(bad)) << bad;
+    }
+}
+
+TEST(TimeTest, LongFractionDoesNotOverflowTheStack) {
+    // A regex matched this one frame per character and crashed the server (found by fuzzing).
+    const auto t = parseIsoUtc("2026-10-18T14:00:00." + std::string(200000, '1') + "Z");
+    ASSERT_TRUE(t);
+    EXPECT_EQ(isoUtc(*t), "2026-10-18T14:00:00Z");
 }

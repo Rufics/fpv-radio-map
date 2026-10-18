@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "fpv.best-launch",
+  "version": "1.0.0",
+  "title": "Best launch point",
+  "description": "Searches a drawn area for the launch point with the best worst-case link margin along the route, and suggests moving there.",
+  "author": "rfmap",
+  "license": "MIT",
+  "lifecycle": "beta",
+  "abi": 1,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["route.analysis"],
+  "methods": ["route.analyze"],
+  "entry": { "linux-x86_64": "lib/libfpv_best_launch.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 256, "timeoutMs": 600000 }
+}

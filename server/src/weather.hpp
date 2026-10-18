@@ -78,11 +78,16 @@ private:
     };
     json fetchCached(double lat, double lon, const Config::WeatherTier& tier);
     std::optional<TimePoint> runTimeCached();
-    /// The forecast for hour `i` of a tier's response (`hourly` is its hourly block); nothing when
-    /// its surface values are missing.
-    std::optional<ForecastAt> forecastAtHour(const json& response, const json& hourly, std::size_t i,
-                                             const Config::WeatherTier& tier, TimePoint time,
-                                             const std::optional<TimePoint>& run, double lat) const;
+    /// The forecast for `time` in one tier's response, or nothing when it does not cover that
+    /// hour. Moves `reach` to the last hour the response covers. Throws on a response that is
+    /// not a forecast.
+    std::optional<ForecastAt> fromResponse(const json& r, const Config::WeatherTier& tier, double lat, TimePoint time,
+                                           const std::optional<TimePoint>& run,
+                                           std::optional<TimePoint>& reach) const;
+    static std::optional<TimePoint> lastCoveredHour(const json& hourly, const json& times);
+    /// Appends the pressure levels above `surface` to `column`; returns how many.
+    static std::size_t pressureLevels(const json& hourly, std::size_t i, double surface,
+                                      std::vector<rfext::AirSample>& column);
 
     Config::Weather cfg_;
     IForecastSource* source_;

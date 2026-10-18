@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <format>
+#include <limits>
 #include <stdexcept>
 
 namespace rfmod {
@@ -17,6 +19,14 @@ bool isDigits(std::string_view s) {
 
 bool isIdentChar(char c) {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-';
+}
+
+/// The next number up, for the exclusive upper bound of ^ and ~.
+unsigned bump(unsigned n, std::string_view range) {
+    if (n == std::numeric_limits<unsigned>::max()) {
+        throw std::invalid_argument("version number out of range in " + std::string(range));
+    }
+    return n + 1;
 }
 
 unsigned parseNumber(std::string_view s) {
@@ -70,7 +80,7 @@ Version Version::parse(std::string_view text) {
         for (std::string_view id : split(s.substr(dash + 1), '.')) {
             checkIdentifier(id, "prerelease", text);
             if (isDigits(id) && id.size() > 1 && id.front() == '0') {
-                throw std::invalid_argument("leading zero in prerelease of " + std::string(text));
+                throw std::invalid_argument(std::format("leading zero in prerelease of {}", text));
             }
             v.pre_.emplace_back(id);
         }
@@ -135,33 +145,34 @@ void VersionRange::appendComparators(std::string_view token, Set& out) {
         }
         return false;
     };
+    const std::string_view whole = token;
     if (take(">=")) {
-        out.push_back({Op::Ge, Version::parse(token)});
+        out.emplace_back(Op::Ge, Version::parse(token));
     } else if (take("<=")) {
-        out.push_back({Op::Le, Version::parse(token)});
+        out.emplace_back(Op::Le, Version::parse(token));
     } else if (take(">")) {
-        out.push_back({Op::Gt, Version::parse(token)});
+        out.emplace_back(Op::Gt, Version::parse(token));
     } else if (take("<")) {
-        out.push_back({Op::Lt, Version::parse(token)});
+        out.emplace_back(Op::Lt, Version::parse(token));
     } else if (take("^")) {
         const Version v = Version::parse(token);
         Version upper;
         if (v.major() > 0) {
-            upper = Version(v.major() + 1, 0, 0);
+            upper = Version(bump(v.major(), whole), 0, 0);
         } else if (v.minor() > 0) {
-            upper = Version(0, v.minor() + 1, 0);
+            upper = Version(0, bump(v.minor(), whole), 0);
         } else {
-            upper = Version(0, 0, v.patch() + 1);
+            upper = Version(0, 0, bump(v.patch(), whole));
         }
-        out.push_back({Op::Ge, v});
-        out.push_back({Op::Lt, upper});
+        out.emplace_back(Op::Ge, v);
+        out.emplace_back(Op::Lt, upper);
     } else if (take("~")) {
         const Version v = Version::parse(token);
-        out.push_back({Op::Ge, v});
-        out.push_back({Op::Lt, Version(v.major(), v.minor() + 1, 0)});
+        out.emplace_back(Op::Ge, v);
+        out.emplace_back(Op::Lt, Version(v.major(), bump(v.minor(), whole), 0));
     } else {
         (void)take("=");  // "=1.2.3" and "1.2.3" mean the same
-        out.push_back({Op::Eq, Version::parse(token)});
+        out.emplace_back(Op::Eq, Version::parse(token));
     }
 }
 

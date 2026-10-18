@@ -35,7 +35,7 @@ MAX_LISTED = 20
 
 # Display names of the CI jobs, keyed by their id in ci.yml.
 JOB_NAMES = {"clang-tidy": "C++ static analysis", "cpp": "C++ build and tests", "coverage": "C++ coverage",
-             "web": "Web build and tests"}
+             "fuzz": "Fuzz C++", "web": "Web build and tests"}
 # Jobs that only orchestrate the run; they are not results worth a row.
 HIDDEN_JOBS = {"changes", "report", "Changed parts", "Test report"}
 SUITES = {"cpp.xml": "C++", "web-ui-kit.xml": "Web: ui-kit", "web-fpv-app.xml": "Web: fpv-app"}
