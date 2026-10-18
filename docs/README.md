@@ -22,6 +22,7 @@ This folder is the project's documentation. It is reviewed in pull requests like
 - [Writing a module](modules/developer-guide.md)
 - [HTTP API (OpenAPI)](api/openapi.yaml)
 - [Contributing](../CONTRIBUTING.md)
+- [Repository settings](maintainers/repository-settings.md): the GitHub settings the CI and the review rules rely on.
 
 ## Where to ask
 
