@@ -111,7 +111,7 @@ TEST(WeatherTest, TimesThreeCenturiesApartAreOutsideTheForecastNotAnOverflow) {
 TEST(WeatherTest, NamesTheModelRunAndSaysWhenItIsStale) {
     TieredRig rig;
     rig.source.responses["icon_d2"] = forecast(kNoon - 3600);
-    rig.source.run = Clock::from_time_t(kNoon - 13 * 3600);
+    rig.source.run = Clock::from_time_t(kNoon - std::time_t{13} * 3600);
     const ForecastAt at = rig.weather.at(50.45, 30.52, Clock::from_time_t(kNoon));
     EXPECT_EQ(at.point.at("model"), "Open-Meteo icon_d2");
     EXPECT_EQ(at.point.at("runUtc"), "2026-10-17T23:00:00Z");
