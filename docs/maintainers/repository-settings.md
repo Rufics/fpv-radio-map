@@ -9,13 +9,16 @@ without giving pull request code any secret or write access.
 
 | Workflow | Trigger | Runs pull request code | Token | Secrets |
 |---|---|---|---|---|
-| `ci.yml` | `pull_request` | yes | read-only | none |
+| `ci.yml`, fork or Dependabot | `pull_request` | yes | read-only | none |
+| `ci.yml`, branch of this repository | `pull_request` | yes, by someone who can push here | `pull-requests: write` in the report job | none |
 | `pr-title.yml` | `pull_request` | yes (commitlint config) | read-only | none |
-| `ci-report.yml` | `workflow_run` after CI | **no**: main's code, PR artifacts read as data | `pull-requests: write` | none |
+| `ci-report.yml`, forks and Dependabot | `workflow_run` after CI | **no**: main's code, PR artifacts read as data | `pull-requests: write` | none |
 | CodeQL, SonarCloud, Gitar | GitHub apps | analyse only | app's own | app's own |
 
-The rule behind it: a workflow that runs pull request code never gets write access or secrets, and
-a workflow that has write access never runs pull request code. `pull_request_target` is not used.
+The rule behind it: code from a fork never runs with write access or secrets, and a workflow
+that has write access for a fork never runs that fork's code. A branch of this repository can
+only be pushed by someone who can already change the workflows, so its report job may comment,
+and nothing gets secrets. `pull_request_target` is not used.
 
 ## Actions → General
 

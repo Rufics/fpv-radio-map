@@ -3,9 +3,10 @@
 # files can affect are built: a change to docs alone builds nothing. Skipped jobs still report, so
 # the required checks pass without running.
 #
-# This workflow runs the pull request's own code, possibly from a fork, so it only ever gets a
-# read-only token and no secrets. It writes nothing to the pull request: ci-report.yml turns the
-# artifacts of this run into the pull request comment, with the trusted code of main.
+# This workflow runs the pull request's own code and gets no secrets. Only the report job may
+# comment, and only on a pull request from a branch of this repository, whose author can already
+# push here. A fork's pull request gets a read-only token, so its comment comes from
+# ci-report.yml, which reads the artifacts of this run as data with the code of main.
 name: CI
 
 on:
@@ -93,6 +94,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cpp == 'true' && github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
+    outputs:
+      html-url: ${{ steps.html.outputs.artifact-url }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -139,7 +142,8 @@ jobs:
             coverage/commit.txt
           if-no-files-found: ignore
           retention-days: 7
-      - if: success() || failure()
+      - id: html
+        if: success() || failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-cpp-html
@@ -183,12 +187,15 @@ jobs:
           retention-days: 7
 
   # The gate: the one required check, red when any job above failed. Also writes the report to
-  # the run summary; ci-report.yml posts the same report to the pull request.
+  # the run summary and to the pull request.
   report:
     name: Test report
     if: always()
     needs: [changes, cpp, coverage, web]
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -213,10 +220,26 @@ jobs:
           REPORT_JOBS: ${{ toJSON(needs) }}
           REPORT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           REPORT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT_COVERAGE_URL: ${{ needs.coverage.outputs.html-url }}
         run: |
           mkdir -p "$RUNNER_TEMP/ci-data"
           cd "$RUNNER_TEMP/ci-data"
-          python3 -I "$GITHUB_WORKSPACE/tools/ci/report.py" >> "$GITHUB_STEP_SUMMARY"
+          python3 -I "$GITHUB_WORKSPACE/tools/ci/report.py" > report.md
+          cat report.md >> "$GITHUB_STEP_SUMMARY"
+      # One comment per pull request, updated on every run. Only for branches of this repository:
+      # forks and Dependabot get a read-only token, and ci-report.yml comments for them. A failed
+      # comment never turns the gate red.
+      - name: Post the report to the pull request
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          github.event.pull_request.user.login != 'dependabot[bot]'
+        continue-on-error: true
+        working-directory: ${{ runner.temp }}/ci-data
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python3 -I "$GITHUB_WORKSPACE/tools/ci/pr_comment.py" post
       - name: Fail when a job failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1

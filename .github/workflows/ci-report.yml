@@ -1,7 +1,8 @@
-# Posts the CI report to the pull request, for pull requests from branches and from forks alike.
+# Posts the CI report to pull requests from forks and from Dependabot. ci.yml comments itself on
+# pull requests from branches of this repository.
 #
-# ci.yml runs the pull request's own code, so it gets a read-only token and cannot comment on a
-# fork's pull request. This workflow runs after it, from main, with the code of main only: it never
+# ci.yml runs the pull request's own code, and a fork's or Dependabot's run gets a read-only token,
+# so it cannot comment. This workflow runs after it, from main, with the code of main only: it never
 # checks out or runs anything from the pull request. It reads the artifacts of that run as data
 # (test results, coverage, changed lines), builds the report with tools/ci/report.py from main,
 # and keeps one comment per pull request up to date (tools/ci/pr_comment.py).
@@ -27,10 +28,13 @@ jobs:
   comment:
     name: Post the CI report
     # Runs of CI called by main.yml or release.yml are not pull requests. A cancelled run was
-    # replaced by a newer push, whose own run reports.
+    # replaced by a newer push, whose own run reports. Branches of this repository other than
+    # Dependabot's got their comment from ci.yml already.
     if: >-
       github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion != 'cancelled'
+      github.event.workflow_run.conclusion != 'cancelled' &&
+      (github.event.workflow_run.head_repository.full_name != github.repository ||
+       github.event.workflow_run.actor.login == 'dependabot[bot]')
     runs-on: ubuntu-24.04
     permissions:
       actions: read

@@ -86,8 +86,10 @@ jobs:
     needs: plan
     if: needs.plan.outputs.version != '' && inputs.dry_run == false
     uses: ./.github/workflows/ci.yml
+    # ci.yml's report job asks for pull-requests: write, which it uses on pull requests only.
     permissions:
       contents: read
+      pull-requests: write
 
   release:
     name: Build, sign and release v${{ needs.plan.outputs.version }}

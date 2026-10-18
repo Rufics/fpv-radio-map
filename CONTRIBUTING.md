@@ -118,10 +118,11 @@ read-only token:
 
 - A maintainer approves the workflow runs of an outside contributor's pull request before they
   start. Until then the checks show as waiting; this is expected.
-- `ci.yml` runs your code and only uploads its results. The `CI report` workflow
-  (`.github/workflows/ci-report.yml`) then runs from `main`, reads those results as data and posts
-  the comment. Nothing from the pull request runs with write access, and changing either workflow
-  in a pull request has no effect on that pull request's report.
+- `ci.yml` runs your code with a read-only token and only uploads its results. The `CI report`
+  workflow (`.github/workflows/ci-report.yml`) then runs from `main`, reads those results as data
+  and posts the comment. Nothing from a fork runs with write access, and changing either workflow
+  in a fork's pull request has no effect on that pull request's report. Pull requests from
+  branches of this repository get the comment from `ci.yml` directly.
 - Changes to `.github/`, `tools/ci/`, `deploy/` and the signing keys need a review by a code owner
   (`.github/CODEOWNERS`).
 
