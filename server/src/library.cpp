@@ -75,11 +75,13 @@ json Library::add(const std::string& kind, json doc, const std::string& by) {
     const std::string id = doc.at("id").get<std::string>();
     const std::string verified = pqxx::to_string(doc.at("verified").get<bool>());
     db_.tx([&kind, &id, &verified, &doc, &by](pqxx::work& w) {
-        const auto r = w.exec_params(
-            "insert into library_items(kind, id, version, verified, doc, updated_by) values ($1, $2, 1, $3, $4::jsonb, $5) "
-            "on conflict do nothing returning id",
-            kind, id, verified, doc.dump(), by);
-        if (r.empty()) throw HttpError(409, kind + "/" + id + " exists; edit it with PUT instead");
+        if (const auto r = w.exec_params(
+                "insert into library_items(kind, id, version, verified, doc, updated_by) values ($1, $2, 1, $3, $4::jsonb, "
+                "$5) on conflict do nothing returning id",
+                kind, id, verified, doc.dump(), by);
+            r.empty()) {
+            throw HttpError(409, kind + "/" + id + " exists; edit it with PUT instead");
+        }
         w.exec_params(
             "insert into library_history(kind, id, version, verified, doc, changed_by) values ($1, $2, 1, $3, $4::jsonb, $5)",
             kind, id, verified, doc.dump(), by);
@@ -121,11 +123,13 @@ std::vector<std::string> Library::seed(const std::filesystem::path& dir) {
         content << in.rdbuf();
         const std::string name = kind + "/seed.json";
         const std::string sha = Secrets::hex(Secrets::sha256(content.str()));
-        const bool done = db_.tx([&name](pqxx::work& w) {
-            return !w.exec_params("select 1 from seeds_applied where name = $1", name).empty();
-        });
         // Only the first start imports: later edits or deletions by the admin must stick.
-        if (done) continue;
+        if (const bool done = db_.tx([&name](pqxx::work& w) {
+                return !w.exec_params("select 1 from seeds_applied where name = $1", name).empty();
+            });
+            done) {
+            continue;
+        }
         std::size_t added = 0, skipped = 0;
         for (json item : json::parse(content.str())) {
             item["verified"] = false;

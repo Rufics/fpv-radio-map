@@ -59,6 +59,7 @@ add_library(rfmod_platform
   src/package.cpp
   src/in_process_module.cpp
   src/isolated_module.cpp
+  src/confined_root.cpp
   src/registry.cpp
   "${_schema_header}")
 target_include_directories(rfmod_platform PUBLIC include PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")

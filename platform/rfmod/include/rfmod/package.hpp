@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <map>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 namespace rfmod {
@@ -39,9 +40,16 @@ public:
                                             ValidationReport& report);
 };
 
+/// libarchive could not build the package archive.
+class PackageWriteError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 class PackageWriter {
 public:
     /// Packs every regular file under `sourceDir` (which must contain manifest.json) and signs it.
+    /// Throws std::invalid_argument for unusable input and PackageWriteError if archiving fails.
     static std::string pack(const std::filesystem::path& sourceDir, const SecretKey& key);
     /// Same for files already in memory; META/ entries in `files` are replaced.
     static std::string pack(const PackageFiles& files, const SecretKey& key);
