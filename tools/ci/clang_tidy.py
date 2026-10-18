@@ -31,17 +31,35 @@ CHECK_ALL = re.compile(r"\.(h|hh|hpp|hxx|inl|cmake)$|(^|/)(CMakeLists\.txt|\.cla
 SKIPPED_DIRS = ("_deps", "generated")
 REVISION = re.compile(r"[0-9a-f]{7,64}|HEAD(\^\d?|~\d{1,3})?")
 CLANG_TIDY_NAME = re.compile(r"clang-tidy(-\d+)?")
-FINDING = re.compile(r"^(?P<path>/.+?):(?P<line>\d+):(?P<col>\d+): (?P<level>warning|error): (?P<msg>.*)$")
+LEVELS = (": error: ", ": warning: ")
 TIMEOUT_SECONDS = 600
 MAX_LINE = 4096
+ROOT_TEXT = str(ROOT)
 
 
 def repo_relative(path):
-    """The path relative to the repository, or None for a file outside it."""
-    try:
-        return Path(path).resolve().relative_to(ROOT).as_posix()
-    except ValueError:
+    """The path relative to the repository, or None for a file outside it. Only the text of the
+    path is looked at, never the file system."""
+    rel = os.path.relpath(os.path.abspath(path), ROOT_TEXT)
+    if rel == os.curdir or rel == os.pardir or rel.startswith(os.pardir + os.sep) or os.path.isabs(rel):
         return None
+    return Path(rel).as_posix()
+
+
+def parse_finding(line):
+    """(path, line, column, message) of a clang-tidy finding such as
+    `/src/a.cpp:12:5: error: text [check]`, or None for any other output line."""
+    if len(line) > MAX_LINE or not line.startswith("/"):
+        return None
+    for level in LEVELS:
+        where, found, message = line.partition(level)
+        if not found:
+            continue
+        path, _, rest = where.rpartition(":")
+        path, _, row = path.rpartition(":")
+        if path and row.isdigit() and rest.isdigit():
+            return path, row, rest, message
+    return None
 
 
 def translation_units(compile_commands, build_dir):
@@ -89,16 +107,16 @@ def annotations(output):
     """GitHub error annotations for the findings in clang-tidy output, one per distinct finding."""
     seen = set()
     for raw in output.splitlines():
-        match = FINDING.match(raw) if len(raw) <= MAX_LINE else None
-        rel = repo_relative(match["path"]) if match else None
+        finding = parse_finding(raw)
+        rel = repo_relative(finding[0]) if finding else None
         if rel is None:
             continue
-        key = (rel, match["line"], match["col"], match["msg"])
-        if key in seen:
+        _, line, col, message = finding
+        if (rel, line, col, message) in seen:
             continue
-        seen.add(key)
+        seen.add((rel, line, col, message))
         prop = escape_annotation(rel).replace(":", "%3A").replace(",", "%2C")
-        yield f"::error file={prop},line={match['line']},col={match['col']}::{escape_annotation(match['msg'])}"
+        yield f"::error file={prop},line={line},col={col}::{escape_annotation(message)}"
 
 
 def run_one(clang_tidy, build_dir, unit):
@@ -129,7 +147,7 @@ def main(argv=None):
     if clang_tidy is None:
         print(f"{args.clang_tidy} is not installed", file=sys.stderr)
         return 2
-    build_dir = args.build_dir.resolve()
+    build_dir = Path(os.path.abspath(args.build_dir))
     with open(build_dir / "compile_commands.json", encoding="utf-8") as f:
         units = translation_units(json.load(f), build_dir)
     units = select(units, changed_files(args.base) if args.base else None)

@@ -59,7 +59,7 @@ int hostCall(rfmod_host_context*, const char* method, const char* request, const
     json req;
     try {
         req = request && *request ? json::parse(request) : json::object();
-    } catch (const std::exception& e) {
+    } catch (const json::exception& e) {
         last = e.what();
         *response = last.c_str();
         return RFMOD_ERR_BAD_REQUEST;
@@ -131,7 +131,7 @@ int run(const char* library) {
         if (response) {
             try {
                 body = json::parse(response);
-            } catch (const std::exception&) {
+            } catch (const json::exception&) {
                 body = {{"error", {{"code", "internal"}, {"message", "module returned invalid JSON"}}}};
             }
             api->free_string(response);
@@ -149,10 +149,11 @@ int main(int argc, char** argv) {
         (void)std::fprintf(stderr, "rfmod-worker is started by the rfmap host, not by hand\n");
         return 64;
     }
-    // stderr goes to the host's log, so an unexpected failure is reported there instead of aborting.
+    // stderr goes to the host's log, so a malformed message from the host is reported there
+    // instead of aborting.
     try {
         return run(argv[1]);
-    } catch (const std::exception& e) {
+    } catch (const json::exception& e) {
         (void)std::fprintf(stderr, "rfmod-worker: %s\n", e.what());
         return 70;
     }

@@ -1,7 +1,8 @@
 """Tests of the clang-tidy runner: python3 -I -m unittest discover -s tools/ci -p '*_test.py'"""
 import unittest
 
-from clang_tidy import ROOT, annotations, changed_files, escape_annotation, main, select, translation_units
+from clang_tidy import (ROOT, annotations, changed_files, escape_annotation, main, parse_finding, repo_relative,
+                        select, translation_units)
 
 BUILD = ROOT / "build-tidy"
 UNITS = ["core/rf-core/src/geodesy.cpp", "platform/rfmod/src/crypto.cpp"]
@@ -52,6 +53,21 @@ class ArgumentsTest(unittest.TestCase):
         for name in ("sh", "/usr/bin/clang-tidy", "clang-tidy-18;rm", "../clang-tidy"):
             with self.subTest(name=name):
                 self.assertEqual(main(["--build-dir", "build", "--clang-tidy", name]), 2)
+
+
+class ParseTest(unittest.TestCase):
+    def test_findings_and_other_lines(self):
+        self.assertEqual(parse_finding("/r/a b:c.cpp:12:5: warning: x: y [z]"), ("/r/a b:c.cpp", "12", "5", "x: y [z]"))
+        for line in ("   12 | int x;", "2 warnings generated.", "a.cpp:1:2: error: relative", "/a.cpp:x:2: error: m",
+                     "/a.cpp: error: m", "/" + "a" * 5000 + ".cpp:1:1: error: long"):
+            with self.subTest(line=line[:40]):
+                self.assertIsNone(parse_finding(line))
+
+    def test_paths_outside_the_repository(self):
+        self.assertEqual(repo_relative(ROOT / "core/x.cpp"), "core/x.cpp")
+        for path in (ROOT, ROOT.parent, ROOT / "../other/x.cpp", "/usr/include/vector"):
+            with self.subTest(path=str(path)):
+                self.assertIsNone(repo_relative(path))
 
 
 class AnnotationTest(unittest.TestCase):

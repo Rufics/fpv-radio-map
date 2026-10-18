@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <random>
@@ -44,12 +45,7 @@ std::string randomName() {
 }
 
 std::string isoNow() {
-    const auto t = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    char buf[32];
-    std::tm tm{};
-    gmtime_r(&t, &tm);
-    (void)std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
-    return buf;
+    return std::format("{:%FT%TZ}", std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now()));
 }
 
 std::optional<std::string> validateOptions(const fs::path& dir, const Manifest& m, const json& options) {
