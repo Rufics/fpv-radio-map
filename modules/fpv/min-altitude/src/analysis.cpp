@@ -61,7 +61,7 @@ json analyze(const json& request, const IWorld& world, const std::map<std::strin
                 const auto need = solver.requiredAgl(profile, mission.pilot.aglM, maxAgl);
                 json pt = {{"distanceAlongRouteM", smp.s}, {"lat", smp.p.position.lat}, {"lon", smp.p.position.lon},
                            {"leg", smp.p.leg}, {"plannedAglM", smp.p.aglM}};
-                if (need) {
+                if (need.has_value()) {
                     pt["requiredAglM"] = *need;
                     legNeed[smp.p.leg] = std::max(legNeed[smp.p.leg], *need);
                 } else {

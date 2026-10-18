@@ -163,7 +163,7 @@ ForecastAt WeatherService::at(double lat, double lon, TimePoint time) {
         const double idx = std::round(hours);
         // Last hour with the surface values the column needs.
         for (std::size_t i = times.size(); i-- > 0;) {
-            if (valueAt(hourly, "temperature_2m", i) && valueAt(hourly, "surface_pressure", i)) {
+            if (valueAt(hourly, "temperature_2m", i).has_value() && valueAt(hourly, "surface_pressure", i).has_value()) {
                 const auto t = Clock::from_time_t(times.at(i).get<std::time_t>());
                 if (!reach || t > *reach) reach = t;
                 break;
@@ -174,7 +174,7 @@ ForecastAt WeatherService::at(double lat, double lon, TimePoint time) {
         const auto t2 = valueAt(hourly, "temperature_2m", i);
         const auto rh2 = valueAt(hourly, "relative_humidity_2m", i);
         const auto ps = valueAt(hourly, "surface_pressure", i);
-        if (!t2 || !rh2 || !ps || !r.contains("elevation")) continue;
+        if (!t2.has_value() || !rh2.has_value() || !ps.has_value() || !r.contains("elevation")) continue;
 
         const TimePoint valid = Clock::from_time_t(times.at(i).get<std::time_t>());
         const double surface = r.at("elevation").get<double>() + 2.0;
@@ -185,7 +185,7 @@ ForecastAt WeatherService::at(double lat, double lon, TimePoint time) {
             const auto t = valueAt(hourly, "temperature_" + s, i);
             const auto rh = valueAt(hourly, "relative_humidity_" + s, i);
             const auto gh = valueAt(hourly, "geopotential_height_" + s, i);
-            if (!t || !rh || !gh) continue;
+            if (!t.has_value() || !rh.has_value() || !gh.has_value()) continue;
             const double h = geometricHeight(*gh);
             // A level the model extrapolates below the ground is not air the path flies through.
             if (!(h > surface)) continue;
@@ -207,9 +207,9 @@ ForecastAt WeatherService::at(double lat, double lon, TimePoint time) {
              {"airDensityKgM3", airDensity(out.column.front())},
              {"surfaceElevationM", surface - 2.0},
              {"stale", false}};
-        if (const auto ws = valueAt(hourly, "wind_speed_10m", i)) p["windSpeedMps"] = *ws;
-        if (const auto wd = valueAt(hourly, "wind_direction_10m", i)) p["windFromDeg"] = *wd;
-        if (out.rainMmPerHour) p["precipitationMmPerHour"] = *out.rainMmPerHour;
+        if (const auto ws = valueAt(hourly, "wind_speed_10m", i); ws.has_value()) p["windSpeedMps"] = *ws;
+        if (const auto wd = valueAt(hourly, "wind_direction_10m", i); wd.has_value()) p["windFromDeg"] = *wd;
+        if (out.rainMmPerHour.has_value()) p["precipitationMmPerHour"] = *out.rainMmPerHour;
         if (run) {
             p["runUtc"] = isoUtc(*run);
             p["stale"] = clock_.now() - *run > std::chrono::hours(cfg_.staleAfterHours);
@@ -263,7 +263,7 @@ json WeatherService::horizon(double lat, double lon) {
         const json& hourly = r.value("hourly", json::object());
         const json& times = hourly.value("time", json::array());
         for (std::size_t i = times.size(); i-- > 0;) {
-            if (valueAt(hourly, "temperature_2m", i) && valueAt(hourly, "surface_pressure", i)) {
+            if (valueAt(hourly, "temperature_2m", i).has_value() && valueAt(hourly, "surface_pressure", i).has_value()) {
                 const std::string key = tier.name == "long-range" ? "longRangeUntilUtc" : "hourlyUntilUtc";
                 out[key] = isoUtc(Clock::from_time_t(times.at(i).get<std::time_t>()));
                 break;

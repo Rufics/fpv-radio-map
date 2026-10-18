@@ -69,7 +69,7 @@ void BuiltinModules::set(const std::string& id, std::optional<bool> enabled, std
     if (options) schemas_.require("builtin:" + id, *options);
     std::lock_guard lock(mutex_);
     Entry& e = entries_.at(id);
-    if (enabled) e.enabled = *enabled;
+    if (enabled.has_value()) e.enabled = *enabled;
     if (options) e.options = *options;
     if (db_) {
         db_->tx([&](pqxx::work& w) {

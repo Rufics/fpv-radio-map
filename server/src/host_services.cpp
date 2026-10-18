@@ -73,7 +73,7 @@ json ServerHostServices::call(const std::string& moduleId, const std::string& me
         const DemSource& dem = links_->requireDem();
         const auto e = dem.elevation(geo(request));
         return {{"groundMslM", e ? json(e->heightMsl.value()) : json(nullptr)},
-                {"uncertaintyM", dem.statedErrorM() ? json(*dem.statedErrorM()) : json(nullptr)},
+                {"uncertaintyM", dem.statedErrorM().has_value() ? json(*dem.statedErrorM()) : json(nullptr)},
                 {"source", dem.name()}};
     }
     if (method == "profile.get") return profileGet(request);
@@ -115,16 +115,16 @@ json ServerHostServices::profileGet(const json& req) {
         if (e) {
             s["groundMslM"] = e->heightMsl.value();
             s["uncertaintyM"] = e->uncertainty.value();
-            if (gap) missing.push_back({{"fromM", *gap}, {"toM", d}});
+            if (gap.has_value()) missing.push_back({{"fromM", *gap}, {"toM", d}});
             gap.reset();
         } else {
             s["groundMslM"] = nullptr;
-            if (!gap) gap = d;
+            if (!gap.has_value()) gap = d;
         }
         s["obstacleM"] = 0.0;
         samples.push_back(std::move(s));
     }
-    if (gap) missing.push_back({{"fromM", *gap}, {"toM", total}});
+    if (gap.has_value()) missing.push_back({{"fromM", *gap}, {"toM", total}});
     return {{"source", dem.name()}, {"stepM", total / n}, {"samples", samples}, {"missing", missing}};
 }
 

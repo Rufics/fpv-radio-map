@@ -18,9 +18,9 @@ Air airFrom(const json& weather, const json& options) {
     a.windSpeedMps = num(weather, "windSpeedMps");
     a.windFromDeg = num(weather, "windFromDeg");
     a.temperatureC = num(weather, "temperatureC");
-    if (auto v = num(options, "temperatureC")) a.temperatureC = v;
-    if (auto v = num(options, "windSpeedMps")) a.windSpeedMps = v;
-    if (auto v = num(options, "windFromDeg")) a.windFromDeg = v;
+    if (auto v = num(options, "temperatureC"); v.has_value()) a.temperatureC = v;
+    if (auto v = num(options, "windSpeedMps"); v.has_value()) a.windSpeedMps = v;
+    if (auto v = num(options, "windFromDeg"); v.has_value()) a.windFromDeg = v;
     return a;
 }
 
@@ -58,7 +58,7 @@ json analyze(const json& request, const IWorld& world, const json& drone, const 
         data["drone"] = {{"id", drone.value("id", "")}, {"version", drone.value("version", 0)}};
         data["battery"] = {{"id", battery.value("id", "")}, {"version", battery.value("version", 0)}};
 
-        if (!air.windSpeedMps) {
+        if (!air.windSpeedMps.has_value()) {
             reasons.push_back(reason(kId, "warn", "No wind forecast for this time: energy is for calm air."));
         } else {
             data["notes"].push_back("Wind " + fixed(*air.windSpeedMps, 1) + " m/s from " + fixed(*air.windFromDeg, 0) +

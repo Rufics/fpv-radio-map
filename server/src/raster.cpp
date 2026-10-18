@@ -129,7 +129,7 @@ std::optional<double> GdalRaster::valueAt(const rfcore::GeoPoint& p) const {
     const float v = b->values[static_cast<std::size_t>(row % blockH_) * static_cast<std::size_t>(b->width) +
                               static_cast<std::size_t>(col % blockW_)];
     if (std::isnan(v)) return std::nullopt;
-    if (noData_ && static_cast<double>(v) == static_cast<double>(static_cast<float>(*noData_))) return std::nullopt;
+    if (noData_.has_value() && static_cast<double>(v) == static_cast<double>(static_cast<float>(*noData_))) return std::nullopt;
     return static_cast<double>(v);
 }
 
@@ -142,7 +142,7 @@ DemSource::DemSource(std::shared_ptr<GdalRaster> raster, std::string name, std::
 
 std::optional<rfcore::ElevationSample> DemSource::elevation(const rfcore::GeoPoint& point) const {
     const auto v = raster_->valueAt(point);
-    if (!v) return std::nullopt;
+    if (!v.has_value()) return std::nullopt;
     return rfcore::ElevationSample{rfcore::Metres(*v), rfcore::Metres(statedError_.value_or(0.0))};
 }
 
@@ -151,7 +151,7 @@ LandCoverSource::LandCoverSource(std::shared_ptr<GdalRaster> raster, std::string
 
 std::optional<int> LandCoverSource::code(const rfcore::GeoPoint& p) const {
     const auto v = raster_->valueAt(p);
-    if (!v || *v == 0.0) return std::nullopt;  // 0 is WorldCover "no data"
+    if (!v.has_value() || *v == 0.0) return std::nullopt;  // 0 is WorldCover "no data"
     return static_cast<int>(*v);
 }
 

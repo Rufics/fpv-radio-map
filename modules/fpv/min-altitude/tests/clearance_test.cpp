@@ -66,7 +66,7 @@ TEST(MinAltitude, NothingWhenNoHeightWorks) {
     const auto inv = w.inverse(a, b);
     const auto mid = w.direct(a, inv.azimuth1Deg, inv.distanceM / 2.0);
     const auto profile = ClearanceSolver::toProfile(w.groundProfile(a, b), mid.azimuthDeg, mid.point.lat);
-    EXPECT_FALSE(ClearanceSolver(4.0 / 3.0, rfcore::Hertz(5.8e9), 0.6).requiredAgl(profile, 1.5, 300.0));
+    EXPECT_FALSE(ClearanceSolver(4.0 / 3.0, rfcore::Hertz(5.8e9), 0.6).requiredAgl(profile, 1.5, 300.0).has_value());
 }
 
 TEST(MinAltitude, RouteAnalysisSuggestsRaisingTheLeg) {

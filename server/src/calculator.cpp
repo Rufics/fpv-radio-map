@@ -87,7 +87,7 @@ CalcContext Calculator::contextFor(const json& mission) const {
 json Calculator::environmentKey(const CalcContext& ctx) const {
     json key = {{"server", links_.version()},
                 {"dem", links_.dem() ? links_.dem()->raster().identity() : ""},
-                {"demError", links_.dem() && links_.dem()->statedErrorM() ? json(*links_.dem()->statedErrorM()) : json()},
+                {"demError", links_.dem() && links_.dem()->statedErrorM().has_value() ? json(*links_.dem()->statedErrorM()) : json()},
                 {"landcover", links_.landcover() ? links_.landcover()->raster().identity() : ""},
                 {"builtins", builtins_.list()},
                 {"modules", modules_.versions(ctx)}};
@@ -329,7 +329,7 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     const std::string hash = inputHash({{"kind", "route"}, {"mission", mission}, {"library", refs},
                                         {"time", isoUtc(ctx.time)}, {"env", environmentKey(ctx)}});
     if (auto hit = cache_.get(hash)) {
-        if (revision) (*hit)["missionRevision"] = *revision;
+        if (revision.has_value()) (*hit)["missionRevision"] = *revision;
         return *hit;
     }
 
@@ -337,7 +337,7 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     json result = {{"inputHash", hash}, {"legs", json::array()}, {"modules", json::object()},
                    {"moduleFailures", json::array()}, {"reasons", json::array()}, {"library", refs},
                    {"timeUtc", isoUtc(ctx.time)}};
-    if (revision) result["missionRevision"] = *revision;
+    if (revision.has_value()) result["missionRevision"] = *revision;
     if (ctx.forecast) result["weather"] = ctx.forecast->point;
     result["forecastTier"] = forecastTier(ctx);
 
@@ -443,9 +443,9 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     json marginJson = json::array(), worstJson = json::array();
     std::vector<bool> reachable(cols * rows, false);
     for (std::size_t i = 0; i < margins.size(); ++i) {
-        marginJson.push_back(margins[i] ? json(*margins[i]) : json(nullptr));
-        worstJson.push_back(worstBand[i] ? json(*worstBand[i]) : json(nullptr));
-        reachable[i] = margins[i] && *margins[i] >= 0.0;
+        marginJson.push_back(margins[i].has_value() ? json(*margins[i]) : json(nullptr));
+        worstJson.push_back(worstBand[i].has_value() ? json(*worstBand[i]) : json(nullptr));
+        reachable[i] = margins[i].has_value() && *margins[i] >= 0.0;
     }
     const double south = north - static_cast<double>(rows) * dLat;
     const double east = west + static_cast<double>(cols) * dLon;
