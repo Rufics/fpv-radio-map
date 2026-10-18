@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <utility>
 
 using namespace rfmap;
 
@@ -17,9 +18,12 @@ public:
 
 class CannedSource final : public IForecastSource {
 public:
-    json response;
-    json fetch(double, double, const std::string&) override { return response; }
+    explicit CannedSource(json response) : response_(std::move(response)) {}
+    json fetch(double, double, const std::string&) override { return response_; }
     std::optional<TimePoint> runTime() override { return std::nullopt; }
+
+private:
+    json response_;
 };
 
 /// Three hours of surface values from `first` on, with no pressure levels.
@@ -32,17 +36,18 @@ json forecast(std::int64_t first) {
               {"surface_pressure", {1000.0, 1001.0, 1002.0}}}}};
 }
 
-class WeatherTest : public ::testing::Test {
-protected:
+/// The weather service over one canned response, read at a fixed "now".
+struct Rig {
+    explicit Rig(json response) : source(std::move(response)) {}
     FixedClock clock;
     CannedSource source;
     Config::Weather cfg;
     WeatherService weather{cfg, &source, clock};
 };
 
-TEST_F(WeatherTest, ReadsTheHourNearestTheRequestedTime) {
-    source.response = forecast(kNoon - 3600);
-    const ForecastAt at = weather.at(50.45, 30.52, Clock::from_time_t(kNoon + 20 * 60));
+TEST(WeatherTest, ReadsTheHourNearestTheRequestedTime) {
+    Rig rig(forecast(kNoon - 3600));
+    const ForecastAt at = rig.weather.at(50.45, 30.52, Clock::from_time_t(kNoon + 20 * 60));
     EXPECT_EQ(at.point.at("validUtc"), "2026-10-18T12:00:00Z");
     EXPECT_DOUBLE_EQ(at.point.at("temperatureC").get<double>(), 11.0);
     ASSERT_FALSE(at.notes.empty());
@@ -51,9 +56,9 @@ TEST_F(WeatherTest, ReadsTheHourNearestTheRequestedTime) {
 
 // The clock counts nanoseconds in 64 bits, about 292 years: a forecast that starts in 1900 and a
 // request for 2199 are further apart than that, and must not overflow it.
-TEST_F(WeatherTest, TimesThreeCenturiesApartAreOutsideTheForecastNotAnOverflow) {
-    source.response = forecast(-2208988800);                                       // 1900-01-01
-    const ForecastAt at = weather.at(50.45, 30.52, Clock::from_time_t(7258032000));  // 2199-12-31
+TEST(WeatherTest, TimesThreeCenturiesApartAreOutsideTheForecastNotAnOverflow) {
+    Rig rig(forecast(-2208988800));                                                     // 1900-01-01
+    const ForecastAt at = rig.weather.at(50.45, 30.52, Clock::from_time_t(7258032000));  // 2199-12-31
     EXPECT_EQ(at.point.at("forecastUntilUtc"), "1900-01-01T02:00:00Z");
 }
 
