@@ -62,7 +62,7 @@ GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), c
     // Pixel centre positions back in WGS84, to measure the pixel pitch on the ellipsoid.
     std::unique_ptr<OGRCoordinateTransformation> toWgs(
         toRaster_ ? OGRCreateCoordinateTransformation(&target, &wgs84) : nullptr);
-    auto centreOf = [&](double col, double row) {
+    auto centreOf = [&gt, &toWgs](double col, double row) {
         double x = gt[0] + (col + 0.5) * gt[1] + (row + 0.5) * gt[2];
         double y = gt[3] + (col + 0.5) * gt[4] + (row + 0.5) * gt[5];
         if (toWgs) toWgs->Transform(1, &x, &y);

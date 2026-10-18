@@ -13,7 +13,7 @@ Database::Database(std::string url, int poolSize) : url_(std::move(url)) {
 
 Database::Lease::Lease(Database& d) : db(d) {
     std::unique_lock lock(db.mutex_);
-    db.available_.wait(lock, [&] { return !db.idle_.empty(); });
+    db.available_.wait(lock, [this] { return !db.idle_.empty(); });
     conn = std::move(db.idle_.back());
     db.idle_.pop_back();
 }
@@ -40,7 +40,7 @@ std::vector<std::string> Database::migrate(const std::filesystem::path& sqlDir) 
     }
     std::sort(files.begin(), files.end());
     std::vector<std::string> applied;
-    tx([&](pqxx::work& w) {
+    tx([&files, &applied](pqxx::work& w) {
         // One server migrates at a time, even with several replicas starting together.
         w.exec("select pg_advisory_xact_lock(7461001)");
         w.exec("create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())");
