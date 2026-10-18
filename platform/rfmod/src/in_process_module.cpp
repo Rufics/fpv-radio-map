@@ -52,7 +52,10 @@ struct InProcessModule::Library {
     };
     std::unique_ptr<void, Close> handle;
 
-    explicit Library(const std::filesystem::path& path) : handle(dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL)) {
+    /// Code is only ever loaded from inside the trusted directory, resolved with symlinks followed.
+    Library(const ConfinedRoot& trustedDir, const std::filesystem::path& path) {
+        const std::filesystem::path confined = trustedDir.confine(path);
+        handle.reset(dlopen(confined.c_str(), RTLD_NOW | RTLD_LOCAL));
         if (!handle) throw ModuleError("load_failed", std::string("dlopen: ") + dlerror());
     }
 
@@ -73,9 +76,11 @@ json takeResponse(const rfmod_module* api, const char* response) {
 
 }  // namespace
 
-InProcessModule::InProcessModule(Manifest manifest, const std::filesystem::path& library, IHostServices& services,
-                                 const json& options)
-    : manifest_(std::move(manifest)), library_(std::make_unique<Library>(library)), bridge_(std::make_unique<Bridge>()) {
+InProcessModule::InProcessModule(Manifest manifest, const ConfinedRoot& trustedDir, const std::filesystem::path& library,
+                                 IHostServices& services, const json& options)
+    : manifest_(std::move(manifest)),
+      library_(std::make_unique<Library>(trustedDir, library)),
+      bridge_(std::make_unique<Bridge>()) {
     // library_ is a constructed member by now, so every throw below closes the library again.
     const rfmod_get_module_fn entry = library_->entry();
     if (!entry) throw ModuleError("load_failed", std::string("library does not export ") + RFMOD_ENTRY_SYMBOL);

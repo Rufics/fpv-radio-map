@@ -11,6 +11,7 @@
 #include <ranges>
 #include <set>
 #include <sstream>
+#include <string_view>
 
 namespace rfmod {
 namespace fs = std::filesystem;
@@ -27,14 +28,17 @@ std::string readFile(const fs::path& p) {
     return s.str();
 }
 
-void writeFileAtomic(const fs::path& p, const std::string& content) {
-    const fs::path tmp = p.string() + ".tmp";
+/// Writes `p` (which must lie inside `root`) through a temporary file renamed into place.
+void writeFileAtomic(const ConfinedRoot& root, const fs::path& p, std::string_view content) {
+    const fs::path target = root.confine(p);
+    const fs::path tmp = root.confine(target.string() + ".tmp");
+    fs::create_directories(target.parent_path());
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         out.write(content.data(), static_cast<std::streamsize>(content.size()));
         if (!out) throw std::runtime_error("cannot write " + tmp.string());
     }
-    fs::rename(tmp, p);
+    fs::rename(tmp, target);
 }
 
 std::string randomName() {
@@ -103,10 +107,11 @@ std::string toString(ModuleState s) {
 }
 
 ModuleRegistry::ModuleRegistry(RegistryConfig config, const TrustStore& trust, IHostServices& services)
-    : config_(std::move(config)), trust_(trust), services_(services) {
-    fs::create_directories(config_.root / "installed");
-    fs::remove_all(config_.root / "staging");
-    fs::create_directories(config_.root / "staging");
+    : config_(std::move(config)), root_(config_.root), trust_(trust), services_(services) {
+    fs::create_directories(root_.resolve("installed"));
+    const fs::path staging = root_.resolve("staging");
+    fs::remove_all(staging);
+    fs::create_directories(staging);
 }
 
 ModuleRegistry::~ModuleRegistry() {
@@ -124,21 +129,19 @@ ModuleRegistry::~ModuleRegistry() {
     }
 }
 
-void ModuleRegistry::unpack(const PackageFiles& files, const fs::path& dir) {
+void ModuleRegistry::unpack(const PackageFiles& files, const fs::path& dir) const {
     for (const auto& [path, content] : files.files) {
         // Write a new file and rename it into place, never rewrite in place: a library that is
         // still mapped by a running module must keep its old pages.
-        const fs::path target = dir / path;
-        fs::create_directories(target.parent_path());
-        writeFileAtomic(target, content);
+        writeFileAtomic(root_, dir / path, content);
     }
 }
 
 std::unique_ptr<IModuleInstance> ModuleRegistry::load(const Manifest& m, const TrustedKey& signer, const fs::path& dir,
                                                       const json& options, bool forceIsolated) {
-    const fs::path library = dir / m.entry.at(currentPlatform());
+    const fs::path library = root_.confine(dir / m.entry.at(currentPlatform()));
     if (signer.firstParty() && !forceIsolated && !config_.isolateAll) {
-        return std::make_unique<InProcessModule>(m, library, services_, options);
+        return std::make_unique<InProcessModule>(m, root_, library, services_, options);
     }
     return std::make_unique<IsolatedModule>(m, library, config_.workerExecutable, services_, options);
 }
@@ -225,17 +228,18 @@ void ModuleRegistry::installStaged(const VerifiedPackage& pkg, const std::string
                                    ValidationReport& report) {
     // Replace the old version atomically from the directory's point of view.
     const Manifest& m = pkg.manifest;
-    const fs::path target = config_.root / "installed" / m.id;
-    writeFileAtomic(staging / kPackageFile, archive);
+    const fs::path target = root_.resolve(fs::path("installed") / m.id);
+    const fs::path staged = root_.confine(staging);
+    writeFileAtomic(root_, staged / kPackageFile, archive);
     Entry fresh{m, pkg.signer, target, true, json::object(), ModuleState::Disabled, {}, nullptr};
     if (auto existing = entries_.find(m.id); existing != entries_.end()) {
         retire(existing->second);
         fresh.enabled = existing->second.enabled;
-        if (!validateOptions(staging, m, existing->second.options)) fresh.options = existing->second.options;
+        if (!validateOptions(staged, m, existing->second.options)) fresh.options = existing->second.options;
     }
-    const fs::path old = config_.root / "staging" / (m.id + ".old." + randomName());
+    const fs::path old = root_.resolve(fs::path("staging") / (m.id + ".old." + randomName()));
     if (fs::exists(target)) fs::rename(target, old);
-    fs::rename(staging, target);
+    fs::rename(staged, target);
     fs::remove_all(old);
     writeState(fresh);
     report.pass("installed", m.id + " " + m.version.str() + " at " + isoNow());
@@ -253,10 +257,10 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
     if (!report.ok()) return report;
 
     // Self-test always runs in a worker, whoever signed it: an upload is untrusted until installed.
-    const fs::path staging = config_.root / "staging" / randomName();
+    const fs::path staging = root_.resolve(fs::path("staging") / randomName());
     runSelfTest(*pkg, staging, report);
     if (!report.ok() || !install) {
-        fs::remove_all(staging);
+        fs::remove_all(root_.confine(staging));
         return report;
     }
 
@@ -268,7 +272,7 @@ ValidationReport ModuleRegistry::upload(const std::string& archive, bool install
 void ModuleRegistry::writeState(const Entry& e) const {
     const json state = {{"enabled", e.enabled}, {"options", e.options}, {"signer", e.signer.key.id()},
                         {"version", e.manifest.version.str()}, {"updatedAt", isoNow()}};
-    writeFileAtomic(e.dir / kStateFile, state.dump(2) + "\n");
+    writeFileAtomic(root_, e.dir / kStateFile, state.dump(2) + "\n");
 }
 
 std::vector<std::string> ModuleRegistry::dependentsOf(const std::string& id) const {
@@ -292,7 +296,7 @@ void ModuleRegistry::remove(const std::string& id) {
         throw std::invalid_argument(id + " is required by " + list + "; disable or remove those first");
     }
     retire(it->second);
-    fs::remove_all(it->second.dir);
+    fs::remove_all(root_.confine(it->second.dir));
     {
         std::lock_guard lock(mutex_);
         entries_.erase(it);
@@ -403,7 +407,7 @@ void ModuleRegistry::reloadLocked() {
     shutdownAll();
     std::map<std::string, Entry, std::less<>> entries;
     std::vector<std::string> notices;
-    for (const auto& item : fs::directory_iterator(config_.root / "installed")) {
+    for (const auto& item : fs::directory_iterator(root_.resolve("installed"))) {
         if (!item.is_directory()) continue;
         if (auto e = readInstalled(item.path(), notices)) {
             const std::string id = e->manifest.id;

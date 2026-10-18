@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rfmod/confined_root.hpp"
 #include "rfmod/host.hpp"
 #include "rfmod/package.hpp"
 #include "rfmod/trust.hpp"
@@ -103,9 +104,10 @@ private:
     void retire(Entry& e);
     void writeState(const Entry& e) const;
     [[nodiscard]] std::vector<std::string> dependentsOf(const std::string& id) const;
-    static void unpack(const PackageFiles& files, const std::filesystem::path& dir);
+    void unpack(const PackageFiles& files, const std::filesystem::path& dir) const;
 
     RegistryConfig config_;
+    ConfinedRoot root_;  ///< config_.root; every path the registry touches stays inside it
     const TrustStore& trust_;
     IHostServices& services_;
     /// Serialises the mutating calls. Module code (init, self-test, shutdown) runs while only this

@@ -334,7 +334,7 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
     archive_write_add_filter_gzip(a.get());
     // The gzip header stores the current time unless told not to, which makes packing depend on the clock.
     if (archive_write_set_filter_option(a.get(), "gzip", "timestamp", nullptr) != ARCHIVE_OK) {
-        throw std::runtime_error("archive: " + archiveError(a.get()));
+        throw PackageWriteError("archive: " + archiveError(a.get()));
     }
     archive_write_set_format_pax_restricted(a.get());
     std::string out;
@@ -345,7 +345,7 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
     };
     auto closeCb = [](archive*, void*) -> int { return ARCHIVE_OK; };
     if (archive_write_open(a.get(), &out, openCb, writeCb, closeCb) != ARCHIVE_OK) {
-        throw std::runtime_error("archive: " + archiveError(a.get()));
+        throw PackageWriteError("archive: " + archiveError(a.get()));
     }
     for (const auto& [path, content] : files.files) {
         archive_entry* e = archive_entry_new();
@@ -357,12 +357,12 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
         if (archive_write_header(a.get(), e) != ARCHIVE_OK ||
             archive_write_data(a.get(), content.data(), content.size()) != static_cast<la_ssize_t>(content.size())) {
             archive_entry_free(e);
-            throw std::runtime_error("archive: " + archiveError(a.get()));
+            throw PackageWriteError("archive: " + archiveError(a.get()));
         }
         archive_entry_free(e);
     }
     if (archive_write_close(a.get()) != ARCHIVE_OK) {
-        throw std::runtime_error("archive: " + archiveError(a.get()));
+        throw PackageWriteError("archive: " + archiveError(a.get()));
     }
     return out;
 }
