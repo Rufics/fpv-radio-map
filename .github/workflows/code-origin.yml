@@ -2,7 +2,9 @@
 # and matched against the SCANOSS open source knowledge base (osskb.org, free for open source).
 # Only fingerprints leave the runner, never the source. Dependency licences and licence headers
 # are not checked here. Pull requests scan the files they change; the weekly run scans everything.
-# Matches against this repository itself, and accepted ones, are listed in scanoss.json.
+# A match marks the "Policy Check: Undeclared" or "Policy Check: Copyleft" run as action required;
+# this job stays green. Matches against this repository itself, and accepted ones, are listed in
+# scanoss.json.
 name: Code origin
 
 on:
@@ -24,6 +26,9 @@ concurrency:
 jobs:
   scan:
     name: Copied code scan
+    # A fork's pull request gets a read-only token, so the action cannot create its check runs or
+    # comment. Fork changes are scanned by the weekly run once they are on main.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

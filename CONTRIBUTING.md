@@ -81,7 +81,9 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
 - the pull request title against Conventional Commits (its own check, re-run when the title is edited);
 - copied code: the changed files are matched file by file and snippet by snippet against the SCANOSS
   open source knowledge base (`.github/workflows/code-origin.yml`, also weekly over the whole tree).
-  Only fingerprints are sent. A match fails the check; accept a reviewed one in `scanoss.json`.
+  Only fingerprints are sent. A match marks the `Policy Check: Undeclared` or `Policy Check: Copyleft`
+  run as action required; accept a reviewed match in `scanoss.json`. Pull requests from forks are
+  not scanned (their token cannot write checks); the weekly run covers them once merged.
 
 Only the parts a pull request can affect are built: changes to `web/` run the web job, changes to
 the C++ tree run the C++ job, and changes to docs alone run neither. A file the rules in `ci.yml`
