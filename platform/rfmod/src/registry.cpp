@@ -468,7 +468,7 @@ void ModuleRegistry::resolve() {
     using enum ModuleState;
     std::unique_lock lock(mutex_);
     VisitMarks mark;
-    for (const auto& entry : entries_) (void)visit(entry.first, mark, lock);
+    for (const auto& [id, e] : entries_) (void)visit(id, mark, lock);
 
     for (const auto& [id, e] : entries_) {
         if (e.state == Active && e.manifest.deprecation) {
