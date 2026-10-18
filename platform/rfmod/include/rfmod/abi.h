@@ -17,8 +17,13 @@
 extern "C" {
 #endif
 
-/* A typed constant rather than a macro, so it has a type and a scope in both C and C++. */
-static const uint32_t RFMOD_ABI_VERSION = 2;
+/* A typed constant in C++; in C an enum, the only non-macro integer constant expression, so
+ * it still works in file-scope initializers, case labels and _Static_assert. */
+#ifdef __cplusplus
+inline constexpr uint32_t RFMOD_ABI_VERSION = 2;
+#else
+enum rfmod_abi { RFMOD_ABI_VERSION = 2 };
+#endif
 
 #if defined(_WIN32)
 #define RFMOD_EXPORT __declspec(dllexport)
