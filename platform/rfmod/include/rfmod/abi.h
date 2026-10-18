@@ -52,7 +52,7 @@ typedef struct rfmod_module {
     /* Handle a method. On success *response_json is allocated by the module and released
      * with free_string. On error it may hold a JSON error object, also released with free_string. */
     int (*invoke)(const char* method, const char* request_json, char** response_json);
-    void (*free_string)(char* s);
+    void (*free_string)(const char* s);
     void (*shutdown)(void);
 } rfmod_module;
 

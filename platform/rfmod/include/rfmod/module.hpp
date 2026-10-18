@@ -8,11 +8,12 @@
 
 #include <nlohmann/json.hpp>
 
-#include <cstdlib>
-#include <cstring>
 #include <memory>
+#include <mutex>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
+#include <utility>
 
 namespace rfmod {
 
@@ -85,10 +86,30 @@ struct ModuleAdapter {
         return m;
     }
 
-    static char* copy(const std::string& s) {
-        char* out = static_cast<char*>(std::malloc(s.size() + 1));
-        if (out) std::memcpy(out, s.c_str(), s.size() + 1);
-        return out;
+    /// Strings lent to the host, keyed by the pointer it holds, until it hands each back to
+    /// freeString. Each string lives on its own, so its characters never move.
+    struct Lent {
+        std::mutex mutex;
+        std::unordered_map<const char*, std::unique_ptr<std::string>> strings;
+    };
+    static Lent& lent() {
+        static Lent l;
+        return l;
+    }
+
+    /// Lends `s` to the host; the host hands it back to freeString, never to free().
+    /// Null if memory runs out, so no exception crosses the ABI.
+    static char* copy(std::string s) noexcept {
+        try {
+            auto owned = std::make_unique<std::string>(std::move(s));
+            char* out = owned->data();
+            Lent& l = lent();
+            const std::lock_guard lock(l.mutex);
+            l.strings.emplace(out, std::move(owned));
+            return out;
+        } catch (const std::exception&) {
+            return nullptr;
+        }
     }
 
     static char* error(const char* code, const std::string& message) {
@@ -136,7 +157,12 @@ struct ModuleAdapter {
         }
     }
 
-    static void freeString(char* s) { std::free(s); }
+    static void freeString(const char* s) {
+        // Releases the string copy() lent; the map entry owns it.
+        Lent& l = lent();
+        const std::lock_guard lock(l.mutex);
+        l.strings.erase(s);
+    }
 
     static void shutdown() {
         try {
