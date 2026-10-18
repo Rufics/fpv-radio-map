@@ -3,7 +3,7 @@
   rfmap-tiles basemap   --region europe/monaco [--bbox ...]
   rfmap-tiles dem       --bbox minLon,minLat,maxLon,maxLat
   rfmap-tiles landcover --bbox ...
-  rfmap-tiles satellite --bbox ... --sat-provider NAME | --sat-file FILE --sat-licence ... --sat-attribution ...
+  rfmap-tiles satellite --bbox ... --sat-provider NAME | --sat-file FILE --sat-mosaic NAME
   rfmap-tiles all       --bbox ... [--region ...] [--sat-provider ... | --sat-file ...]
   rfmap-tiles style | manifest | verify
 

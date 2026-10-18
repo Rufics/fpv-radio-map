@@ -7,7 +7,8 @@ The source is chosen by the operator because licences differ between mosaics:
     Mercator and cut into JPEG tiles. Any other mosaic is downloaded into /data/inputs first.
 No source is enabled by default: the operator must pick one, check its licence
 and terms of use (bulk tile downloading is forbidden by many tile services),
-and pass --sat-licence / --sat-attribution.
+and confirm that with --sat-licence-checked. Name, licence and attribution come from
+sources.SATELLITE_MOSAICS; a mosaic that is not listed there is added there first.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ import urllib.request
 from pathlib import Path
 
 from . import sources
-from .common import (USER_AGENT, BBox, BuildError, Dirs, fresh_dir, input_file, install, is_up_to_date, log,
+from .common import (USER_AGENT, BBox, BuildError, Dirs, fresh_dir, input_file, inputs_entry, install, is_up_to_date, log,
                      mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors, pmtiles_header, run,
                      tile_aligned_extent, warn, write_meta, zoom_resolution)
 
@@ -33,10 +34,13 @@ def add_arguments(p) -> None:
     g.add_argument("--sat-provider", choices=sorted(sources.SATELLITE_PROVIDERS),
                    help="XYZ mosaic to download tiles from (see README for each one's licence)")
     g.add_argument("--sat-file", type=input_file,
-                   help="a GDAL raster (GeoTIFF/COG/VRT) in /data/inputs, for any other mosaic")
-    g.add_argument("--sat-name", default=None, help="human-readable source name (default: the provider's)")
-    g.add_argument("--sat-licence", default=None, help="licence of the chosen mosaic, as verified by you")
-    g.add_argument("--sat-attribution", default=None, help="attribution text required by the mosaic licence")
+                   help="a GDAL raster (GeoTIFF/COG/VRT) in /data/inputs; needs --sat-mosaic")
+    g.add_argument("--sat-mosaic", choices=sorted(sources.SATELLITE_MOSAICS),
+                   help="which mosaic --sat-file holds; its name, licence and attribution come from the table")
+    g.add_argument("--sat-data-year", type=int, default=None,
+                   help="acquisition year of the imagery, for mosaics whose attribution names it")
+    g.add_argument("--sat-licence-checked", action="store_true",
+                   help="you checked the mosaic's current licence and terms of use")
     g.add_argument("--sat-minzoom", type=int, default=6)
     g.add_argument("--sat-maxzoom", type=int, default=14, help="default 14 (~6-10 m/px; Sentinel-2 is 10 m)")
     g.add_argument("--sat-rate", type=float, default=4.0, help="XYZ mode: max requests per second (default 4)")
@@ -72,156 +76,206 @@ def _open_mbtiles(path: Path) -> sqlite3.Connection:
     return con
 
 
-def _xyz(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
-    tpl = _provider(args)["template"]
-    zmin, zmax = args.sat_minzoom, args.sat_maxzoom
+def _xyz_jobs(bbox: BBox, zmin: int, zmax: int, max_tiles: int) -> list[tuple[int, int, int]]:
     jobs = []
     for z in range(zmin, zmax + 1):
         x0, y0, x1, y1 = _tile_range(bbox, z)
         jobs += [(z, x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)]
-    if len(jobs) > args.sat_max_tiles:
-        raise BuildError(f"{len(jobs)} tiles needed (> --sat-max-tiles {args.sat_max_tiles}); "
+    if len(jobs) > max_tiles:
+        raise BuildError(f"{len(jobs)} tiles needed (> --sat-max-tiles {max_tiles}); "
                          "lower --sat-maxzoom or raise the limit after checking the provider's terms")
-    log(f"XYZ: {len(jobs)} tiles z{zmin}-{zmax}, max {args.sat_rate:g} req/s")
+    return jobs
+
+
+def _tile_url(tpl: str, z: int, x: int, y: int) -> str:
+    return (tpl.replace("{z}", str(z)).replace("{x}", str(x))
+            .replace("{-y}", str(2 ** z - 1 - y)).replace("{y}", str(y)))
+
+
+def _get(url: str) -> bytes | None:
+    """One request: the tile's bytes, or None when the service has no tile there."""
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            return r.read()
+    except urllib.error.HTTPError as e:
+        if e.code in (204, 404):
+            return None
+        if e.code in (401, 403):
+            raise BuildError(f"{url}: HTTP {e.code} — the service refuses access "
+                             "(credentials or terms of use?)")
+        raise
+
+
+def _fetch_tile(url: str) -> bytes | None:
+    """The tile's bytes, or None when the service has no tile there; retries transient errors."""
+    for attempt in range(4):
+        try:
+            return _get(url)
+        except (urllib.error.URLError, TimeoutError):
+            time.sleep(2 ** attempt)
+    try:
+        return _get(url)
+    except urllib.error.HTTPError as e:
+        raise BuildError(f"{url}: HTTP {e.code}")
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise BuildError(f"{url}: {e}")
+
+
+def _checked_format(url: str, data: bytes, fmt: str | None) -> str:
+    """The archive's tile format after this tile: the first format seen, with a warning on a mix."""
+    f = _format_of(data)
+    if f is None:
+        raise BuildError(f"{url}: response is not a JPEG/PNG/WebP image")
+    if fmt and f != fmt:
+        warn(f"mixed tile formats ({fmt}, {f}); MapLibre handles both, metadata says {fmt}")
+    return fmt or f
+
+
+def _xyz(tpl: str, zmin: int, zmax: int, max_tiles: int, rate: float, bbox: BBox, mb: Path) -> dict:
+    jobs = _xyz_jobs(bbox, zmin, zmax, max_tiles)
+    log(f"XYZ: {len(jobs)} tiles z{zmin}-{zmax}, max {rate:g} req/s")
     con = _open_mbtiles(mb)
     have = {(z, x, (2 ** z - 1) - r) for z, x, r in con.execute("SELECT zoom_level, tile_column, tile_row FROM tiles")}
     fmt, fetched, missing = None, 0, 0
-    delay = 1.0 / args.sat_rate if args.sat_rate > 0 else 0
-    for i, (z, x, y) in enumerate(jobs):
-        if (z, x, y) in have:
-            continue
-        url = (tpl.replace("{z}", str(z)).replace("{x}", str(x))
-               .replace("{-y}", str(2 ** z - 1 - y)).replace("{y}", str(y)))
+    delay = 1.0 / rate if rate > 0 else 0
+    for i, (z, x, y) in enumerate(j for j in jobs if j not in have):
+        url = _tile_url(tpl, z, x, y)
         t0 = time.monotonic()
-        data = None
-        for attempt in range(5):
-            try:
-                req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-                with urllib.request.urlopen(req, timeout=60) as r:
-                    data = r.read()
-                break
-            except urllib.error.HTTPError as e:
-                if e.code in (204, 404):
-                    break
-                if e.code in (401, 403):
-                    raise BuildError(f"{url}: HTTP {e.code} — the service refuses access "
-                                     "(credentials or terms of use?)")
-                if attempt == 4:
-                    raise BuildError(f"{url}: HTTP {e.code}")
-            except (urllib.error.URLError, TimeoutError) as e:
-                if attempt == 4:
-                    raise BuildError(f"{url}: {e}")
-            time.sleep(2 ** attempt)
+        data = _fetch_tile(url)
         if data is None:
             missing += 1
         else:
-            f = _format_of(data)
-            if f is None:
-                raise BuildError(f"{url}: response is not a JPEG/PNG/WebP image")
-            if fmt and f != fmt:
-                warn(f"mixed tile formats ({fmt}, {f}); MapLibre handles both, metadata says {fmt}")
-            fmt = fmt or f
+            fmt = _checked_format(url, data, fmt)
             con.execute("INSERT OR REPLACE INTO tiles VALUES (?, ?, ?, ?)", (z, x, 2 ** z - 1 - y, data))
             fetched += 1
             if fetched % 200 == 0:
                 con.commit()
-                log(f"  {i + 1}/{len(jobs)} tiles")
-        wait = delay - (time.monotonic() - t0)
-        if wait > 0:
-            time.sleep(wait)
+                log(f"  {len(have) + i + 1}/{len(jobs)} tiles")
+        time.sleep(max(0.0, delay - (time.monotonic() - t0)))
     con.commit()
     if fmt is None:
         row = con.execute("SELECT tile_data FROM tiles LIMIT 1").fetchone()
         fmt = _format_of(row[0]) if row else None
+    con.close()
     if fmt is None:
         raise BuildError("no tiles were downloaded")
-    con.close()
     mbtiles_set_metadata(mb, {"name": "satellite", "format": fmt, "minzoom": zmin, "maxzoom": zmax,
                               "bounds": str(bbox), "type": "baselayer"})
     log(f"XYZ: fetched {fetched}, already cached {len(have)}, not available {missing}")
     return {"mode": "xyz", "tiles_fetched": fetched, "tiles_missing": missing, "format": fmt}
 
 
-def _raster(args, dirs: Dirs, bbox: BBox, mb: Path) -> dict:
-    src = str(args.sat_file)
+def _raster(src: Path, zmin: int, zmax: int, quality: int, bbox: BBox, mb: Path) -> dict:
     from . import raster
     i = raster.info(src)
     bands = i["bands"]
     if len(bands) < 3:
         raise BuildError("raster satellite source needs at least 3 bands (RGB)")
-    zmin, zmax = args.sat_minzoom, args.sat_maxzoom
     work = mb.parent
     res = zoom_resolution(zmax)
     te = tile_aligned_extent(bbox, zmax)
     merc = work / "sat3857.tif"
     run(["gdalwarp", "-t_srs", "EPSG:3857", "-r", "cubic", "-tr", repr(res), repr(res), "-te", *map(repr, te),
          "-multi", "-wo", "NUM_THREADS=ALL_CPUS", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE",
-         "-co", "BIGTIFF=IF_SAFER", src, str(merc)])
+         "-co", "BIGTIFF=IF_SAFER", str(src), str(merc)])
     rgb = work / "sat-rgb.vrt"
     tr = ["gdal_translate", "-of", "VRT", "-b", "1", "-b", "2", "-b", "3"]
     if bands[0]["type"] != "Byte":
         warn(f"source is {bands[0]['type']}; stretching to 8 bit with -scale (check the colours)")
         tr += ["-ot", "Byte", "-scale"]
     run(tr + [str(merc), str(rgb)])
-    run(["gdal_translate", "-of", "MBTiles", "-co", "TILE_FORMAT=JPEG", "-co", f"QUALITY={args.sat_jpeg_quality}",
+    run(["gdal_translate", "-of", "MBTiles", "-co", "TILE_FORMAT=JPEG", "-co", f"QUALITY={quality}",
          "-co", "NAME=satellite", str(rgb), str(mb)])
     if zmax > zmin:
         run(["gdaladdo", "-r", "average", str(mb), *overview_factors(zmin, zmax)])
     return {"mode": "raster", "format": "jpg", "resampling": "cubic (display only)"}
 
 
-def _provider(args) -> dict:
-    """The provider entry the operator chose; the template is the table's, never the typed text."""
-    return next(p for key, p in sources.SATELLITE_PROVIDERS.items() if key == args.sat_provider)
+def _table_key(table: dict, typed: str | None) -> str:
+    """The table's own key equal to the typed choice, so later code never holds the typed text."""
+    return next(key for key in table if key == typed)
+
+
+def _attribution(mosaic: dict, year: int | None) -> str:
+    text = mosaic["attribution"]
+    if "{year}" not in text:
+        return text
+    if year is None or not 1972 <= year <= 2100:
+        raise BuildError("this mosaic's attribution names the acquisition year: pass --sat-data-year")
+    return text.format(year=int(year))
+
+
+def _chosen_mosaic(args) -> tuple[str, dict, str, Path | None]:
+    """(table key, table entry, source description, input file) for the operator's choice.
+    Every value comes from the source table or the /data/inputs listing, never the typed text."""
+    if bool(args.sat_provider) == bool(args.sat_file):
+        raise BuildError("satellite needs exactly one of --sat-provider or --sat-file "
+                         "(see README: pick a mosaic and check its licence)")
+    if args.sat_provider:
+        key = _table_key(sources.SATELLITE_PROVIDERS, args.sat_provider)
+        mosaic = sources.SATELLITE_PROVIDERS[key]
+        return key, mosaic, mosaic["template"], None
+    if not args.sat_mosaic:
+        raise BuildError("--sat-file needs --sat-mosaic (which mosaic the file holds)")
+    key = _table_key(sources.SATELLITE_MOSAICS, args.sat_mosaic)
+    src = inputs_entry(args.sat_file.name)
+    return key, sources.SATELLITE_MOSAICS[key], f"file:{src.name}", src
+
+
+def _tiles(args, dirs: Dirs, key: str, source: str, src: Path | None, bbox: BBox,
+           zmin: int, zmax: int) -> tuple[Path, Path, dict]:
+    """Fill an MBTiles file from the chosen source; returns (mbtiles, work dir, details)."""
+    if src is None:
+        # Kept between runs so an interrupted download resumes; one cache per provider, area and zooms.
+        area = hashlib.sha256(",".join(f"{v:.7f}" for v in bbox.as_list()).encode()).hexdigest()[:12]
+        work = dirs.cache / "satellite-xyz" / f"{key}-{area}-z{zmin}-{zmax}"
+        work.mkdir(parents=True, exist_ok=True)
+        mb = work / "tiles.mbtiles"
+        return mb, work, _xyz(source, zmin, zmax, int(args.sat_max_tiles), float(args.sat_rate), bbox, mb)
+    quality = int(args.sat_jpeg_quality)
+    if not 1 <= quality <= 100:
+        raise BuildError("--sat-jpeg-quality must be 1-100")
+    work = fresh_dir(dirs.work / "satellite")
+    mb = work / "satellite.mbtiles"
+    return mb, work, _raster(src, zmin, zmax, quality, bbox, mb)
 
 
 def build(args, dirs: Dirs) -> None:
     if not args.bbox:
         raise BuildError("satellite needs --bbox")
-    if bool(args.sat_provider) == bool(args.sat_file):
-        raise BuildError("satellite needs exactly one of --sat-provider or --sat-file "
-                         "(see README: pick a mosaic and check its licence)")
+    key, mosaic, source, src = _chosen_mosaic(args)
     bbox = BBox.parse(args.bbox)
-    if not (0 <= args.sat_minzoom <= args.sat_maxzoom <= 18):
+    zmin, zmax = int(args.sat_minzoom), int(args.sat_maxzoom)
+    if not (0 <= zmin <= zmax <= 18):
         raise BuildError("need 0 <= --sat-minzoom <= --sat-maxzoom <= 18")
-    xyz = bool(args.sat_provider)
-    source = _provider(args)["template"] if xyz else f"file:{args.sat_file.name}"
-    sat_name = args.sat_name or (_provider(args)["name"] if xyz else args.sat_file.name)
-    params = {"bbox": str(bbox), "source": source, "zoom": [args.sat_minzoom, args.sat_maxzoom],
-              "licence": args.sat_licence, "attribution": args.sat_attribution}
+    attribution = _attribution(mosaic, args.sat_data_year)
+    checked = bool(args.sat_licence_checked)
+    params = {"bbox": str(bbox), "mosaic": key, "source": source, "zoom": [zmin, zmax],
+              "attribution": attribution, "licence_checked": checked}
     if is_up_to_date(dirs, OUT_NAME, params, args.force):
         return
-    if not args.sat_licence or not args.sat_attribution:
+    licence = mosaic["licence"]
+    if not checked:
         warn(sources.SATELLITE_UNVERIFIED)
+        licence = f"{licence}. {sources.SATELLITE_UNVERIFIED}"
 
-    key = hashlib.sha256(f"{source}|{bbox}|{args.sat_minzoom}|{args.sat_maxzoom}".encode()).hexdigest()[:12]
-    if xyz:
-        # Kept between runs so an interrupted download resumes.
-        work = dirs.cache / "satellite-xyz" / key
-        work.mkdir(parents=True, exist_ok=True)
-        mb = work / "tiles.mbtiles"
-        detail = _xyz(args, dirs, bbox, mb)
-    else:
-        work = fresh_dir(dirs.work / "satellite")
-        mb = work / "satellite.mbtiles"
-        detail = _raster(args, dirs, bbox, mb)
-
-    attribution = args.sat_attribution or f"{sat_name} (attribution not set)"
-    mbtiles_set_metadata(mb, {"attribution": attribution, "description": sat_name})
+    mb, work, detail = _tiles(args, dirs, key, source, src, bbox, zmin, zmax)
+    mbtiles_set_metadata(mb, {"attribution": attribution, "description": mosaic["name"]})
     tmp = dirs.out / f".tmp-{OUT_NAME}"
     mbtiles_to_pmtiles(mb, tmp)
     install(tmp, dirs, OUT_NAME)
     h = pmtiles_header(dirs.out / OUT_NAME)
     write_meta(dirs, OUT_NAME, params, {
         "kind": "raster-tiles",
-        "source": f"{sat_name}: {source}",
-        "licence": args.sat_licence or sources.SATELLITE_UNVERIFIED,
+        "source": f"{mosaic['name']}: {source}",
+        "licence": licence,
         "attribution": attribution,
-        "licence_verified_by_operator": bool(args.sat_licence and args.sat_attribution),
+        "licence_verified_by_operator": checked,
         "bbox": bbox.as_list(),
-        "zoom": [h.get("minzoom", args.sat_minzoom), h.get("maxzoom", args.sat_maxzoom)],
-        "resolution": f"z{args.sat_maxzoom} = {zoom_resolution(args.sat_maxzoom):.1f} m/px (EPSG:3857 units)",
+        "zoom": [h.get("minzoom", zmin), h.get("maxzoom", zmax)],
+        "resolution": f"z{zmax} = {zoom_resolution(zmax):.1f} m/px (EPSG:3857 units)",
         **detail,
     })
-    if not xyz:
+    if src is not None:
         shutil.rmtree(work, ignore_errors=True)

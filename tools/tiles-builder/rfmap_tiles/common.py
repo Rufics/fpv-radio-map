@@ -85,6 +85,16 @@ def input_file(text: str) -> Path:
     raise argparse_error(f"{text}: no such file in {inputs} (put input files in <data>/inputs/)")
 
 
+def inputs_entry(name: str) -> Path:
+    """The /data/inputs entry called `name`, taken from the directory listing at the point of use,
+    so a path handed to a tool always comes from the volume and not from the command line."""
+    inputs = DATA / INPUTS_DIR
+    for entry in inputs.iterdir() if inputs.is_dir() else ():
+        if entry.name == name and entry.is_file():
+            return entry
+    raise BuildError(f"{name}: no longer in {inputs}")
+
+
 def heap_size(text: str) -> str:
     """argparse type: a JVM heap size such as 4g or 2048m."""
     m = re.fullmatch(r"([1-9]\d{0,6})([kKmMgG])", text)

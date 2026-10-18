@@ -53,8 +53,8 @@ Directory layout: `/data/inputs` holds files you supply. `/data/cache` holds dow
 
 **Satellite source is your choice, and there is no default.**
 - `--sat-provider` picks an XYZ mosaic from the built-in list: `eox-s2cloudless-2016` (EOX notes CC BY 4.0) and `eox-s2cloudless-2018` … `-2023` (EOX notes CC BY-NC-SA 4.0, non-commercial). Tiles are copied byte for byte, rate-limited (`--sat-rate`) and capped (`--sat-max-tiles`). An interrupted download resumes.
-- `--sat-file` takes a GeoTIFF/COG/VRT in `inputs/`, reprojects it and writes JPEG tiles. Use it for any other mosaic.
-- **Licences differ between Sentinel-2 cloudless mosaics, and many tile services forbid bulk downloading.** The operator must check the chosen mosaic's licence and terms (the site is non-commercial) and pass `--sat-licence` and `--sat-attribution`. Without them the manifest marks the licence `UNVERIFIED`. This tool does not claim any licence for any mosaic.
+- `--sat-file` takes a GeoTIFF/COG/VRT in `inputs/`, reprojects it and writes JPEG tiles. `--sat-mosaic` says which mosaic the file holds: one of the EOX entries or `copernicus-sentinel-2` (any Sentinel-2 imagery; also pass `--sat-data-year`). A mosaic that is not listed is added to `SATELLITE_MOSAICS` in `rfmap_tiles/sources.py` first.
+- **Licences differ between Sentinel-2 cloudless mosaics, and many tile services forbid bulk downloading.** The operator must check the chosen mosaic's licence and terms (the site is non-commercial) and confirm that with `--sat-licence-checked`. Without it the manifest marks the licence `UNVERIFIED`. Name, licence note and attribution text come from the mosaic table, never from the command line.
 
 **PMTiles packaging.** GDAL (raster MBTiles, vector MVT) → `pmtiles convert`. The header zoom range is taken from the tiles that actually exist, so the archives pass `pmtiles verify`.
 
@@ -85,7 +85,7 @@ It then re-runs `all` (every step must report "up to date") and runs `verify`.
 - `© OpenMapTiles © OpenStreetMap contributors` (ODbL; OpenMapTiles schema CC BY 4.0)
 - `Copernicus DEM GLO-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved`
 - `© ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium` (CC BY 4.0)
-- satellite: the text you verified and passed with `--sat-attribution`
+- satellite: the attribution of the chosen mosaic from `SATELLITE_MOSAICS`
 - glyph fonts: Noto Sans, SIL Open Font License 1.1 (`out/fonts/OFL.txt`)
 
 `manifest.json → attribution_display_text` has these strings joined together. Each source's attribution is also set in `style-dark.json`, so MapLibre's attribution control shows it.
