@@ -17,6 +17,8 @@ on:
       - .github/workflows/pr-title.yml
       - .github/workflows/wiki.yml
       - .github/workflows/release.yml
+      - .github/workflows/code-origin.yml
+      - scanoss.json
       - tools/wiki/**
       - .githooks/**
 

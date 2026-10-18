@@ -41,7 +41,7 @@ jobs:
           for f in $(git diff --name-only "$BASE...$HEAD"); do
             case "$f" in
               docs/*|*.md|LICENSE|.github/ISSUE_TEMPLATE/*|.github/DISCUSSION_TEMPLATE/*|.github/dependabot.yml) ;;
-              .github/workflows/pr-title.yml|.github/workflows/wiki.yml|tools/wiki/*|.githooks/*) ;;
+              .github/workflows/pr-title.yml|.github/workflows/wiki.yml|.github/workflows/code-origin.yml|scanoss.json|tools/wiki/*|.githooks/*) ;;
               .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*) ;;
               .dockerignore|.gitignore) ;;
               web/*) web=true ;;
