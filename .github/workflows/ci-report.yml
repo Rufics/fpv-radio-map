@@ -35,6 +35,8 @@ jobs:
       github.event.workflow_run.conclusion != 'cancelled' &&
       github.event.workflow_run.head_repository.full_name != github.repository
     runs-on: ubuntu-24.04
+    # Bounds the time a crafted artifact can make the report builder spend.
+    timeout-minutes: 10
     permissions:
       actions: read
       contents: read
