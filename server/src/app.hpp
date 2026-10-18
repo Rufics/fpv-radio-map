@@ -51,7 +51,18 @@ public:
     [[nodiscard]] const Config& config() const { return config_; }
 
 private:
+    // The route handlers, grouped by area; each is built per request around *this.
+    struct MissionApi;
+    struct DataApi;
+    struct AdminApi;
+
     void routes();
+    /// Runs `run` under the rate limit of `rateClass` and answers its errors as JSON.
+    template <typename Run>
+    void dispatch(const std::string& rateClass, const Run& run, const httplib::Request& req, httplib::Response& res);
+    /// The HTTP handler that runs `method` of a fresh `Api` inside dispatch.
+    template <typename Api, typename Method>
+    auto route(std::string rateClass, Method method);
     void loadCacheSettings();
     json cacheTiers();
     json moduleList(bool admin);
@@ -65,6 +76,9 @@ private:
     [[nodiscard]] bool isAdmin(const httplib::Request& req) const;
     [[nodiscard]] std::string bundleGrant(const std::string& moduleId, TimePoint until) const;
     [[nodiscard]] bool grantValid(const std::string& moduleId, const std::string& grant) const;
+    /// The library kind of a path, checked: HttpError 404 for an unknown or disabled kind.
+    [[nodiscard]] std::string libraryKind(const std::string& kind) const;
+    [[nodiscard]] json trustedKeys() const;
 
     Config config_;
     Logger log_;

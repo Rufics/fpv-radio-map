@@ -8,11 +8,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <iterator>
 #include <map>
 #include <mutex>
+#include <ranges>
 #include <shared_mutex>
 #include <sstream>
+#include <string_view>
 #include <future>
 
 namespace rfmap {
@@ -54,6 +57,125 @@ void appendModuleFailures(json& list, const std::vector<ModuleFailure>& failures
         if (!seen) list.push_back(f.toJson());
     }
 }
+
+// ---- route legs ----
+
+/// The worst sample of one link along a leg.
+struct WorstSample {
+    double margin = std::numeric_limits<double>::infinity();
+    std::optional<PreparedPath> path;
+    double along = 0.0;
+};
+
+/// What sampling a leg found: counts, the positions without terrain, the worst per link.
+struct LegScan {
+    std::map<LinkKind, WorstSample> worst;
+    std::size_t evaluated = 0;
+    std::size_t overPilot = 0;
+    std::size_t missingCount = 0;
+    json missing = json::array();
+    json missingBbox = nullptr;
+};
+
+/// Records a drone position whose path from the pilot lacks terrain data; the first 20 are listed.
+void recordMissing(LegScan& scan, const LinkService& links, const PreparedPath& p, double along) {
+    ++scan.missingCount;
+    const json md = links.missingData(p.missing, p.ground.position, p.air.position);
+    scan.missingBbox = LinkService::unionBbox(scan.missingBbox, md.at("missingData").at("bbox"));
+    if (scan.missing.size() < 20) {
+        scan.missing.push_back({{"alongLegM", along},
+                                {"lat", p.air.position.latitudeDeg},
+                                {"lon", p.air.position.longitudeDeg},
+                                {"missing", md.at("missing")}});
+    }
+}
+
+/// Evaluates every link at one sample position and keeps each link's worst.
+void recordWorst(LegScan& scan, const LinkService& service, const PreparedPath& p, double along,
+                 const std::vector<std::pair<LinkKind, ResolvedLink>>& links, const CalcContext& ctx,
+                 std::vector<ModuleFailure>& failures) {
+    for (const auto& [k, l] : links) {
+        const LinkEvaluation e = service.evaluate(p, l, ctx, false, false);
+        failures.insert(failures.end(), e.failures.begin(), e.failures.end());
+        WorstSample& w = scan.worst[k];
+        if (e.marginDb < w.margin) {
+            w.margin = e.marginDb;
+            w.path = p;
+            w.along = along;
+        }
+    }
+}
+
+/// "blocked" below 0 dB, "warn" when the band says marginal, "info" otherwise.
+std::string marginSeverity(double marginDb, std::string_view verdict) {
+    if (marginDb < 0.0) return "blocked";
+    if (verdict == "marginal") return "warn";
+    return "info";
+}
+
+/// The reason text for a link's worst sample on a leg.
+std::string worstMarginText(LinkKind k, const json& r, double along, const std::string& verdict) {
+    std::string text = (k == LinkKind::Control ? "Control" : "Video") + std::string(" link: worst margin ") +
+                       fmt(r.at("marginDb").get<double>()) + " dB at " + km(along) + " along the leg";
+    if (r.contains("band")) {
+        text += " (with terrain error " + fmt(r["band"]["worstDb"].get<double>()) + " to " +
+                fmt(r["band"]["bestDb"].get<double>()) + " dB, " + verdict + ")";
+    }
+    if (r.contains("analogGrade")) text += "; picture " + r["analogGrade"].get<std::string>();
+    return text;
+}
+
+/// Marks a leg with terrain gaps as not evaluated.
+json missingDataLeg(json leg, const LegScan& scan, const DemSource& dem, std::size_t total) {
+    json reasons = json::array();
+    leg["status"] = "missing-data";
+    leg["missing"] = scan.missing;
+    leg["missingData"] = {{"bbox", scan.missingBbox}, {"source", dem.name()}};
+    reasons.push_back({{"module", "rf-core"},
+                       {"severity", "blocked"},
+                       {"text", std::format("No terrain data for {} of {} positions on this leg; the leg is not "
+                                            "evaluated and no heights are guessed.",
+                                            scan.missingCount, total)}});
+    leg["reasons"] = reasons;
+    return leg;
+}
+
+// ---- route modules ----
+
+/// Calls a module's route.analyze. A failure, or an answer that is not an object, is listed in
+/// result.moduleFailures and gives nothing.
+std::optional<json> analyzeRoute(const ModuleRunner::Active& a, const json& req, json& result) {
+    json resp;
+    try {
+        resp = a.instance->invoke("route.analyze", req);
+    } catch (const rfmod::ModuleError& e) {
+        result["moduleFailures"].push_back({{"module", a.id}, {"error", e.code() + ": " + e.what()}});
+        return std::nullopt;
+    } catch (const std::exception& e) {
+        result["moduleFailures"].push_back({{"module", a.id}, {"error", e.what()}});
+        return std::nullopt;
+    }
+    if (!resp.is_object()) {
+        result["moduleFailures"].push_back({{"module", a.id}, {"error", "route.analyze did not return an object"}});
+        return std::nullopt;
+    }
+    return resp;
+}
+
+/// A module's reason with "leg": i belongs to that leg; the rest to the route.
+void addRouteReason(json& result, json r, const std::string& moduleId) {
+    r["module"] = moduleId;
+    if (const std::string sev = r.value("severity", "info"); sev != "info" && sev != "warn" && sev != "blocked") r["severity"] = "info";
+    if (r.contains("leg") && r["leg"].is_number_integer()) {
+        if (const auto i = r["leg"].get<long long>(); i >= 0 && static_cast<std::size_t>(i) < result["legs"].size()) {
+            result["legs"][static_cast<std::size_t>(i)]["reasons"].push_back(r);
+            return;
+        }
+    }
+    result["reasons"].push_back(r);
+}
+
+// ---- coverage ----
 
 /// A lat/lon-regular grid: cellM is exact at the pilot's latitude (meridian and parallel arc
 /// per degree there); further north or south a cell's east-west size changes with the
@@ -106,6 +228,144 @@ void addCoverageModule(json& grid, const json& resp, const std::string& moduleId
 }
 
 json nullable(const std::optional<double>& v) { return v.has_value() ? json(*v) : json(nullptr); }
+
+// ---- grid outline ----
+
+/// A cell edge on the integer grid: x = column edge (0..cols), y = row edge (0..rows, down).
+struct Edge {
+    long x0 = 0;
+    long y0 = 0;
+    long x1 = 0;
+    long y1 = 0;
+    bool used = false;
+};
+using Ring = std::vector<std::pair<long, long>>;
+using EdgesFrom = std::multimap<std::pair<long, long>, std::size_t>;
+
+/// Each boundary edge of an inside cell, directed with the inside on its left (counter-
+/// clockwise in map orientation).
+std::vector<Edge> boundaryEdges(const std::vector<bool>& inside, std::size_t cols, std::size_t rows) {
+    const auto in = [&inside, rows, cols](long r, long c) {
+        return r >= 0 && c >= 0 && r < static_cast<long>(rows) && c < static_cast<long>(cols) &&
+               inside[static_cast<std::size_t>(r) * cols + static_cast<std::size_t>(c)];
+    };
+    std::vector<Edge> edges;
+    for (long r = 0; r < static_cast<long>(rows); ++r) {
+        for (long c = 0; c < static_cast<long>(cols); ++c) {
+            if (!in(r, c)) continue;
+            // y grows southwards here, so counter-clockwise on the map runs: bottom left to
+            // bottom right, up the east side, top right to top left, down the west side.
+            if (!in(r + 1, c)) edges.push_back({c, r + 1, c + 1, r + 1});
+            if (!in(r, c + 1)) edges.push_back({c + 1, r + 1, c + 1, r});
+            if (!in(r - 1, c)) edges.push_back({c + 1, r, c, r});
+            if (!in(r, c - 1)) edges.push_back({c, r, c, r + 1});
+        }
+    }
+    return edges;
+}
+
+/// The unused edge continuing `e`, or edges.size(). At a vertex two inside cells touch only by
+/// a corner: turn left (in map terms), which keeps them as separate rings.
+std::size_t nextEdge(const std::vector<Edge>& edges, const EdgesFrom& from, const Edge& e) {
+    const long dx = e.x1 - e.x0;
+    const long dy = e.y1 - e.y0;
+    std::size_t next = edges.size();
+    int bestRank = 9;
+    const auto [first, last] = from.equal_range({e.x1, e.y1});
+    for (const std::size_t candidate : std::views::values(std::ranges::subrange(first, last))) {
+        const Edge& n = edges[candidate];
+        if (n.used) continue;
+        const long ndx = n.x1 - n.x0;
+        const long ndy = n.y1 - n.y0;
+        // y points down, so a left turn on the map is (dy, -dx) here.
+        int rank = 2;
+        if (ndx == dy && ndy == -dx) rank = 0;
+        else if (ndx == dx && ndy == dy) rank = 1;
+        if (rank < bestRank) {
+            bestRank = rank;
+            next = candidate;
+        }
+    }
+    return next;
+}
+
+/// Chains edges from `start` until the ring closes, marking them used.
+Ring traceRing(std::vector<Edge>& edges, const EdgesFrom& from, std::size_t start) {
+    Ring ring;
+    std::size_t cur = start;
+    while (true) {
+        Edge& e = edges[cur];
+        e.used = true;
+        ring.emplace_back(e.x0, e.y0);
+        if (e.x1 == edges[start].x0 && e.y1 == edges[start].y0) break;
+        const std::size_t next = nextEdge(edges, from, e);
+        if (next == edges.size()) break;  // cannot happen on a closed boundary
+        cur = next;
+    }
+    return ring;
+}
+
+/// Drops vertices in the middle of straight runs.
+Ring simplified(const Ring& ring) {
+    Ring simple;
+    for (std::size_t i = 0; i < ring.size(); ++i) {
+        const auto& [px, py] = ring[(i + ring.size() - 1) % ring.size()];
+        const auto& [qx, qy] = ring[i];
+        const auto& [sx, sy] = ring[(i + 1) % ring.size()];
+        if ((qx - px) * (sy - qy) != (qy - py) * (sx - qx)) simple.push_back(ring[i]);
+    }
+    return simple;
+}
+
+/// Signed area in map orientation (x east, y north = -y here): outer rings are positive.
+double signedArea(const Ring& r) {
+    double a = 0.0;
+    for (std::size_t i = 0; i < r.size(); ++i) {
+        const auto& [px, py] = r[i];
+        const auto& [qx, qy] = r[(i + 1) % r.size()];
+        a += static_cast<double>(px) * static_cast<double>(-qy) - static_cast<double>(qx) * static_cast<double>(-py);
+    }
+    return a / 2.0;
+}
+
+bool ringContains(const Ring& r, double x, double y) {
+    bool c = false;
+    std::size_t j = r.size() - 1;
+    for (std::size_t i = 0; i < r.size(); j = i++) {
+        const auto [ix, iy] = r[i];
+        const auto [jx, jy] = r[j];
+        const auto xi = static_cast<double>(ix);
+        const auto yi = static_cast<double>(iy);
+        const auto xj = static_cast<double>(jx);
+        const auto yj = static_cast<double>(jy);
+        if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+}
+
+/// The index in `outers` of the smallest outer ring holding the hole, or outers.size().
+std::size_t outerOfHole(const std::vector<Ring>& rings, const std::vector<std::size_t>& outers, const Ring& hole) {
+    // A point just inside the hole: the middle of its first edge, nudged to the hole side
+    // (the hole is on the right of a hole edge, i.e. away from the inside cells).
+    const auto [px, py] = hole[0];
+    const auto [qx, qy] = hole[1];
+    const double mx = (static_cast<double>(px) + static_cast<double>(qx)) / 2.0;
+    const double my = (static_cast<double>(py) + static_cast<double>(qy)) / 2.0;
+    const auto dx = static_cast<double>(qx - px);
+    const auto dy = static_cast<double>(qy - py);
+    const double len = std::hypot(dx, dy);
+    const double tx = mx - dy / len * 0.25;
+    const double ty = my + dx / len * 0.25;
+    std::size_t best = outers.size();
+    double bestArea = std::numeric_limits<double>::infinity();
+    for (std::size_t o = 0; o < outers.size(); ++o) {
+        if (const double a = signedArea(rings[outers[o]]); a < bestArea && ringContains(rings[outers[o]], tx, ty)) {
+            bestArea = a;
+            best = o;
+        }
+    }
+    return best;
+}
 
 }  // namespace
 
@@ -221,7 +481,6 @@ json Calculator::evaluateLeg(const json& mission, std::size_t index, const json&
     const std::size_t n = mission.at("waypoints").size();
     leg["from"] = index == 0 ? label(from, "Pilot") : label(from, "WP" + std::to_string(index));
     leg["to"] = index < n ? label(to, "WP" + std::to_string(index + 1)) : label(to, "Pilot");
-    json reasons = json::array();
 
     // Sample positions: the leg's geodesic at the DEM's native step, both ends included. The
     // drone's AGL changes linearly with distance along the leg between the two points' aglM.
@@ -230,69 +489,33 @@ json Calculator::evaluateLeg(const json& mission, std::size_t index, const json&
     else pts = {a.position};
     const double steps = std::max<double>(1.0, static_cast<double>(pts.size() - 1));
 
-    struct Worst {
-        double margin = std::numeric_limits<double>::infinity();
-        std::optional<PreparedPath> path;
-        double along = 0.0;
-    };
-    std::map<LinkKind, Worst> worst;
-    std::size_t evaluated = 0, skipped = 0, missingCount = 0;
-    json missing = json::array();
-    json missingBbox = nullptr;
+    LegScan scan;
     for (std::size_t i = 0; i < pts.size(); ++i) {
         const double f = static_cast<double>(i) / steps;
         const double along = length * f;
         const Terminal drone{pts[i], a.aglM + (b.aglM - a.aglM) * f};
         if (!(geo.inverse(pilot.position, drone.position).distance.value() > 0.0)) {
-            ++skipped;  // the drone is over the pilot: there is no path to evaluate
+            ++scan.overPilot;  // the drone is over the pilot: there is no path to evaluate
             continue;
         }
         PreparedPath p = links_.prepare(pilot, drone, ctx);
         if (!p.complete()) {
-            ++missingCount;
-            const json md = links_.missingData(p.missing, pilot.position, drone.position);
-            missingBbox = LinkService::unionBbox(missingBbox, md.at("missingData").at("bbox"));
-            if (missing.size() < 20) {
-                missing.push_back({{"alongLegM", along},
-                                   {"lat", drone.position.latitudeDeg},
-                                   {"lon", drone.position.longitudeDeg},
-                                   {"missing", md.at("missing")}});
-            }
+            recordMissing(scan, links_, p, along);
             continue;
         }
-        ++evaluated;
-        for (const auto& [k, l] : links) {
-            const LinkEvaluation e = links_.evaluate(p, l, ctx, false, false);
-            failures.insert(failures.end(), e.failures.begin(), e.failures.end());
-            Worst& w = worst[k];
-            if (e.marginDb < w.margin) {
-                w.margin = e.marginDb;
-                w.path = p;
-                w.along = along;
-            }
-        }
+        ++scan.evaluated;
+        recordWorst(scan, links_, p, along, links, ctx, failures);
     }
-    leg["samples"] = {{"total", pts.size()}, {"evaluated", evaluated}, {"overPilot", skipped},
-                      {"missingData", missingCount}, {"stepM", dem.nativeResolution().value()}};
-
-    if (missingCount > 0) {
-        leg["status"] = "missing-data";
-        leg["missing"] = missing;
-        leg["missingData"] = {{"bbox", missingBbox}, {"source", dem.name()}};
-        reasons.push_back({{"module", "rf-core"},
-                           {"severity", "blocked"},
-                           {"text", "No terrain data for " + std::to_string(missingCount) + " of " +
-                                        std::to_string(pts.size()) +
-                                        " positions on this leg; the leg is not evaluated and no heights are guessed."}});
-        leg["reasons"] = reasons;
-        return leg;
-    }
+    leg["samples"] = {{"total", pts.size()}, {"evaluated", scan.evaluated}, {"overPilot", scan.overPilot},
+                      {"missingData", scan.missingCount}, {"stepM", dem.nativeResolution().value()}};
+    if (scan.missingCount > 0) return missingDataLeg(std::move(leg), scan, dem, pts.size());
 
     std::string status = "ok";
+    json reasons = json::array();
     json worstJson = json::object();
     for (const auto& [k, l] : links) {
-        const Worst& w = worst[k];
-        if (!w.path) continue;
+        const WorstSample& w = scan.worst[k];
+        if (!w.path.has_value()) continue;
         LinkEvaluation e = links_.evaluate(*w.path, l, ctx, true, true);
         failures.insert(failures.end(), e.failures.begin(), e.failures.end());
         json& r = e.result;
@@ -301,23 +524,13 @@ json Calculator::evaluateLeg(const json& mission, std::size_t index, const json&
                        {"lon", w.path->air.position.longitudeDeg},
                        {"aglM", w.path->air.aglM}};
         const std::string verdict = r.contains("band") ? r["band"].value("verdict", "") : "";
-        const double m = r.at("marginDb").get<double>();
-        std::string severity = "info";
-        if (m < 0.0) {
-            severity = "blocked";
-            status = "blocked";
-        } else if (verdict == "marginal") {
-            severity = "warn";
-            if (status == "ok") status = "warn";
-        }
-        std::string text = (k == LinkKind::Control ? "Control" : "Video") + std::string(" link: worst margin ") +
-                           fmt(m) + " dB at " + km(w.along) + " along the leg";
-        if (r.contains("band")) {
-            text += " (with terrain error " + fmt(r["band"]["worstDb"].get<double>()) + " to " +
-                    fmt(r["band"]["bestDb"].get<double>()) + " dB, " + verdict + ")";
-        }
-        if (r.contains("analogGrade")) text += "; picture " + r["analogGrade"].get<std::string>();
-        reasons.push_back({{"module", "rf-core"}, {"severity", severity}, {"text", text}, {"link", toString(k)}});
+        const std::string severity = marginSeverity(r.at("marginDb").get<double>(), verdict);
+        if (severity == "blocked") status = "blocked";
+        else if (severity == "warn" && status == "ok") status = "warn";
+        reasons.push_back({{"module", "rf-core"},
+                           {"severity", severity},
+                           {"text", worstMarginText(k, r, w.along, verdict)},
+                           {"link", toString(k)}});
         worstJson[toString(k)] = std::move(r);
     }
     leg["worst"] = worstJson;
@@ -329,45 +542,22 @@ json Calculator::evaluateLeg(const json& mission, std::size_t index, const json&
 void Calculator::runRouteModules(const json& mission, json& result, const CalcContext& ctx) {
     json soFar = json::object();
     for (const ModuleRunner::Active& a : modules_.optedIn("route.analysis", ctx)) {
-        json req = {{"mission", mission},
-                    {"legs", result["legs"]},
-                    {"options", a.options},
-                    {"modules", soFar},
-                    {"weather", ctx.forecast ? ctx.forecast->point : json(nullptr)},
-                    {"time", isoUtc(ctx.time)}};
-        json resp;
-        try {
-            resp = a.instance->invoke("route.analyze", req);
-        } catch (const rfmod::ModuleError& e) {
-            result["moduleFailures"].push_back({{"module", a.id}, {"error", e.code() + ": " + e.what()}});
-            continue;
-        } catch (const std::exception& e) {
-            result["moduleFailures"].push_back({{"module", a.id}, {"error", e.what()}});
-            continue;
-        }
-        if (!resp.is_object()) {
-            result["moduleFailures"].push_back({{"module", a.id}, {"error", "route.analyze did not return an object"}});
-            continue;
-        }
-        // A reason with "leg": i belongs to that leg; the rest to the route.
-        for (json r : resp.value("reasons", json::array())) {
-            if (!r.is_object()) continue;
-            r["module"] = a.id;
-            const std::string sev = r.value("severity", "info");
-            if (sev != "info" && sev != "warn" && sev != "blocked") r["severity"] = "info";
-            if (r.contains("leg") && r["leg"].is_number_integer()) {
-                const auto i = r["leg"].get<long long>();
-                if (i >= 0 && static_cast<std::size_t>(i) < result["legs"].size()) {
-                    result["legs"][static_cast<std::size_t>(i)]["reasons"].push_back(r);
-                    continue;
-                }
-            }
-            result["reasons"].push_back(r);
+        const json req = {{"mission", mission},
+                          {"legs", result["legs"]},
+                          {"options", a.options},
+                          {"modules", soFar},
+                          {"weather", ctx.forecast.has_value() ? ctx.forecast->point : json(nullptr)},
+                          {"time", isoUtc(ctx.time)}};
+        const std::optional<json> answer = analyzeRoute(a, req, result);
+        if (!answer.has_value()) continue;
+        const json& resp = *answer;
+        for (const json& r : resp.value("reasons", json::array())) {
+            if (r.is_object()) addRouteReason(result, r, a.id);
         }
         const json data = resp.value("data", json::object());
         result["modules"][a.id] = data;
         soFar[a.id] = data;
-        if (resp.contains("battery") && !result.contains("battery")) result["battery"] = resp["battery"];
+        if (resp.contains("battery") && !result.contains("battery")) result["battery"] = resp.at("battery");
     }
 }
 
@@ -411,11 +601,7 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     for (std::size_t i = 0; i + 1 < points.size(); ++i) {
         result["legs"].push_back(evaluateLeg(mission, i, points[i], points[i + 1], links, ctx, failures));
     }
-    for (const auto& f : failures) {
-        const bool seen = std::any_of(result["moduleFailures"].begin(), result["moduleFailures"].end(),
-                                      [&f](const json& j) { return j.value("module", "") == f.moduleId; });
-        if (!seen) result["moduleFailures"].push_back(f.toJson());
-    }
+    appendModuleFailures(result["moduleFailures"], failures);
     runRouteModules(mission, result, ctx);
     // Only a complete, failure-free result is worth keeping: a module that failed might work next time.
     if (result["moduleFailures"].empty()) cache_.put(hash, "route", result);
@@ -578,124 +764,25 @@ std::size_t Calculator::coverageCells(const json& mission) {
 
 json cellsToMultiPolygon(const std::vector<bool>& inside, std::size_t cols, std::size_t rows, double west,
                          double north, double dLon, double dLat) {
-    // Vertices on the integer grid: x = column edge (0..cols), y = row edge (0..rows, down).
-    // Each boundary edge of an inside cell is directed with the inside on its left (counter-
-    // clockwise in map orientation), then edges are chained into rings.
-    struct Edge {
-        long x0, y0, x1, y1;
-        bool used = false;
-    };
-    auto in = [&inside, rows, cols](long r, long c) {
-        return r >= 0 && c >= 0 && r < static_cast<long>(rows) && c < static_cast<long>(cols) &&
-               inside[static_cast<std::size_t>(r) * cols + static_cast<std::size_t>(c)];
-    };
-    std::vector<Edge> edges;
-    for (long r = 0; r < static_cast<long>(rows); ++r) {
-        for (long c = 0; c < static_cast<long>(cols); ++c) {
-            if (!in(r, c)) continue;
-            // y grows southwards here, so counter-clockwise on the map runs: bottom left to
-            // bottom right, up the east side, top right to top left, down the west side.
-            if (!in(r + 1, c)) edges.push_back({c, r + 1, c + 1, r + 1});
-            if (!in(r, c + 1)) edges.push_back({c + 1, r + 1, c + 1, r});
-            if (!in(r - 1, c)) edges.push_back({c + 1, r, c, r});
-            if (!in(r, c - 1)) edges.push_back({c, r, c, r + 1});
-        }
-    }
-    std::multimap<std::pair<long, long>, std::size_t> from;
+    // Boundary edges of the inside cells, chained into rings.
+    std::vector<Edge> edges = boundaryEdges(inside, cols, rows);
+    EdgesFrom from;
     for (std::size_t i = 0; i < edges.size(); ++i) from.insert({{edges[i].x0, edges[i].y0}, i});
-
-    using Ring = std::vector<std::pair<long, long>>;
     std::vector<Ring> rings;
     for (std::size_t start = 0; start < edges.size(); ++start) {
-        if (edges[start].used) continue;
-        Ring ring;
-        std::size_t cur = start;
-        while (true) {
-            Edge& e = edges[cur];
-            e.used = true;
-            ring.emplace_back(e.x0, e.y0);
-            if (e.x1 == edges[start].x0 && e.y1 == edges[start].y0) break;
-            // At a vertex two inside cells touch only by a corner: turn left (in map terms),
-            // which keeps them as separate rings.
-            const long dx = e.x1 - e.x0, dy = e.y1 - e.y0;
-            std::size_t next = edges.size();
-            int bestRank = 9;
-            const auto range = from.equal_range({e.x1, e.y1});
-            for (auto it = range.first; it != range.second; ++it) {
-                const Edge& n = edges[it->second];
-                if (n.used) continue;
-                const long ndx = n.x1 - n.x0, ndy = n.y1 - n.y0;
-                // y points down, so a left turn on the map is (dy, -dx) here.
-                const int rank = (ndx == dy && ndy == -dx) ? 0 : (ndx == dx && ndy == dy) ? 1 : 2;
-                if (rank < bestRank) {
-                    bestRank = rank;
-                    next = it->second;
-                }
-            }
-            if (next == edges.size()) break;  // cannot happen on a closed boundary
-            cur = next;
-        }
-        // Drop vertices in the middle of straight runs.
-        Ring simple;
-        for (std::size_t i = 0; i < ring.size(); ++i) {
-            const auto& p = ring[(i + ring.size() - 1) % ring.size()];
-            const auto& q = ring[i];
-            const auto& s = ring[(i + 1) % ring.size()];
-            if ((q.first - p.first) * (s.second - q.second) != (q.second - p.second) * (s.first - q.first)) {
-                simple.push_back(q);
-            }
-        }
-        rings.push_back(simple);
+        if (!edges[start].used) rings.push_back(simplified(traceRing(edges, from, start)));
     }
 
-    // Signed area in map orientation (x east, y north = -y here): outer rings are positive.
-    auto area = [](const Ring& r) {
-        double a = 0.0;
-        for (std::size_t i = 0; i < r.size(); ++i) {
-            const auto& p = r[i];
-            const auto& q = r[(i + 1) % r.size()];
-            a += static_cast<double>(p.first) * static_cast<double>(-q.second) -
-                 static_cast<double>(q.first) * static_cast<double>(-p.second);
-        }
-        return a / 2.0;
-    };
-    auto contains = [](const Ring& r, double x, double y) {
-        bool c = false;
-        for (std::size_t i = 0, j = r.size() - 1; i < r.size(); j = i++) {
-            const double xi = static_cast<double>(r[i].first), yi = static_cast<double>(r[i].second);
-            const double xj = static_cast<double>(r[j].first), yj = static_cast<double>(r[j].second);
-            if ((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
-        }
-        return c;
-    };
     std::vector<std::size_t> outers;
     std::vector<std::vector<std::size_t>> holesOf(rings.size());
     for (std::size_t i = 0; i < rings.size(); ++i) {
-        if (area(rings[i]) > 0.0) outers.push_back(i);
+        if (signedArea(rings[i]) > 0.0) outers.push_back(i);
     }
     for (std::size_t i = 0; i < rings.size(); ++i) {
-        if (area(rings[i]) > 0.0 || rings[i].size() < 2) continue;
-        // A point just inside the hole: the middle of its first edge, nudged to the hole side
-        // (the hole is on the right of a hole edge, i.e. away from the inside cells).
-        const auto& p = rings[i][0];
-        const auto& q = rings[i][1];
-        const double mx = (static_cast<double>(p.first) + static_cast<double>(q.first)) / 2.0;
-        const double my = (static_cast<double>(p.second) + static_cast<double>(q.second)) / 2.0;
-        const double dx = static_cast<double>(q.first - p.first), dy = static_cast<double>(q.second - p.second);
-        const double len = std::hypot(dx, dy);
-        const double tx = mx - dy / len * 0.25, ty = my + dx / len * 0.25;
-        std::size_t best = outers.size();
-        double bestArea = std::numeric_limits<double>::infinity();
-        for (std::size_t o = 0; o < outers.size(); ++o) {
-            const double a = area(rings[outers[o]]);
-            if (a < bestArea && contains(rings[outers[o]], tx, ty)) {
-                bestArea = a;
-                best = o;
-            }
-        }
-        if (best < outers.size()) holesOf[outers[best]].push_back(i);
+        if (signedArea(rings[i]) > 0.0 || rings[i].size() < 2) continue;
+        if (const std::size_t best = outerOfHole(rings, outers, rings[i]); best < outers.size()) holesOf[outers[best]].push_back(i);
     }
-    auto coords = [west, north, dLon, dLat](const Ring& r) {
+    const auto coords = [west, north, dLon, dLat](const Ring& r) {
         json ring = json::array();
         for (const auto& [x, y] : r) {
             ring.push_back({west + static_cast<double>(x) * dLon, north - static_cast<double>(y) * dLat});

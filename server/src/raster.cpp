@@ -158,25 +158,42 @@ std::optional<int> LandCoverSource::code(const rfcore::GeoPoint& p) const {
     return static_cast<int>(*v);
 }
 
+namespace {
+
+/// The "source" of `name` in a manifest's "files": tiles-builder writes
+/// {"files": {"<name>": {"source": ..., ...}}} or a list with "name".
+std::string sourceInFiles(const nlohmann::json& files, const std::string& name) {
+    if (files.is_object() && files.contains(name)) return files.at(name).value("source", "");
+    if (!files.is_array()) return {};
+    for (const auto& f : files) {
+        if (f.value("name", "") == name || f.value("file", "") == name) return f.value("source", "");
+    }
+    return {};
+}
+
+/// Adds the distinct attributions of a manifest's files to `out`, else its joined display text.
+void addAttributions(const nlohmann::json& doc, std::vector<std::string>& out) {
+    if (doc.contains("files") && doc.at("files").is_array()) {
+        for (const auto& f : doc.at("files")) {
+            if (const std::string a = f.value("attribution", ""); !a.empty() && std::ranges::find(out, a) == out.end()) out.push_back(a);
+        }
+    }
+    if (out.empty()) {
+        if (const std::string joined = doc.value("attribution_display_text", ""); !joined.empty()) out.push_back(joined);
+    }
+}
+
+}  // namespace
+
 std::string manifestSourceName(const fs::path& file) {
     const fs::path manifest = file.parent_path() / "manifest.json";
     std::ifstream in(manifest);
     if (!in) return {};
     try {
         const auto doc = nlohmann::json::parse(in);
-        const std::string name = file.filename().string();
-        // tiles-builder writes {"files": {"<name>": {"source": ..., ...}}} or a list with "name".
-        if (doc.contains("files")) {
-            const auto& files = doc.at("files");
-            if (files.is_object() && files.contains(name)) return files.at(name).value("source", "");
-            if (files.is_array()) {
-                for (const auto& f : files) {
-                    if (f.value("name", "") == name || f.value("file", "") == name) return f.value("source", "");
-                }
-            }
-        }
+        if (doc.contains("files")) return sourceInFiles(doc.at("files"), file.filename().string());
     } catch (const nlohmann::json::exception&) {
-        return {};  // not JSON, or an entry of the wrong type: the source is unknown
+        // Ignored: not JSON, or an entry of the wrong type; the source is unknown.
     }
     return {};
 }
@@ -186,19 +203,9 @@ std::vector<std::string> manifestAttributions(const fs::path& file) {
     std::ifstream in(file.parent_path() / "manifest.json");
     if (!in) return out;
     try {
-        const auto doc = nlohmann::json::parse(in);
-        if (doc.contains("files") && doc.at("files").is_array()) {
-            for (const auto& f : doc.at("files")) {
-                const std::string a = f.value("attribution", "");
-                if (!a.empty() && std::find(out.begin(), out.end(), a) == out.end()) out.push_back(a);
-            }
-        }
-        if (out.empty()) {
-            const std::string joined = doc.value("attribution_display_text", "");
-            if (!joined.empty()) out.push_back(joined);
-        }
+        addAttributions(nlohmann::json::parse(in), out);
     } catch (const nlohmann::json::exception&) {
-        return out;  // not JSON, or an entry of the wrong type: keep what was read before it
+        // Ignored: not JSON, or an entry of the wrong type; keep what was read before it.
     }
     return out;
 }

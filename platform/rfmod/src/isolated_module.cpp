@@ -8,6 +8,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <array>
 #include <cerrno>
 #include <chrono>
 #include <cstring>
@@ -34,6 +36,30 @@ template <std::size_t N>
 
 }  // namespace
 
+/// Holds the worker for the lifetime of the object; see busy_.
+class IsolatedModule::Turn {
+public:
+    explicit Turn(IsolatedModule& owner) : owner_(owner) {
+        std::unique_lock lock(owner_.mutex_);
+        owner_.idle_.wait(lock, [this] { return !owner_.busy_; });
+        owner_.busy_ = true;
+    }
+    ~Turn() {
+        {
+            const std::lock_guard lock(owner_.mutex_);
+            owner_.busy_ = false;
+        }
+        owner_.idle_.notify_one();
+    }
+    Turn(const Turn&) = delete;
+    Turn& operator=(const Turn&) = delete;
+    Turn(Turn&&) = delete;
+    Turn& operator=(Turn&&) = delete;
+
+private:
+    IsolatedModule& owner_;
+};
+
 IsolatedModule::IsolatedModule(Manifest manifest, std::filesystem::path library, std::filesystem::path workerExecutable,
                                IHostServices& services, json options)
     : manifest_(std::move(manifest)),
@@ -41,7 +67,7 @@ IsolatedModule::IsolatedModule(Manifest manifest, std::filesystem::path library,
       worker_(std::move(workerExecutable)),
       services_(services),
       options_(std::move(options)) {
-    std::lock_guard lock(mutex_);
+    const Turn turn(*this);
     start();
 }
 
@@ -168,71 +194,85 @@ void IsolatedModule::send(const json& message) const {
     }
 }
 
-json IsolatedModule::waitFor(const std::string& type, long long id, long long deadlineMs) {
-    for (;;) {
-        // Handle every complete protocol line already buffered.
-        for (std::size_t nl = 0; (nl = outBuffer_.find('\n')) != std::string::npos;) {
-            const std::string line = outBuffer_.substr(0, nl);
-            outBuffer_.erase(0, nl + 1);
-            json msg;
-            try {
-                msg = json::parse(line);
-            } catch (const std::exception&) {
-                throw ModuleError("protocol", manifest_.id + ": worker sent a malformed message");
-            }
-            const std::string t = msg.value("t", "");
-            if (t == "log") {
-                services_.log(manifest_.id, msg.value("level", 1), msg.value("message", ""));
-            } else if (t == "cb") {
-                json reply = {{"t", "cbr"}, {"id", msg.value("id", 0LL)}};
-                try {
-                    reply["result"] = services_.call(manifest_.id, msg.value("method", ""),
-                                                     msg.value("request", json::object()));
-                    reply["ok"] = true;
-                } catch (const std::exception& e) {
-                    reply["ok"] = false;
-                    reply["error"] = e.what();
-                }
-                send(reply);
-            } else if (t == type && (type == "ready" || msg.value("id", -1LL) == id)) {
-                return msg;
-            } else {
-                throw ModuleError("protocol", manifest_.id + ": unexpected worker message " + t);
-            }
-        }
-        for (std::size_t nl = 0; (nl = errBuffer_.find('\n')) != std::string::npos;) {
-            services_.log(manifest_.id, 2, "stderr: " + errBuffer_.substr(0, nl));
-            errBuffer_.erase(0, nl + 1);
-        }
+void IsolatedModule::answerCallback(const json& msg) {
+    json reply = {{"t", "cbr"}, {"id", msg.value("id", 0LL)}};
+    try {
+        reply["result"] = services_.call(manifest_.id, msg.value("method", ""), msg.value("request", json::object()));
+        reply["ok"] = true;
+    } catch (const std::exception& e) {
+        reply["ok"] = false;
+        reply["error"] = e.what();
+    }
+    send(reply);
+}
 
-        const long long left = deadlineMs - nowMs();
-        if (left <= 0) {
-            stop(true);
-            throw ModuleError("timeout", manifest_.id + " did not answer within " +
-                                             std::to_string(manifest_.limits.timeoutMs) + " ms; worker stopped");
+std::optional<json> IsolatedModule::handleBufferedMessages(std::string_view type, long long id) {
+    for (std::size_t nl = outBuffer_.find('\n'); nl != std::string::npos; nl = outBuffer_.find('\n')) {
+        const std::string line = outBuffer_.substr(0, nl);
+        outBuffer_.erase(0, nl + 1);
+        json msg;
+        try {
+            msg = json::parse(line);
+        } catch (const std::exception&) {
+            throw ModuleError("protocol", manifest_.id + ": worker sent a malformed message");
         }
-        pollfd fds[2] = {{fromWorker_, POLLIN, 0}, {errFromWorker_, POLLIN, 0}};
-        const int rc = poll(fds, 2, static_cast<int>(std::min<long long>(left, 1000)));
-        if (rc < 0 && errno == EINTR) continue;
-        char buf[65536];
-        for (int i = 0; i < 2; ++i) {
-            if (!(fds[i].revents & (POLLIN | POLLHUP | POLLERR))) continue;
-            const ssize_t n = read(fds[i].fd, buf, sizeof buf);
-            if (n > 0) {
-                (i == 0 ? outBuffer_ : errBuffer_).append(buf, static_cast<std::size_t>(n));
-                if (outBuffer_.size() > (256u << 20)) throw ModuleError("protocol", manifest_.id + ": reply too large");
-            } else if (i == 0) {
-                std::string lastWords = errBuffer_;
-                stop(true);
-                throw ModuleError("worker_crashed",
-                                  manifest_.id + ": worker exited" + (lastWords.empty() ? "" : ": " + lastWords));
-            }
+        if (const std::string t = msg.value("t", ""); t == "log") {
+            services_.log(manifest_.id, msg.value("level", 1), msg.value("message", ""));
+        } else if (t == "cb") {
+            answerCallback(msg);
+        } else if (t == type && (type == "ready" || msg.value("id", -1LL) == id)) {
+            return msg;
+        } else {
+            throw ModuleError("protocol", manifest_.id + ": unexpected worker message " + t);
+        }
+    }
+    return std::nullopt;
+}
+
+void IsolatedModule::logBufferedStderr() {
+    for (std::size_t nl = errBuffer_.find('\n'); nl != std::string::npos; nl = errBuffer_.find('\n')) {
+        services_.log(manifest_.id, 2, "stderr: " + errBuffer_.substr(0, nl));
+        errBuffer_.erase(0, nl + 1);
+    }
+}
+
+void IsolatedModule::readWorkerOutput(long long deadlineMs) {
+    const long long left = deadlineMs - nowMs();
+    if (left <= 0) {
+        stop(true);
+        throw ModuleError("timeout", manifest_.id + " did not answer within " +
+                                         std::to_string(manifest_.limits.timeoutMs) + " ms; worker stopped");
+    }
+    std::array<pollfd, 2> fds{{{fromWorker_, POLLIN, 0}, {errFromWorker_, POLLIN, 0}}};
+    if (const int rc = poll(fds.data(), fds.size(), static_cast<int>(std::min<long long>(left, 1000))); rc < 0 && errno == EINTR) {
+        return;
+    }
+    std::array<char, 65536> buf{};
+    for (std::size_t i = 0; i < fds.size(); ++i) {
+        if (!(fds[i].revents & (POLLIN | POLLHUP | POLLERR))) continue;
+        if (const ssize_t n = read(fds[i].fd, buf.data(), buf.size()); n > 0) {
+            (i == 0 ? outBuffer_ : errBuffer_).append(buf.data(), static_cast<std::size_t>(n));
+            if (outBuffer_.size() > (256u << 20)) throw ModuleError("protocol", manifest_.id + ": reply too large");
+        } else if (i == 0) {
+            const std::string lastWords = errBuffer_;
+            stop(true);
+            throw ModuleError("worker_crashed",
+                              manifest_.id + ": worker exited" + (lastWords.empty() ? "" : ": " + lastWords));
         }
     }
 }
 
+json IsolatedModule::waitFor(const std::string& type, long long id, long long deadlineMs) {
+    for (;;) {
+        // Handle every complete protocol line already buffered.
+        if (auto msg = handleBufferedMessages(type, id)) return std::move(*msg);
+        logBufferedStderr();
+        readWorkerOutput(deadlineMs);
+    }
+}
+
 json IsolatedModule::invoke(const std::string& method, const json& request) {
-    std::lock_guard lock(mutex_);
+    const Turn turn(*this);
     if (pid_ <= 0) start();  // restart after a crash or timeout
     const long long id = nextId_++;
     send({{"t", "invoke"}, {"id", id}, {"method", method}, {"request", request}});
@@ -246,7 +286,7 @@ json IsolatedModule::invoke(const std::string& method, const json& request) {
 }
 
 void IsolatedModule::shutdown() {
-    std::lock_guard lock(mutex_);
+    const Turn turn(*this);
     if (pid_ <= 0) return;
     try {
         send({{"t", "shutdown"}});
