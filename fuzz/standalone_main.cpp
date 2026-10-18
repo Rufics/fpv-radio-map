@@ -1,5 +1,6 @@
 // Corpus replay driver for compilers without libFuzzer: runs LLVMFuzzerTestOneInput once on every
-// file named on the command line, or in a directory named there. A crash still stops the program.
+// file of the target's checked-in corpus, fixed at build time (RFMAP_FUZZ_CORPUS). It reads no
+// paths from the command line. A crash still stops the program.
 
 #include <cstddef>
 #include <cstdint>
@@ -25,21 +26,12 @@ void runFile(const std::filesystem::path& file) {
 int main(int argc, char** argv) {
     if (LLVMFuzzerInitialize) LLVMFuzzerInitialize(&argc, &argv);
     std::size_t runs = 0;
-    for (int i = 1; i < argc; ++i) {
-        const std::filesystem::path arg = argv[i];
-        if (arg.string().rfind('-', 0) == 0) continue;  // libFuzzer flags such as -runs=0
-        if (std::filesystem::is_directory(arg)) {
-            for (const auto& entry : std::filesystem::recursive_directory_iterator(arg)) {
-                if (entry.is_regular_file()) {
-                    runFile(entry.path());
-                    ++runs;
-                }
-            }
-        } else {
-            runFile(arg);
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(RFMAP_FUZZ_CORPUS)) {
+        if (entry.is_regular_file()) {
+            runFile(entry.path());
             ++runs;
         }
     }
-    std::printf("replayed %zu inputs\n", runs);
-    return 0;
+    std::printf("replayed %zu inputs from %s\n", runs, RFMAP_FUZZ_CORPUS);
+    return runs == 0 ? 1 : 0;
 }

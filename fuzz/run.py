@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """Fuzzes every target in the fuzz build for a while, several at once.
 
-    fuzz/run.py SECONDS_PER_TARGET [--merge] [TARGET ...]
+    FUZZ_SECONDS=300 fuzz/run.py
+
+Settings come from the environment: FUZZ_SECONDS is the time per target (default 60), FUZZ_MERGE=1
+minimises each target's corpus afterwards, which keeps the CI cache small, and FUZZ_TARGETS names
+the targets to run, separated by spaces (default: all of them).
 
 The fuzz build is build-fuzz/ at the repository root (docs/dev/fuzzing.md). New inputs go to
 build-fuzz/fuzz-work/corpus/<target>, crashes to build-fuzz/fuzz-work/crashes/<target>, logs to
 build-fuzz/fuzz-work/<target>.log. The checked-in seeds under fuzz/corpus are read, never written.
---merge minimises each target's corpus afterwards, which keeps the CI cache small.
 Exits 1 when any target crashed and lists the inputs that did it.
 
-The paths are fixed rather than arguments, so nothing on the command line can point the script
-at other files.
+The script takes no command-line arguments and its paths are fixed, so nothing passed to it can
+point it at other files or reach the fuzzer's command line.
 """
 
-import argparse
 import os
 import re
 import shutil
@@ -68,25 +70,32 @@ def fuzz_one(binary: Path, target: str, seconds: int, merge: bool) -> bool:
     return True
 
 
+def setting_seconds() -> int:
+    text = os.environ.get("FUZZ_SECONDS", "60")
+    if not re.fullmatch(r"[0-9]{1,6}", text) or int(text) == 0:
+        sys.exit(f"FUZZ_SECONDS must be a whole number of seconds from 1 to 999999, not {text!r}")
+    return int(text)
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("seconds", type=int)
-    parser.add_argument("targets", nargs="*")
-    parser.add_argument("--merge", action="store_true")
-    args = parser.parse_args()
+    if len(sys.argv) > 1:
+        sys.exit(__doc__)
+    seconds = setting_seconds()
+    merge = os.environ.get("FUZZ_MERGE") == "1"
+    wanted = os.environ.get("FUZZ_TARGETS", "").split()
 
     binaries = {p.name.removesuffix("_fuzzer"): p for p in sorted((BUILD / "fuzz").glob("*_fuzzer"))}
     if not binaries:
-        parser.error(f"no fuzz targets in {BUILD}; build them first (docs/dev/fuzzing.md)")
-    unknown = sorted(set(args.targets) - set(binaries))
+        sys.exit(f"no fuzz targets in {BUILD}; build them first (docs/dev/fuzzing.md)")
+    unknown = sorted(set(wanted) - set(binaries))
     if unknown:
-        parser.error("no such fuzz target: " + ", ".join(unknown))
-    # Names come from the build, never from the command line.
-    targets = [name for name in binaries if not args.targets or name in args.targets]
+        sys.exit("no such fuzz target: " + ", ".join(unknown))
+    # Names come from the build, never from the settings.
+    targets = [name for name in binaries if not wanted or name in wanted]
 
     WORK.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(max_workers=os.cpu_count() or 1) as pool:
-        results = list(pool.map(lambda t: fuzz_one(binaries[t], t, args.seconds, args.merge), targets))
+        results = list(pool.map(lambda t: fuzz_one(binaries[t], t, seconds, merge), targets))
     if all(results):
         return 0
     print("Crashing inputs:")

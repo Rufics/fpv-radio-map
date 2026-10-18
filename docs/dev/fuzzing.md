@@ -47,8 +47,11 @@ ctest --test-dir build-fuzz -L fuzz
 Fuzz every target for five minutes, as many at once as there are CPU cores:
 
 ```
-python3 fuzz/run.py 300
+FUZZ_SECONDS=300 python3 fuzz/run.py
 ```
+
+`FUZZ_TARGETS="manifest semver"` runs only those targets and `FUZZ_MERGE=1` minimises each
+corpus afterwards.
 
 Or one target by hand:
 
@@ -58,7 +61,8 @@ build-fuzz/fuzz/manifest_fuzzer -dict=fuzz/dict/json.dict build-fuzz/fuzz-work/c
 
 A crash writes the input to a `crash-*` file and prints the stack. Run the target on that file
 alone to reproduce it. With a compiler other than Clang, `RFMAP_BUILD_FUZZERS=ON` builds the
-targets as replay programs only: they run the corpus under the sanitizers but cannot fuzz.
+targets as replay programs only: they run their checked-in corpus, `fuzz/corpus/<target>/`, under
+the sanitizers but cannot fuzz. Put an input there to replay it.
 
 ## In CI
 
