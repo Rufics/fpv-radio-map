@@ -46,6 +46,67 @@ std::string label(const json& p, const std::string& fallback) {
     return l.empty() ? fallback : l;
 }
 
+/// Adds each failing module to `list` once, keeping the entries already there.
+void appendModuleFailures(json& list, const std::vector<ModuleFailure>& failures) {
+    for (const auto& f : failures) {
+        const bool seen = std::any_of(list.begin(), list.end(),
+                                      [&f](const json& j) { return j.value("module", "") == f.moduleId; });
+        if (!seen) list.push_back(f.toJson());
+    }
+}
+
+/// A lat/lon-regular grid: cellM is exact at the pilot's latitude (meridian and parallel arc
+/// per degree there); further north or south a cell's east-west size changes with the
+/// parallel, and cellLatDeg/cellLonDeg say exactly what was used.
+struct CoverageGrid {
+    double radius = 0.0;
+    double agl = 0.0;
+    double dLat = 0.0;
+    double dLon = 0.0;
+    double north = 0.0;
+    double west = 0.0;
+    std::size_t cols = 0;
+    std::size_t rows = 0;
+    [[nodiscard]] rfcore::GeoPoint centre(std::size_t r, std::size_t c) const {
+        return {north - (static_cast<double>(r) + 0.5) * dLat, west + (static_cast<double>(c) + 0.5) * dLon};
+    }
+};
+
+CoverageGrid coverageGrid(const rfcore::GeoPoint& pilot, double radius, double cell, double agl) {
+    CoverageGrid g;
+    g.radius = radius;
+    g.agl = agl;
+    const double lat0 = pilot.latitudeDeg;
+    const double deg = rfcore::constants::kPi / 180.0;
+    const double m = rfcore::EarthModel::radiusOfCurvature(lat0, 0.0).value();
+    const double nRad = rfcore::EarthModel::radiusOfCurvature(lat0, 90.0).value();
+    g.dLat = cell / (m * deg);
+    g.dLon = cell / (nRad * std::cos(lat0 * deg) * deg);
+    const auto half = static_cast<std::size_t>(std::ceil(radius / cell));
+    g.cols = 2 * half + 1;
+    g.rows = 2 * half + 1;
+    g.north = lat0 + (static_cast<double>(half) + 0.5) * g.dLat;
+    g.west = pilot.longitudeDeg - (static_cast<double>(half) + 0.5) * g.dLon;
+    return g;
+}
+
+/// A module's coverage.analyze answer in the grid: its reasons, and the layers that match the
+/// grid cell for cell.
+void addCoverageModule(json& grid, const json& resp, const std::string& moduleId, std::size_t cells) {
+    for (json r : resp.value("reasons", json::array())) {
+        if (!r.is_object()) continue;
+        r["module"] = moduleId;
+        grid["reasons"].push_back(r);
+    }
+    json layers = json::array();
+    for (const json& l : resp.value("layers", json::array())) {
+        if (l.is_object() && l.contains("values") && l["values"].size() == cells) layers.push_back(l);
+    }
+    grid["modules"][moduleId] = {{"layers", layers}, {"data", resp.value("data", json::object())}};
+}
+
+json nullable(const std::optional<double>& v) { return v.has_value() ? json(*v) : json(nullptr); }
+
 }  // namespace
 
 Calculator::Calculator(LinkService& links, WeatherService& weather, const BuiltinModules& builtins,
@@ -360,6 +421,82 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
     return result;
 }
 
+/// The state the worker threads of one coverage calculation share: rows are taken in turn and
+/// each cell's margin lands in its own slot.
+struct Calculator::CoverageRun {
+    CoverageRun(const ResolvedLink& l, const CalcContext& c, const Terminal& p, const CoverageGrid& g,
+                CoverageProgress& pr)
+        : link(l), ctx(c), pilot(p), grid(g), progress(pr), margins(g.cols * g.rows), worstBand(g.cols * g.rows) {}
+
+    const ResolvedLink& link;
+    const CalcContext& ctx;
+    const Terminal& pilot;
+    const CoverageGrid& grid;
+    CoverageProgress& progress;
+    std::vector<std::optional<double>> margins;
+    std::vector<std::optional<double>> worstBand;
+    std::atomic<std::size_t> nextRow{0};
+    std::atomic<std::size_t> doneRows{0};
+    std::atomic<std::size_t> missingCells{0};
+    std::mutex failMutex;
+    std::vector<ModuleFailure> failures;
+    std::exception_ptr error;
+    const rfcore::Geodesy geo{};
+};
+
+void Calculator::coverageWorker(CoverageRun& run) {
+    try {
+        for (std::size_t r; (r = run.nextRow++) < run.grid.rows;) {
+            if (run.progress.cancelled()) return;
+            std::shared_lock gate(modules_.gate());
+            const CalcContextScope scope(run.ctx);
+            coverageRow(run, r);
+            run.progress.report(static_cast<double>(++run.doneRows) / static_cast<double>(run.grid.rows));
+        }
+    } catch (...) {
+        std::lock_guard lock(run.failMutex);
+        if (!run.error) run.error = std::current_exception();
+        run.nextRow = run.grid.rows;
+    }
+}
+
+void Calculator::coverageRow(CoverageRun& run, std::size_t r) {
+    const CoverageGrid& g = run.grid;
+    for (std::size_t c = 0; c < g.cols; ++c) {
+        const rfcore::GeoPoint centre = g.centre(r, c);
+        const double d = run.geo.inverse(run.pilot.position, centre).distance.value();
+        if (!(d > 0.0) || d > g.radius) continue;
+        const PreparedPath p = links_.prepare(run.pilot, Terminal{centre, g.agl}, run.ctx);
+        if (!p.complete()) {
+            ++run.missingCells;
+            continue;
+        }
+        LinkEvaluation e = links_.evaluate(p, run.link, run.ctx, builtins_.enabled(BuiltinModules::kUncertainty), false);
+        run.margins[r * g.cols + c] = e.marginDb;
+        if (e.result.contains("band")) run.worstBand[r * g.cols + c] = e.result["band"]["worstDb"].get<double>();
+        if (!e.failures.empty()) {
+            std::lock_guard lock(run.failMutex);
+            run.failures.insert(run.failures.end(), e.failures.begin(), e.failures.end());
+        }
+    }
+}
+
+void Calculator::runCoverageModules(const json& mission, LinkKind kind, const CalcContext& ctx, std::size_t cells,
+                                    json& grid) {
+    std::shared_lock gate(modules_.gate());
+    const CalcContextScope scope(ctx);
+    for (const ModuleRunner::Active& a : modules_.optedIn("coverage.analysis", ctx)) {
+        try {
+            json resp = a.instance->invoke("coverage.analyze", {{"mission", mission}, {"grid", grid},
+                                                                {"options", a.options}, {"link", toString(kind)},
+                                                                {"time", isoUtc(ctx.time)}});
+            addCoverageModule(grid, resp, a.id, cells);
+        } catch (const std::exception& e) {
+            grid["moduleFailures"].push_back({{"module", a.id}, {"error", e.what()}});
+        }
+    }
+}
+
 json Calculator::coverage(const json& mission, LinkKind kind, CoverageProgress& progress, ThreadPool& pool) {
     const CalcContext ctx = contextFor(mission);
     if (!mission.at("links").contains(toString(kind))) throw HttpError(422, "the mission has no " + toString(kind) + " link");
@@ -381,87 +518,37 @@ json Calculator::coverage(const json& mission, LinkKind kind, CoverageProgress& 
         return *hit;
     }
 
-    // A lat/lon-regular grid: cellM is exact at the pilot's latitude (meridian and parallel
-    // arc per degree there); further north or south a cell's east-west size changes with the
-    // parallel, and cellLatDeg/cellLonDeg say exactly what was used.
-    const double lat0 = pilot.position.latitudeDeg;
-    const double deg = rfcore::constants::kPi / 180.0;
-    const double m = rfcore::EarthModel::radiusOfCurvature(lat0, 0.0).value();
-    const double nRad = rfcore::EarthModel::radiusOfCurvature(lat0, 90.0).value();
-    const double dLat = cell / (m * deg);
-    const double dLon = cell / (nRad * std::cos(lat0 * deg) * deg);
-    const auto half = static_cast<std::size_t>(std::ceil(radius / cell));
-    const std::size_t cols = 2 * half + 1, rows = 2 * half + 1;
-    const double north = lat0 + (static_cast<double>(half) + 0.5) * dLat;
-    const double west = pilot.position.longitudeDeg - (static_cast<double>(half) + 0.5) * dLon;
-
-    std::vector<std::optional<double>> margins(cols * rows), worstBand(cols * rows);
-    std::atomic<std::size_t> nextRow{0}, doneRows{0}, missingCells{0};
-    std::mutex failMutex;
-    std::vector<ModuleFailure> failures;
-    std::exception_ptr error;
-    const rfcore::Geodesy geo;
-    auto worker = [&] {
-        try {
-            for (std::size_t r; (r = nextRow++) < rows;) {
-                if (progress.cancelled()) return;
-                std::shared_lock gate(modules_.gate());
-                const CalcContextScope scope(ctx);
-                for (std::size_t c = 0; c < cols; ++c) {
-                    const rfcore::GeoPoint centre{north - (static_cast<double>(r) + 0.5) * dLat,
-                                                  west + (static_cast<double>(c) + 0.5) * dLon};
-                    const double d = geo.inverse(pilot.position, centre).distance.value();
-                    if (!(d > 0.0) || d > radius) continue;
-                    const PreparedPath p = links_.prepare(pilot, Terminal{centre, agl}, ctx);
-                    if (!p.complete()) {
-                        ++missingCells;
-                        continue;
-                    }
-                    LinkEvaluation e = links_.evaluate(p, link, ctx, builtins_.enabled(BuiltinModules::kUncertainty), false);
-                    margins[r * cols + c] = e.marginDb;
-                    if (e.result.contains("band")) worstBand[r * cols + c] = e.result["band"]["worstDb"].get<double>();
-                    if (!e.failures.empty()) {
-                        std::lock_guard lock(failMutex);
-                        failures.insert(failures.end(), e.failures.begin(), e.failures.end());
-                    }
-                }
-                progress.report(static_cast<double>(++doneRows) / static_cast<double>(rows));
-            }
-        } catch (...) {
-            std::lock_guard lock(failMutex);
-            if (!error) error = std::current_exception();
-            nextRow = rows;
-        }
-    };
+    const CoverageGrid g = coverageGrid(pilot.position, radius, cell, agl);
+    CoverageRun run(link, ctx, pilot, g, progress);
     std::vector<std::future<void>> parts;
-    for (int t = 0; t < pool.size(); ++t) parts.push_back(pool.submit(worker));
+    for (int t = 0; t < pool.size(); ++t) parts.push_back(pool.submit([this, &run] { coverageWorker(run); }));
     for (auto& f : parts) f.get();
-    if (error) std::rethrow_exception(error);
+    if (run.error) std::rethrow_exception(run.error);
     if (progress.cancelled()) throw std::runtime_error("cancelled");
 
     json marginJson = json::array(), worstJson = json::array();
-    std::vector<bool> reachable(cols * rows, false);
-    for (std::size_t i = 0; i < margins.size(); ++i) {
-        marginJson.push_back(margins[i].has_value() ? json(*margins[i]) : json(nullptr));
-        worstJson.push_back(worstBand[i].has_value() ? json(*worstBand[i]) : json(nullptr));
-        reachable[i] = margins[i].has_value() && *margins[i] >= 0.0;
+    std::vector<bool> reachable(g.cols * g.rows, false);
+    for (std::size_t i = 0; i < run.margins.size(); ++i) {
+        marginJson.push_back(nullable(run.margins[i]));
+        worstJson.push_back(nullable(run.worstBand[i]));
+        reachable[i] = run.margins[i].has_value() && *run.margins[i] >= 0.0;
     }
-    const double south = north - static_cast<double>(rows) * dLat;
-    const double east = west + static_cast<double>(cols) * dLon;
+    const double south = g.north - static_cast<double>(g.rows) * g.dLat;
+    const double east = g.west + static_cast<double>(g.cols) * g.dLon;
     json grid = {{"link", toString(kind)},
-                 {"origin", {{"lat", north}, {"lon", west}}},
+                 {"origin", {{"lat", g.north}, {"lon", g.west}}},
                  {"pilot", {{"lat", pilot.position.latitudeDeg}, {"lon", pilot.position.longitudeDeg}}},
                  {"cellM", cell},
-                 {"cellLatDeg", dLat},
-                 {"cellLonDeg", dLon},
-                 {"cols", cols},
-                 {"rows", rows},
+                 {"cellLatDeg", g.dLat},
+                 {"cellLonDeg", g.dLon},
+                 {"cols", g.cols},
+                 {"rows", g.rows},
                  {"radiusM", radius},
                  {"droneAglM", agl},
-                 {"bbox", {west, south, east, north}},
+                 {"bbox", {g.west, south, east, g.north}},
                  {"marginDb", marginJson},
-                 {"limitPolygon", cellsToMultiPolygon(reachable, cols, rows, west, north, dLon, dLat)},
-                 {"missingDataCells", missingCells.load()},
+                 {"limitPolygon", cellsToMultiPolygon(reachable, g.cols, g.rows, g.west, g.north, g.dLon, g.dLat)},
+                 {"missingDataCells", run.missingCells.load()},
                  {"library", refs},
                  {"timeUtc", isoUtc(ctx.time)},
                  {"inputHash", hash},
@@ -471,36 +558,8 @@ json Calculator::coverage(const json& mission, LinkKind kind, CoverageProgress& 
     if (builtins_.enabled(BuiltinModules::kUncertainty)) grid["marginWorstDb"] = worstJson;
     if (ctx.forecast) grid["weather"] = ctx.forecast->point;
     grid["forecastTier"] = forecastTier(ctx);
-    for (const auto& f : failures) {
-        const bool seen = std::any_of(grid["moduleFailures"].begin(), grid["moduleFailures"].end(),
-                                      [&](const json& j) { return j.value("module", "") == f.moduleId; });
-        if (!seen) grid["moduleFailures"].push_back(f.toJson());
-    }
-
-    {
-        std::shared_lock gate(modules_.gate());
-        const CalcContextScope scope(ctx);
-        for (const ModuleRunner::Active& a : modules_.optedIn("coverage.analysis", ctx)) {
-            try {
-                json resp = a.instance->invoke("coverage.analyze", {{"mission", mission}, {"grid", grid},
-                                                                    {"options", a.options}, {"link", toString(kind)},
-                                                                    {"time", isoUtc(ctx.time)}});
-                for (json r : resp.value("reasons", json::array())) {
-                    if (!r.is_object()) continue;
-                    r["module"] = a.id;
-                    grid["reasons"].push_back(r);
-                }
-                json layers = json::array();
-                for (const json& l : resp.value("layers", json::array())) {
-                    // Layers must match the grid cell for cell.
-                    if (l.is_object() && l.contains("values") && l["values"].size() == cols * rows) layers.push_back(l);
-                }
-                grid["modules"][a.id] = {{"layers", layers}, {"data", resp.value("data", json::object())}};
-            } catch (const std::exception& e) {
-                grid["moduleFailures"].push_back({{"module", a.id}, {"error", e.what()}});
-            }
-        }
-    }
+    appendModuleFailures(grid["moduleFailures"], run.failures);
+    runCoverageModules(mission, kind, ctx, g.cols * g.rows, grid);
     if (grid["moduleFailures"].empty()) cache_.put(hash, "coverage", grid);
     (void)log_;
     return grid;

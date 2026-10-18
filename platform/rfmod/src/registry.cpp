@@ -398,55 +398,65 @@ bool ModuleRegistry::visit(const std::string& id, VisitMarks& mark, std::unique_
         return false;
     }
     mark[id] = 1;
-    bool ok = e.enabled;
-    if (!e.enabled) {
-        e.state = ModuleState::Disabled;
-        e.stateDetail = "disabled by the admin";
-    }
-    if (ok && e.manifest.deprecation && config_.hostVersion >= e.manifest.deprecation->removedIn) {
-        ok = false;
-        e.state = ModuleState::Failed;
-        e.stateDetail = "removed in host " + e.manifest.deprecation->removedIn.str();
-    }
-    for (const Dependency& d : e.manifest.dependencies) {
-        if (!ok) break;
-        const auto dep = entries_.find(d.id);
-        if (dep == entries_.end() || !d.range.contains(dep->second.manifest.version) || !visit(d.id, mark, lock)) {
-            ok = false;
-            e.state = ModuleState::MissingDependency;
-            e.stateDetail = "needs " + d.id + " " + d.range.str() +
-                            (dep == entries_.end() ? " (not installed)"
-                                                   : " (installed " + dep->second.manifest.version.str() + ", " +
-                                                         toString(dep->second.state) + ")");
-        }
-    }
-    for (const Dependency& d : e.manifest.optionalDependencies) {
-        if (!ok) break;
-        if (entries_.count(d.id) && d.range.contains(entries_.at(d.id).manifest.version)) (void)visit(d.id, mark, lock);
-    }
+    bool ok = mayLoad(e) && requiredDependenciesActive(e, mark, lock);
     if (ok) {
-        std::unique_ptr<IModuleInstance> instance;
-        std::string error;
-        lock.unlock();
-        try {
-            instance = load(e.manifest, e.signer, e.dir, e.options, false);
-        } catch (const std::exception& ex) {
-            error = ex.what();
+        for (const Dependency& d : e.manifest.optionalDependencies) {
+            if (entries_.count(d.id) && d.range.contains(entries_.at(d.id).manifest.version)) (void)visit(d.id, mark, lock);
         }
-        lock.lock();
-        if (instance) {
-            e.instance = std::move(instance);
-            e.state = ModuleState::Active;
-            e.stateDetail.clear();
-            order_.push_back(id);
-        } else {
-            e.state = ModuleState::Failed;
-            e.stateDetail = error;
-            ok = false;
-        }
+        ok = start(id, e, lock);
     }
     mark[id] = 2;
     return ok;
+}
+
+bool ModuleRegistry::mayLoad(Entry& e) const {
+    if (!e.enabled) {
+        e.state = ModuleState::Disabled;
+        e.stateDetail = "disabled by the admin";
+        return false;
+    }
+    if (e.manifest.deprecation && config_.hostVersion >= e.manifest.deprecation->removedIn) {
+        e.state = ModuleState::Failed;
+        e.stateDetail = "removed in host " + e.manifest.deprecation->removedIn.str();
+        return false;
+    }
+    return true;
+}
+
+bool ModuleRegistry::requiredDependenciesActive(Entry& e, VisitMarks& mark, std::unique_lock<std::mutex>& lock) {
+    for (const Dependency& d : e.manifest.dependencies) {
+        const auto dep = entries_.find(d.id);
+        if (dep != entries_.end() && d.range.contains(dep->second.manifest.version) && visit(d.id, mark, lock)) continue;
+        e.state = ModuleState::MissingDependency;
+        e.stateDetail = "needs " + d.id + " " + d.range.str() +
+                        (dep == entries_.end() ? " (not installed)"
+                                               : " (installed " + dep->second.manifest.version.str() + ", " +
+                                                     toString(dep->second.state) + ")");
+        return false;
+    }
+    return true;
+}
+
+bool ModuleRegistry::start(const std::string& id, Entry& e, std::unique_lock<std::mutex>& lock) {
+    std::unique_ptr<IModuleInstance> instance;
+    std::string error;
+    lock.unlock();
+    try {
+        instance = load(e.manifest, e.signer, e.dir, e.options, false);
+    } catch (const std::exception& ex) {
+        error = ex.what();
+    }
+    lock.lock();
+    if (!instance) {
+        e.state = ModuleState::Failed;
+        e.stateDetail = error;
+        return false;
+    }
+    e.instance = std::move(instance);
+    e.state = ModuleState::Active;
+    e.stateDetail.clear();
+    order_.push_back(id);
+    return true;
 }
 
 void ModuleRegistry::resolve() {

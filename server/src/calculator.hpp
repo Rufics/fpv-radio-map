@@ -57,6 +57,12 @@ private:
                      std::vector<ModuleFailure>& failures);
     void runRouteModules(const json& mission, json& result, const CalcContext& ctx);
 
+    struct CoverageRun;
+    /// One pool thread of a coverage calculation: takes rows until none are left.
+    void coverageWorker(CoverageRun& run);
+    void coverageRow(CoverageRun& run, std::size_t row);
+    void runCoverageModules(const json& mission, LinkKind kind, const CalcContext& ctx, std::size_t cells, json& grid);
+
     LinkService& links_;
     WeatherService& weather_;
     const BuiltinModules& builtins_;
