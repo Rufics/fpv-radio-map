@@ -80,6 +80,9 @@ jobs:
         run: cmake --build build-sonar
       - name: Test C++
         run: ctest --test-dir build-sonar --output-on-failure
+      # Branch coverage counts only the decisions in the source: the hidden exception paths
+      # the compiler adds to every call that may throw, and branches no code can reach, are left
+      # out, or they would dominate the branch count without saying anything about the tests.
       - name: C++ coverage
         run: |
           mkdir -p sonar-reports
@@ -87,6 +90,7 @@ jobs:
             --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
             --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' \
             --exclude '.*/tests/.*' \
+            --exclude-throw-branches --exclude-unreachable-branches \
             --sonarqube sonar-reports/cpp-coverage.xml \
             build-sonar
 
