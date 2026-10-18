@@ -53,11 +53,11 @@ json JobManager::start(const std::string& missionId, const json& mission) {
             try {
                 json grid = calc_.coverage(
                     mission, linkKindFromString(job->parts[i].link),
-                    [&](double p) {
+                    [this, &job, i](double p) {
                         std::lock_guard lock(mutex_);
                         job->parts[i].progress = p;
                     },
-                    [&] { return job->cancelled.load(); }, cells_);
+                    [&job] { return job->cancelled.load(); }, cells_);
                 std::lock_guard lock(mutex_);
                 job->parts[i].state = grid.value("cached", false) ? "cached" : "done";
                 job->parts[i].progress = 1.0;

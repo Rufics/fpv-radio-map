@@ -7,7 +7,7 @@ namespace rfmap {
 std::string inputHash(const json& inputs) { return Secrets::hex(Secrets::sha256(inputs.dump())); }
 
 std::optional<json> PgResultTable::get(const std::string& hash) {
-    return db_.tx([&](pqxx::work& w) -> std::optional<json> {
+    return db_.tx([&hash](pqxx::work& w) -> std::optional<json> {
         const auto r = w.exec_params(
             "update result_cache set last_hit_at = now(), hits = hits + 1 where input_hash = $1 returning result::text",
             hash);
@@ -17,7 +17,7 @@ std::optional<json> PgResultTable::get(const std::string& hash) {
 }
 
 void PgResultTable::put(const std::string& hash, const std::string& kind, const json& result, std::size_t bytes) {
-    db_.tx([&](pqxx::work& w) {
+    db_.tx([&hash, &kind, &result, bytes](pqxx::work& w) {
         w.exec_params(
             "insert into result_cache(input_hash, kind, result, bytes) values ($1, $2, $3::jsonb, $4) "
             "on conflict (input_hash) do update set result = excluded.result, bytes = excluded.bytes, last_hit_at = now()",
@@ -26,7 +26,7 @@ void PgResultTable::put(const std::string& hash, const std::string& kind, const 
 }
 
 void PgResultTable::trim(std::size_t maxRows, std::size_t maxBytes) {
-    db_.tx([&](pqxx::work& w) {
+    db_.tx([maxRows, maxBytes](pqxx::work& w) {
         // Keep the newest rows whose running byte total stays within the limit.
         w.exec_params(
             "delete from result_cache where input_hash in ("
@@ -40,11 +40,11 @@ void PgResultTable::trim(std::size_t maxRows, std::size_t maxBytes) {
 }
 
 void PgResultTable::clear() {
-    db_.tx([&](pqxx::work& w) { w.exec("delete from result_cache"); });
+    db_.tx([](pqxx::work& w) { w.exec("delete from result_cache"); });
 }
 
 IResultTable::Usage PgResultTable::usage() {
-    return db_.tx([&](pqxx::work& w) {
+    return db_.tx([](pqxx::work& w) {
         const auto r = w.exec("select count(*), coalesce(sum(bytes), 0) from result_cache");
         return Usage{r[0][0].as<std::size_t>(), r[0][1].as<std::size_t>()};
     });

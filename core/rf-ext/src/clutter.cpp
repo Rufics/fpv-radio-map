@@ -41,7 +41,7 @@ ClutterConditioner::ClutterConditioner(std::map<LandCover, ClassSetting> setting
 ClutterConditioner::Report ClutterConditioner::apply(rfcore::TerrainProfile& profile) const {
     Report r;
     auto& samples = profile.mutableSamples();
-    auto addSource = [&](const std::string& s) {
+    auto addSource = [&r](const std::string& s) {
         if (!s.empty() && std::find(r.sources.begin(), r.sources.end(), s) == r.sources.end()) r.sources.push_back(s);
     };
     for (std::size_t i = 1; i + 1 < samples.size(); ++i) {

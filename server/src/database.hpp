@@ -37,7 +37,7 @@ public:
     /// Runs `f` in a transaction and commits it.
     template <class F>
     auto tx(F&& f) -> decltype(f(std::declval<pqxx::work&>())) {
-        return with([&](pqxx::connection& c) {
+        return with([&f](pqxx::connection& c) {
             pqxx::work w(c);
             if constexpr (std::is_void_v<decltype(f(w))>) {
                 f(w);

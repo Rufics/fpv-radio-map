@@ -4,6 +4,7 @@
 
 #include <rfcore/terrain_profile.hpp>
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -11,6 +12,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -19,6 +21,12 @@ class GDALRasterBand;
 class OGRCoordinateTransformation;
 
 namespace rfmap {
+
+/// A raster file that cannot be opened, read or placed on the WGS84 ellipsoid.
+class RasterError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 /// One decoded block of a raster band, as 32-bit floats (DEM heights and land cover codes both
 /// fit exactly).
@@ -59,7 +67,7 @@ private:
     GDALDataset* dataset_ = nullptr;
     GDALRasterBand* band_ = nullptr;
     OGRCoordinateTransformation* toRaster_ = nullptr;  ///< null when the raster is in WGS84 lon/lat
-    double inverse_[6]{};
+    std::array<double, 6> inverse_{};
     int width_ = 0, height_ = 0, blockW_ = 0, blockH_ = 0;
     std::optional<double> noData_;
     rfcore::Metres resolution_{0.0};

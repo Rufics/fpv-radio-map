@@ -106,7 +106,7 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
     m.entry = document.at("entry").get<std::map<std::string, std::string>>();
 
     bool ok = true;
-    auto check = [&](const std::string& name, bool passed, const std::string& detail) {
+    auto check = [&report, &ok](const std::string& name, bool passed, const std::string& detail) {
         report.add(name, passed, detail);
         ok = ok && passed;
     };

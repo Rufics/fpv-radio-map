@@ -127,7 +127,7 @@ ResolvedLink LinkService::resolve(const json& setup, LinkKind kind) const {
     }
     r.txPowerDbm = setup.at("txPowerDbm").get<double>();
     const auto& steps = radio.at("txPowerDbm");
-    if (std::none_of(steps.begin(), steps.end(), [&](const json& s) { return s.get<double>() == r.txPowerDbm; })) {
+    if (std::none_of(steps.begin(), steps.end(), [&r](const json& s) { return s.get<double>() == r.txPowerDbm; })) {
         throw HttpError(422, "radio profile '" + radioRef.id + "' has no " + fmt(r.txPowerDbm) + " dBm power step",
                         {{"steps", steps}});
     }
@@ -360,7 +360,7 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
 
     // Report positions in ground -> air order whatever the direction of transmission.
     const std::size_t n = samples.size();
-    auto groundIndex = [&](std::size_t i) { return b.txIsGround ? i : n - 1 - i; };
+    auto groundIndex = [&b, n](std::size_t i) { return b.txIsGround ? i : n - 1 - i; };
     const auto& gs = path.profile->samples();
     const rfcore::DiffractionResult& d = r.diffraction;
     json diff = {{"lineOfSight", d.lineOfSight},
@@ -459,7 +459,7 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
     // A module that failed in any of the band's evaluations is listed once.
     std::vector<ModuleFailure> unique;
     for (const auto& f : out.failures) {
-        if (std::none_of(unique.begin(), unique.end(), [&](const ModuleFailure& u) { return u.moduleId == f.moduleId; })) {
+        if (std::none_of(unique.begin(), unique.end(), [&f](const ModuleFailure& u) { return u.moduleId == f.moduleId; })) {
             unique.push_back(f);
         }
     }
