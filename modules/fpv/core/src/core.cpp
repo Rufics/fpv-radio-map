@@ -35,8 +35,9 @@ bool sameGeometry(const Mission& a, const Mission& b) {
     return true;
 }
 
-json compare(const json& missionA, const json& compareOpt, const IWorld& world, double stepM,
-             const std::function<std::unique_ptr<ILinkEvaluator>(const json&)>& evalFor, json& reasons) {
+template <typename EvalFor>
+json compare(const json& missionA, const json& compareOpt, const IWorld& world, double stepM, const EvalFor& evalFor,
+             json& reasons) {
     json missionB = missionA;
     missionB.merge_patch(compareOpt.at("patch"));
     const std::string name = compareOpt.value("name", "B");
