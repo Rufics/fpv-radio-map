@@ -63,7 +63,9 @@ public:
     /// Run by the server on upload, in a worker, before anything is installed. Return
     /// {"ok": bool, "checks": [{"name", "ok", "detail"}]}. Check your maths against known cases here.
     [[nodiscard]] virtual json selftest() { return {{"ok", true}, {"checks", json::array()}}; }
-    virtual void shutdown() {}
+    virtual void shutdown() {
+        // Nothing to release by default; modules that hold resources override this.
+    }
 
 protected:
     [[nodiscard]] const HostClient& host() const {
