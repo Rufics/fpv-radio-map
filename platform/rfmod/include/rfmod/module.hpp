@@ -84,10 +84,15 @@ struct ModuleAdapter {
     }
 
     /// A module-owned copy for the host; the host hands it back to freeString, never to free().
-    static char* copy(const std::string& s) {
-        auto* out = new (std::nothrow) char[s.size() + 1];
-        if (out) std::memcpy(out, s.c_str(), s.size() + 1);
-        return out;
+    /// Null if memory runs out, so no exception crosses the ABI.
+    static char* copy(const std::string& s) noexcept {
+        try {
+            auto out = std::make_unique<char[]>(s.size() + 1);
+            std::memcpy(out.get(), s.c_str(), s.size() + 1);
+            return out.release();
+        } catch (const std::bad_alloc&) {
+            return nullptr;
+        }
     }
 
     static char* error(const char* code, const std::string& message) {
@@ -135,7 +140,10 @@ struct ModuleAdapter {
         }
     }
 
-    static void freeString(char* s) { delete[] s; }
+    static void freeString(char* s) {
+        // Takes back the ownership copy() released; the destructor frees the string.
+        const std::unique_ptr<char[]> owned(s);
+    }
 
     static void shutdown() {
         try {
