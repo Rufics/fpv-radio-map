@@ -46,7 +46,9 @@ You can also run the steps one at a time with the same options: `basemap`, `dem`
 | `--contour-interval 10` | contour spacing in m (default 20) |
 | `--basemap-maxzoom 14` | much smaller basemap that looks the same (the map over-zooms) |
 | `--dem-source srtm` | fallback DEM (AWS Terrain Tiles, SRTM-based) if Copernicus is not reachable |
-| `--dem-file my.tif` | use your own DEM files from `data/inputs/` (repeatable) |
+| `--dem-file my.tif` | use your own DEM files (repeatable; a bare name is also looked up in `data/inputs/`) |
+| `--osm-url https://…/x.osm.pbf` | any https OSM extract instead of `--region` |
+| `--data`, `--out` | other data and output directories; both must lie inside the directory the build starts in (`/data` in the image) |
 | `--java-heap 6g` | memory for the basemap step |
 | `--public-base-url https://maps.example.org/tiles` | URL written into the style (default `/tiles`) |
 | `--force` | rebuild even if nothing changed |
@@ -60,9 +62,10 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-buil
     --sat-licence-checked
 ```
 
-- `--sat-provider` takes one of the built-in mosaics: `eox-s2cloudless-2016` and `eox-s2cloudless-2018` to `eox-s2cloudless-2023` (Sentinel-2 cloudless by EOX). The build downloads tiles only from this list, never from a URL you type.
-- For a mosaic you downloaded yourself, put the GeoTIFF/COG in `data/inputs/` and pass `--sat-file <name> --sat-mosaic <mosaic>` instead of `--sat-provider`. `--sat-mosaic` takes one of the EOX names above or `copernicus-sentinel-2` (any Sentinel-2 imagery, together with `--sat-data-year <year>`). The name, licence note and attribution come from the mosaic table in `rfmap_tiles/sources.py`; to use a mosaic that is not listed, add it there.
-- **Check the licence yourself before publishing.** Sentinel-2 cloudless mosaics are published under different licences per provider and per year. EOX lists the 2016 mosaic as CC BY 4.0 and the later years as CC BY-NC-SA 4.0 (non-commercial); some tile services forbid bulk downloading altogether. Read the provider's current licence and terms of service, then pass `--sat-licence-checked`. Without it the manifest records the licence as `UNVERIFIED`.
+- `--sat-provider` takes one of the built-in mosaics: `eox-s2cloudless-2016` and `eox-s2cloudless-2018` to `eox-s2cloudless-2023` (Sentinel-2 cloudless by EOX).
+- For a listed mosaic you downloaded yourself, put the GeoTIFF/COG in `data/inputs/` and pass `--sat-file <name> --sat-mosaic <mosaic>` instead of `--sat-provider`. `--sat-mosaic` takes one of the EOX names above or `copernicus-sentinel-2` (any Sentinel-2 imagery, together with `--sat-data-year <year>`).
+- For any other mosaic, pass `--sat-source` with an https XYZ template such as `https://host/path/{z}/{y}/{x}.jpg`, or a GeoTIFF/COG as a local path or https URL, together with `--sat-name`, `--sat-licence` and `--sat-attribution`.
+- **Check the licence yourself before publishing.** Sentinel-2 cloudless mosaics are published under different licences per provider and per year. EOX lists the 2016 mosaic as CC BY 4.0 and the later years as CC BY-NC-SA 4.0 (non-commercial); some tile services forbid bulk downloading altogether. Read the provider's current licence and terms of service, then pass `--sat-licence-checked` (or both `--sat-licence` and `--sat-attribution`). Without it the manifest records the licence as `UNVERIFIED`.
 - The download is rate-limited (`--sat-rate`, default 4 requests/s) and refuses jobs above `--sat-max-tiles`.
 - With `satellite.pmtiles` built, the web app shows a **Map / Satellite** switch on the map. Without it there is no switch, and the browser does not ask for the file.
 
@@ -138,7 +141,7 @@ Before going public, check the current licence pages of Copernicus DEM, ESA Worl
 
 ## 10. Known limitations and honest notes
 
-- **Geofabrik** (OSM extracts), **osmdata.openstreetmap.de** (water polygons) and **naciscdn.org** (Natural Earth) need direct internet access. They require no credentials. If your network blocks them, download the files elsewhere into `data/inputs/` and pass their names with `--osm-file`, `--water-polygons-file` and `--natural-earth-file`.
+- **Geofabrik** (OSM extracts), **osmdata.openstreetmap.de** (water polygons) and **naciscdn.org** (Natural Earth) need direct internet access. They require no credentials. If your network blocks them, download the files elsewhere into `data/inputs/` and pass their names with `--osm-file`, `--water-polygons-file` and `--natural-earth-file`, or point `--osm-url` at a mirror.
 - **Copernicus DEM** comes from the public AWS bucket, with no account needed. Some tiles are missing from the public GLO-30 release: open ocean, and a few countries the provider withholds. Missing tiles become NoData, never invented heights, and are listed under `missing_tiles` in the manifest.
 - **Copernicus is a surface model.** It includes buildings and tree canopy. Heights are relative to the EGM2008 geoid.
 - **The SRTM fallback** uses AWS Terrain Tiles, a blend based mostly on SRTM. The original NASA SRTMGL1 tiles need a free NASA Earthdata login. Download those yourself into `data/inputs/` and use `--dem-file`.

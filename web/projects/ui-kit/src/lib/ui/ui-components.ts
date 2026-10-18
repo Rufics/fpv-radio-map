@@ -117,7 +117,7 @@ const PART_MARK: Record<string, string> = { done: '✓', cached: '✓', running:
       }
     </div>
     @if (showCancel()) {
-      <button type="button" class="rf-btn rf-btn--secondary" (click)="cancel.emit()">Cancel</button>
+      <button type="button" class="rf-btn rf-btn--secondary" (click)="cancelRequested.emit()">Cancel</button>
     }
   `,
   styles: `
@@ -137,7 +137,7 @@ export class JobProgressComponent {
   readonly job = input<Job | null>(null);
   readonly extraParts = input<JobPart[]>([]);
   readonly showCancel = input(true);
-  readonly cancel = output<void>();
+  readonly cancelRequested = output<void>();
   protected readonly parts = computed(() => [...this.extraParts(), ...(this.job()?.parts ?? [])]);
   protected mark(p: JobPart): string {
     return PART_MARK[p.state ?? 'waiting'] ?? '○';

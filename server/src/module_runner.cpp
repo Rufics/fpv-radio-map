@@ -19,11 +19,11 @@ LossContributionScope::~LossContributionScope() { activeContributor.swap(previou
 
 const std::string& LossContributionScope::active() { return activeContributor; }
 
-ModuleLossContributor::ModuleLossContributor(rfmod::IModuleInstance& module, json options, PathEnds ends,
+ModuleLossContributor::ModuleLossContributor(rfmod::IModuleInstance& instance, json options, PathEnds ends,
                                              TimePoint time, const LandCoverSource* landcover,
                                              std::vector<ModuleFailure>& failures)
-    : module_(module),
-      id_(module.manifest().id),
+    : module_(instance),
+      id_(instance.manifest().id),
       options_(std::move(options)),
       ends_(std::move(ends)),
       time_(time),

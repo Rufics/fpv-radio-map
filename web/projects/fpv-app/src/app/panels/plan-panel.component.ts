@@ -108,7 +108,7 @@ import { CompareService } from '../core/fpv-core';
         }
       }
       @if (busy()) {
-        <rf-job-progress [job]="ws.store.job()" [extraParts]="routePart()" (cancel)="ws.store.cancel()" />
+        <rf-job-progress [job]="ws.store.job()" [extraParts]="routePart()" (cancelRequested)="ws.store.cancel()" />
         <div class="rf-caption">Finished parts appear on the map right away.</div>
       }
       @if (ws.store.calcState() === 'cancelled') {

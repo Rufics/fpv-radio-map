@@ -67,9 +67,9 @@ struct PreparedPath {
 
 /// A failure of an optional module during a calculation. Never fails the request.
 struct ModuleFailure {
-    std::string module;
+    std::string moduleId;
     std::string error;
-    [[nodiscard]] json toJson() const { return {{"module", module}, {"error", error}}; }
+    [[nodiscard]] json toJson() const { return {{"module", moduleId}, {"error", error}}; }
 };
 
 struct LinkEvaluation {

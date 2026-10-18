@@ -14,10 +14,10 @@ Admin step-by-step guide: [`docs/admin/tiles-builder.md`](../../docs/admin/tiles
 
 | command | output (in `/data/out`) | source |
 |---|---|---|
-| `basemap` | `basemap.pmtiles`: vector, OpenMapTiles schema, z0–16 | OSM `.osm.pbf` (`--region` Geofabrik id/path, or `--osm-file` from `inputs/`) |
-| `dem` | `dem.cog.tif` (**calculation DEM**), `hillshade.pmtiles`, `contours.pmtiles` | Copernicus DEM GLO-30 (AWS `copernicus-dem-30m`, no auth); `--dem-source srtm` / `--dem-file` from `inputs/` |
+| `basemap` | `basemap.pmtiles`: vector, OpenMapTiles schema, z0–16 | OSM `.osm.pbf` (`--region` Geofabrik id/path, `--osm-url`, or a local `--osm-file`) |
+| `dem` | `dem.cog.tif` (**calculation DEM**), `hillshade.pmtiles`, `contours.pmtiles` | Copernicus DEM GLO-30 (AWS `copernicus-dem-30m`, no auth); `--dem-source srtm` / local `--dem-file` |
 | `landcover` | `landcover.cog.tif` (clutter classes) | ESA WorldCover 10 m 2021 v200 (AWS, no auth) |
-| `satellite` | `satellite.pmtiles`: raster | `--sat-provider` (a built-in XYZ mosaic) or `--sat-file` (a raster in `inputs/`); you choose it, see licences |
+| `satellite` | `satellite.pmtiles`: raster | `--sat-provider` (a built-in XYZ mosaic), `--sat-file` (a local raster of a listed mosaic) or `--sat-source` (any XYZ template or raster); you choose it, see licences |
 | `all` | everything above | |
 | `style` | `style-dark.json` + `fonts/` | `styles/style-dark.template.json` |
 | `manifest` | `manifest.json` | the per-file records in `out/.meta/` |
@@ -25,9 +25,12 @@ Admin step-by-step guide: [`docs/admin/tiles-builder.md`](../../docs/admin/tiles
 
 `style-dark.json` and `manifest.json` are rewritten after every command. Run `rfmap-tiles <command> --help` to see all options.
 
-Directory layout: `/data/inputs` holds files you supply. `/data/cache` holds downloads and is reused between runs. `/data/work` holds temporary files. `/data/out` holds the results.
+Directory layout: the data directory (`--data`, default `$RFMAP_DATA` or the current directory, which is `/data` in the image) holds `cache/` (downloads, reused between runs), `work/` (temporary files) and `out/` (the results; `--out` moves them). `inputs/` is a convenient place for files you supply: a bare file name that is not found in the current directory is looked up there.
 
-**Fixed sources only:** the build downloads only from the URLs in `rfmap_tiles/sources.py` (https, redirects too): Geofabrik extracts as its index lists them, Planetiler's auxiliary files, Copernicus, SRTM, WorldCover and the satellite providers below. It never fetches a URL typed on the command line. For any other source, download the file yourself into `data/inputs/` and name it with the matching `--…-file` option; files outside `inputs/` are refused. `--java-heap` takes a size such as `4g`.
+**Command-line values are validated before use** (the tool may be run by scripts or AI agents, so its arguments are treated as untrusted):
+- Paths (`--data`, `--out` and every `--…-file`) are resolved with `realpath` and must lie inside the directory the build is started from (`/data` in the image). They may use only letters, digits and `_ . , / : = + -`.
+- Text and numbers that reach a tool's command line must match that same character set and may not start with `-`, so they cannot add options to the command. `--java-heap` takes a size such as `4g`; `--region` takes lower-case letters, digits, `_`, `-` and `/`.
+- URLs (`--osm-url`, `--sat-source`) must be `https://`, contain no spaces or quotes, and resolve (here, not only through a proxy) to public addresses. The host is resolved and checked once, and every connection then goes to that checked address, also through an http proxy, which is asked to CONNECT to the address rather than the name (`https_proxy` must then be a full proxy URL with the http scheme). Files are downloaded this way with `curl --connect-to`; XYZ tiles go over reused connections from one lookup per job. Redirects are not followed: a URL that redirects fails, so pass the final URL. A raster given by URL is downloaded into `cache/` first. Downloads from the fixed sources follow https redirects.
 
 **Idempotent:** every output is written under a temporary name and renamed into place only when it is finished. A step whose output already exists, was built with the same parameters and has the same sha256 is skipped. `--force` rebuilds it.
 
@@ -53,8 +56,9 @@ Directory layout: `/data/inputs` holds files you supply. `/data/cache` holds dow
 
 **Satellite source is your choice, and there is no default.**
 - `--sat-provider` picks an XYZ mosaic from the built-in list: `eox-s2cloudless-2016` (EOX notes CC BY 4.0) and `eox-s2cloudless-2018` … `-2023` (EOX notes CC BY-NC-SA 4.0, non-commercial). Tiles are copied byte for byte, rate-limited (`--sat-rate`) and capped (`--sat-max-tiles`). An interrupted download resumes.
-- `--sat-file` takes a GeoTIFF/COG/VRT in `inputs/`, reprojects it and writes JPEG tiles. `--sat-mosaic` says which mosaic the file holds: one of the EOX entries or `copernicus-sentinel-2` (any Sentinel-2 imagery; also pass `--sat-data-year`). A mosaic that is not listed is added to `SATELLITE_MOSAICS` in `rfmap_tiles/sources.py` first.
-- **Licences differ between Sentinel-2 cloudless mosaics, and many tile services forbid bulk downloading.** The operator must check the chosen mosaic's licence and terms (the site is non-commercial) and confirm that with `--sat-licence-checked`. Without it the manifest marks the licence `UNVERIFIED`. Name, licence note and attribution text come from the mosaic table, never from the command line.
+- `--sat-file` takes a local GeoTIFF/COG/VRT, reprojects it and writes JPEG tiles. `--sat-mosaic` says which listed mosaic the file holds: one of the EOX entries or `copernicus-sentinel-2` (any Sentinel-2 imagery; also pass `--sat-data-year`).
+- `--sat-source` takes any other mosaic: an https XYZ template with `{z}` `{x}` `{y}` (or `{-y}` for TMS rows), copied byte for byte like a provider, or a GDAL raster as a local path or an https URL. Give its texts with `--sat-name`, `--sat-licence` and `--sat-attribution`; these three also override the table's texts for a listed mosaic.
+- **Licences differ between Sentinel-2 cloudless mosaics, and many tile services forbid bulk downloading.** The operator must check the chosen mosaic's licence and terms (the site is non-commercial) and confirm that with `--sat-licence-checked` (or by passing both `--sat-licence` and `--sat-attribution`). Without it the manifest marks the licence `UNVERIFIED`.
 
 **PMTiles packaging.** GDAL (raster MBTiles, vector MVT) → `pmtiles convert`. The header zoom range is taken from the tiles that actually exist, so the archives pass `pmtiles verify`.
 

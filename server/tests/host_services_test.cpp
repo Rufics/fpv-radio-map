@@ -119,7 +119,7 @@ TEST(TermPrefixRule, AFailingModuleContributesNothingAndIsReported) {
     const auto r = evaluateWith(std::make_shared<ModuleLossContributor>(m, json::object(), ends(), Clock::now(),
                                                                         nullptr, failures));
     ASSERT_EQ(failures.size(), 1u);
-    EXPECT_EQ(failures[0].module, "acme.broken");
+    EXPECT_EQ(failures[0].moduleId, "acme.broken");
     EXPECT_NE(failures[0].error.find("division by zero"), std::string::npos);
     EXPECT_DOUBLE_EQ(r.margin.value(), base.margin.value());
 }

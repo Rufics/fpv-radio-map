@@ -72,9 +72,9 @@ private:
 };
 
 /// A "why" line (OpenAPI Reason).
-inline json reason(const std::string& module, const std::string& severity, const std::string& text,
+inline json reason(const std::string& moduleId, const std::string& severity, const std::string& text,
                    const json& fix = nullptr) {
-    json r = {{"module", module}, {"severity", severity}, {"text", text}};
+    json r = {{"module", moduleId}, {"severity", severity}, {"text", text}};
     if (!fix.is_null()) r["fix"] = fix;
     return r;
 }

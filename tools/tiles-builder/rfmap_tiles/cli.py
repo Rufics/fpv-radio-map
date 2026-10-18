@@ -4,25 +4,33 @@
   rfmap-tiles dem       --bbox minLon,minLat,maxLon,maxLat
   rfmap-tiles landcover --bbox ...
   rfmap-tiles satellite --bbox ... --sat-provider NAME | --sat-file FILE --sat-mosaic NAME
-  rfmap-tiles all       --bbox ... [--region ...] [--sat-provider ... | --sat-file ...]
+                        | --sat-source TEMPLATE_OR_RASTER --sat-licence ... --sat-attribution ...
+  rfmap-tiles all       --bbox ... [--region ...] [--sat-provider ... | --sat-file ... | --sat-source ...]
   rfmap-tiles style | manifest | verify
 
-Everything lives in the /data volume: input files in /data/inputs, downloads cached in
-/data/cache, outputs in /data/out.
+The build works inside the directory it is started from (/data in the image): every path given
+on the command line must lie inside it. Downloads are cached in <data>/cache, outputs go to
+<data>/out.
 """
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 
 from . import basemap, dem, landcover, manifest, satellite, style
-from .common import BBox, BuildError, Dirs, log, run, warn
+from .common import BBox, BuildError, Dirs, directory, log, run, warn
 
 
 def _common(p: argparse.ArgumentParser) -> None:
     g = p.add_argument_group("common")
     g.add_argument("--bbox", help="minLon,minLat,maxLon,maxLat (WGS84 degrees)")
+    g.add_argument("--data", type=directory, default=os.environ.get("RFMAP_DATA", "."),
+                   help="data directory: cache/, work/ and out/ live here (default: $RFMAP_DATA, else the "
+                        "current directory, which is /data in the image). Must lie inside the current directory.")
+    g.add_argument("--out", type=directory, default=None,
+                   help="output directory (default <data>/out). Must lie inside the current directory.")
     g.add_argument("--force", action="store_true", help="rebuild even if the output is up to date")
     g.add_argument("--threads", type=int, default=None, help="worker threads for Planetiler (default: all CPUs)")
 
@@ -83,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.bbox:
             BBox.parse(args.bbox)  # fail early on a malformed bbox
-        dirs = Dirs.make()
+        dirs = Dirs.make(args.data, args.out)
         cmd = args.command
         if cmd == "verify":
             return 0 if verify(dirs) else 1
@@ -97,8 +105,8 @@ def main(argv: list[str] | None = None) -> int:
         if cmd in ("landcover", "all"):
             landcover.build(args, dirs)
         if cmd in ("satellite", "all"):
-            if cmd == "all" and not (args.sat_provider or args.sat_file):
-                warn("all: no --sat-provider/--sat-file given; skipping satellite "
+            if cmd == "all" and not (args.sat_provider or args.sat_file or args.sat_source):
+                warn("all: no --sat-provider/--sat-file/--sat-source given; skipping satellite "
                      "(choose a mosaic and check its licence)")
             else:
                 satellite.build(args, dirs)

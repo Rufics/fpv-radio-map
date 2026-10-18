@@ -14,9 +14,10 @@ import shutil
 from pathlib import Path
 
 from . import raster, sources
-from .common import (BBox, BuildError, Dirs, download, fresh_dir, http_status, input_file, inputs_entry, install, is_up_to_date,
+from .common import (BBox, BuildError, Dirs, download, existing_file, fresh_dir, http_status, install, is_up_to_date,
                      mbtiles_set_metadata, mbtiles_to_pmtiles, overview_factors, pmtiles_header,
-                     run, sha256_file, tile_aligned_extent, warn, write_meta, zoom_resolution)
+                     run, safe_arg, safe_file, safe_float, safe_int, sha256_file, tile_aligned_extent, warn,
+                     write_meta, zoom_resolution)
 
 DEM_OUT = "dem.cog.tif"
 HILLSHADE_OUT = "hillshade.pmtiles"
@@ -28,9 +29,9 @@ def add_arguments(p) -> None:
     g = p.add_argument_group("dem (elevation)")
     g.add_argument("--dem-source", choices=["copernicus", "srtm", "file"], default="copernicus",
                    help="copernicus = Copernicus DEM GLO-30 from AWS (default); srtm = AWS Terrain Tiles "
-                        "1\" HGT (fallback); file = rasters in /data/inputs given with --dem-file")
-    g.add_argument("--dem-file", type=input_file, action="append", default=[],
-                   help="DEM raster(s) in /data/inputs on one shared grid (repeatable); implies --dem-source file")
+                        "1\" HGT (fallback); file = local rasters given with --dem-file")
+    g.add_argument("--dem-file", type=existing_file, action="append", default=[],
+                   help="local DEM raster(s) on one shared grid (repeatable); implies --dem-source file")
     g.add_argument("--allow-dem-resample", action="store_true",
                    help="allow mosaicking tiles of different pixel size (e.g. Copernicus across 50°N) by "
                         "nearest-neighbour duplication onto the finest grid. Off by default.")
@@ -112,16 +113,19 @@ def build(args, dirs: Dirs) -> None:
     if not args.bbox:
         raise BuildError("dem needs --bbox minLon,minLat,maxLon,maxLat")
     bbox = BBox.parse(args.bbox)
-    source = "file" if args.dem_file else args.dem_source
-    if source == "file" and not args.dem_file:
+    files = [safe_file(f, "--dem-file") for f in args.dem_file]
+    source = "file" if files else safe_arg(args.dem_source, "--dem-source")
+    if source not in ("copernicus", "srtm", "file"):
+        raise BuildError(f"unknown --dem-source {source!r}")
+    if source == "file" and not files:
         raise BuildError("--dem-source file needs at least one --dem-file")
     if bbox.area_km2() > 250_000:
         warn(f"bbox is {bbox.area_km2():,.0f} km²; this will need a lot of disk and time")
 
     params = {"bbox": str(bbox), "source": source,
-              "files": sorted(f.name for f in args.dem_file), "allow_resample": args.allow_dem_resample}
+              "files": sorted(f.name for f in files), "allow_resample": bool(args.allow_dem_resample)}
     if not is_up_to_date(dirs, DEM_OUT, params, args.force):
-        _build_cog(args, dirs, bbox, source, params)
+        _build_cog(dirs, bbox, source, files, bool(args.allow_dem_resample), params)
     dem = dirs.out / DEM_OUT
     if args.no_hillshade and args.no_contours:
         return
@@ -143,7 +147,8 @@ def _source_info(source: str) -> dict:
     return sources.DEM_FILE
 
 
-def _build_cog(args, dirs: Dirs, bbox: BBox, source: str, params: dict) -> None:
+def _build_cog(dirs: Dirs, bbox: BBox, source: str, inputs: list[Path], allow_resample: bool,
+               params: dict) -> None:
     work = fresh_dir(dirs.work / "dem")
     src_info = _source_info(source)
     if source == "copernicus":
@@ -151,7 +156,7 @@ def _build_cog(args, dirs: Dirs, bbox: BBox, source: str, params: dict) -> None:
     elif source == "srtm":
         files, missing, urls = _fetch_srtm(bbox, dirs)
     else:
-        files = [inputs_entry(f.name) for f in args.dem_file]
+        files = inputs
         missing, urls = [], [f"file:{f.name}" for f in files]
     if not files:
         raise BuildError("no elevation tiles found for this bbox")
@@ -163,7 +168,7 @@ def _build_cog(args, dirs: Dirs, bbox: BBox, source: str, params: dict) -> None:
     resampled = False
     if len(distinct) > 1:
         detail = ", ".join(f"{f.name}: {dx:.9f}x{abs(dy):.9f}" for f, (dx, dy) in sizes.items())
-        if not args.allow_dem_resample:
+        if not allow_resample:
             raise BuildError("the DEM tiles for this bbox have different pixel sizes (Copernicus GLO-30 "
                              "widens its longitude spacing above 50° latitude). Mosaicking them would "
                              f"resample. Split the bbox at the zone border, or pass --allow-dem-resample. {detail}")
@@ -211,9 +216,10 @@ def _derived_params(derived: dict, extra: dict) -> dict:
 
 
 def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, derived: dict) -> None:
-    zmin, zmax = int(args.hillshade_minzoom), int(args.hillshade_maxzoom)
+    zmin = safe_int(args.hillshade_minzoom, "--hillshade-minzoom")
+    zmax = safe_int(args.hillshade_maxzoom, "--hillshade-maxzoom")
     style = "alpha" if args.hillshade_style == "alpha" else "gray"
-    exaggeration = float(args.hillshade_exaggeration)
+    exaggeration = safe_float(args.hillshade_exaggeration, "--hillshade-exaggeration")
     params = _derived_params(derived, {"zoom": [zmin, zmax], "style": style, "z": exaggeration})
     if is_up_to_date(dirs, HILLSHADE_OUT, params, args.force):
         return
@@ -288,11 +294,12 @@ def _shade_to_rgba(src: Path, dst: Path) -> None:
 
 
 def _build_contours(args, dirs: Dirs, bbox: BBox, dem: Path, derived: dict) -> None:
-    interval = float(args.contour_interval)
+    interval = safe_float(args.contour_interval, "--contour-interval")
     if interval <= 0:
         raise BuildError("--contour-interval must be > 0")
-    index_every = max(1, int(args.contour_index_every))
-    zmin, zmax = int(args.contours_minzoom), int(args.contours_maxzoom)
+    index_every = max(1, safe_int(args.contour_index_every, "--contour-index-every"))
+    zmin = safe_int(args.contours_minzoom, "--contours-minzoom")
+    zmax = safe_int(args.contours_maxzoom, "--contours-maxzoom")
     params = _derived_params(derived, {"interval": interval, "index_every": index_every, "zoom": [zmin, zmax]})
     if is_up_to_date(dirs, CONTOURS_OUT, params, args.force):
         return

@@ -459,7 +459,7 @@ LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const
     // A module that failed in any of the band's evaluations is listed once.
     std::vector<ModuleFailure> unique;
     for (const auto& f : out.failures) {
-        if (std::none_of(unique.begin(), unique.end(), [&](const ModuleFailure& u) { return u.module == f.module; })) {
+        if (std::none_of(unique.begin(), unique.end(), [&](const ModuleFailure& u) { return u.moduleId == f.moduleId; })) {
             unique.push_back(f);
         }
     }
