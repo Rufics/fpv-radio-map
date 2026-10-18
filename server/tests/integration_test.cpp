@@ -258,6 +258,16 @@ TEST_F(Integration, MapConfigOffersOnlyBuiltLayers) {
     EXPECT_FALSE(map.body.contains("satellite")) << map.body.dump();
     EXPECT_FALSE(map.body.contains("contours")) << map.body.dump();
     EXPECT_EQ(map.body["attribution"], json::array({"test basemap credit"}));
+
+    // A manifest the server cannot read is treated as none.
+    {
+        std::ofstream out(manifest);
+        out << R"({"files": ["basemap.pmtiles", 2]})";
+    }
+    const auto unreadable = call("GET", "/config/map");
+    fs::remove(manifest);
+    ASSERT_EQ(unreadable.status, 200);
+    EXPECT_TRUE(unreadable.body.contains("satellite"));
 }
 
 TEST_F(Integration, AdminAddsLibraryItemsWithVersions) {

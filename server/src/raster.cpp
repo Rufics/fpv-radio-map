@@ -198,19 +198,19 @@ std::vector<std::string> manifestAttributions(const fs::path& file) {
     return out;
 }
 
-std::optional<std::set<std::string>> manifestFiles(const fs::path& file) {
+std::optional<std::set<std::string, std::less<>>> manifestFiles(const fs::path& file) {
     std::ifstream in(file.parent_path() / "manifest.json");
     if (!in) return std::nullopt;
     try {
         const auto doc = nlohmann::json::parse(in);
         if (!doc.contains("files") || !doc.at("files").is_array()) return std::nullopt;
-        std::set<std::string> out;
+        std::set<std::string, std::less<>> out;
         for (const auto& f : doc.at("files")) {
             const std::string name = f.value("file", "");
             if (!name.empty()) out.insert(name);
         }
         return out;
-    } catch (const std::exception&) {
+    } catch (const nlohmann::json::exception&) {  // not JSON, or an entry that is not an object
         return std::nullopt;
     }
 }
