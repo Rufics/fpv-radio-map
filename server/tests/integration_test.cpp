@@ -238,6 +238,28 @@ TEST_F(Integration, HealthAndSeededLibrary) {
     for (const auto& item : lib.body) EXPECT_FALSE(item["verified"].get<bool>()) << item["id"];
 }
 
+TEST_F(Integration, MapConfigOffersOnlyBuiltLayers) {
+    // Without a manifest every layer is offered.
+    EXPECT_TRUE(call("GET", "/config/map").body.contains("satellite"));
+
+    // A tiles-builder run without satellite imagery and without contours.
+    const fs::path manifest = env->dir / "manifest.json";
+    {
+        std::ofstream out(manifest);
+        out << json{{"files", json::array({{{"file", "basemap.pmtiles"}, {"attribution", "test basemap credit"}},
+                                           {{"file", "hillshade.pmtiles"}},
+                                           {{"file", "dem.cog.tif"}}})}}.dump();
+    }
+    const auto map = call("GET", "/config/map");
+    fs::remove(manifest);
+    ASSERT_EQ(map.status, 200);
+    EXPECT_EQ(map.body["basemap"]["pmtiles"], "/tiles/basemap.pmtiles");
+    EXPECT_EQ(map.body["hillshade"]["pmtiles"], "/tiles/hillshade.pmtiles");
+    EXPECT_FALSE(map.body.contains("satellite")) << map.body.dump();
+    EXPECT_FALSE(map.body.contains("contours")) << map.body.dump();
+    EXPECT_EQ(map.body["attribution"], json::array({"test basemap credit"}));
+}
+
 TEST_F(Integration, AdminAddsLibraryItemsWithVersions) {
     const json ground = {{"id", "test-ground-dipole"}, {"name", "Test ground dipole"}, {"version", 1}, {"verified", true},
                          {"type", "dipole"}, {"gainDbi", 2.15}, {"polarization", "linear-vertical"},

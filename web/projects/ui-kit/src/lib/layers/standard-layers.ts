@@ -45,8 +45,9 @@ function demSource(ref: TileSourceRef): SourceSpecification {
  */
 export class DarkBaseLayer extends StyleLayerSet {
   readonly id = 'base-dark';
-  readonly title = 'Dark map';
+  readonly title = 'Map';
   readonly group = 'base' as const;
+  override readonly lazy = true;
   override readonly exclusive = true;
   override readonly order = 0;
   override readonly attribution: string;
@@ -94,13 +95,15 @@ export class SatelliteLayer extends StyleLayerSet {
   readonly id = 'base-satellite';
   readonly title = 'Satellite';
   readonly group = 'base' as const;
+  override readonly lazy = true;
   override readonly exclusive = true;
   override readonly order = 1;
   override readonly defaultVisible = false;
-  override readonly attribution: string;
+  /** Only an explicit credit: the operator's own (--sat-attribution) arrives with the manifest's. */
+  override readonly attribution?: string;
   constructor(private readonly ref: TileSourceRef) {
     super();
-    this.attribution = ref.attribution ?? 'Sentinel-2 cloudless (Copernicus)';
+    this.attribution = ref.attribution;
   }
   protected sources(): Record<string, SourceSpecification> {
     return { 'rf-satellite': rasterSource(this.ref) };
@@ -118,6 +121,7 @@ export class HillshadeLayer extends StyleLayerSet {
   readonly id = 'terrain-hillshade';
   readonly title = 'Hillshade';
   readonly group = 'terrain' as const;
+  override readonly lazy = true;
   override readonly attribution = 'Copernicus DEM';
   constructor(
     private readonly ref: TileSourceRef,
@@ -156,6 +160,7 @@ export class ContoursLayer extends StyleLayerSet {
   readonly id = 'terrain-contours';
   readonly title = 'Contours';
   readonly group = 'terrain' as const;
+  override readonly lazy = true;
   override readonly order = 1;
   override readonly defaultVisible = false;
   override readonly attribution = 'Copernicus DEM';
@@ -194,6 +199,7 @@ export class WeatherLayer extends StyleLayerSet {
   readonly id: string;
   readonly title: string;
   readonly group = 'weather' as const;
+  override readonly lazy = true;
   override readonly order: number;
   override readonly defaultVisible: boolean;
   override readonly attribution = 'Weather: Open-Meteo (ICON, GFS, ECMWF open data)';

@@ -35,7 +35,12 @@ export interface LayerDefinition {
   readonly legend?: string;
   /** Data credit added to the attribution line while visible. */
   readonly attribution?: string;
-  /** Add sources and style layers. Called once the map style is loaded. */
+  /**
+   * Add the sources only when the layer is first shown, so a hidden layer downloads nothing, not
+   * even its PMTiles header (tile layers). Once added, it stays added while hidden.
+   */
+  readonly lazy?: boolean;
+  /** Add sources and style layers. Called once the map style is loaded, or when first shown if lazy. */
   attach(map: MlMap, beforeId: string | undefined): void;
   detach(map: MlMap): void;
   setVisible(map: MlMap, visible: boolean): void;
@@ -55,6 +60,7 @@ export abstract class StyleLayerSet implements LayerDefinition {
   readonly exclusive: boolean = false;
   readonly defaultVisible: boolean = true;
   readonly internal: boolean = false;
+  readonly lazy: boolean = false;
   readonly legend?: string;
   readonly attribution?: string;
   protected map?: MlMap;

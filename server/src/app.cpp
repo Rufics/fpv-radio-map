@@ -287,6 +287,13 @@ json Application::mapConfig() const {
     if (!config_.data.dem.empty()) {
         const auto attributions = manifestAttributions(config_.data.dem);
         if (!attributions.empty()) out["attribution"] = attributions;
+        // Offer only the layers that were built, so the client shows no satellite view it cannot
+        // load. Without a manifest every layer is offered.
+        if (const auto files = manifestFiles(config_.data.dem)) {
+            for (const char* layer : {"basemap", "satellite", "hillshade", "contours"}) {
+                if (!files->contains(std::string(layer) + ".pmtiles")) out.erase(layer);
+            }
+        }
     }
     if (dem_) {
         const rfcore::GeoPoint c = dem_->raster().centre();

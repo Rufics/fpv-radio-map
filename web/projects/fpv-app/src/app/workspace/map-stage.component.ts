@@ -2,6 +2,7 @@ import { Component, DestroyRef, computed, effect, inject, input, signal, untrack
 import { Map as MlMap, Marker } from 'maplibre-gl';
 import type { Geometry, Position } from 'geojson';
 import {
+  BaseSwitcherComponent,
   CoverageDeltaLayer,
   CoverageLayer,
   MissingDataLayer,
@@ -32,14 +33,17 @@ import { CompareService } from '../core/fpv-core';
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
   selector: 'fpv-map-stage',
-  imports: [MapViewComponent, LayerPanelComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent],
+  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
       <rf-map-view class="map" [config]="cfg" label="Mission map" (mapReady)="onReady($event)">
         <div class="overlay top-right">
-          <button type="button" class="rf-btn rf-btn--sm map-btn" [attr.aria-expanded]="ws.layersOpen()" (click)="ws.layersOpen.set(!ws.layersOpen())">
-            <span aria-hidden="true">◫</span> Layers
-          </button>
+          <div class="map-actions">
+            <rf-base-switcher />
+            <button type="button" class="rf-btn rf-btn--sm map-btn" [attr.aria-expanded]="ws.layersOpen()" (click)="ws.layersOpen.set(!ws.layersOpen())">
+              <span aria-hidden="true">◫</span> Layers
+            </button>
+          </div>
           @if (ws.layersOpen()) {
             <rf-layer-panel
               [forecastHours]="48"
@@ -94,6 +98,7 @@ import { CompareService } from '../core/fpv-core';
     .map { position: absolute; inset: 0; }
     .overlay { position: absolute; z-index: 3; }
     .top-right { top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-height: calc(100% - 32px); }
+    .map-actions { display: flex; gap: 8px; align-items: center; }
     .map-btn { background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); }
     .delta-scale { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #FF6B5B, #8A96A5 50%, #35D0BA); }
     .delta-keys { display: flex; justify-content: space-between; font-size: 11px; }

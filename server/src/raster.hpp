@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -104,5 +105,7 @@ private:
 std::string manifestSourceName(const std::filesystem::path& file);
 /// Distinct per-file attributions from the tiles-builder manifest next to `file`; empty without one.
 std::vector<std::string> manifestAttributions(const std::filesystem::path& file);
+/// File names the tiles-builder manifest next to `file` lists; nullopt without a readable manifest.
+std::optional<std::set<std::string>> manifestFiles(const std::filesystem::path& file);
 
 }  // namespace rfmap
