@@ -1,5 +1,8 @@
 # Deploying FPV Radio Map
 
+For a first install, follow [Production server, step by step](production-setup.md). This page is
+the reference for each part.
+
 The stack has four parts, described in [`deploy/docker-compose.yml`](../../deploy/docker-compose.yml):
 
 | Service | What it does |
@@ -72,6 +75,70 @@ docker build --secret id=build_ca,src=/path/to/proxy-ca.crt -f deploy/server.Doc
 
 Put TLS in front of `web` (your reverse proxy or load balancer). Share links and the admin
 token must not travel over plain HTTP.
+
+### Behind a reverse proxy
+
+rfmap-server counts its rate limits per client address (`server.trustProxy`: the last
+`X-Forwarded-For` entry, which `web` adds). Behind a proxy, `web` sees only the proxy's address,
+so all visitors would share one limit. Tell nginx in `web` which address the proxy connects
+from; nginx then takes the visitor's address from the `X-Forwarded-For` the proxy sends, on
+connections from that address only. Nothing in the image changes: the setting is one extra
+file.
+
+1. Find the address. With `RFMAP_HTTP_PORT=127.0.0.1:8088` and the proxy on the same machine,
+   it is the gateway of the `rfmap_public` Docker network:
+
+   ```sh
+   docker network inspect rfmap_public --format '{{(index .IPAM.Config 0).Gateway}}'
+   ```
+
+   Docker gives its networks addresses in `172.16.0.0/12` by default. Trust that whole range, so
+   the setting survives a `docker compose down`, which can give the network a new address. If
+   the gateway is outside that range, use the network's subnet
+   (`{{(index .IPAM.Config 0).Subnet}}`) instead. Under rootless Docker the proxy may show up
+   with yet another address: use the one the first field of a `docker compose logs web` line
+   shows for a request through the proxy. For a proxy on another machine, use that machine's
+   address, and let only it reach the published port (firewall).
+
+   Trust the Docker range only while `RFMAP_HTTP_PORT` is bound to `127.0.0.1`. If the port is
+   published on a public address, visitors that Docker forwards through `docker-proxy` (IPv6
+   visitors when the Docker daemon has IPv6 off, which is the default, and every visitor under
+   rootless Docker) also arrive from the gateway, and could set their own `X-Forwarded-For`.
+2. Write `deploy/nginx-realip.conf`:
+
+   ```nginx
+   set_real_ip_from 172.16.0.0/12;
+   real_ip_header X-Forwarded-For;
+   ```
+
+3. Mount it into `web` with `deploy/docker-compose.override.yml`:
+
+   ```yaml
+   services:
+     web:
+       volumes:
+         - ./nginx-realip.conf:/etc/nginx/conf.d/realip.conf:ro
+   ```
+
+4. `docker compose up -d`, open the site through the proxy, and check that the lines of
+   `docker compose logs web` start with your own address.
+
+The proxy must add the visitor's address as the last `X-Forwarded-For` entry. nginx does that
+with `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`.
+
+The proxy itself must see the visitors' real addresses. Run it on the host, as a system
+service, or in a container with `network_mode: host`. A proxy in a container behind published
+ports (`80:80`, `443:443`) sees the same `docker-proxy` gateway address for every IPv6 visitor
+when the Docker daemon has IPv6 off, and for every visitor under rootless Docker. With an AAAA
+record on the domain, all IPv6 visitors would then share one rate limit. If the proxy has to
+stay in such a container, enable IPv6 in the Docker daemon and on the proxy's network (see
+<https://docs.docker.com/engine/daemon/ipv6/>), or publish no AAAA record. Visitors cannot pick their
+address by sending the header themselves: nginx in `web` uses it only on connections from the
+trusted addresses, and takes the last entry, which the proxy wrote. Trust only addresses your
+proxy uses: anyone who can connect from a trusted address can choose their rate-limit bucket.
+With `web` on `127.0.0.1` and the Docker range trusted, that is processes on this machine and
+the stack's own containers; rfmap-server, the only other container `web` can see, already takes
+`X-Forwarded-For` from whatever connects to it, so the range adds no one new.
 
 ## 3. Configuration
 

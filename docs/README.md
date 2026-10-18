@@ -13,6 +13,7 @@ This folder is the project's documentation. It is reviewed in pull requests like
 ## Running it
 
 - [Quick start](../README.md#quick-start)
+- [Production server, step by step](admin/production-setup.md)
 - [Deployment](admin/deploy.md)
 - [Building map data](admin/tiles-builder.md)
 

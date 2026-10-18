@@ -9,6 +9,14 @@ dist/
 *.secret
 !platform/rfmod/keys/dev-*.secret
 .env
+# Local operator files: tiles-builder data under data/, a Compose override and the proxy
+# address file (docs/admin/deploy.md, "Behind a reverse proxy") in deploy/.
+/data/inputs/
+/data/cache/
+/data/work/
+/data/out/
+/deploy/docker-compose.override.yml
+/deploy/nginx-realip.conf
 test-results/
 test-scratch/
 .rfmod-test-*/
