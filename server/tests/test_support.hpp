@@ -7,7 +7,6 @@
 
 #include <cmath>
 #include <filesystem>
-#include <functional>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -34,9 +33,9 @@ private:
 
 /// A small Float32 Cloud Optimized GeoTIFF in EPSG:4326, made like tools/tiles-builder makes
 /// dem.cog.tif (NoData -32768). `height(col, row)` gives each pixel; return NAN for NoData.
-inline void writeCog(const std::filesystem::path& out, double west, double north, double pixelDeg, int cols, int rows,
-                     const std::function<double(int, int)>& height, GDALDataType type = GDT_Float32,
-                     double noData = -32768.0) {
+template <class Height>
+void writeCog(const std::filesystem::path& out, double west, double north, double pixelDeg, int cols, int rows,
+              const Height& height, GDALDataType type = GDT_Float32, double noData = -32768.0) {
     GDALAllRegister();
     GDALDriver* mem = GetGDALDriverManager()->GetDriverByName("MEM");
     GDALDriver* cog = GetGDALDriverManager()->GetDriverByName("COG");
