@@ -104,11 +104,8 @@ SecretKey SecretKey::fromText(std::string_view text) {
 }
 
 SecretKey::~SecretKey() { sodium_memzero(key_.data(), key_.size()); }
-SecretKey::SecretKey(const SecretKey& other) : key_(other.key_) {}
-SecretKey& SecretKey::operator=(const SecretKey& other) {
-    key_ = other.key_;
-    return *this;
-}
+SecretKey::SecretKey(const SecretKey& other) = default;
+SecretKey& SecretKey::operator=(const SecretKey& other) = default;
 
 std::string SecretKey::toText() const { return std::string(kSecretPrefix) + toBase64(key_.data(), key_.size()); }
 
