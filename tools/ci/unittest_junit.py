@@ -48,6 +48,14 @@ class JUnitResult(unittest.TextTestResult):
         super().addError(test, err)
         self._record(test, "failed", "error", self._exc_info_to_string(err, test))
 
+    def addSubTest(self, test, subtest, err):
+        # A failed subtest goes to failures or errors directly, and its test is then neither a
+        # success nor a failure, so each failed subtest becomes a case of its own.
+        super().addSubTest(test, subtest, err)
+        if err is not None:
+            kind = "failure" if issubclass(err[0], test.failureException) else "error"
+            self._record(subtest, "failed", kind, self._exc_info_to_string(err, test))
+
     def addSkip(self, test, reason):
         super().addSkip(test, reason)
         self._record(test, "skipped", "skipped", reason)
@@ -83,11 +91,17 @@ class JUnitWriter:
         return sum(1 for r in records if r["kind"] == kind)
 
     @staticmethod
+    def _names(test):
+        """(classname, name) of a test; a subtest keeps its parameters after the test's name."""
+        parent = getattr(test, "test_case", test)
+        classname, _, name = parent.id().rpartition(".")
+        suffix = test.id()[len(parent.id()):] if parent is not test else ""
+        return classname, (name or parent.id()) + suffix
+
+    @staticmethod
     def _case(suite, record):
-        test = record["test"]
-        test_id = test.id()
-        classname, _, name = test_id.rpartition(".")
-        case = ET.SubElement(suite, "testcase", classname=classname, name=name or test_id,
+        classname, name = JUnitWriter._names(record["test"])
+        case = ET.SubElement(suite, "testcase", classname=classname, name=name,
                              time=f"{record['seconds']:.3f}")
         if record["kind"] == "skipped":
             ET.SubElement(case, "skipped", message=record["detail"])

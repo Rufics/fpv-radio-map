@@ -32,6 +32,14 @@ class Sample(unittest.TestCase):
     @unittest.expectedFailure
     def test_unexpected_success(self):
         pass
+
+    def test_subtests(self):
+        for value in (1, 2.5, "x"):
+            with self.subTest(value=value):
+                if value == 2.5:
+                    self.assertEqual(value, 3)
+                if value == "x":
+                    raise ValueError("bad x")
 '''
 
 
@@ -49,12 +57,14 @@ class CommandTest(unittest.TestCase):
             output = Path(tmp) / "out" / "python.xml"
             self.assertEqual(self.run_command(folder, output), 1)
             xml = output.read_text()
-        self.assertIn('<testsuite name="sample" tests="6" failures="2" errors="1" skipped="1">', xml)
+        self.assertIn('<testsuite name="sample" tests="8" failures="3" errors="2" skipped="1">', xml)
         cases = {c.name.rpartition(" › ")[2]: c for c in JUnitParser().parse(xml).cases}
         self.assertEqual({n: c.outcome for n, c in cases.items()}, {
             "test_passes": "passed", "test_fails": "failed", "test_errors": "failed", "test_skipped": "skipped",
             "test_expected_failure": "passed", "test_unexpected_success": "failed",
+            "test_subtests (value=2.5)": "failed", "test_subtests (value='x')": "failed",
         })
+        self.assertIn("ValueError: bad x", cases["test_subtests (value='x')"].reason)
         self.assertIn("one is not <two>", cases["test_fails"].reason)
         self.assertEqual(cases["test_fails"].reason.count("AssertionError"), 1)
         self.assertIn("KeyError: 'missing'", cases["test_errors"].reason)
