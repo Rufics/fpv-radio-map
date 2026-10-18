@@ -8,12 +8,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <iterator>
 #include <map>
 #include <mutex>
 #include <ranges>
 #include <shared_mutex>
 #include <sstream>
+#include <string_view>
 #include <future>
 
 namespace rfmap {
@@ -105,7 +107,7 @@ void recordWorst(LegScan& scan, const LinkService& service, const PreparedPath& 
 }
 
 /// "blocked" below 0 dB, "warn" when the band says marginal, "info" otherwise.
-std::string marginSeverity(double marginDb, const std::string& verdict) {
+std::string marginSeverity(double marginDb, std::string_view verdict) {
     if (marginDb < 0.0) return "blocked";
     if (verdict == "marginal") return "warn";
     return "info";
@@ -131,9 +133,9 @@ json missingDataLeg(json leg, const LegScan& scan, const DemSource& dem, std::si
     leg["missingData"] = {{"bbox", scan.missingBbox}, {"source", dem.name()}};
     reasons.push_back({{"module", "rf-core"},
                        {"severity", "blocked"},
-                       {"text", "No terrain data for " + std::to_string(scan.missingCount) + " of " +
-                                    std::to_string(total) +
-                                    " positions on this leg; the leg is not evaluated and no heights are guessed."}});
+                       {"text", std::format("No terrain data for {} of {} positions on this leg; the leg is not "
+                                            "evaluated and no heights are guessed.",
+                                            scan.missingCount, total)}});
     leg["reasons"] = reasons;
     return leg;
 }

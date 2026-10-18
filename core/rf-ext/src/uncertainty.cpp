@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <string_view>
 
 namespace rfext {
 namespace {
@@ -18,7 +19,7 @@ rfcore::TerrainProfile shifted(const rfcore::TerrainProfile& p, double interior,
 }
 
 /// Widens [lo, hi] to the value of term `id` at every corner that has it.
-void widenOverCorners(const std::vector<rfcore::LinkResult>& corners, const std::string& id, double& lo, double& hi) {
+void widenOverCorners(const std::vector<rfcore::LinkResult>& corners, std::string_view id, double& lo, double& hi) {
     for (const auto& c : corners) {
         for (const auto& term : c.terms) {
             if (term.id != id) continue;

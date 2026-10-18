@@ -72,7 +72,7 @@ std::size_t addPressureLevels(std::vector<rfext::AirSample>& column, const json&
         const double h = WeatherService::geometricHeight(*gh);
         // A level the model extrapolates below the ground is not air the path flies through.
         if (!(h > surface)) continue;
-        column.push_back({rfext::Metres(h), *t, static_cast<double>(level), *rh});
+        column.emplace_back(rfext::Metres(h), *t, static_cast<double>(level), *rh);
         ++levels;
     }
     return levels;

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <optional>
 #include <utility>
 
@@ -103,7 +104,7 @@ json raiseLegFix(const json& request, const Leg& leg, const std::string& legName
     const std::size_t toIdx = leg.index;          // waypoint index of leg.to
     if (toIdx < wps.size()) wps[toIdx]["aglM"] = std::max(wps[toIdx].at("aglM").get<double>(), need);
     if (leg.index >= 1) wps[leg.index - 1]["aglM"] = std::max(wps[leg.index - 1].at("aglM").get<double>(), need);
-    return {{"id", std::string(kId) + "/raise-leg-" + std::to_string(leg.index)},
+    return {{"id", std::format("{}/raise-leg-{}", kId, leg.index)},
             {"title", "Raise " + legName + " to " + fixed(need, 1) + " m"},
             {"patch", {{"waypoints", wps}}},
             {"preview", {{{"label", "Height on " + legName}, {"now", fixed(planned, 1) + " m AGL"}, {"after", fixed(need, 1) + " m AGL"}}}}};

@@ -13,8 +13,9 @@
 #include <rfext/uncertainty.hpp>
 
 #include <algorithm>
-#include <functional>
 #include <cmath>
+#include <format>
+#include <functional>
 #include <set>
 #include <sstream>
 
@@ -124,9 +125,9 @@ EarthFactor earthFactor(const rfcore::TerrainProfile& profile, const CalcContext
     for (const auto& n : ctx.forecast->notes) notes.push_back(n);
     if (!ctx.forecast->covered()) return out;
     const auto est = rfext::refractionForPath(ctx.forecast->column, Metres(topMsl));
-    if (!est) {
-        notes.push_back({"Refraction", "the forecast column does not reach the higher antenna (" + fmt(topMsl) +
-                                           " m MSL); standard k = 4/3 used"});
+    if (!est.has_value()) {
+        notes.emplace_back("Refraction", "the forecast column does not reach the higher antenna (" + fmt(topMsl) +
+                                             " m MSL); standard k = 4/3 used");
         return out;
     }
     const Metres radius = rfcore::EarthModel::radiusOfCurvature(profile.midLatitudeDeg(), profile.azimuthDeg());
@@ -150,8 +151,8 @@ void addRain(rfcore::LinkEvaluator& evaluator, const CalcContext& ctx, Hertz fre
         return;
     }
     if (frequency.value() < 1e9) {
-        notes.push_back({"Rain", "ITU-R P.838-3 covers 1-1000 GHz; rain loss at " + fmt(frequency.value() / 1e6) +
-                                     " MHz is not computed (forecast " + fmt(*ctx.forecast->rainMmPerHour) + " mm/h)"});
+        notes.emplace_back("Rain", "ITU-R P.838-3 covers 1-1000 GHz; rain loss at " + fmt(frequency.value() / 1e6) +
+                                       " MHz is not computed (forecast " + fmt(*ctx.forecast->rainMmPerHour) + " mm/h)");
     } else if (tiltDeg.has_value()) {
         evaluator.addContributor(std::make_shared<rfext::RainContributor>(*ctx.forecast->rainMmPerHour, *tiltDeg,
                                                                           ctx.forecast->sourceLabel));
@@ -329,7 +330,7 @@ PreparedPath LinkService::prepare(const Terminal& ground, const Terminal& air, c
 void LinkService::applyClutter(rfcore::TerrainProfile& profile, std::vector<rfcore::UncertaintyNote>& notes,
                                const CalcContext& ctx) const {
     if (!landcover_) {
-        notes.push_back({"Clutter", "no land cover layer is configured on this server; clutter not applied"});
+        notes.emplace_back("Clutter", "no land cover layer is configured on this server; clutter not applied");
         return;
     }
     const std::set<int> off = disabledClasses(ctx.optionsFor(BuiltinModules::kClutter));
@@ -338,8 +339,8 @@ void LinkService::applyClutter(rfcore::TerrainProfile& profile, std::vector<rfco
     for (auto& n : report.notes()) notes.push_back(std::move(n));
     if (!off.empty()) {
         std::string list;
-        for (const int c : off) list += (list.empty() ? "" : ", ") + std::to_string(c);
-        notes.push_back({"Clutter", "classes turned off for this mission: " + list});
+        for (const int c : off) list += std::format("{}{}", list.empty() ? "" : ", ", c);
+        notes.emplace_back("Clutter", std::format("classes turned off for this mission: {}", list));
     }
 }
 

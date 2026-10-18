@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <random>
@@ -79,9 +80,8 @@ void checkLifecycle(const Manifest& m, const Version& hostVersion, ValidationRep
 }
 
 std::string sandboxDetail(const SandboxInfo& sb) {
-    return "separate process, memory limit " + std::to_string(sb.memoryLimitMb) + " MB, no file writes; no_new_privs " +
-           (sb.noNewPrivileges ? "on" : "unavailable") + "; network " +
-           (sb.networkIsolated ? "cut off" : "NOT isolated on this host");
+    return std::format("separate process, memory limit {} MB, no file writes; no_new_privs {}; network {}", sb.memoryLimitMb,
+                       sb.noNewPrivileges ? "on" : "unavailable", sb.networkIsolated ? "cut off" : "NOT isolated on this host");
 }
 
 std::string selfTestDetail(const json& result, bool passed) {

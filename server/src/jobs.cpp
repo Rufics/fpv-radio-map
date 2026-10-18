@@ -80,7 +80,7 @@ void JobManager::runJob(Job& job, const json& mission) {
     else job.state = "done";
 }
 
-void JobManager::runPart(Job& job, Part& part, const json& mission, bool& failed) {
+void JobManager::runPart(const Job& job, Part& part, const json& mission, bool& failed) {
     {
         const std::lock_guard lock(mutex_);
         part.state = "running";

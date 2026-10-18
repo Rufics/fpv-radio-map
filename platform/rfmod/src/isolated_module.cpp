@@ -36,6 +36,30 @@ template <std::size_t N>
 
 }  // namespace
 
+/// Holds the worker for the lifetime of the object; see busy_.
+class IsolatedModule::Turn {
+public:
+    explicit Turn(IsolatedModule& module) : module_(module) {
+        std::unique_lock lock(module_.mutex_);
+        module_.idle_.wait(lock, [this] { return !module_.busy_; });
+        module_.busy_ = true;
+    }
+    ~Turn() {
+        {
+            const std::lock_guard lock(module_.mutex_);
+            module_.busy_ = false;
+        }
+        module_.idle_.notify_one();
+    }
+    Turn(const Turn&) = delete;
+    Turn& operator=(const Turn&) = delete;
+    Turn(Turn&&) = delete;
+    Turn& operator=(Turn&&) = delete;
+
+private:
+    IsolatedModule& module_;
+};
+
 IsolatedModule::IsolatedModule(Manifest manifest, std::filesystem::path library, std::filesystem::path workerExecutable,
                                IHostServices& services, json options)
     : manifest_(std::move(manifest)),
@@ -43,7 +67,7 @@ IsolatedModule::IsolatedModule(Manifest manifest, std::filesystem::path library,
       worker_(std::move(workerExecutable)),
       services_(services),
       options_(std::move(options)) {
-    std::lock_guard lock(mutex_);
+    const Turn turn(*this);
     start();
 }
 
@@ -181,7 +205,7 @@ void IsolatedModule::answerCallback(const json& msg) {
     send(reply);
 }
 
-std::optional<json> IsolatedModule::handleBufferedMessages(const std::string& type, long long id) {
+std::optional<json> IsolatedModule::handleBufferedMessages(std::string_view type, long long id) {
     for (std::size_t nl = outBuffer_.find('\n'); nl != std::string::npos; nl = outBuffer_.find('\n')) {
         const std::string line = outBuffer_.substr(0, nl);
         outBuffer_.erase(0, nl + 1);
@@ -247,7 +271,7 @@ json IsolatedModule::waitFor(const std::string& type, long long id, long long de
 }
 
 json IsolatedModule::invoke(const std::string& method, const json& request) {
-    std::lock_guard lock(mutex_);
+    const Turn turn(*this);
     if (pid_ <= 0) start();  // restart after a crash or timeout
     const long long id = nextId_++;
     send({{"t", "invoke"}, {"id", id}, {"method", method}, {"request", request}});
@@ -261,7 +285,7 @@ json IsolatedModule::invoke(const std::string& method, const json& request) {
 }
 
 void IsolatedModule::shutdown() {
-    std::lock_guard lock(mutex_);
+    const Turn turn(*this);
     if (pid_ <= 0) return;
     try {
         send({{"t", "shutdown"}});

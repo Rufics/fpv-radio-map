@@ -8,6 +8,8 @@
 
 #include <rfmod/abi.h>
 
+#include <format>
+
 namespace rfmap {
 
 namespace {
@@ -58,7 +60,7 @@ void ServerHostServices::log(const std::string& moduleId, int level, const std::
 }
 
 json ServerHostServices::call(const std::string& moduleId, const std::string& method, const json& request) {
-    if (hostDepth >= kMaxDepth) throw HostCallError("host calls nested deeper than " + std::to_string(kMaxDepth));
+    if (hostDepth >= kMaxDepth) throw HostCallError(std::format("host calls nested deeper than {}", kMaxDepth));
     const DepthGuard depth;
     if (method == "link.evaluate") {
         // The guide's promise: evaluating a link runs loss.contribute, so calling it from there recurses.

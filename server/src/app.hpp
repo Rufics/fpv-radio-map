@@ -51,12 +51,18 @@ public:
     [[nodiscard]] const Config& config() const { return config_; }
 
 private:
-    /// One endpoint; routes() registers each with its path and rate class.
-    using Handler = void (Application::*)(const httplib::Request&, httplib::Response&);
+    // The route handlers, grouped by area; each is built per request around *this.
+    struct MissionApi;
+    struct DataApi;
+    struct AdminApi;
 
     void routes();
-    /// Runs `handler` under the rate limit of `rateClass` and answers its errors as JSON.
-    void dispatch(const std::string& rateClass, Handler handler, const httplib::Request& req, httplib::Response& res);
+    /// Runs `run` under the rate limit of `rateClass` and answers its errors as JSON.
+    template <typename Run>
+    void dispatch(const std::string& rateClass, const Run& run, const httplib::Request& req, httplib::Response& res);
+    /// The HTTP handler that runs `method` of a fresh `Api` inside dispatch.
+    template <typename Api, typename Method>
+    auto route(std::string rateClass, Method method);
     void loadCacheSettings();
     json cacheTiers();
     json moduleList(bool admin);
@@ -73,44 +79,6 @@ private:
     /// The library kind of a path, checked: HttpError 404 for an unknown or disabled kind.
     [[nodiscard]] std::string libraryKind(const std::string& kind) const;
     [[nodiscard]] json trustedKeys() const;
-
-    // route handlers, in the order routes() registers them
-    void getHealth(const httplib::Request& req, httplib::Response& res);
-    void postMission(const httplib::Request& req, httplib::Response& res);
-    void getMission(const httplib::Request& req, httplib::Response& res);
-    void putMission(const httplib::Request& req, httplib::Response& res);
-    void getLinks(const httplib::Request& req, httplib::Response& res);
-    void postLink(const httplib::Request& req, httplib::Response& res);
-    void deleteLink(const httplib::Request& req, httplib::Response& res);
-    void getLink(const httplib::Request& req, httplib::Response& res);
-    void postLinkOpen(const httplib::Request& req, httplib::Response& res);
-    void postCalcPath(const httplib::Request& req, httplib::Response& res);
-    void postCalcRoute(const httplib::Request& req, httplib::Response& res);
-    void postCalcCoverage(const httplib::Request& req, httplib::Response& res);
-    void getJob(const httplib::Request& req, httplib::Response& res);
-    void deleteJob(const httplib::Request& req, httplib::Response& res);
-    void getJobGrid(const httplib::Request& req, httplib::Response& res);
-    void getElevationProfile(const httplib::Request& req, httplib::Response& res);
-    void getLibraryList(const httplib::Request& req, httplib::Response& res);
-    void getLibraryItem(const httplib::Request& req, httplib::Response& res);
-    void getLibraryHistory(const httplib::Request& req, httplib::Response& res);
-    void postLibraryItem(const httplib::Request& req, httplib::Response& res);
-    void putLibraryItem(const httplib::Request& req, httplib::Response& res);
-    void getWeatherPoint(const httplib::Request& req, httplib::Response& res);
-    void getWeatherHorizon(const httplib::Request& req, httplib::Response& res);
-    void getMapConfig(const httplib::Request& req, httplib::Response& res);
-    void getModules(const httplib::Request& req, httplib::Response& res);
-    void getModuleFile(const httplib::Request& req, httplib::Response& res);
-    void postAdminModule(const httplib::Request& req, httplib::Response& res);
-    void putAdminModule(const httplib::Request& req, httplib::Response& res);
-    void deleteAdminModule(const httplib::Request& req, httplib::Response& res);
-    void getAdminNotices(const httplib::Request& req, httplib::Response& res);
-    void getAdminKeys(const httplib::Request& req, httplib::Response& res);
-    void postAdminKey(const httplib::Request& req, httplib::Response& res);
-    void deleteAdminKey(const httplib::Request& req, httplib::Response& res);
-    void getAdminCache(const httplib::Request& req, httplib::Response& res);
-    void putAdminCache(const httplib::Request& req, httplib::Response& res);
-    void deleteAdminCache(const httplib::Request& req, httplib::Response& res);
 
     Config config_;
     Logger log_;
