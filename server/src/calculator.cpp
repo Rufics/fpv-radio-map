@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <shared_mutex>
@@ -384,12 +385,12 @@ struct Calculator::CoverageRun {
     std::mutex failMutex{};
     std::vector<ModuleFailure> failures{};
     std::exception_ptr error{};
-    const rfcore::Geodesy geo{};
+    [[no_unique_address]] const rfcore::Geodesy geo{};
 };
 
 void Calculator::coverageWorker(CoverageRun& run) {
     try {
-        for (std::size_t r; (r = run.nextRow++) < run.rows;) {
+        for (std::size_t r = run.nextRow++; r < run.rows; r = run.nextRow++) {
             if (run.cancelled()) return;
             std::shared_lock gate(modules_.gate());
             const CalcContextScope scope(run.ctx);
@@ -403,12 +404,13 @@ void Calculator::coverageWorker(CoverageRun& run) {
     }
 }
 
-void Calculator::coverageRow(CoverageRun& run, std::size_t r) {
+void Calculator::coverageRow(CoverageRun& run, std::size_t r) const {
     for (std::size_t c = 0; c < run.cols; ++c) {
         const rfcore::GeoPoint centre{run.north - (static_cast<double>(r) + 0.5) * run.dLat,
                                       run.west + (static_cast<double>(c) + 0.5) * run.dLon};
-        const double d = run.geo.inverse(run.pilot.position, centre).distance.value();
-        if (!(d > 0.0) || d > run.radius) continue;
+        if (const double d = run.geo.inverse(run.pilot.position, centre).distance.value(); !(d > 0.0) || d > run.radius) {
+            continue;
+        }
         const PreparedPath p = links_.prepare(run.pilot, Terminal{centre, run.agl}, run.ctx);
         if (!p.complete()) {
             ++run.missingCells;
@@ -464,10 +466,11 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     run.margins.resize(cols * rows);
     run.worstBand.resize(cols * rows);
     std::vector<std::future<void>> parts;
-    for (int t = 0; t < pool.size(); ++t) parts.push_back(pool.submit([this, &run] { coverageWorker(run); }));
+    std::generate_n(std::back_inserter(parts), pool.size(),
+                    [this, &pool, &run] { return pool.submit([this, &run] { coverageWorker(run); }); });
     for (auto& f : parts) f.get();
     if (run.error) std::rethrow_exception(run.error);
-    if (cancelled()) throw std::runtime_error("cancelled");
+    if (cancelled()) throw CalculationCancelled();
     const std::vector<std::optional<double>>& margins = run.margins;
     const std::vector<std::optional<double>>& worstBand = run.worstBand;
 

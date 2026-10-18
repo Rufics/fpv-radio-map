@@ -10,9 +10,16 @@
 #include "weather.hpp"
 
 #include <atomic>
+#include <stdexcept>
 #include <functional>
 
 namespace rfmap {
+
+/// Thrown when a coverage calculation stops because its caller asked it to.
+class CalculationCancelled : public std::runtime_error {
+public:
+    CalculationCancelled() : std::runtime_error("cancelled") {}
+};
 
 /// The three calculations of the API: one path, a whole route, a coverage grid. Every result
 /// carries the hash of all its inputs and is cached under it.
@@ -52,7 +59,7 @@ private:
     struct CoverageRun;
     /// One pool thread of a coverage calculation: takes rows until none are left.
     void coverageWorker(CoverageRun& run);
-    void coverageRow(CoverageRun& run, std::size_t row);
+    void coverageRow(CoverageRun& run, std::size_t row) const;
 
     LinkService& links_;
     WeatherService& weather_;
