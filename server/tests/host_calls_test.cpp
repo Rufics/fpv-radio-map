@@ -28,12 +28,11 @@ double flatWithHole(int c, int r) {
     return lat < 48.52 && lon > 35.22 ? NAN : 200.0;
 }
 
-/// Three hours of surface weather around the current hour.
+/// Three hours of surface weather around the hour the rig was built in, 10 C in that hour.
 class NowForecast final : public IForecastSource {
 public:
     json fetch(double, double, const std::string&) override {
         ++fetches;
-        const auto hour = std::chrono::floor<std::chrono::hours>(Clock::now());
         const long long t0 = Clock::to_time_t(hour - std::chrono::hours(1));
         return {{"elevation", 200.0},
                 {"hourly",
@@ -45,6 +44,7 @@ public:
                   {"wind_direction_10m", {180.0, 180.0, 180.0}}}}};
     }
     std::optional<TimePoint> runTime() override { return std::nullopt; }
+    const TimePoint hour = std::chrono::floor<std::chrono::hours>(Clock::now());
     int fetches = 0;
 };
 
@@ -86,6 +86,7 @@ public:
 
     [[nodiscard]] ServerHostServices& host() { return *host_; }
     [[nodiscard]] int forecastFetches() const { return forecast_.fetches; }
+    [[nodiscard]] TimePoint forecastHour() const { return forecast_.hour; }
 
 private:
     /// Empties the database (a rerun keeps the cluster) before the pool connects to it.
@@ -192,8 +193,11 @@ TEST_F(HostServices, LibraryGetReturnsItemsAndRefusesUnknownOnes) {
 }
 
 TEST_F(HostServices, WeatherPointReadsTheForecast) {
+    // Without a time the hour nearest to now is read, which may be either side of the middle one.
     const json now = call("weather.point", point(48.55, 35.18));
-    EXPECT_DOUBLE_EQ(now.at("temperatureC").get<double>(), 10.0);
+    EXPECT_TRUE(now.at("temperatureC").is_number());
+    const json middle = call("weather.point", {{"lat", 48.55}, {"lon", 35.18}, {"time", isoUtc(rig_->forecastHour())}});
+    EXPECT_DOUBLE_EQ(middle.at("temperatureC").get<double>(), 10.0);
     EXPECT_GE(rig_->forecastFetches(), 1);
     EXPECT_THROW(call("weather.point", {{"lat", 48.55}, {"lon", 35.18}, {"time", "yesterday"}}), HostCallError);
 }
