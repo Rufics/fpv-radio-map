@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rfmod/abi.h"
 #include "rfmod/report.hpp"
 #include "rfmod/semver.hpp"
 
@@ -48,7 +49,7 @@ struct Manifest {
     std::string license;
     Lifecycle lifecycle = Lifecycle::Alpha;
     std::optional<Deprecation> deprecation;
-    unsigned abi = 1;
+    unsigned abi = RFMOD_ABI_VERSION;
     std::optional<VersionRange> hostRange;
     std::vector<Dependency> dependencies;          ///< manifest "requires"
     std::vector<Dependency> optionalDependencies;  ///< manifest "optional"
