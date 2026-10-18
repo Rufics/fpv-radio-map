@@ -24,6 +24,7 @@ public:
     }
     void trim(std::size_t maxRows, std::size_t maxBytes) override {
         std::vector<std::pair<long, std::string>> order;
+        order.reserve(rows.size());
         for (const auto& [h, r] : rows) order.emplace_back(r.lastHit, h);
         std::sort(order.rbegin(), order.rend());
         std::size_t n = 0, total = 0;
@@ -42,8 +43,8 @@ public:
 
     struct Row {
         json result;
-        std::size_t bytes;
-        long lastHit;
+        std::size_t bytes{};
+        long lastHit{};
     };
     std::map<std::string, Row> rows;
     long tick = 0;

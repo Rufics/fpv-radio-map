@@ -11,6 +11,7 @@ namespace rfcore::test {
 inline TerrainProfile makeProfile(const std::vector<std::pair<double, double>>& points, double azimuthDeg = 37.5,
                                   double latitudeDeg = 48.53) {
     std::vector<ProfileSample> samples;
+    samples.reserve(points.size());
     for (const auto& [d, h] : points) {
         samples.push_back({Metres(d), Metres(h), Metres(0.0), Metres(4.0), GeoPoint{latitudeDeg, 35.2}});
     }
@@ -23,13 +24,13 @@ inline TerrainProfile spikeProfile(double length, double at, double ground, doub
     for (std::size_t i = 0; static_cast<double>(i) * step < length; ++i) {
         const double d = static_cast<double>(i) * step;
         if (d < at && d + step > at) {
-            pts.push_back({d, ground});
-            pts.push_back({at, top});
+            pts.emplace_back(d, ground);
+            pts.emplace_back(at, top);
             continue;
         }
-        pts.push_back({d, ground});
+        pts.emplace_back(d, ground);
     }
-    pts.push_back({length, ground});
+    pts.emplace_back(length, ground);
     return makeProfile(pts);
 }
 

@@ -16,7 +16,7 @@ namespace rfmod {
 
 struct InProcessModule::Bridge {
     rfmod_host_context context;
-    rfmod_host host;
+    rfmod_host host{};
 
     static int call(rfmod_host_context* self, const char* method, const char* request, const char** response) {
         // Valid until the next call on this thread, as abi.h promises.
@@ -37,6 +37,7 @@ struct InProcessModule::Bridge {
         try {
             self->services->log(self->moduleId, level, message ? message : "");
         } catch (...) {
+            // Ignored: an exception must not cross the C ABI, and a lost log line is harmless.
         }
     }
 };

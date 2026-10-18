@@ -75,6 +75,7 @@ IsolatedModule::~IsolatedModule() {
     try {
         shutdown();
     } catch (...) {
+        // Ignored: a destructor must not throw; the worker is killed either way.
     }
 }
 
@@ -182,7 +183,7 @@ void IsolatedModule::stop(bool kill) {
     toWorker_ = fromWorker_ = errFromWorker_ = -1;
 }
 
-void IsolatedModule::send(const json& message) {
+void IsolatedModule::send(const json& message) const {
     const std::string line = message.dump() + "\n";
     std::size_t off = 0;
     while (off < line.size()) {
@@ -290,6 +291,7 @@ void IsolatedModule::shutdown() {
     try {
         send({{"t", "shutdown"}});
     } catch (...) {
+        // Ignored: a worker that cannot be told to stop is stopped by stop() below.
     }
     stop(false);
 }

@@ -21,7 +21,7 @@ public:
 
 private:
     struct Bucket {
-        double tokens;
+        double tokens{};
         TimePoint updated;
     };
     std::map<std::string, Config::RateLimit> limits_;

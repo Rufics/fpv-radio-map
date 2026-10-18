@@ -154,8 +154,6 @@ void VersionRange::appendComparators(std::string_view token, Set& out) {
         out.emplace_back(Op::Gt, Version::parse(token));
     } else if (take("<")) {
         out.emplace_back(Op::Lt, Version::parse(token));
-    } else if (take("=")) {
-        out.emplace_back(Op::Eq, Version::parse(token));
     } else if (take("^")) {
         const Version v = Version::parse(token);
         Version upper;
@@ -173,6 +171,7 @@ void VersionRange::appendComparators(std::string_view token, Set& out) {
         out.emplace_back(Op::Ge, v);
         out.emplace_back(Op::Lt, Version(v.major(), bump(v.minor(), whole), 0));
     } else {
+        (void)take("=");  // "=1.2.3" and "1.2.3" mean the same
         out.emplace_back(Op::Eq, Version::parse(token));
     }
 }

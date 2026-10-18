@@ -39,7 +39,7 @@ struct PathEnds {
 /// contribute nothing; terms whose id does not start with "<moduleId>/" are dropped.
 class ModuleLossContributor final : public rfcore::ILossContributor {
 public:
-    ModuleLossContributor(rfmod::IModuleInstance& instance, json options, PathEnds ends, TimePoint time,
+    ModuleLossContributor(rfmod::IModuleInstance& instance, json options, const PathEnds& ends, TimePoint time,
                           const LandCoverSource* landcover, std::vector<ModuleFailure>& failures);
 
     std::vector<rfcore::BudgetTerm> contribute(const rfcore::PathContext& context) const override;

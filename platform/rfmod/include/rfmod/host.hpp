@@ -96,7 +96,7 @@ private:
     class Turn;
     void start();
     void stop(bool kill);
-    void send(const json& message);
+    void send(const json& message) const;
     /// Reads worker messages until one of `type` (and `id`, except for "ready") arrives,
     /// answering callbacks on the way.
     json waitFor(const std::string& type, long long id, long long deadlineMs);

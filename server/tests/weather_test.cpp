@@ -47,7 +47,7 @@ struct Rig {
 
 TEST(WeatherTest, ReadsTheHourNearestTheRequestedTime) {
     Rig rig(forecast(kNoon - 3600));
-    const ForecastAt at = rig.weather.at(50.45, 30.52, Clock::from_time_t(kNoon + 20 * 60));
+    const ForecastAt at = rig.weather.at(50.45, 30.52, Clock::from_time_t(kNoon + 1200));
     EXPECT_EQ(at.point.at("validUtc"), "2026-10-18T12:00:00Z");
     EXPECT_DOUBLE_EQ(at.point.at("temperatureC").get<double>(), 11.0);
     ASSERT_FALSE(at.notes.empty());

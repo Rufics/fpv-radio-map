@@ -192,7 +192,8 @@ std::string manifestSourceName(const fs::path& file) {
     try {
         const auto doc = nlohmann::json::parse(in);
         if (doc.contains("files")) return sourceInFiles(doc.at("files"), file.filename().string());
-    } catch (const nlohmann::json::exception&) {  // not JSON, or an entry of the wrong type
+    } catch (const nlohmann::json::exception&) {
+        return {};  // not JSON, or an entry of the wrong type: the source is unknown
     }
     return {};
 }
@@ -203,7 +204,8 @@ std::vector<std::string> manifestAttributions(const fs::path& file) {
     if (!in) return out;
     try {
         addAttributions(nlohmann::json::parse(in), out);
-    } catch (const nlohmann::json::exception&) {  // not JSON, or an entry of the wrong type
+    } catch (const nlohmann::json::exception&) {
+        return out;  // not JSON, or an entry of the wrong type: keep what was read before it
     }
     return out;
 }

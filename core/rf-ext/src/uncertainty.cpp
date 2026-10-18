@@ -98,14 +98,14 @@ MarginBand UncertaintyAnalyzer::analyze(const rfcore::TerrainProfile& profile, r
     // Every other term: its own extremes over the corners (they depend on the end heights only
     // through the ray length and geometry, which also peak at corners).
     double worstLoss = 0.0, bestLoss = 0.0;
-    for (std::size_t t = 0; t < nominal.terms.size(); ++t) {
-        const std::string& id = nominal.terms[t].id;
+    for (const auto& t : nominal.terms) {
+        const std::string& id = t.id;
         if (id == "diffraction") {
             worstLoss += j.max;
             bestLoss += j.min;
             continue;
         }
-        double hi = nominal.terms[t].value.value(), lo = hi;
+        double hi = t.value.value(), lo = hi;
         widenOverCorners(corners, id, lo, hi);
         worstLoss += hi;
         bestLoss += lo;

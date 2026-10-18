@@ -13,9 +13,9 @@ using rfcore::Metres;
 /// Air at one height, as a forecast gives it.
 struct AirSample {
     Metres heightMsl;
-    double temperatureC;
-    double pressureHpa;       ///< Total pressure.
-    double relativeHumidity;  ///< Percent, 0..100.
+    double temperatureC{};
+    double pressureHpa{};       ///< Total pressure.
+    double relativeHumidity{};  ///< Percent, 0..100.
 };
 
 /// Radio refractivity, ITU-R P.453-14.

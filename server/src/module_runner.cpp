@@ -19,13 +19,13 @@ LossContributionScope::~LossContributionScope() { activeContributor.swap(previou
 
 const std::string& LossContributionScope::active() { return activeContributor; }
 
-ModuleLossContributor::ModuleLossContributor(rfmod::IModuleInstance& instance, json options, PathEnds ends,
+ModuleLossContributor::ModuleLossContributor(rfmod::IModuleInstance& instance, json options, const PathEnds& ends,
                                              TimePoint time, const LandCoverSource* landcover,
                                              std::vector<ModuleFailure>& failures)
     : module_(instance),
       id_(instance.manifest().id),
       options_(std::move(options)),
-      ends_(std::move(ends)),
+      ends_(ends),
       time_(time),
       landcover_(landcover),
       failures_(failures) {}
@@ -34,13 +34,13 @@ std::vector<rfcore::BudgetTerm> ModuleLossContributor::acceptTerms(const std::st
                                                                    std::vector<std::string>& dropped) {
     std::vector<rfcore::BudgetTerm> out;
     if (!terms.is_array()) {
-        if (!terms.is_null()) dropped.push_back("terms is not an array");
+        if (!terms.is_null()) dropped.emplace_back("terms is not an array");
         return out;
     }
     const std::string prefix = moduleId + "/";
     for (const json& t : terms) {
         const std::string id = t.is_object() ? t.value("id", "") : "";
-        if (id.rfind(prefix, 0) != 0 || id.size() == prefix.size()) {
+        if (!id.starts_with(prefix) || id.size() == prefix.size()) {
             dropped.push_back("term '" + id + "' does not start with " + prefix);
             continue;
         }

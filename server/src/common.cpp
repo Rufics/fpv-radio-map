@@ -11,7 +11,7 @@ std::string isoUtc(TimePoint t) {
     std::tm tm{};
     gmtime_r(&s, &tm);
     char buf[32];
-    std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
+    (void)std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
     return buf;
 }
 

@@ -47,7 +47,7 @@ public:
     FakeOpenMeteo() {
         server_.Get("/v1/forecast", [this](const httplib::Request& req, httplib::Response& res) {
             ++requests;
-            lastQuery = req.params.count("hourly") ? req.get_param_value("hourly") : "";
+            lastQuery = req.params.contains("hourly") ? req.get_param_value("hourly") : "";
             const auto now = std::chrono::floor<std::chrono::hours>(Clock::now());
             const long long t0 = Clock::to_time_t(now - std::chrono::hours(24));
             json h = {{"time", json::array()}};
@@ -173,7 +173,7 @@ protected:
     };
 
     static Reply call(const std::string& method, const std::string& path, const json& body = nullptr,
-                      httplib::Headers headers = {}) {
+                      const httplib::Headers& headers = {}) {
         httplib::Client c("127.0.0.1", env->port);
         c.set_read_timeout(120, 0);
         httplib::Result r;

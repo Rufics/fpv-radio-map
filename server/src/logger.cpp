@@ -11,7 +11,7 @@ void Logger::write(Level level, const std::string& source, const std::string& me
     static const char* names[] = {"debug", "info", "WARN", "ERROR"};
     std::lock_guard lock(mutex_);
     std::cerr << isoUtc(Clock::now()) << ' ' << names[static_cast<int>(level)] << ' ' << source << ": " << message
-              << std::endl;
+              << '\n';
 }
 
 }  // namespace rfmap

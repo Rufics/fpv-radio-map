@@ -9,7 +9,7 @@ struct MarginBand {
     rfcore::Decibel nominal;
     rfcore::Decibel worst;  ///< interior samples raised by their error, ends lowered
     rfcore::Decibel best;   ///< interior samples lowered, ends raised
-    enum class Verdict { Reliable, Marginal, Blocked, BlockedMayWork } verdict;
+    enum class Verdict { Reliable, Marginal, Blocked, BlockedMayWork } verdict{};
 };
 
 std::string toString(MarginBand::Verdict v);
