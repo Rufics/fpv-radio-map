@@ -1,7 +1,13 @@
-# Tests every pull request and posts the results to it. main.yml (every push to main) and
-# release.yml (the release button) call this same workflow, so they run exactly these checks.
-# On a pull request only the parts its files can affect are built: a change to docs alone builds
-# nothing. Skipped jobs still report, so the required checks pass without running.
+# Tests every pull request. main.yml (every push to main) and release.yml (the release button)
+# call this same workflow, so they run exactly these checks. On a pull request only the parts its
+# files can affect are built: a change to docs alone builds nothing. Skipped jobs still report, so
+# the required checks pass without running.
+#
+# This workflow runs the pull request's own code with a read-only token and no secrets. Only the
+# comment job may write, and it runs no code from the pull request: it posts the finished report
+# as text, and only on a pull request from a branch of this repository. A fork's pull request
+# gets its comment from ci-report.yml, which reads the artifacts of this run as data with the
+# code of main.
 name: CI
 
 on:
@@ -19,6 +25,7 @@ jobs:
   changes:
     name: Changed parts
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       cpp: ${{ steps.scope.outputs.cpp }}
       web: ${{ steps.scope.outputs.web }}
@@ -42,11 +49,12 @@ jobs:
             case "$f" in
               docs/*|*.md|LICENSE|.github/ISSUE_TEMPLATE/*|.github/DISCUSSION_TEMPLATE/*|.github/dependabot.yml) ;;
               .github/workflows/pr-title.yml|.github/workflows/wiki.yml|tools/wiki/*|.githooks/*) ;;
+              .github/workflows/ci-report.yml|.github/CODEOWNERS|.github/pull_request_template.md) ;;
               .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*) ;;
               .dockerignore|.gitignore) ;;
               web/*) web=true ;;
               schemas/*|.github/workflows/ci.yml) cpp=true; web=true ;;
-              core/*|platform/*|modules/*|server/*|examples/*|data/*|CMakeLists.txt) cpp=true ;;
+              core/*|platform/*|modules/*|server/*|examples/*|data/*|CMakeLists.txt|.github/actions/cpp-deps/*) cpp=true ;;
               *) echo "No rule for $f: building everything."; cpp=true; web=true ;;
             esac
           done
@@ -59,18 +67,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cpp == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake ninja-build pkg-config \
-            libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
-            libpqxx-dev libgdal-dev gdal-bin libcpp-httplib-dev libgtest-dev \
-            postgresql-16 postgresql-16-postgis-3
+      - uses: ./.github/actions/cpp-deps
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON
       - name: Build
@@ -87,11 +89,78 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The same tests on an instrumented build (-O0 --coverage), so the Release job above stays the
+  # gate for the binaries that ship. Like every job here it tests the merge commit; the report
+  # links the uncovered lines to that commit, so the line numbers match.
+  coverage:
+    name: C++ coverage
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true' && github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      html-url: ${{ steps.html.outputs.artifact-url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: ./.github/actions/cpp-deps
+        with:
+          extra: gcovr
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON -DRFMAP_COVERAGE=ON
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      # Product code only: tests, the example module, fetched dependencies and generated files
+      # are not counted. The sandboxed module worker is skipped too: it leaves through _exit()
+      # under seccomp, so its counters are never written completely.
+      - name: Collect coverage
+        if: success() || failure()
+        run: |
+          mkdir -p coverage/html
+          gcovr --root . -j "$(nproc)" \
+            --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
+            --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' \
+            --exclude '.*/tests/.*' \
+            --json coverage/coverage.json \
+            --html-details coverage/html/index.html --html-title 'fpv-radio-map C++ coverage' \
+            --print-summary \
+            build
+      # Lines this pull request adds or changes: the merge commit against its first parent, the
+      # base branch it was merged onto.
+      - name: List the changed lines
+        if: success() || failure()
+        run: |
+          git diff --unified=0 --no-color --no-ext-diff --no-renames HEAD^1 HEAD > coverage/changes.diff
+          git rev-parse HEAD > coverage/commit.txt
+      - if: success() || failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-cpp
+          path: |
+            coverage/coverage.json
+            coverage/changes.diff
+            coverage/commit.txt
+          if-no-files-found: ignore
+          retention-days: 7
+      - id: html
+        if: success() || failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-cpp-html
+          path: coverage/html/
+          if-no-files-found: ignore
+          retention-days: 7
+
   web:
     name: Web build and tests
     needs: changes
     if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: web
@@ -122,48 +191,94 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The gate: the one required check, red when any job above failed. Also writes the report to
+  # the run summary and hands it to the comment job below.
   report:
     name: Test report
     if: always()
-    needs: [changes, cpp, web]
+    needs: [changes, cpp, coverage, web]
     runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: write
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           sparse-checkout: tools/ci
+      - name: Test the report builder
+        run: python3 -I -m unittest discover -s tools/ci -p '*_test.py'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: test-results-*
-          path: test-results
+          path: ${{ runner.temp }}/ci-data/tests
           merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.coverage.result != 'skipped'
+        continue-on-error: true
+        with:
+          name: coverage-cpp
+          path: ${{ runner.temp }}/ci-data/coverage
+      # report.py reads fixed file names under the current directory only.
       - name: Write the report
         env:
-          NEEDS: ${{ toJSON(needs) }}
+          REPORT_JOBS: ${{ toJSON(needs) }}
           REPORT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           REPORT_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT_COVERAGE_URL: ${{ needs.coverage.outputs.html-url }}
         run: |
-          node tools/ci/report.mjs test-results "$NEEDS" > report.md
+          mkdir -p "$RUNNER_TEMP/ci-data"
+          cd "$RUNNER_TEMP/ci-data"
+          python3 -I "$GITHUB_WORKSPACE/tools/ci/report.py" > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
-      # One comment per pull request, updated on every run. Pull requests from forks get a
-      # read-only token, so for them the report stays in the run summary and the checks.
-      - name: Post the report to the pull request
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('report.md', 'utf8');
-            const marker = '<!-- rfmap-ci-report -->';
-            const { owner, repo } = context.repo;
-            const issue_number = context.payload.pull_request.number;
-            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
-            const mine = comments.find((c) => c.user?.type === 'Bot' && c.body?.startsWith(marker));
-            if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
-            else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+          name: ci-report
+          path: ${{ runner.temp }}/ci-data/report.md
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Fail when a job failed
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
+
+  # One comment per pull request, updated on every run. The only job with write access, and it
+  # checks out and runs no code: it reads the finished report as text and posts it with the gh
+  # CLI. Only for branches of this repository; ci-report.yml comments on forks' pull requests. A
+  # run cancelled by a newer push leaves the comment to that push's run. Runs started by
+  # Dependabot get a read-only token, so their comment fails without failing the run; the report
+  # is still in the run summary.
+  comment:
+    name: Post the CI report
+    needs: [changes, cpp, coverage, web, report]
+    if: >-
+      always() &&
+      !contains(needs.*.result, 'cancelled') &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    continue-on-error: true
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ci-report
+          path: ${{ runner.temp }}/ci-report
+      - name: Post the report to the pull request
+        working-directory: ${{ runner.temp }}/ci-report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MARKER: <!-- rfmap-ci-report -->
+        run: |
+          if [ "$(head -n 1 report.md)" != "$MARKER" ] || [ "$(wc -c < report.md)" -gt 65000 ]; then
+            echo "::error::report.md is not a CI report"
+            exit 1
+          fi
+          comments="repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments"
+          id="$(gh api --paginate "$comments" --jq \
+            '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith(env.MARKER))) | .id' | tail -n 1)"
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@report.md > /dev/null
+          else
+            gh api --method POST "$comments" -F body=@report.md > /dev/null
+          fi
