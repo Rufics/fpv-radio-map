@@ -64,7 +64,7 @@ json ModuleLossContributor::request(const rfcore::PathContext& ctx) const {
                   {"groundMslM", p.groundMsl.value()},
                   {"obstacleM", p.obstacleHeight.value()},
                   {"uncertaintyM", p.uncertainty.value()}};
-        if (landcover_ && p.landCover) {
+        if (landcover_ && p.landCover.has_value()) {
             if (const auto c = rfext::landCoverFromCode(*p.landCover)) {
                 j["landCover"] = rfext::landCoverName(*c);
                 j["landCoverCode"] = *p.landCover;

@@ -57,7 +57,7 @@ RthPlan FailsafeAnalyzer::planRth(const Mission& mission, const Route& route, co
     for (const GroundSample& x : g) {
         if (x.distanceM > home.distanceM - 1e-6) break;  // landing at home is not a collision
         const double gap = plan.cruiseMslM - (x.groundMslM + x.obstacleM);
-        plan.worstTerrainGapM = plan.worstTerrainGapM ? std::min(*plan.worstTerrainGapM, gap) : gap;
+        plan.worstTerrainGapM = plan.worstTerrainGapM.has_value() ? std::min(*plan.worstTerrainGapM, gap) : gap;
         if (gap < s_.terrainClearanceM && !plan.collision) plan.collision = world_.direct(loss.point.position, home.azimuth1Deg, x.distanceM).point;
     }
 
@@ -132,14 +132,14 @@ json analyze(const json& request, const IWorld& world, const ILinkProbe& link, c
         const double homeGround = world.groundMsl(mission.pilot.position);
         data["rth"] = {{"cruiseMslM", rth.cruiseMslM}, {"altitudeAboveHomeM", rth.cruiseMslM - homeGround},
                        {"homeDistanceM", rth.homeDistanceM}};
-        if (rth.regainAfterM) data["rth"]["regainAfterM"] = *rth.regainAfterM;
-        if (rth.worstTerrainGapM) data["rth"]["worstTerrainGapM"] = *rth.worstTerrainGapM;
+        if (rth.regainAfterM.has_value()) data["rth"]["regainAfterM"] = *rth.regainAfterM;
+        if (rth.worstTerrainGapM.has_value()) data["rth"]["worstTerrainGapM"] = *rth.worstTerrainGapM;
 
         reasons.push_back(reason(kId, "warn",
                                  "Failsafe: control is lost at " + where + "; return-to-home flies " +
                                      fixed(rth.homeDistanceM / 1000.0, 2) + " km at " + fixed(rth.cruiseMslM - homeGround, 0) +
                                      " m above home" +
-                                     (rth.regainAfterM ? ", control back after " + fixed(*rth.regainAfterM, 0) + " m."
+                                     (rth.regainAfterM.has_value() ? ", control back after " + fixed(*rth.regainAfterM, 0) + " m."
                                                        : ", control does not come back before home.")));
         if (rth.collision) {
             // Suggest the lowest RTH altitude that clears the terrain by the required gap.

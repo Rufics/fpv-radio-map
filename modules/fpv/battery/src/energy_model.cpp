@@ -74,7 +74,7 @@ BatterySpec BatterySpec::fromJson(const json& j) {
 
 BatterySpec::Derated BatterySpec::deratingAt(std::optional<double> t) const {
     if (derating.empty()) return {1.0, "no temperature data for this battery: capacity not derated"};
-    if (!t) return {1.0, "air temperature unknown: capacity not derated"};
+    if (!t.has_value()) return {1.0, "air temperature unknown: capacity not derated"};
     if (*t < derating.front().first || *t > derating.back().first) {
         throw std::domain_error("air temperature " + fixed(*t, 1) + " °C is outside the battery's measured range (" +
                                 fixed(derating.front().first, 1) + " to " + fixed(derating.back().first, 1) +
@@ -100,13 +100,13 @@ EnergyModel::EnergyModel(DroneSpec drone, Air air, const IWorld& world)
 
 double EnergyModel::cruisePowerW() const {
     if (drone_.powerDensityExponent == 0.0) return drone_.cruisePowerW;
-    if (!air_.densityKgM3) throw std::domain_error("air density unknown, but this drone's power depends on it");
+    if (!air_.densityKgM3.has_value()) throw std::domain_error("air density unknown, but this drone's power depends on it");
     return drone_.cruisePowerW * std::pow(kSeaLevelDensity / *air_.densityKgM3, drone_.powerDensityExponent);
 }
 
 double EnergyModel::groundSpeedMps(double courseDeg) const {
     const double va = drone_.cruiseAirspeedMps;
-    if (!air_.windSpeedMps || !air_.windFromDeg || *air_.windSpeedMps == 0.0) return va;
+    if (!air_.windSpeedMps.has_value() || !air_.windFromDeg.has_value() || *air_.windSpeedMps == 0.0) return va;
     // Wind blows towards from+180°. Split it along and across the course.
     const double rel = (*air_.windFromDeg + 180.0 - courseDeg) * kDeg;
     const double along = *air_.windSpeedMps * std::cos(rel);
