@@ -34,8 +34,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         const VersionRange r = VersionRange::parse(rangeText);
         if (v.has_value()) (void)r.contains(*v);
         (void)r.contains(Version(1, 0, 0));
-    } catch (const std::invalid_argument&) {
+    } catch (const std::invalid_argument& e) {
         // Not a range: refusing it is the documented answer.
+        rfmap::fuzz::refused(e);
     }
 
     // Single comparators that always include their own version.
@@ -44,8 +45,9 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         const std::string range = std::format("{}{}", op, v->str());
         try {
             rfmap::fuzz::check(VersionRange::parse(range).contains(*v));
-        } catch (const std::invalid_argument&) {
+        } catch (const std::invalid_argument& e) {
             // Refusing a range is fine; accepting one that excludes its own version is not.
+            rfmap::fuzz::refused(e);
         }
     }
     return 0;

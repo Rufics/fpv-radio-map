@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <source_location>
@@ -18,6 +19,12 @@ inline void check(bool holds, const std::source_location where = std::source_loc
     if (holds) return;
     std::cerr << where.file_name() << ':' << where.line() << ": fuzz property failed\n";
     std::abort();
+}
+
+/// An input the code refused with a documented exception. The refusal is the user's only answer,
+/// so it must say why: an empty message fails the target like a broken property.
+inline void refused(const std::exception& error, const std::source_location where = std::source_location::current()) {
+    check(error.what()[0] != '\0', where);
 }
 
 /// The input as text, byte for byte.

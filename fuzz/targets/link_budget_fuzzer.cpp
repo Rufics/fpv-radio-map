@@ -58,10 +58,12 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
         const LinkResult r = eval.evaluate(profile, frequency, tx, rx);
         rfmap::fuzz::check(std::isfinite(r.margin.value()));
         rfmap::fuzz::check(r.diffraction.dominantSample < profile.samples().size());
-    } catch (const std::invalid_argument&) {
+    } catch (const std::invalid_argument& e) {
         // A profile the radio maths documents as unusable: refusing it is the expected answer.
-    } catch (const std::runtime_error&) {
+        rfmap::fuzz::refused(e);
+    } catch (const std::runtime_error& e) {
         // A calculation the maths documents as impossible on this ground: also expected.
+        rfmap::fuzz::refused(e);
     }
     return 0;
 }
