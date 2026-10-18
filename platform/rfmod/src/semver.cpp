@@ -146,15 +146,15 @@ void VersionRange::appendComparators(std::string_view token, Set& out) {
     };
     const std::string_view whole = token;
     if (take(">=")) {
-        out.push_back({Op::Ge, Version::parse(token)});
+        out.emplace_back(Op::Ge, Version::parse(token));
     } else if (take("<=")) {
-        out.push_back({Op::Le, Version::parse(token)});
+        out.emplace_back(Op::Le, Version::parse(token));
     } else if (take(">")) {
-        out.push_back({Op::Gt, Version::parse(token)});
+        out.emplace_back(Op::Gt, Version::parse(token));
     } else if (take("<")) {
-        out.push_back({Op::Lt, Version::parse(token)});
+        out.emplace_back(Op::Lt, Version::parse(token));
     } else if (take("=")) {
-        out.push_back({Op::Eq, Version::parse(token)});
+        out.emplace_back(Op::Eq, Version::parse(token));
     } else if (take("^")) {
         const Version v = Version::parse(token);
         Version upper;
@@ -165,14 +165,14 @@ void VersionRange::appendComparators(std::string_view token, Set& out) {
         } else {
             upper = Version(0, 0, bump(v.patch(), whole));
         }
-        out.push_back({Op::Ge, v});
-        out.push_back({Op::Lt, upper});
+        out.emplace_back(Op::Ge, v);
+        out.emplace_back(Op::Lt, upper);
     } else if (take("~")) {
         const Version v = Version::parse(token);
-        out.push_back({Op::Ge, v});
-        out.push_back({Op::Lt, Version(v.major(), bump(v.minor(), whole), 0)});
+        out.emplace_back(Op::Ge, v);
+        out.emplace_back(Op::Lt, Version(v.major(), bump(v.minor(), whole), 0));
     } else {
-        out.push_back({Op::Eq, Version::parse(token)});
+        out.emplace_back(Op::Eq, Version::parse(token));
     }
 }
 

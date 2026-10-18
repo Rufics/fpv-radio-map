@@ -16,11 +16,15 @@
 
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
 #include <sstream>
 
 namespace {
+
+/// path -> content
+using Files = std::map<std::string, std::string, std::less<>>;
 
 const rfmod::SecretKey& devKey() {
     static const rfmod::SecretKey key = [] {
@@ -32,11 +36,11 @@ const rfmod::SecretKey& devKey() {
     return key;
 }
 
-std::map<std::string, std::string> splitSections(std::string_view text) {
+Files splitSections(std::string_view text) {
     constexpr std::string_view kMark = "--- ";
-    std::map<std::string, std::string> files;
-    if (text.substr(0, kMark.size()) != kMark) {
-        files.emplace("manifest.json", std::string(text));
+    Files files;
+    if (!text.starts_with(kMark)) {
+        files.try_emplace("manifest.json", text);
         return files;
     }
     std::size_t pos = 0;
@@ -46,15 +50,15 @@ std::map<std::string, std::string> splitSections(std::string_view text) {
         const std::size_t bodyStart = std::min(nameEnd + 1, text.size());
         const std::size_t next = text.find("\n--- ", bodyStart);
         const std::size_t bodyEnd = next == std::string_view::npos ? text.size() : next;
-        files.emplace(std::string(text.substr(nameStart, nameEnd - nameStart)),
-                      std::string(text.substr(bodyStart, bodyEnd - bodyStart)));
+        files.try_emplace(std::string(text.substr(nameStart, nameEnd - nameStart)),
+                          text.substr(bodyStart, bodyEnd - bodyStart));
         pos = next == std::string_view::npos ? text.size() : next + 1;
     }
     return files;
 }
 
 /// Plain tar (no gzip, to keep runs fast; the reader accepts both), written as given.
-std::string writeTar(const std::map<std::string, std::string>& files) {
+std::string writeTar(const Files& files) {
     std::unique_ptr<archive, decltype(&archive_write_free)> a(archive_write_new(), archive_write_free);
     archive_write_set_format_pax_restricted(a.get());
     archive_write_set_bytes_in_last_block(a.get(), 1);
@@ -84,10 +88,10 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     static const rfmod::TrustStore trust(devKey().publicKey().toText(),
                                          rfmap::fuzz::noSuchKeysFile());
 
-    std::map<std::string, std::string> files = splitSections(rfmap::fuzz::asText(data, size));
+    Files files = splitSections(rfmap::fuzz::asText(data, size));
     if (!files.contains("META/files.sha256")) {
         rfmod::PackageFiles content;
-        content.files = files;
+        content.files.insert(files.begin(), files.end());
         files["META/files.sha256"] = rfmod::PackageWriter::fileList(content);
     }
     if (!files.contains("META/signature")) {

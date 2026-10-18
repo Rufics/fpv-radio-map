@@ -99,16 +99,16 @@ void setIfPresent(json& point, const char* key, const std::optional<double>& val
 }
 
 void addForecastNotes(ForecastAt& out, std::int64_t offsetMin, std::size_t levels) {
-    out.notes.push_back({"Forecast", out.sourceLabel + (offsetMin != 0 ? " (" + std::to_string(offsetMin) +
+    out.notes.emplace_back("Forecast", out.sourceLabel + (offsetMin != 0 ? " (" + std::to_string(offsetMin) +
                                                                                " min from the requested time)"
-                                                                         : "")});
-    out.notes.push_back({"Forecast air column",
-                         "surface air is the 2 m temperature and humidity with the surface pressure; " +
-                             std::to_string(levels) + " pressure levels above the ground; forecast values are "
-                                                      "model output with their own error, not measurements"});
+                                                                         : ""));
+    out.notes.emplace_back("Forecast air column",
+                           "surface air is the 2 m temperature and humidity with the surface pressure; " +
+                               std::to_string(levels) + " pressure levels above the ground; forecast values are "
+                                                        "model output with their own error, not measurements");
     if (levels == 0) {
-        out.notes.push_back({"Refraction", "no forecast pressure level lies above the ground here; k cannot be "
-                                           "derived and the standard atmosphere k = 4/3 is used"});
+        out.notes.emplace_back("Refraction", "no forecast pressure level lies above the ground here; k cannot be "
+                                             "derived and the standard atmosphere k = 4/3 is used");
     }
 }
 
