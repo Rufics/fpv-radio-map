@@ -7,6 +7,7 @@
 #include <fstream>
 #include <functional>
 #include <random>
+#include <ranges>
 #include <set>
 #include <sstream>
 
@@ -47,7 +48,7 @@ std::string isoNow() {
     char buf[32];
     std::tm tm{};
     gmtime_r(&t, &tm);
-    std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
+    (void)std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
     return buf;
 }
 
@@ -87,12 +88,13 @@ ModuleRegistry::ModuleRegistry(RegistryConfig config, const TrustStore& trust, I
 
 ModuleRegistry::~ModuleRegistry() {
     // Shut down in reverse dependency order.
-    for (auto it = order_.rbegin(); it != order_.rend(); ++it) {
-        auto e = entries_.find(*it);
+    for (const auto& id : std::ranges::reverse_view(order_)) {
+        auto e = entries_.find(id);
         if (e != entries_.end() && e->second.instance) {
             try {
                 e->second.instance->shutdown();
             } catch (...) {
+                // Ignored: one module failing to shut down must not stop the others.
             }
             e->second.instance.reset();
         }
@@ -320,8 +322,8 @@ void ModuleRegistry::shutdownAll() {
     std::vector<std::unique_ptr<IModuleInstance>> retired;
     {
         std::lock_guard lock(mutex_);
-        for (auto it = order_.rbegin(); it != order_.rend(); ++it) {
-            auto e = entries_.find(*it);
+        for (const auto& id : std::ranges::reverse_view(order_)) {
+            auto e = entries_.find(id);
             if (e != entries_.end() && e->second.instance) retired.push_back(std::move(e->second.instance));
         }
         entries_.clear();
@@ -333,6 +335,7 @@ void ModuleRegistry::shutdownAll() {
         try {
             instance->shutdown();
         } catch (...) {
+            // Ignored: one module failing to shut down must not stop the others.
         }
     }
 }
@@ -427,7 +430,7 @@ void ModuleRegistry::resolve() {
         }
         for (const Dependency& d : e.manifest.optionalDependencies) {
             if (!ok) break;
-            if (entries_.count(d.id) && d.range.contains(entries_.at(d.id).manifest.version)) (void)visit(d.id);
+            if (entries_.contains(d.id) && d.range.contains(entries_.at(d.id).manifest.version)) (void)visit(d.id);
         }
         if (ok) {
             std::unique_ptr<IModuleInstance> instance;
@@ -536,10 +539,10 @@ std::optional<fs::path> ModuleRegistry::publicFile(const std::string& id, const 
     const auto it = entries_.find(id);
     if (it == entries_.end() || it->second.state != ModuleState::Active) return std::nullopt;
     // Only the UI bundle directory and the options schema are public; never lib/.
-    const bool isUi = path.rfind("ui/", 0) == 0;
-    const bool isSchema = it->second.manifest.optionsSchema && path == *it->second.manifest.optionsSchema;
+    const bool isUi = path.starts_with("ui/");
+    const bool isSchema = it->second.manifest.optionsSchema == path;
     if ((!isUi && !isSchema) || path.find("..") != std::string::npos) return std::nullopt;
-    const fs::path p = it->second.dir / path;
+    fs::path p = it->second.dir / path;
     if (!fs::is_regular_file(p)) return std::nullopt;
     return p;
 }

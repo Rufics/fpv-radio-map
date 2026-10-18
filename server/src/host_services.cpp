@@ -72,8 +72,9 @@ json ServerHostServices::call(const std::string& moduleId, const std::string& me
         if (!links_) throw std::runtime_error("no terrain model");
         const DemSource& dem = links_->requireDem();
         const auto e = dem.elevation(geo(request));
+        const std::optional<double> uncertainty = dem.statedErrorM();
         return {{"groundMslM", e ? json(e->heightMsl.value()) : json(nullptr)},
-                {"uncertaintyM", dem.statedErrorM().has_value() ? json(*dem.statedErrorM()) : json(nullptr)},
+                {"uncertaintyM", uncertainty ? json(*uncertainty) : json(nullptr)},
                 {"source", dem.name()}};
     }
     if (method == "profile.get") return profileGet(request);

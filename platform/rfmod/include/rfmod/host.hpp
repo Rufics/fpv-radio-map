@@ -92,7 +92,7 @@ public:
 private:
     void start();
     void stop(bool kill);
-    void send(const json& message);
+    void send(const json& message) const;
     /// Reads worker messages until `done` returns true, answering callbacks on the way.
     json waitFor(const std::string& type, long long id, long long deadlineMs);
 

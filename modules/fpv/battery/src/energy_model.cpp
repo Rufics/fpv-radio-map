@@ -219,7 +219,7 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
         if (s >= out) break;
     }
     if (lastOk < 0.0) {
-        p.notes.push_back("Even turning back at the start does not fit in the usable energy.");
+        p.notes.emplace_back("Even turning back at the start does not fit in the usable energy.");
         return p;
     }
     if (firstBad > lastOk) {

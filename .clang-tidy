@@ -1,0 +1,64 @@
+# clang-tidy checks for the C++ code, run by tools/ci/clang_tidy.py in CI before the C++ build.
+# Any finding fails CI. The set aims at real defects (bugprone, clang-analyzer, performance) and a
+# few modern idioms with automatic fixes; pure style checks are left out on purpose.
+#
+# Left out, with the reason:
+#   bugprone-easily-swappable-parameters   flags most numeric APIs (lat, lon, height, ...)
+#   bugprone-narrowing-conversions         -Wconversion already covers it in the build
+#   cert-err58-cpp                         static constants that can throw at start-up: none matter
+#   concurrency-mt-unsafe                  flags getenv/strerror/dlerror; glibc's are thread-safe
+#                                          or only called before threads start
+#   misc-include-cleaner                   too noisy with umbrella headers (nlohmann, gtest)
+#   misc-no-recursion                      recursion is intended (JSON walks, dependency order)
+#   misc-non-private-member-variables-in-classes, misc-const-correctness,
+#   misc-use-anonymous-namespace           style
+#   performance-enum-size                  style
+#   performance-inefficient-string-concatenation
+#                                          messages built once per result; += would only hurt reading
+#
+# To find what a change breaks: python3 tools/ci/clang_tidy.py --build-dir <build> (configure the
+# build with -DCMAKE_EXPORT_COMPILE_COMMANDS=ON, ideally with Clang).
+Checks: >-
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  cert-err33-c,
+  cert-oop54-cpp,
+  clang-analyzer-*,
+  cppcoreguidelines-init-variables,
+  cppcoreguidelines-missing-std-forward,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-virtual-class-destructor,
+  misc-*,
+  -misc-include-cleaner,
+  -misc-no-recursion,
+  -misc-non-private-member-variables-in-classes,
+  -misc-const-correctness,
+  -misc-use-anonymous-namespace,
+  modernize-loop-convert,
+  modernize-make-shared,
+  modernize-make-unique,
+  modernize-use-emplace,
+  modernize-use-equals-default,
+  modernize-use-equals-delete,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-starts-ends-with,
+  performance-*,
+  -performance-enum-size,
+  -performance-inefficient-string-concatenation,
+  readability-container-contains,
+  readability-container-size-empty,
+  readability-duplicate-include,
+  readability-make-member-function-const,
+  readability-misleading-indentation,
+  readability-simplify-boolean-expr
+WarningsAsErrors: '*'
+HeaderFilterRegex: '/(core|platform|modules|server|examples)/'
+CheckOptions:
+  # A deliberately empty catch says why in a comment that starts with "Ignored:".
+  bugprone-empty-catch.IgnoreCatchWithKeywords: '@TODO;@FIXME;Ignored:'
+  # !(x >= a && x <= b) also rejects NaN; the De Morgan form would let it through.
+  readability-simplify-boolean-expr.SimplifyDeMorgan: false

@@ -50,7 +50,7 @@ BuiltinModules::BuiltinModules(Database* db, SchemaRegistry& schemas, std::strin
     });
 }
 
-bool BuiltinModules::isBuiltin(const std::string& id) const { return entries_.count(id) > 0; }
+bool BuiltinModules::isBuiltin(const std::string& id) const { return entries_.contains(id); }
 
 bool BuiltinModules::enabled(const std::string& id) const {
     std::lock_guard lock(mutex_);

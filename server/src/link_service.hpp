@@ -31,12 +31,12 @@ struct Terminal {
 
 /// A mission linkSetup with its library items looked up and checked.
 struct ResolvedLink {
-    LinkKind kind;
+    LinkKind kind{};
     json radio;
     json groundAntenna;
     json airAntenna;
-    double txPowerDbm;
-    double requiredMarginDb;
+    double txPowerDbm{};
+    double requiredMarginDb{};
     std::vector<LibraryRef> refs;
 };
 
@@ -74,7 +74,7 @@ struct ModuleFailure {
 
 struct LinkEvaluation {
     json result;  ///< OpenAPI LinkResult
-    double marginDb;
+    double marginDb{};
     std::vector<ModuleFailure> failures;
 };
 
@@ -97,11 +97,11 @@ public:
 
     /// Same as evaluate, for raw radio parameters (host call link.evaluate without a mission).
     struct RawEnds {
-        double frequencyHz;
-        double txPowerDbm;
+        double frequencyHz{};
+        double txPowerDbm{};
         Terminal tx, rx;
-        double txGainDbi, txFeederDb, rxGainDbi, rxFeederDb;
-        double sensitivityDbm, requiredMarginDb;
+        double txGainDbi{}, txFeederDb{}, rxGainDbi{}, rxFeederDb{};
+        double sensitivityDbm{}, requiredMarginDb{};
     };
     [[nodiscard]] LinkEvaluation evaluateRaw(const RawEnds& ends, const CalcContext& ctx) const;
 

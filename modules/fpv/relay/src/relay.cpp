@@ -75,6 +75,7 @@ json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eva
                 (void)world.groundMsl(p);
                 scored.push_back({p, evaluateRelay(eval, links, pilot, {p, relayAgl}, samples)});
             } catch (const MissingTerrain&) {
+                // Ignored: a cell without terrain data is not a candidate.
             }
         }
         std::sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) { return a.h.score() > b.h.score(); });

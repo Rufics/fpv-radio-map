@@ -174,7 +174,7 @@ PreparedPath LinkService::prepare(const Terminal& ground, const Terminal& air, c
                 const auto cls = rfext::landCoverFromCode(std::stoi(code));
                 if (!cls) continue;
                 rfext::ClassSetting set;
-                set.enabled = s.value("enabled", false) && !off.count(std::stoi(code));
+                set.enabled = s.value("enabled", false) && !off.contains(std::stoi(code));
                 if (s.contains("heightM")) set.height = Metres(s.at("heightM").get<double>());
                 set.heightSource = s.value("source", "");
                 settings[*cls] = set;

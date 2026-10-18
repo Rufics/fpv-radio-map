@@ -23,7 +23,7 @@ Database::Lease::~Lease() {
         try {
             conn = std::make_unique<pqxx::connection>(db.url_);
         } catch (...) {
-            // Keep the dead one; the next lease fails fast with a clear error instead of hanging.
+            // Ignored: keep the dead one; the next lease fails fast with a clear error instead of hanging.
         }
     }
     {
@@ -48,7 +48,7 @@ std::vector<std::string> Database::migrate(const std::filesystem::path& sqlDir) 
         for (const auto& row : w.exec("select name from schema_migrations")) done.insert(row[0].as<std::string>());
         for (const auto& f : files) {
             const std::string name = f.filename().string();
-            if (done.count(name)) continue;
+            if (done.contains(name)) continue;
             std::ifstream in(f);
             std::ostringstream sql;
             sql << in.rdbuf();

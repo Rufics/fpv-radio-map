@@ -141,7 +141,8 @@ json analyze(const json& request, const IWorld& world, const ILinkProbe& link, c
                                      " m above home" +
                                      (rth.regainAfterM.has_value() ? ", control back after " + fixed(*rth.regainAfterM, 0) + " m."
                                                        : ", control does not come back before home.")));
-        if (rth.collision) {
+        // A collision is only recorded together with the gap that caused it.
+        if (rth.collision && rth.worstTerrainGapM.has_value()) {
             // Suggest the lowest RTH altitude that clears the terrain by the required gap.
             const double need = rth.cruiseMslM - *rth.worstTerrainGapM + settings.terrainClearanceM - homeGround;
             const double rounded = std::ceil(need);

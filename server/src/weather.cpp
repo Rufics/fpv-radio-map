@@ -34,6 +34,7 @@ json httpGetJson(const std::string& url, int timeoutMs) {
         try {
             reason = json::parse(res->body).value("reason", "");
         } catch (const std::exception&) {
+            // Ignored: the error below says what failed, with or without a reason.
         }
         throw std::runtime_error("forecast service answered HTTP " + std::to_string(res->status) +
                                  (reason.empty() ? "" : ": " + reason));
@@ -131,6 +132,7 @@ std::optional<TimePoint> WeatherService::runTimeCached() {
     try {
         t = source_->runTime();
     } catch (const std::exception&) {
+        // Ignored: the run time stays unknown and is asked for again when the cache expires.
     }
     std::lock_guard lock(mutex_);
     run_ = std::make_pair(now, t);

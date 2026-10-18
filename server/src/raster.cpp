@@ -172,7 +172,8 @@ std::string manifestSourceName(const fs::path& file) {
                 }
             }
         }
-    } catch (const nlohmann::json::exception&) {  // not JSON, or an entry of the wrong type
+    } catch (const nlohmann::json::exception&) {
+        // Ignored: not JSON, or an entry of the wrong type; the source is then unknown.
     }
     return {};
 }
@@ -193,7 +194,8 @@ std::vector<std::string> manifestAttributions(const fs::path& file) {
             const std::string joined = doc.value("attribution_display_text", "");
             if (!joined.empty()) out.push_back(joined);
         }
-    } catch (const nlohmann::json::exception&) {  // not JSON, or an entry of the wrong type
+    } catch (const nlohmann::json::exception&) {
+        // Ignored: not JSON, or an entry of the wrong type; there is no attribution to show.
     }
     return out;
 }

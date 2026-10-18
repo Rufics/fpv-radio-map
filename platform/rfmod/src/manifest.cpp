@@ -138,7 +138,7 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
 
     const std::string platform = currentPlatform();
     check("entry.platform", m.entry.count(platform) == 1,
-          m.entry.count(platform) ? "library for " + platform + ": " + m.entry.at(platform)
+          m.entry.contains(platform) ? "library for " + platform + ": " + m.entry.at(platform)
                                   : "no library for " + platform + " in entry");
 
     std::set<std::string> seen;

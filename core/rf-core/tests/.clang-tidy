@@ -1,0 +1,4 @@
+# Tests: the checks of the repository's .clang-tidy, except unchecked-optional-access, which does
+# not see that ASSERT_TRUE(optional) ends the test when the optional is empty.
+InheritParentConfig: true
+Checks: -bugprone-unchecked-optional-access

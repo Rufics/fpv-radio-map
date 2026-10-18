@@ -86,13 +86,8 @@ void hostLog(void*, int level, const char* message) {
     sendLine({{"t", "log"}, {"level", level}, {"message", message ? message : ""}});
 }
 
-}  // namespace
-
-int main(int argc, char** argv) {
-    if (argc != 3) {
-        std::fprintf(stderr, "rfmod-worker is started by the rfmap host, not by hand\n");
-        return 64;
-    }
+/// The worker after its arguments are checked. Returns the exit code.
+int run(const char* library) {
 
     // Hardening that does not need privileges. Each result is reported to the host as it is.
     const bool noNewPrivs = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0;
@@ -107,7 +102,7 @@ int main(int argc, char** argv) {
     };
     if (init.value("t", "") != "init") return fail("expected init");
 
-    void* handle = dlopen(argv[1], RTLD_NOW | RTLD_LOCAL);
+    void* handle = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (!handle) return fail(std::string("dlopen: ") + dlerror());
     auto entry = reinterpret_cast<rfmod_get_module_fn>(dlsym(handle, RFMOD_ENTRY_SYMBOL));
     if (!entry) return fail("library does not export " RFMOD_ENTRY_SYMBOL);
@@ -145,4 +140,20 @@ int main(int argc, char** argv) {
     }
     api->shutdown();
     return 0;
+}
+
+}  // namespace
+
+int main(int argc, char** argv) {
+    if (argc != 3) {
+        (void)std::fprintf(stderr, "rfmod-worker is started by the rfmap host, not by hand\n");
+        return 64;
+    }
+    // stderr goes to the host's log, so an unexpected failure is reported there instead of aborting.
+    try {
+        return run(argv[1]);
+    } catch (const std::exception& e) {
+        (void)std::fprintf(stderr, "rfmod-worker: %s\n", e.what());
+        return 70;
+    }
 }

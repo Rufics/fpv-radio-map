@@ -73,7 +73,7 @@ std::map<std::string, std::string> Config::processEnvironment() {
     for (char** e = environ; e && *e; ++e) {
         const std::string kv = *e;
         const auto eq = kv.find('=');
-        if (eq != std::string::npos && kv.rfind("RFMAP", 0) == 0) env[kv.substr(0, eq)] = kv.substr(eq + 1);
+        if (eq != std::string::npos && kv.starts_with("RFMAP")) env[kv.substr(0, eq)] = kv.substr(eq + 1);
     }
     return env;
 }
@@ -95,7 +95,7 @@ Config Config::load(const std::filesystem::path& file, const std::map<std::strin
             setPath(doc, a->second, name == "RFMAP_PORT" ? parseValue(value) : json(value));
             continue;
         }
-        if (name.rfind("RFMAP__", 0) != 0) continue;
+        if (!name.starts_with("RFMAP__")) continue;
         std::vector<std::string> path;
         std::string rest = name.substr(7);
         std::size_t pos = 0;

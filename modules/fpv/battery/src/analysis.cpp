@@ -58,7 +58,8 @@ json analyze(const json& request, const IWorld& world, const json& drone, const 
         data["drone"] = {{"id", drone.value("id", "")}, {"version", drone.value("version", 0)}};
         data["battery"] = {{"id", battery.value("id", "")}, {"version", battery.value("version", 0)}};
 
-        if (!air.windSpeedMps.has_value()) {
+        // The energy model takes wind without a direction as calm air too.
+        if (!air.windSpeedMps.has_value() || !air.windFromDeg.has_value()) {
             reasons.push_back(reason(kId, "warn", "No wind forecast for this time: energy is for calm air."));
         } else {
             data["notes"].push_back("Wind " + fixed(*air.windSpeedMps, 1) + " m/s from " + fixed(*air.windFromDeg, 0) +

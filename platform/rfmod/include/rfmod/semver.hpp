@@ -48,7 +48,7 @@ public:
 private:
     enum class Op { Eq, Gt, Ge, Lt, Le };
     struct Comparator {
-        Op op;
+        Op op{};
         Version version;
     };
     using Set = std::vector<Comparator>;

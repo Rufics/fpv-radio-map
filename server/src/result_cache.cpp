@@ -70,7 +70,7 @@ void ResultCache::put(const std::string& hash, const std::string& kind, const js
     const std::size_t bytes = text->size();
     memory_.put(hash, text);
     if (!table_) return;
-    Limits l;
+    Limits l{};
     bool trimNow = false;
     {
         std::lock_guard lock(mutex_);

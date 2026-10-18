@@ -140,6 +140,7 @@ struct ModuleAdapter {
         try {
             instance()->shutdown();
         } catch (...) {
+            // Ignored: an exception must not cross the C ABI, and the host is unloading us anyway.
         }
     }
 };

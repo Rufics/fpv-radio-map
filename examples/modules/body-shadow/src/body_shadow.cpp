@@ -39,7 +39,7 @@ public:
         lossDb_ = saved;
         const rfmod::json& term = out.at("terms").at(0);
         const bool valueOk = term.at("valueDb").get<double>() == 3.5;
-        const bool idOk = term.at("id").get<std::string>().rfind("example.body-shadow/", 0) == 0;
+        const bool idOk = term.at("id").get<std::string>().starts_with("example.body-shadow/");
         return {{"ok", valueOk && idOk},
                 {"checks", {{{"name", "value passes through unchanged"}, {"ok", valueOk}},
                             {{"name", "term id is namespaced"}, {"ok", idOk}}}}};

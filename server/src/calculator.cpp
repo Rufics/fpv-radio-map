@@ -85,9 +85,10 @@ CalcContext Calculator::contextFor(const json& mission) const {
 }
 
 json Calculator::environmentKey(const CalcContext& ctx) const {
+    const std::optional<double> demError = links_.dem() ? links_.dem()->statedErrorM() : std::nullopt;
     json key = {{"server", links_.version()},
                 {"dem", links_.dem() ? links_.dem()->raster().identity() : ""},
-                {"demError", links_.dem() && links_.dem()->statedErrorM().has_value() ? json(*links_.dem()->statedErrorM()) : json()},
+                {"demError", demError ? json(*demError) : json()},
                 {"landcover", links_.landcover() ? links_.landcover()->raster().identity() : ""},
                 {"builtins", builtins_.list()},
                 {"modules", modules_.versions(ctx)}};
@@ -404,7 +405,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
     const rfcore::Geodesy geo;
     auto worker = [&] {
         try {
-            for (std::size_t r; (r = nextRow++) < rows;) {
+            for (std::size_t r = 0; (r = nextRow++) < rows;) {
                 if (cancelled()) return;
                 std::shared_lock gate(modules_.gate());
                 const CalcContextScope scope(ctx);
@@ -435,6 +436,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, const std::functio
         }
     };
     std::vector<std::future<void>> parts;
+    parts.reserve(static_cast<std::size_t>(pool.size()));
     for (int t = 0; t < pool.size(); ++t) parts.push_back(pool.submit(worker));
     for (auto& f : parts) f.get();
     if (error) std::rethrow_exception(error);
@@ -552,7 +554,7 @@ json cellsToMultiPolygon(const std::vector<bool>& inside, std::size_t cols, std:
         while (true) {
             Edge& e = edges[cur];
             e.used = true;
-            ring.push_back({e.x0, e.y0});
+            ring.emplace_back(e.x0, e.y0);
             if (e.x1 == edges[start].x0 && e.y1 == edges[start].y0) break;
             // At a vertex two inside cells touch only by a corner: turn left (in map terms),
             // which keeps them as separate rings.

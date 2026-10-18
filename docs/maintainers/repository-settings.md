@@ -56,9 +56,10 @@ Target: the default branch. Enforcement: *Active*.
     does not affect were skipped), `Conventional Commits title`, `SonarCloud Code Analysis`.
 - **Require code scanning results:** CodeQL, *Security alerts: High or higher*, *Alerts: Errors*.
 
-`C++ build and tests`, `C++ coverage` and `Web build and tests` are not required one by one: they
-are skipped when a change cannot affect them, and `Test report` already fails when any of them
-fails.
+`C++ static analysis`, `C++ build and tests`, `C++ coverage` and `Web build and tests` are not
+required one by one: they are skipped when a change cannot affect them, and `Test report` already
+fails when any of them fails. `C++ static analysis` (clang-tidy, checks in `.clang-tidy`) runs
+first: when it fails, the C++ build, tests and coverage are skipped.
 
 ### Tag ruleset `v*`
 

@@ -45,12 +45,12 @@ struct LossPoint {
 };
 
 struct RthPlan {
-    double cruiseMslM;               ///< constant altitude flown home
-    double homeDistanceM;
+    double cruiseMslM{};             ///< constant altitude flown home
+    double homeDistanceM{};
     std::optional<double> regainAfterM;  ///< flown distance until control is back, if it comes back
     std::optional<double> worstTerrainGapM;
     std::optional<LatLon> collision;     ///< first point closer to terrain than the clearance
-    double energyWh;                     ///< from take-off to landing at home via the loss point
+    double energyWh{};                   ///< from take-off to landing at home via the loss point
 };
 
 class FailsafeAnalyzer {

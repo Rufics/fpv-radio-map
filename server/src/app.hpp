@@ -37,7 +37,7 @@ class Application {
 public:
     /// `ownerKeyText` is the built-in owner key (RFMAP_OWNER_PUBKEY_TEXT); `ownerKeyIsDev`
     /// says the build used the public development key, which is logged as a warning.
-    Application(Config config, std::string ownerKeyText, bool ownerKeyIsDev, std::filesystem::path sqlDir);
+    Application(Config config, const std::string& ownerKeyText, bool ownerKeyIsDev, const std::filesystem::path& sqlDir);
     ~Application();
 
     /// Binds and serves until stop(). Returns false if the port could not be bound.

@@ -23,7 +23,7 @@ std::string header(const Req& req, const char* name) { return req.has_header(nam
 
 std::string bearer(const Req& req) {
     const std::string h = header(req, "Authorization");
-    if (h.rfind("Bearer ", 0) == 0) return h.substr(7);
+    if (h.starts_with("Bearer ")) return h.substr(7);
     return {};
 }
 
@@ -88,7 +88,7 @@ void dropUnbuiltLayers(json& map, const std::filesystem::path& dem) {
 
 }  // namespace
 
-Application::Application(Config config, std::string ownerKeyText, bool ownerKeyIsDev, std::filesystem::path sqlDir)
+Application::Application(Config config, const std::string& ownerKeyText, bool ownerKeyIsDev, const std::filesystem::path& sqlDir)
     : config_(std::move(config)) {
     Secrets::init();
     if (ownerKeyIsDev) {
@@ -358,7 +358,7 @@ void Application::routes() {
 
     // Every handler runs inside this: rate limit, uniform JSON errors, Retry-After on 429.
     using Handler = std::function<void(const Req&, Res&)>;
-    auto wrap = [this](std::string cls, Handler h) {
+    auto wrap = [this](const std::string& cls, const Handler& h) {
         return [this, cls, h](const Req& req, Res& res) {
             try {
                 limiter_->take(cls, client(req));

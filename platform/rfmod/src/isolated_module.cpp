@@ -49,6 +49,7 @@ IsolatedModule::~IsolatedModule() {
     try {
         shutdown();
     } catch (...) {
+        // Ignored: a destructor must not throw; the worker is killed either way.
     }
 }
 
@@ -156,7 +157,7 @@ void IsolatedModule::stop(bool kill) {
     toWorker_ = fromWorker_ = errFromWorker_ = -1;
 }
 
-void IsolatedModule::send(const json& message) {
+void IsolatedModule::send(const json& message) const {
     const std::string line = message.dump() + "\n";
     std::size_t off = 0;
     while (off < line.size()) {
@@ -170,7 +171,7 @@ void IsolatedModule::send(const json& message) {
 json IsolatedModule::waitFor(const std::string& type, long long id, long long deadlineMs) {
     for (;;) {
         // Handle every complete protocol line already buffered.
-        for (std::size_t nl; (nl = outBuffer_.find('\n')) != std::string::npos;) {
+        for (std::size_t nl = 0; (nl = outBuffer_.find('\n')) != std::string::npos;) {
             const std::string line = outBuffer_.substr(0, nl);
             outBuffer_.erase(0, nl + 1);
             json msg;
@@ -199,7 +200,7 @@ json IsolatedModule::waitFor(const std::string& type, long long id, long long de
                 throw ModuleError("protocol", manifest_.id + ": unexpected worker message " + t);
             }
         }
-        for (std::size_t nl; (nl = errBuffer_.find('\n')) != std::string::npos;) {
+        for (std::size_t nl = 0; (nl = errBuffer_.find('\n')) != std::string::npos;) {
             services_.log(manifest_.id, 2, "stderr: " + errBuffer_.substr(0, nl));
             errBuffer_.erase(0, nl + 1);
         }
@@ -250,6 +251,7 @@ void IsolatedModule::shutdown() {
     try {
         send({{"t", "shutdown"}});
     } catch (...) {
+        // Ignored: a worker that cannot be told to stop is stopped by stop() below.
     }
     stop(false);
 }
