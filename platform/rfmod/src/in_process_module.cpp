@@ -63,9 +63,9 @@ struct InProcessModule::Library {
 
 namespace {
 
-json takeResponse(const rfmod_module* api, char* response) {
+json takeResponse(const rfmod_module* api, const char* response) {
     if (!response) return json();
-    std::string text(response);
+    const std::string text(response);
     api->free_string(response);
     return json::parse(text);
 }
