@@ -23,6 +23,7 @@ This folder is the project's documentation. It is reviewed in pull requests like
 - [HTTP API (OpenAPI)](api/openapi.yaml)
 - [Fuzz testing](dev/fuzzing.md): how the C++ input parsers are fuzzed.
 - [Contributing](../CONTRIBUTING.md)
+- [Repository settings](maintainers/repository-settings.md): the GitHub settings the CI and the review rules rely on.
 
 ## Where to ask
 

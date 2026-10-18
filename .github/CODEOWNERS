@@ -1,0 +1,14 @@
+# Code owners. With "Require review from Code Owners" on in the main branch ruleset, a pull request
+# that touches these paths cannot be merged without an approving review from an owner listed here.
+# See docs/maintainers/repository-settings.md.
+
+# Everything, until the project has more maintainers.
+*                       @Rufics
+
+# The supply chain: CI, release and deployment, the trusted keys. Keep these owned by maintainers
+# when ownership of the rest is shared, and list them last so they override broader rules.
+/.github/               @Rufics
+/tools/ci/              @Rufics
+/deploy/                @Rufics
+/platform/rfmod/keys/   @Rufics
+/CMakeLists.txt         @Rufics

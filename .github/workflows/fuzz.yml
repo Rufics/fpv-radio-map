@@ -15,6 +15,7 @@ on:
       - schemas/**
       - fuzz/**
       - CMakeLists.txt
+      - .github/actions/cpp-deps/**
       - .github/workflows/fuzz.yml
   schedule:
     - cron: "40 1 * * *"
@@ -42,13 +43,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            clang-18 libclang-rt-18-dev cmake ninja-build pkg-config \
-            libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
-            libpqxx-dev libgdal-dev libcpp-httplib-dev
+      - uses: ./.github/actions/cpp-deps
+        with:
+          extra: clang-18 libclang-rt-18-dev
       - name: Configure
         run: >
           cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
