@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rfmod/confined_root.hpp"
 #include "rfmod/manifest.hpp"
 
 #include <nlohmann/json.hpp>
@@ -48,10 +49,11 @@ public:
 };
 
 /// Loads the shared library into this process. Only for packages signed with the owner key.
+/// The library must lie inside `trustedDir`; anything else throws PathEscapeError before dlopen.
 class InProcessModule final : public IModuleInstance {
 public:
-    InProcessModule(Manifest manifest, const std::filesystem::path& library, IHostServices& services,
-                    const json& options);
+    InProcessModule(Manifest manifest, const ConfinedRoot& trustedDir, const std::filesystem::path& library,
+                    IHostServices& services, const json& options);
     ~InProcessModule() override;
 
     [[nodiscard]] const Manifest& manifest() const override { return manifest_; }
