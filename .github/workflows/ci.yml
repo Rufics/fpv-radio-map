@@ -227,13 +227,14 @@ jobs:
           python3 -I "$GITHUB_WORKSPACE/tools/ci/report.py" > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
       # One comment per pull request, updated on every run. Only for branches of this repository:
-      # forks and Dependabot get a read-only token, and ci-report.yml comments for them. A failed
+      # forks and runs started by Dependabot get a read-only token, and ci-report.yml comments for
+      # them. ci-report.yml checks the same actor, so exactly one of the two posts. A failed
       # comment never turns the gate red.
       - name: Post the report to the pull request
         if: >-
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
-          github.event.pull_request.user.login != 'dependabot[bot]'
+          github.actor != 'dependabot[bot]'
         continue-on-error: true
         working-directory: ${{ runner.temp }}/ci-data
         env:
