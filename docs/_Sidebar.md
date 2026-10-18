@@ -8,6 +8,7 @@
 
 **Running it**
 
+- [Production server, step by step](admin/production-setup.md)
 - [Deployment](admin/deploy.md)
 - [Building map data](admin/tiles-builder.md)
 

@@ -152,6 +152,7 @@ npm run start:mock-prod      # then open http://localhost:4200
 ```
 
 **Run the whole stack** with Docker. You need terrain tiles from the [tiles builder](docs/admin/tiles-builder.md) first.
+[Production server, step by step](docs/admin/production-setup.md) walks through tiles, keys, modules, TLS and backups.
 
 ```sh
 cd deploy
@@ -173,7 +174,7 @@ cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
 All documentation lives in [`docs/`](docs/README.md) and is published to the [wiki](https://github.com/Rufics/fpv-radio-map/wiki) on every change.
 
 - [Glossary](docs/guide/glossary.md) and [FAQ](docs/guide/faq.md)
-- [Server deployment](docs/admin/deploy.md) and the [tiles builder](docs/admin/tiles-builder.md)
+- [Production server, step by step](docs/admin/production-setup.md), then [server deployment](docs/admin/deploy.md) and the [tiles builder](docs/admin/tiles-builder.md) for every option
 - [HTTP API (OpenAPI)](docs/api/openapi.yaml)
 - [Writing a module](docs/modules/developer-guide.md): C ABI, host calls, UI bundles, signing, deprecation
 - [Web frontend](web/README.md)
