@@ -21,7 +21,7 @@ export function groundToAir(link: LinkResult | null | undefined): GroundToAirVie
   const flipped = link?.ends?.transmitter === 'air';
   const profile = link?.profile;
   if (!flipped || !profile?.points?.length) return { profile, diffraction: link?.diffraction, ground, air, flipped: false };
-  const L = profile.lengthM ?? profile.points[profile.points.length - 1].distanceM;
+  const L = profile.lengthM ?? profile.points.at(-1)!.distanceM;
   const flipPoint = (p: ProfilePoint | undefined): ProfilePoint | undefined => (p ? { ...p, distanceM: L - p.distanceM } : p);
   const points = [...profile.points].reverse().map((p) => flipPoint(p)!);
   const d = link?.diffraction;

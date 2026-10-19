@@ -24,7 +24,8 @@ export class HeatScale {
     const m = marginDb - this.thresholdDb;
     if (m < 0) return null;
     const stops = HEAT_STOPS;
-    if (m >= stops[stops.length - 1].db) return [...stops[stops.length - 1].rgb, this.alpha];
+    const top = stops.at(-1)!;
+    if (m >= top.db) return [...top.rgb, this.alpha];
     for (let i = 0; i < stops.length - 1; i++) {
       const a = stops[i];
       const b = stops[i + 1];
@@ -58,6 +59,11 @@ export class HeatScale {
   }
 
   static cssGradient(): string {
-    return `linear-gradient(90deg, ${[...HEAT_STOPS].reverse().map((s) => `rgb(${s.rgb.join(',')})`).join(', ')})`;
+    const colors = [...HEAT_STOPS].reverse().map((s) => HeatScale.cssRgb(s.rgb));
+    return `linear-gradient(90deg, ${colors.join(', ')})`;
+  }
+
+  private static cssRgb(rgb: readonly number[]): string {
+    return `rgb(${rgb.join(',')})`;
   }
 }

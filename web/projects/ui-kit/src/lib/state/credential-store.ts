@@ -29,7 +29,7 @@ class SafeStorage {
 export class CredentialStore {
   private readonly local = new SafeStorage(() => localStorage);
   private readonly tab = new SafeStorage(() => sessionStorage);
-  private memory = new Map<string, string>();
+  private readonly memory = new Map<string, string>();
   private readonly adminTokenState = signal<string | null>(this.read(this.tab, 'rfmap.admin'));
   /** The admin token as a signal, for UI that switches between read-only and editable. */
   readonly adminTokenSignal = this.adminTokenState.asReadonly();

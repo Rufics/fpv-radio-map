@@ -120,4 +120,36 @@ describe('ModuleUiLoader', () => {
     await TestBed.inject(ModuleUiLoader).load(info());
     expect(seen).toBeNull();
   });
+  it('loadAll loads the modules with a UI bundle one after the other, in list order', async () => {
+    const panel = (id: string): RfModuleUiBundle => ({
+      register: (api) => {
+        api.slots.register({ id, slot: 'side.panels', mount: () => undefined });
+      },
+    });
+    bundles['/modules/a/ui.js'] = panel('a');
+    bundles['/modules/b/ui.js'] = panel('b');
+    const loader = TestBed.inject(ModuleUiLoader);
+    const results = await loader.loadAll(
+      [
+        info({ id: 'm.a', ui: { bundle: '/modules/a/ui.js', slots: ['side.panels'] } }),
+        info({ id: 'm.none', ui: undefined }),
+        info({ id: undefined }),
+        info({ id: 'm.alpha', lifecycle: 'alpha', ui: { bundle: '/modules/alpha/ui.js' } }),
+        info({ id: 'm.b', ui: { bundle: '/modules/b/ui.js', slots: ['side.panels'] } }),
+      ],
+      { includeAlpha: false },
+    );
+    expect(results.map((r) => [r.moduleId, r.state])).toEqual([
+      ['m.a', 'loaded'],
+      ['m.alpha', 'skipped'],
+      ['m.b', 'loaded'],
+    ]);
+    expect(imported.map((u) => new URL(u).pathname)).toEqual(['/modules/a/ui.js', '/modules/b/ui.js']);
+    const slot = TestBed.inject(SlotRegistry).slot('side.panels')();
+    expect(slot.map((c) => c.id)).toEqual(['m.a/a', 'm.b/b']);
+  });
+
+  it('loadAll of nothing resolves to no status', async () => {
+    expect(await TestBed.inject(ModuleUiLoader).loadAll([])).toEqual([]);
+  });
 });

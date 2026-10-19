@@ -116,7 +116,11 @@ export class SourcesPage implements OnInit {
     ['Weather map', 'Tiles drawn from the same forecast', 'hourly', 'as forecast'],
   ];
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
+    this.loadPage().catch((e) => this.cacheError.set(ApiError.from(e).message));
+  }
+
+  private async loadPage(): Promise<void> {
     await this.data.load();
     try {
       this.tiers.set(await this.api.adminCache());

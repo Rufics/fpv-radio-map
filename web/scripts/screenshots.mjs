@@ -21,6 +21,9 @@ const watch = (page, tag) => {
   page.on('console', (m) => m.type() === 'error' && errors.push(`[${tag}] console: ${m.text()}`));
 };
 const settle = (page, ms = 1500) => page.waitForTimeout(ms);
+// PIN digits must be entered in order, so each click waits for the one before it
+const typeDigits = (page, digits) =>
+  [...digits].reduce((prev, d) => prev.then(() => page.getByRole('button', { name: `Digit ${d}` }).click()), Promise.resolve());
 
 try {
   // ---- laptop: result state + why drawer ----
@@ -102,7 +105,7 @@ try {
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   watch(phone, 'phone');
   await phone.goto(`${BASE}/m/v/demo-view`);
-  for (const d of '24') await phone.getByRole('button', { name: `Digit ${d}` }).click();
+  await typeDigits(phone, '24');
   await settle(phone, 300);
   await phone.screenshot({ path: `${OUT}/phone-pin.png` });
   const gone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
@@ -111,7 +114,7 @@ try {
   await settle(gone, 1200);
   await gone.screenshot({ path: `${OUT}/phone-pin-expired.png` });
   await gone.close();
-  for (const d of '6810') await phone.getByRole('button', { name: `Digit ${d}` }).click();
+  await typeDigits(phone, '6810');
   await phone.getByRole('button', { name: 'Open mission' }).click();
   await phone.waitForURL(/\/mission\//, { timeout: 10000 });
   await settle(phone, 3500);

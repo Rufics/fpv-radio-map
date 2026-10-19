@@ -10,7 +10,7 @@ const EMPTY_PNG =
 
 /** [west, south, east, north] of a grid; from bbox, or derived from origin (north-west corner) and cell size. */
 export function gridBounds(grid: CoverageGrid): [number, number, number, number] | null {
-  if (grid.bbox && grid.bbox.length === 4) return grid.bbox;
+  if (grid.bbox?.length === 4) return grid.bbox;
   const o = grid.origin;
   if (!o?.lat || !o.lon || !grid.cellM || !grid.cols || !grid.rows) return null;
   const east = destinationPoint(o.lat, o.lon, 90, grid.cellM * grid.cols);
@@ -52,7 +52,7 @@ export class CoverageLayer extends StyleLayerSet {
 
   /** Render a grid; null clears the layer. */
   setGrid(grid: CoverageGrid | null): void {
-    if (!grid || !grid.marginDb || !grid.cols || !grid.rows) {
+    if (!grid?.marginDb || !grid.cols || !grid.rows) {
       this.hasGrid = false;
       this.url = EMPTY_PNG;
     } else {
@@ -147,7 +147,7 @@ export class LimitsLayer extends StyleLayerSet {
       features.push({ type: 'Feature', properties: { kind: 'battery', label: shapes.battery.label ?? '' }, geometry: { type: 'LineString', coordinates: ring } });
     }
     const fc: FeatureCollection = { type: 'FeatureCollection', features };
-    (this.map?.getSource('rf-limits') as GeoJSONSource | undefined)?.setData(fc);
+    this.pushData(this.map, fc);
     this.pending = fc;
   }
 
@@ -155,7 +155,13 @@ export class LimitsLayer extends StyleLayerSet {
 
   override attach(map: MlMap, beforeId: string | undefined): void {
     super.attach(map, beforeId);
-    if (this.pending) (map.getSource('rf-limits') as GeoJSONSource | undefined)?.setData(this.pending);
+    if (this.pending) this.pushData(map, this.pending);
+  }
+
+  private pushData(map: MlMap | undefined, fc: FeatureCollection): void {
+    (map?.getSource('rf-limits') as GeoJSONSource | undefined)
+      ?.setData(fc)
+      .catch((e: unknown) => console.error('Limit shapes could not be updated', e));
   }
 }
 

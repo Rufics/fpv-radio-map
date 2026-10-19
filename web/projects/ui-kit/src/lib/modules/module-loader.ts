@@ -42,13 +42,13 @@ export class ModuleUiLoader {
 
   readonly status = signal<ModuleUiStatus[]>([]);
 
-  async loadAll(modules: ModuleInfo[], opts: LoadOptions = {}): Promise<ModuleUiStatus[]> {
-    const results: ModuleUiStatus[] = [];
-    for (const m of modules) {
-      if (!m.ui?.bundle || !m.id) continue;
-      results.push(await this.load(m, opts));
-    }
-    return results;
+  /** Loads one bundle after the other, so status and slot registration keep the list order. */
+  loadAll(modules: ModuleInfo[], opts: LoadOptions = {}): Promise<ModuleUiStatus[]> {
+    const withUi = modules.filter((m) => m.ui?.bundle && m.id);
+    return withUi.reduce<Promise<ModuleUiStatus[]>>(
+      (previous, m) => previous.then((results) => this.load(m, opts).then((s) => [...results, s])),
+      Promise.resolve([]),
+    );
   }
 
   async load(info: ModuleInfo, opts: LoadOptions = {}): Promise<ModuleUiStatus> {

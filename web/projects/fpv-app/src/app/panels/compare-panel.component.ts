@@ -205,7 +205,7 @@ export class ComparePanelComponent {
         a,
         b,
         d,
-        mark: Math.abs(d) < 0.005 ? '=' : d > 0 ? '▲' : '▼',
+        mark: this.deltaMark(d),
         better: l.pointsBetter,
         worse: l.pointsWorse,
         total: l.points?.length,
@@ -216,5 +216,11 @@ export class ComparePanelComponent {
   protected async run(): Promise<void> {
     const p = this.patch();
     if (p) await this.cmp.compare(this.name().trim(), p);
+  }
+
+  /** '=' for no change, '▲' when B is better, '▼' otherwise (also when the difference is unknown). */
+  private deltaMark(d: number): string {
+    if (Math.abs(d) < 0.005) return '=';
+    return d > 0 ? '▲' : '▼';
   }
 }

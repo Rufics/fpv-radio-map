@@ -71,16 +71,16 @@ const rnd = (n = 20) => {
 };
 
 export class MockBackend {
-  private missions = new Map<string, StoredMission>();
-  private sessions = new Map<string, { missionId: string; role: 'edit' | 'view' }>();
-  private jobs = new Map<string, StoredJob>();
-  private library: Record<LibraryKind, Record<string, unknown>[]> = {
+  private readonly missions = new Map<string, StoredMission>();
+  private readonly sessions = new Map<string, { missionId: string; role: 'edit' | 'view' }>();
+  private readonly jobs = new Map<string, StoredJob>();
+  private readonly library: Record<LibraryKind, Record<string, unknown>[]> = {
     'radio-profiles': structuredClone(LIBRARY.radios) as unknown as Record<string, unknown>[],
     antennas: structuredClone(LIBRARY.antennas) as unknown as Record<string, unknown>[],
     batteries: structuredClone(LIBRARY.batteries) as unknown as Record<string, unknown>[],
     drones: structuredClone(LIBRARY.drones) as unknown as Record<string, unknown>[],
   };
-  private cache: CacheTier[] = [
+  private readonly cache: CacheTier[] = [
     { id: 'dem-blocks', label: 'Elevation blocks in memory', limitBytes: 2e9, usedBytes: 1.1e9, entries: 412, hits: 96210, misses: 2980, evictions: 120, hitRate: 0.97 },
     { id: 'results-memory', label: 'Results in memory', limitBytes: 5e8, usedBytes: 1.8e8, entries: 61, hits: 830, misses: 520, evictions: 4, hitRate: 0.61 },
     { id: 'results-table', label: 'Results table (Postgres)', limitBytes: 4e9, limitRows: 50000, usedBytes: 0.9e9, entries: 8120, hits: 2210, misses: 1430, evictions: 0, hitRate: 0.61 },
@@ -89,10 +89,10 @@ export class MockBackend {
     { id: '9f3a1c0b', label: 'Server owner key', key: 'rfmod-ed25519 9f3a1c0b5e7d…', builtIn: true, firstParty: true },
     { id: '4be27d11', label: 'club.ham publisher', key: 'rfmod-ed25519 4be27d11a0c3…', builtIn: false, firstParty: false },
   ];
-  private history = new Map<string, { version: number; verified: boolean; item: Record<string, unknown>; changedBy: string; changedAt: string }[]>();
+  private readonly history = new Map<string, { version: number; verified: boolean; item: Record<string, unknown>; changedBy: string; changedAt: string }[]>();
   private modules: ModuleInfo[] = structuredClone(MODULES);
-  private validator = new SchemaValidator();
-  private routes: [string, RegExp, Handler][] = [];
+  private readonly validator = new SchemaValidator();
+  private readonly routes: [string, RegExp, Handler][] = [];
 
   constructor(private readonly scenario: () => MockScenario = () => 'normal') {
     this.seed();
@@ -159,10 +159,12 @@ export class MockBackend {
     const mission = exampleMission();
     const s: StoredMission = { id, mission, revision: 3, ownerKey: 'owner-demo-key', links: [] };
     s.lastResult = routeResult(mission, 'normal');
-    s.links.push({ linkId: 'l-demo-view', role: 'view', label: 'Phone crew', createdAt: new Date(Date.now() - 86400e3).toISOString(), revoked: false, openCount: 7, token: 'demo-view', pin: '246810', wrong: 0 });
-    s.links.push({ linkId: 'l-demo-edit', role: 'edit', label: 'Co-pilot', createdAt: new Date(Date.now() - 86400e3).toISOString(), revoked: false, openCount: 2, expiresAt: new Date(Date.now() + 6 * 86400e3).toISOString(), token: 'demo-edit', pin: '135790', wrong: 0 });
-    s.links.push({ linkId: 'l-demo-expired', role: 'view', label: 'Last week', createdAt: new Date(Date.now() - 9 * 86400e3).toISOString(), expiresAt: new Date(Date.now() - 2 * 86400e3).toISOString(), revoked: false, openCount: 3, token: 'demo-expired', pin: '111111', wrong: 0 });
-    s.links.push({ linkId: 'l-demo-revoked', role: 'view', label: 'Old link', createdAt: new Date(Date.now() - 5 * 86400e3).toISOString(), revoked: true, openCount: 12, token: 'demo-revoked', pin: '000000', wrong: 0 });
+    s.links.push(
+      { linkId: 'l-demo-view', role: 'view', label: 'Phone crew', createdAt: new Date(Date.now() - 86400e3).toISOString(), revoked: false, openCount: 7, token: 'demo-view', pin: '246810', wrong: 0 },
+      { linkId: 'l-demo-edit', role: 'edit', label: 'Co-pilot', createdAt: new Date(Date.now() - 86400e3).toISOString(), revoked: false, openCount: 2, expiresAt: new Date(Date.now() + 6 * 86400e3).toISOString(), token: 'demo-edit', pin: '135790', wrong: 0 },
+      { linkId: 'l-demo-expired', role: 'view', label: 'Last week', createdAt: new Date(Date.now() - 9 * 86400e3).toISOString(), expiresAt: new Date(Date.now() - 2 * 86400e3).toISOString(), revoked: false, openCount: 3, token: 'demo-expired', pin: '111111', wrong: 0 },
+      { linkId: 'l-demo-revoked', role: 'view', label: 'Old link', createdAt: new Date(Date.now() - 5 * 86400e3).toISOString(), revoked: true, openCount: 12, token: 'demo-revoked', pin: '000000', wrong: 0 },
+    );
     this.missions.set(id, s);
   }
 
@@ -219,7 +221,7 @@ export class MockBackend {
     const s = this.missions.get(id);
     const sess = this.sessionOf(req);
     if (!s) throw this.error(404, 'No such mission');
-    if (!sess || sess.missionId !== id) throw this.error(401, 'Session required');
+    if (sess?.missionId !== id) throw this.error(401, 'Session required');
     return this.ok({ mission: s.mission, role: sess.role, revision: s.revision, lastResult: s.lastResult });
   }
 
@@ -227,7 +229,7 @@ export class MockBackend {
     const s = this.missions.get(id);
     const sess = this.sessionOf(req);
     if (!s) throw this.error(404, 'No such mission');
-    if (!sess || sess.missionId !== id || sess.role !== 'edit') throw this.error(403, 'Edit session required');
+    if (sess?.missionId !== id || sess.role !== 'edit') throw this.error(403, 'Edit session required');
     const ifMatch = Number((req.headers.get('If-Match') ?? '').replaceAll('"', ''));
     if (ifMatch !== s.revision) throw this.error(409, 'Someone saved in between');
     const v = this.validator.validateMission(req.body);
@@ -238,8 +240,8 @@ export class MockBackend {
   }
 
   private createLink(s: StoredMission, body: CreateLinkRequest): HttpResponse<unknown> {
-    if (!/^[0-9]{6}$/.test(body?.pin ?? '')) throw this.error(400, 'PIN must be 6 digits');
-    if (body.expiresAt !== undefined && !(Date.parse(body.expiresAt) > Date.now())) throw this.error(400, 'expiresAt must be a future date-time');
+    if (!/^\d{6}$/.test(body?.pin ?? '')) throw this.error(400, 'PIN must be 6 digits');
+    if (body.expiresAt !== undefined && !isFutureDate(body.expiresAt)) throw this.error(400, 'expiresAt must be a future date-time');
     const token = rnd(32);
     const link = { linkId: `l-${rnd(6)}`, role: body.role, label: body.label, createdAt: new Date().toISOString(), revoked: false, openCount: 0, expiresAt: body.expiresAt, token, pin: body.pin, wrong: 0 };
     s.links.push(link);
@@ -305,7 +307,7 @@ export class MockBackend {
   private calcRoute(req: HttpRequest<unknown>): HttpResponse<unknown> {
     const mission = req.body as Mission;
     const result = routeResult(mission, this.scenario());
-    if (mission.modules?.['fpv.core']) result.modules = { ...(result.modules ?? {}), 'fpv.core': fpvCoreMock(mission) };
+    if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
     const sess = this.sessionOf(req);
     const stored = sess ? this.missions.get(sess.missionId) : undefined;
     if (stored && sess?.role === 'edit') {
@@ -340,7 +342,12 @@ export class MockBackend {
       return { ...base, state: 'waiting' as const, progress: 0 };
     });
     const done = parts.every((p) => p.state === 'done' || p.state === 'cached');
-    return { jobId: job.id, createdAt: new Date(job.started).toISOString(), state: job.cancelled ? 'cancelled' : done ? 'done' : 'running', parts };
+    return { jobId: job.id, createdAt: new Date(job.started).toISOString(), state: this.jobState(job.cancelled, done), parts };
+  }
+
+  private jobState(cancelled: boolean, done: boolean): NonNullable<Job['state']> {
+    if (cancelled) return 'cancelled';
+    return done ? 'done' : 'running';
   }
 
   private getJob(id: string): HttpResponse<unknown> {
@@ -394,7 +401,7 @@ export class MockBackend {
     if (idx < 0) throw this.error(404, 'No such item');
     const current = list[idx];
     const currentVersion = Number(current['version'] ?? 1);
-    if (Number(edited) !== currentVersion) throw this.error(409, `The item changed since version ${edited ?? '?'}; now at version ${currentVersion}`);
+    if (Number(edited) !== currentVersion) throw this.error(409, `The item changed since version ${versionLabel(edited)}; now at version ${currentVersion}`);
     const saved = this.validated(kind, { ...entry, id, version: currentVersion + 1, verified: true });
     const key = `${kind}/${id}`;
     const hist = this.history.get(key) ?? [];
@@ -433,7 +440,7 @@ export class MockBackend {
 
   private addKey(body: { key?: string; label?: string }): HttpResponse<unknown> {
     const key = (body?.key ?? '').trim();
-    const m = key.match(/^rfmod-ed25519 ([0-9a-f]{8})[0-9a-f]{8,}$/);
+    const m = /^rfmod-ed25519 ([0-9a-f]{8})[0-9a-f]{8,}$/.exec(key);
     if (!m) throw this.error(422, 'Not a valid key (expected "rfmod-ed25519 <hex>")');
     if (!this.keys.some((k) => k.id === m[1])) this.keys.push({ id: m[1], label: body.label || 'Publisher key', key: `${key.slice(0, 26)}…`, builtIn: false, firstParty: false });
     return this.ok(this.keys, 201);
@@ -448,7 +455,6 @@ export class MockBackend {
 
   private async uploadModule(req: HttpRequest<unknown>): Promise<HttpResponse<ValidationReport>> {
     const blob = req.body as Blob;
-    const name = (blob as File).name ?? 'package.rfmod';
     const size = blob.size ?? 0;
     const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
     const isZip = head[0] === 0x50 && head[1] === 0x4b;
@@ -462,15 +468,13 @@ export class MockBackend {
       { name: 'Deprecated API', ok: true, detail: 'warning: calls link::budget_v1, deprecated in 1.3, removed in 1.6. Use link::budget.' },
       { name: 'Self-test', ok: isZip, detail: isZip ? 'Conformance tests 48 / 48 on reference cases' : 'not run' },
     ];
-    void name;
     return this.ok({ ok: checks.every((c) => c.ok), checks });
   }
 
   private putCache(body: CacheLimit[]): HttpResponse<unknown> {
     if (!Array.isArray(body)) throw this.error(400, 'Expected an array of {id, limitBytes?, limitRows?}');
     for (const b of body) {
-      const t = this.cache.find((c) => c.id === b.id);
-      if (!t) throw this.error(400, `Unknown cache tier ${b.id}`);
+      if (!this.cache.some((c) => c.id === b.id)) throw this.error(400, `Unknown cache tier ${b.id}`);
       const bad = (n: unknown) => n !== undefined && !(Number.isInteger(n) && (n as number) >= 0);
       if (bad(b.limitBytes) || bad(b.limitRows)) throw this.error(400, 'Limits must be integers ≥ 0');
       if (b.limitRows !== undefined && b.id !== 'results-table') throw this.error(400, 'limitRows is for results-table only');
@@ -482,6 +486,20 @@ export class MockBackend {
     }
     return this.ok(this.cache);
   }
+}
+
+/** True if `iso` parses to a time after now (an unparsable string is not in the future). */
+function isFutureDate(iso: string): boolean {
+  return Date.parse(iso) > Date.now();
+}
+
+/** The edited version as shown in a conflict message; '?' when the client sent none. */
+function versionLabel(edited: unknown): string {
+  if (edited === undefined || edited === null) return '?';
+  if (typeof edited === 'string' || typeof edited === 'number' || typeof edited === 'boolean') {
+    return String(edited);
+  }
+  return JSON.stringify(edited) ?? '?';
 }
 
 function publicLink(l: ShareLink & { token?: string; pin?: string; pausedUntilMs?: number }): ShareLink {

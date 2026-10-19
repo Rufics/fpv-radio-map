@@ -65,7 +65,7 @@ export class MapViewComponent {
   private readonly slots = inject(SlotRegistry);
   private readonly destroyRef = inject(DestroyRef);
   private map?: MlMap;
-  private slotLayerCleanups = new Map<string, () => void>();
+  private readonly slotLayerCleanups = new Map<string, () => void>();
 
   protected readonly attributionText = computed(() => {
     const parts = [...(this.config()?.attribution ?? ['© OpenStreetMap contributors', 'Copernicus DEM'])];

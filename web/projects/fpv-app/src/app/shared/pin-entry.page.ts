@@ -156,7 +156,8 @@ export class PinEntryPage implements OnInit {
     } else if (err.status === 401) {
       this.state.set('entry');
       const left = (err.body as { triesLeft?: number } | undefined)?.triesLeft;
-      this.error.set(left !== undefined ? `Wrong PIN. ${left} ${left === 1 ? 'try' : 'tries'} left before the link pauses.` : 'Wrong PIN.');
+      const tries = left === 1 ? 'try' : 'tries';
+      this.error.set(left !== undefined ? `Wrong PIN. ${left} ${tries} left before the link pauses.` : 'Wrong PIN.');
     } else {
       // the info call is a convenience: if the server cannot answer it, still let the user try the PIN
       this.state.set('entry');

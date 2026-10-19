@@ -65,12 +65,18 @@ class RouteLinesLayer extends StyleLayerSet {
 
   setData(fc: FeatureCollection, map?: MlMap): void {
     this.data = fc;
-    (map?.getSource('rf-route') as GeoJSONSource | undefined)?.setData(fc);
+    this.pushData(map);
   }
 
   override attach(map: MlMap, beforeId: string | undefined): void {
     super.attach(map, beforeId);
-    (map.getSource('rf-route') as GeoJSONSource | undefined)?.setData(this.data);
+    this.pushData(map);
+  }
+
+  private pushData(map: MlMap | undefined): void {
+    (map?.getSource('rf-route') as GeoJSONSource | undefined)
+      ?.setData(this.data)
+      .catch((e: unknown) => console.error('Route lines could not be updated', e));
   }
 }
 
@@ -90,9 +96,9 @@ export class RouteTool {
   private markers: Marker[] = [];
   private editable = false;
   private last: RouteDrawing | null = null;
-  private offRegistry: () => void;
+  private readonly offRegistry: () => void;
   private addHandler: ((p: LatLon) => void) | null = null;
-  private offClick: () => void;
+  private readonly offClick: () => void;
 
   constructor(
     private readonly registry: LayerRegistry,
