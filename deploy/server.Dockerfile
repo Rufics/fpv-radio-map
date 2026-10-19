@@ -9,9 +9,9 @@
 FROM ubuntu:24.04 AS build
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential cmake ninja-build pkg-config git ca-certificates \
-        libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
-        libpqxx-dev libgdal-dev libcpp-httplib-dev \
+        build-essential ca-certificates cmake git \
+        libarchive-dev libcpp-httplib-dev libgdal-dev libgeographiclib-dev \
+        libpqxx-dev libsodium-dev ninja-build nlohmann-json3-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -41,8 +41,8 @@ RUN --mount=type=secret,id=build_ca,required=false \
 FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates libgeographiclib26 libarchive13t64 libsodium23 \
-        libpqxx-7.8t64 libgdal34t64 libcpp-httplib0.14t64 \
+        ca-certificates libarchive13t64 libcpp-httplib0.14t64 libgdal34t64 \
+        libgeographiclib26 libpqxx-7.8t64 libsodium23 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --home-dir /var/lib/rfmap --shell /usr/sbin/nologin rfmap \
     && install -d -o rfmap -g rfmap -m 0750 /var/lib/rfmap /var/lib/rfmap/modules \

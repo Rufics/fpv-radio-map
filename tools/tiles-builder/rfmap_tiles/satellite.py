@@ -195,8 +195,7 @@ def _raster(src: str | Path, zmin: int, zmax: int, quality: int, bbox: BBox, mb:
     te = tile_aligned_extent(bbox, zmax)
     merc = work / "sat3857.tif"
     run(["gdalwarp", "-t_srs", "EPSG:3857", "-r", "cubic", "-tr", repr(res), repr(res), "-te", *map(repr, te),
-         "-multi", "-wo", "NUM_THREADS=ALL_CPUS", "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE",
-         "-co", "BIGTIFF=IF_SAFER", str(src), str(merc)])
+         "-multi", "-wo", "NUM_THREADS=ALL_CPUS", *raster.tiff_option_args(), str(src), str(merc)])
     rgb = work / "sat-rgb.vrt"
     tr = ["gdal_translate", "-of", "VRT", "-b", "1", "-b", "2", "-b", "3"]
     if bands[0]["type"] != "Byte":

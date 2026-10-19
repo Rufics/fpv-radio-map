@@ -135,7 +135,7 @@ jobs:
           umask 077
           printf '%s\n' "$SECRET" > "$RUNNER_TEMP/owner.secret"
           printf '%s\n' "$PUB" > "$RUNNER_TEMP/owner.pub"
-          tools/ci/pack-modules.sh build "$RUNNER_TEMP/owner.secret" "$RUNNER_TEMP/owner.pub" dist/release
+          python3 -I tools/ci/pack_modules.py build "$RUNNER_TEMP/owner.secret" "$RUNNER_TEMP/owner.pub" dist/release
           rm -f "$RUNNER_TEMP/owner.secret"
           install -m 0755 build/platform/rfmod/rfmod dist/release/rfmod-linux-x86_64
           ls -l dist/release

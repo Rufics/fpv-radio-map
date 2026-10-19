@@ -85,6 +85,29 @@ def verify(dirs: Dirs) -> bool:
     return ok
 
 
+def _build(args, dirs: Dirs) -> None:
+    """Runs the build steps the command selects ("all" runs every step it has inputs for), then
+    the style and the manifest, which always follow."""
+    cmd = args.command
+    if cmd in ("basemap", "all"):
+        if cmd == "all" and not (args.region or args.osm_file):
+            warn("all: no --region/--osm-file given; skipping basemap")
+        else:
+            basemap.build(args, dirs)
+    if cmd in ("dem", "all"):
+        dem.build(args, dirs)
+    if cmd in ("landcover", "all"):
+        landcover.build(args, dirs)
+    if cmd in ("satellite", "all"):
+        if cmd == "all" and not (args.sat_provider or args.sat_file or args.sat_source):
+            warn("all: no --sat-provider/--sat-file/--sat-source given; skipping satellite "
+                 "(choose a mosaic and check its licence)")
+        else:
+            satellite.build(args, dirs)
+    style.build(args, dirs)
+    manifest.build(dirs)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     t0 = time.time()
@@ -92,26 +115,9 @@ def main(argv: list[str] | None = None) -> int:
         if args.bbox:
             BBox.parse(args.bbox)  # fail early on a malformed bbox
         dirs = Dirs.make(args.data, args.out)
-        cmd = args.command
-        if cmd == "verify":
+        if args.command == "verify":
             return 0 if verify(dirs) else 1
-        if cmd in ("basemap", "all"):
-            if cmd == "all" and not (args.region or args.osm_file):
-                warn("all: no --region/--osm-file given; skipping basemap")
-            else:
-                basemap.build(args, dirs)
-        if cmd in ("dem", "all"):
-            dem.build(args, dirs)
-        if cmd in ("landcover", "all"):
-            landcover.build(args, dirs)
-        if cmd in ("satellite", "all"):
-            if cmd == "all" and not (args.sat_provider or args.sat_file or args.sat_source):
-                warn("all: no --sat-provider/--sat-file/--sat-source given; skipping satellite "
-                     "(choose a mosaic and check its licence)")
-            else:
-                satellite.build(args, dirs)
-        style.build(args, dirs)
-        manifest.build(args, dirs)
+        _build(args, dirs)
         log(f"done in {time.time() - t0:.0f} s; outputs in {dirs.out}")
         return 0
     except BuildError as e:

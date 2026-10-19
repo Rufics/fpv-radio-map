@@ -7,6 +7,16 @@ from pathlib import Path
 
 from .common import BBox, BuildError, log, run
 
+# GeoTIFF creation options of every intermediate (non-COG) raster: tiled, lossless, > 4 GiB safe.
+COMPRESS_DEFLATE = "COMPRESS=DEFLATE"
+BIGTIFF_IF_SAFER = "BIGTIFF=IF_SAFER"
+TIFF_OPTIONS = ("TILED=YES", COMPRESS_DEFLATE, BIGTIFF_IF_SAFER)
+
+
+def tiff_option_args() -> list[str]:
+    """TIFF_OPTIONS as GDAL command-line arguments (-co NAME=VALUE ...)."""
+    return [arg for option in TIFF_OPTIONS for arg in ("-co", option)]
+
 
 def gdal():
     from osgeo import gdal as _gdal  # imported lazily so --help works without GDAL
@@ -52,12 +62,12 @@ def write_cog(src: str | Path, dst: Path, *, srcwin: tuple[int, int, int, int] |
     """gdal_translate to a lossless COG: 512 px internal tiles, DEFLATE, overviews."""
     cmd = ["gdal_translate", "-of", "COG",
            "-co", "BLOCKSIZE=512",
-           "-co", "COMPRESS=DEFLATE",
+           "-co", COMPRESS_DEFLATE,
            "-co", "LEVEL=6",
            "-co", f"PREDICTOR={predictor}",
            "-co", "OVERVIEWS=IGNORE_EXISTING",
            "-co", f"OVERVIEW_RESAMPLING={overview_resampling}",
-           "-co", "BIGTIFF=IF_SAFER",
+           "-co", BIGTIFF_IF_SAFER,
            "-co", f"NUM_THREADS={threads}"]
     if srcwin:
         cmd += ["-srcwin", *map(str, srcwin)]
