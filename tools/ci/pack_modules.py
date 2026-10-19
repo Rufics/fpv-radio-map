@@ -61,7 +61,10 @@ class ModuleCatalog:
 
     @classmethod
     def from_build(cls, build):
-        stages = sorted((build / "modules" / "fpv").glob("*/stage"))
+        modules = build / "modules" / "fpv"
+        stages = sorted(modules.glob("*/stage"))
+        if not stages:
+            raise PackError(f"no staged modules in {modules}")
         return cls(StagedModule.load(stage) for stage in stages)
 
     def __iter__(self):

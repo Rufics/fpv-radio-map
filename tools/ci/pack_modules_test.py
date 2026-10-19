@@ -156,6 +156,15 @@ class CommandTest(unittest.TestCase):
         self.assertEqual(status, 1)
         self.assertIn("cannot read id", stderr)
 
+    def test_build_without_staged_modules_fails(self):
+        for stage in (self.fake.build / "modules" / "fpv").glob("*/stage"):
+            (stage / "manifest.json").unlink()
+            stage.rmdir()
+        status, _, stderr = self.run_command()
+        self.assertEqual(status, 1)
+        self.assertIn("no staged modules in", stderr)
+        self.assertFalse(self.fake.out.exists())
+
     def test_missing_key_is_a_usage_error(self):
         argv = self.fake.argv()
         argv[1] = str(self.fake.root / "absent.secret")
