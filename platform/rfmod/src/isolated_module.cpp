@@ -131,7 +131,9 @@ void IsolatedModule::start() {
         close_range(kProtocolFd + 1, ~0u, 0);
         if (!applyWorkerLimits(memBytes)) childFail(2, "rfmod: cannot apply resource limits\n");
         if (chdir(dir.c_str()) != 0) childFail(2, "rfmod: cannot enter module directory\n");
-        execve(argv[0], argv.data(), envp.data());
+        // The worker path is operator configuration, the library path is confined to the registry root
+        // and argv is fixed; nothing here is request input.
+        execve(argv[0], argv.data(), envp.data());  // NOSONAR(cpp:S2076, cpp:S2083): see above
         childFail(2, "rfmod: cannot start rfmod-worker\n");
     }
 

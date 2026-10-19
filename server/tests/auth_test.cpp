@@ -5,6 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <string>
 #include <stdexcept>
 #include <utility>
 
@@ -207,4 +209,33 @@ TEST(Secrets, MacDependsOnKeyAndMessage) {
     EXPECT_NE(mac, Secrets::mac("other key", "message"));
     EXPECT_NE(mac, Secrets::mac("key", "other message"));
     EXPECT_EQ(mac.size(), 64u);  // 32 bytes, hex
+}
+
+TEST(BundleGrantsTest, IssuedGrantIsValidUntilItExpires) {
+    const BundleGrants grants("secret");
+    const TimePoint now = Clock::from_time_t(1'700'000'000);
+    const std::string grant = grants.issue("fpv.alpha", now + std::chrono::hours(1));
+    EXPECT_TRUE(grants.valid("fpv.alpha", grant, now));
+    EXPECT_TRUE(grants.valid("fpv.alpha", grant, now + std::chrono::hours(1)));
+    EXPECT_FALSE(grants.valid("fpv.alpha", grant, now + std::chrono::hours(2)));
+}
+
+TEST(BundleGrantsTest, GrantIsBoundToItsModuleAndSecret) {
+    const BundleGrants grants("secret");
+    const TimePoint now = Clock::from_time_t(1'700'000'000);
+    const std::string grant = grants.issue("fpv.alpha", now + std::chrono::hours(1));
+    EXPECT_FALSE(grants.valid("fpv.other", grant, now));
+    EXPECT_FALSE(BundleGrants("another").valid("fpv.alpha", grant, now));
+    std::string tampered = grant;
+    tampered.back() = tampered.back() == '0' ? '1' : '0';
+    EXPECT_FALSE(grants.valid("fpv.alpha", tampered, now));
+}
+
+TEST(BundleGrantsTest, MalformedGrantsAreRejected) {
+    const BundleGrants grants;
+    const TimePoint now = Clock::from_time_t(1'700'000'000);
+    EXPECT_FALSE(grants.valid("m", "", now));
+    EXPECT_FALSE(grants.valid("m", "1800000000", now));
+    EXPECT_FALSE(grants.valid("m", "soon.abcdef", now));
+    EXPECT_FALSE(grants.valid("m", "18000x0000.abcdef", now));
 }

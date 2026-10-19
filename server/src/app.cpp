@@ -225,7 +225,6 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
-    grantSecret_ = Secrets::randomToken(32);
     http_ = std::make_unique<httplib::Server>();
     routes();
 }
@@ -280,25 +279,6 @@ json Application::cacheTiers() const {
           {"misses", table.misses}, {"hitRate", rate(table.hits, table.misses)}}});
 }
 
-std::string Application::bundleGrant(const std::string& moduleId, TimePoint until) const {
-    const std::string exp = std::to_string(Clock::to_time_t(until));
-    return exp + "." + Secrets::mac(grantSecret_, moduleId + "|" + exp);
-}
-
-bool Application::grantValid(const std::string& moduleId, std::string_view grant) const {
-    const auto dot = grant.find('.');
-    if (dot == std::string_view::npos) return false;
-    const std::string_view exp = grant.substr(0, dot);
-    std::time_t expiry = 0;
-    if (const auto [end, ec] = std::from_chars(exp.data(), exp.data() + exp.size(), expiry);
-        ec != std::errc{} || end != exp.data() + exp.size()) {
-        return false;
-    }
-    if (Clock::from_time_t(expiry) < Clock::now()) return false;
-    return Secrets::constantTimeEqual(grant.substr(dot + 1),
-                                      Secrets::mac(grantSecret_, std::format("{}|{}", moduleId, exp)));
-}
-
 json Application::moduleList(bool admin) {
     json out = store_.builtins->list();
     json installed;
@@ -314,7 +294,8 @@ json Application::moduleList(bool admin) {
             if (!admin) {
                 m.erase("ui");
             } else {
-                const std::string grant = bundleGrant(m.at("id"), Clock::now() + std::chrono::hours(12));
+                const std::string grant =
+                    grants_.issue(m.at("id").get<std::string>(), Clock::now() + std::chrono::hours(12));
                 m["ui"]["bundle"] = m["ui"]["bundle"].get<std::string>() + "?grant=" + grant;
             }
         }
@@ -788,7 +769,8 @@ void Application::DataApi::getModuleFile(const Req& req, Res& res) const {
         if (const auto* m = app.modules_.registry->instance(id)) alpha = m->manifest().lifecycle == rfmod::Lifecycle::Alpha;
     }
     if (!file.has_value()) throw HttpError(404, "no such module file");
-    if (alpha && !app.isAdmin(req) && !(req.has_param("grant") && app.grantValid(id, req.get_param_value("grant")))) {
+    const bool granted = req.has_param("grant") && app.grants_.valid(id, req.get_param_value("grant"), Clock::now());
+    if (alpha && !app.isAdmin(req) && !granted) {
         throw HttpError(404, "no such module file");
     }
     const std::ifstream in(*file, std::ios::binary);

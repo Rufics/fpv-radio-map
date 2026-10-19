@@ -5,6 +5,9 @@
 #include <sodium.h>
 
 #include <array>
+#include <charconv>
+#include <ctime>
+#include <format>
 #include <mutex>
 #include <stdexcept>
 #include <vector>
@@ -98,6 +101,24 @@ std::string PinHasher::hash(std::string_view pin) const {
 
 bool PinHasher::verify(const std::string& stored, std::string_view pin) const {
     return crypto_pwhash_str_verify(stored.c_str(), pin.data(), pin.size()) == 0;
+}
+
+std::string BundleGrants::issue(std::string_view moduleId, TimePoint until) const {
+    const std::string exp = std::to_string(Clock::to_time_t(until));
+    return std::format("{}.{}", exp, Secrets::mac(secret_, std::format("{}|{}", moduleId, exp)));
+}
+
+bool BundleGrants::valid(std::string_view moduleId, std::string_view grant, TimePoint now) const {
+    const auto dot = grant.find('.');
+    if (dot == std::string_view::npos) return false;
+    const std::string_view exp = grant.substr(0, dot);
+    std::time_t expiry = 0;
+    if (const auto [end, ec] = std::from_chars(exp.data(), exp.data() + exp.size(), expiry);
+        ec != std::errc{} || end != exp.data() + exp.size()) {
+        return false;
+    }
+    if (Clock::from_time_t(expiry) < now) return false;
+    return Secrets::constantTimeEqual(grant.substr(dot + 1), Secrets::mac(secret_, std::format("{}|{}", moduleId, exp)));
 }
 
 }  // namespace rfmap

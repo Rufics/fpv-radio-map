@@ -77,8 +77,6 @@ private:
     [[nodiscard]] Principal session(const httplib::Request& req) const;
     void requireAdmin(const httplib::Request& req);
     [[nodiscard]] bool isAdmin(const httplib::Request& req) const;
-    [[nodiscard]] std::string bundleGrant(const std::string& moduleId, TimePoint until) const;
-    [[nodiscard]] bool grantValid(const std::string& moduleId, std::string_view grant) const;
     /// The library kind of a path, checked: HttpError 404 for an unknown or disabled kind.
     [[nodiscard]] std::string libraryKind(const std::string& kind) const;
     [[nodiscard]] json trustedKeys() const;
@@ -132,7 +130,7 @@ private:
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
     std::unique_ptr<httplib::Server> http_;
-    std::string grantSecret_;
+    BundleGrants grants_;  ///< signs the UI bundle URLs of alpha modules
 };
 
 }  // namespace rfmap

@@ -1,11 +1,14 @@
 #include "weather.hpp"
 
 #include <gtest/gtest.h>
+#include <httplib.h>
 
 #include <map>
+#include <mutex>
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -210,3 +213,146 @@ TEST(WeatherTest, HorizonNamesHowFarEachTierReaches) {
 }
 
 }  // namespace
+
+namespace {
+
+/// A local stand-in for Open-Meteo whose answers each test sets: a status and a body per path.
+class LocalOpenMeteo {
+public:
+    LocalOpenMeteo() {
+        server_.Get(R"(/.*)", [this](const httplib::Request& req, httplib::Response& res) {
+            std::lock_guard lock(mutex_);
+            lastQuery_ = req.target;
+            const auto it = answers_.find(req.path);
+            if (it == answers_.end()) {
+                res.status = 404;
+                return;
+            }
+            res.status = it->second.first;
+            res.set_content(it->second.second, "application/json");
+        });
+        port_ = server_.bind_to_any_port("127.0.0.1");
+        thread_ = std::thread([this] { server_.listen_after_bind(); });
+        server_.wait_until_ready();
+    }
+    ~LocalOpenMeteo() {
+        server_.stop();
+        thread_.join();
+    }
+    LocalOpenMeteo(const LocalOpenMeteo&) = delete;
+    LocalOpenMeteo& operator=(const LocalOpenMeteo&) = delete;
+
+    void answer(const std::string& path, int status, const std::string& body) {
+        std::lock_guard lock(mutex_);
+        answers_[path] = {status, body};
+    }
+    [[nodiscard]] std::string lastQuery() const {
+        std::lock_guard lock(mutex_);
+        return lastQuery_;
+    }
+    [[nodiscard]] std::string url() const { return "http://127.0.0.1:" + std::to_string(port_); }
+
+private:
+    httplib::Server server_;
+    std::thread thread_;
+    int port_ = 0;
+    mutable std::mutex mutex_;
+    std::map<std::string, std::pair<int, std::string>, std::less<>> answers_;
+    std::string lastQuery_;
+};
+
+/// Open-Meteo settings pointing at `base`, with a short timeout.
+Config::Weather openMeteoAt(const std::string& base, const std::string& metaUrl = "") {
+    Config::Weather cfg;
+    cfg.baseUrl = base;
+    cfg.metaUrl = metaUrl;
+    cfg.timeoutMs = 1500;
+    return cfg;
+}
+
+/// The message `f` fails with as ForecastUnavailableError; empty when it does not.
+template <class F>
+std::string unavailable(F&& f) {
+    try {
+        std::forward<F>(f)();
+    } catch (const ForecastUnavailableError& e) {
+        return e.what();
+    }
+    return {};
+}
+
+}  // namespace
+
+TEST(OpenMeteoSourceTest, FetchAsksForTheColumnAndTheModels) {
+    LocalOpenMeteo service;
+    service.answer("/v1/forecast", 200, forecast(kNoon).dump());
+    OpenMeteoSource source(openMeteoAt(service.url()));
+    EXPECT_EQ(source.fetch(50.5, 30.5, "icon_d2"), forecast(kNoon));
+    const std::string query = service.lastQuery();
+    EXPECT_NE(query.find("latitude=50.5&longitude=30.5"), std::string::npos) << query;
+    EXPECT_NE(query.find("geopotential_height_850hPa"), std::string::npos) << query;
+    EXPECT_NE(query.find("&models=icon_d2"), std::string::npos) << query;
+    (void)source.fetch(50.5, 30.5, "");
+    EXPECT_EQ(service.lastQuery().find("models="), std::string::npos);
+}
+
+TEST(OpenMeteoSourceTest, AnErrorStatusNamesTheReasonWhenTheBodyGivesOne) {
+    LocalOpenMeteo service;
+    OpenMeteoSource source(openMeteoAt(service.url()));
+    service.answer("/v1/forecast", 400, json{{"error", true}, {"reason", "Latitude must be in range"}}.dump());
+    EXPECT_EQ(unavailable([&] { (void)source.fetch(0, 0, ""); }),
+              "forecast service answered HTTP 400: Latitude must be in range");
+    service.answer("/v1/forecast", 503, "busy");
+    EXPECT_EQ(unavailable([&] { (void)source.fetch(0, 0, ""); }), "forecast service answered HTTP 503");
+    service.answer("/v1/forecast", 500, json{{"reason", 7}}.dump());
+    EXPECT_EQ(unavailable([&] { (void)source.fetch(0, 0, ""); }), "forecast service answered HTTP 500");
+}
+
+TEST(OpenMeteoSourceTest, AnUnreachableServiceIsUnavailable) {
+    std::string url;
+    {
+        const LocalOpenMeteo gone;
+        url = gone.url();
+    }
+    OpenMeteoSource source(openMeteoAt(url));
+    EXPECT_NE(unavailable([&] { (void)source.fetch(0, 0, ""); }).find("forecast service unreachable"),
+              std::string::npos);
+}
+
+TEST(OpenMeteoSourceTest, RunTimeComesFromTheModelMetadata) {
+    LocalOpenMeteo service;
+    EXPECT_FALSE(OpenMeteoSource(openMeteoAt(service.url())).runTime().has_value());
+
+    OpenMeteoSource source(openMeteoAt(service.url(), service.url() + "/data/icon_d2/static/meta.json"));
+    service.answer("/data/icon_d2/static/meta.json", 200, json{{"last_run_initialisation_time", kNoon}}.dump());
+    EXPECT_EQ(source.runTime(), Clock::from_time_t(kNoon));
+    service.answer("/data/icon_d2/static/meta.json", 200, json{{"other", 1}}.dump());
+    EXPECT_FALSE(source.runTime().has_value());
+}
+
+TEST(OpenMeteoSourceTest, AnUnreadableRunTimeLeavesTheRunUnknown) {
+    for (const std::string& meta : {std::string("not json"), json{{"last_run_initialisation_time", "noon"}}.dump()}) {
+        LocalOpenMeteo service;
+        service.answer("/v1/forecast", 200, forecast(kNoon).dump());
+        service.answer("/meta.json", 200, meta);
+        const Config::Weather cfg = openMeteoAt(service.url(), service.url() + "/meta.json");
+        OpenMeteoSource source(cfg);
+        FixedClock clock;
+        WeatherService weather(cfg, &source, clock);
+        const ForecastAt at = weather.at(50.45, 30.52, Clock::from_time_t(kNoon));
+        EXPECT_FALSE(at.point.contains("runUtc")) << meta;
+        EXPECT_FALSE(at.point.contains("error")) << meta;
+    }
+}
+
+TEST(OpenMeteoSourceTest, ABodyThatIsNotJsonFailsTheTier) {
+    LocalOpenMeteo service;
+    service.answer("/v1/forecast", 200, "<html>");
+    const Config::Weather cfg = openMeteoAt(service.url());
+    OpenMeteoSource source(cfg);
+    FixedClock clock;
+    WeatherService weather(cfg, &source, clock);
+    const ForecastAt at = weather.at(50.45, 30.52, Clock::from_time_t(kNoon));
+    ASSERT_TRUE(at.point.contains("error")) << at.point;
+    EXPECT_NE(at.point.at("error").get<std::string>().find("parse"), std::string::npos) << at.point;
+}

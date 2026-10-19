@@ -4,6 +4,8 @@
 // plain SHA-256 is enough to store them: nobody can search that space. PINs are six digits, so
 // they get a slow, salted argon2id hash instead.
 
+#include "common.hpp"
+
 #include <array>
 #include <cstdint>
 #include <string>
@@ -44,6 +46,20 @@ public:
 private:
     unsigned long long opsLimit_;
     std::size_t memLimit_;
+};
+
+/// Short-lived signed grants that let a browser fetch an alpha module's UI bundle without the
+/// admin session. A grant reads "<expiry as unix seconds>.<MAC of moduleId|expiry>".
+class BundleGrants {
+public:
+    explicit BundleGrants(std::string secret = Secrets::randomToken(32)) : secret_(std::move(secret)) {}
+
+    [[nodiscard]] std::string issue(std::string_view moduleId, TimePoint until) const;
+    /// True when `grant` was issued for `moduleId` with this secret and has not expired at `now`.
+    [[nodiscard]] bool valid(std::string_view moduleId, std::string_view grant, TimePoint now) const;
+
+private:
+    std::string secret_;
 };
 
 }  // namespace rfmap
