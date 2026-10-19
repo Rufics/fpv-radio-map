@@ -154,11 +154,7 @@ std::string moduleCallFailure(const Call& call) {
         call();
     } catch (const rfmod::ModuleError& e) {
         return std::format("{}: {}", e.code(), e.what());
-    } catch (const json::exception& e) {
-        return e.what();
-    } catch (const std::runtime_error& e) {
-        return e.what();
-    } catch (const std::logic_error& e) {
+    } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): a module failure is listed, never fails the calculation
         return e.what();
     }
     return {};

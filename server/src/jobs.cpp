@@ -118,12 +118,8 @@ void JobManager::runPart(const Job& job, Part& part, const json& mission, bool& 
         part.progress = 1.0;
         grid.erase("cached");
         part.grid = std::move(grid);
-    } catch (const nlohmann::json::exception& e) {
+    } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): a part contains every failure of its calculation
         // A part is contained: whatever the calculation throws becomes the part's error.
-        recordFailure(job, part, e.what(), failed);
-    } catch (const std::runtime_error& e) {
-        recordFailure(job, part, e.what(), failed);
-    } catch (const std::logic_error& e) {
         recordFailure(job, part, e.what(), failed);
     }
 }

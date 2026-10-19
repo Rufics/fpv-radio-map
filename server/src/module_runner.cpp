@@ -116,12 +116,8 @@ std::vector<rfcore::BudgetTerm> ModuleLossContributor::contribute(const rfcore::
         }
     } catch (const rfmod::ModuleError& e) {
         failures_.emplace_back(id_, e.code() + ": " + e.what());
-    } catch (const nlohmann::json::exception& e) {
+    } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): a module failure is reported, never fails the calculation
         // A module failure never fails the calculation: it is reported with the result instead.
-        failures_.emplace_back(id_, e.what());
-    } catch (const std::runtime_error& e) {
-        failures_.emplace_back(id_, e.what());
-    } catch (const std::logic_error& e) {
         failures_.emplace_back(id_, e.what());
     }
     const std::scoped_lock lock(lastMutex_);
