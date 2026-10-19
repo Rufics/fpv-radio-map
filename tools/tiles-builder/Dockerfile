@@ -42,7 +42,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1
 
 # 1) CA certificates (needed to reach the https snapshot archive), then
-# 2) everything else at exact versions from the dated snapshot.
+# 2) everything else at exact versions from the dated snapshot, then
+# 3) Planetiler (OpenMapTiles profile is built in) and go-pmtiles, verified by sha256, and the
+#    glyph fonts at a pinned commit. One layer, so the optional extra CA is mounted once.
 RUN --mount=type=secret,id=extra_ca,required=false \
     set -eux; \
     apt-get update; \
@@ -52,20 +54,18 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     fi; \
     apt-get update --snapshot "${UBUNTU_SNAPSHOT}"; \
     apt-get install -y --no-install-recommends --snapshot "${UBUNTU_SNAPSHOT}" \
-      "gdal-bin=${GDAL_VERSION}" \
-      "python3-gdal=${GDAL_VERSION}" \
-      "openjdk-21-jre-headless=${OPENJDK_VERSION}" \
       "curl=${CURL_VERSION}" \
+      "gdal-bin=${GDAL_VERSION}" \
       "git=${GIT_VERSION}" \
+      "openjdk-21-jre-headless=${OPENJDK_VERSION}" \
       "python3=${PYTHON3_VERSION}" \
+      "python3-gdal=${GDAL_VERSION}" \
       "sqlite3=${SQLITE3_VERSION}"; \
     rm -f /usr/local/share/ca-certificates/build-extra-ca.crt; update-ca-certificates --fresh >/dev/null; \
-    rm -rf /var/lib/apt/lists/*
-
-# Planetiler (OpenMapTiles profile is built in) and go-pmtiles, verified by sha256.
-RUN --mount=type=secret,id=extra_ca,required=false \
-    set -eux; \
-    if [ -s /run/secrets/extra_ca ]; then export CURL_CA_BUNDLE=/run/secrets/extra_ca GIT_SSL_CAINFO=/run/secrets/extra_ca; fi; \
+    rm -rf /var/lib/apt/lists/*; \
+    if [ -s /run/secrets/extra_ca ]; then \
+      export CURL_CA_BUNDLE=/run/secrets/extra_ca GIT_SSL_CAINFO=/run/secrets/extra_ca; \
+    fi; \
     mkdir -p /opt/planetiler /opt/fonts; \
     curl -fsSL --proto =https --proto-redir =https -o /opt/planetiler/planetiler.jar \
       "https://github.com/onthegomap/planetiler/releases/download/v${PLANETILER_VERSION}/planetiler.jar"; \
@@ -76,8 +76,9 @@ RUN --mount=type=secret,id=extra_ca,required=false \
       arm64) pm_arch=arm64;  pm_sha="${PMTILES_SHA256_ARM64}";; \
       *) echo "unsupported arch $arch"; exit 1;; \
     esac; \
+    pm_url="https://github.com/protomaps/go-pmtiles/releases/download/v${PMTILES_VERSION}"; \
     curl -fsSL --proto =https --proto-redir =https -o /tmp/pmtiles.tgz \
-      "https://github.com/protomaps/go-pmtiles/releases/download/v${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION}_Linux_${pm_arch}.tar.gz"; \
+      "${pm_url}/go-pmtiles_${PMTILES_VERSION}_Linux_${pm_arch}.tar.gz"; \
     echo "${pm_sha}  /tmp/pmtiles.tgz" | sha256sum -c -; \
     tar -xzf /tmp/pmtiles.tgz -C /usr/local/bin pmtiles; rm /tmp/pmtiles.tgz; \
     pmtiles version; \

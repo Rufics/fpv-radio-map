@@ -12,7 +12,7 @@ FILES = ["basemap.pmtiles", "hillshade.pmtiles", "contours.pmtiles", "satellite.
 SKIP_META_KEYS = {"file", "params"}
 
 
-def build(args, dirs: Dirs) -> dict:
+def build(dirs: Dirs) -> dict:
     files = []
     for name in FILES:
         path = dirs.out / name

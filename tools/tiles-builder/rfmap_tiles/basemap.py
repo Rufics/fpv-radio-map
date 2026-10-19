@@ -132,22 +132,7 @@ def build(args, dirs: Dirs) -> None:
     if is_up_to_date(dirs, OUT_NAME, params, args.force):
         return
 
-    # Planetiler's auxiliary sources, fetched with curl (retries, resume, proxy-friendly) into the cache.
-    src_dir = dirs.cache / "planetiler-sources"
-    aux = {}
-    for key, given, flag, url in (
-            ("water", args.water_polygons_file, "--water-polygons-file", sources.WATER_POLYGONS_URL),
-            ("natural_earth", args.natural_earth_file, "--natural-earth-file", sources.NATURAL_EARTH_URL),
-            ("lake_centerlines", args.lake_centerlines_file, "--lake-centerlines-file", sources.LAKE_CENTERLINES_URL)):
-        if given:
-            aux[key] = safe_file(given, flag)
-        else:
-            try:
-                aux[key] = download(url, src_dir / url.rsplit("/", 1)[1])
-            except BuildError:
-                raise BuildError(f"could not download {url}; download it elsewhere and pass {flag}")
-    water, ne, lakes = aux["water"], aux["natural_earth"], aux["lake_centerlines"]
-
+    aux = _aux_sources(args, dirs)
     work = fresh_dir(dirs.work / "planetiler")
     tmp_out = dirs.out / f".tmp-{OUT_NAME}"
     if tmp_out.exists():
@@ -157,9 +142,9 @@ def build(args, dirs: Dirs) -> None:
         "java", _heap_flag(args.java_heap),
         "-jar", PLANETILER_JAR,
         f"--osm-path={pbf}",
-        f"--water-polygons-path={water}",
-        f"--natural-earth-path={ne}",
-        f"--lake-centerlines-path={lakes}",
+        f"--water-polygons-path={aux['water']}",
+        f"--natural-earth-path={aux['natural_earth']}",
+        f"--lake-centerlines-path={aux['lake_centerlines']}",
         f"--tmpdir={work}",
         f"--output={tmp_out}",
         f"--maxzoom={maxzoom}",
@@ -185,6 +170,26 @@ def build(args, dirs: Dirs) -> None:
         "resolution": f"vector tiles z{header.get('minzoom', 0)}-{header.get('maxzoom', maxzoom)}",
     })
     shutil.rmtree(work, ignore_errors=True)
+
+
+def _aux_sources(args, dirs: Dirs) -> dict[str, Path]:
+    """Planetiler's auxiliary sources: the given files, else fetched with curl (retries, resume,
+    proxy-friendly) into the cache."""
+    src_dir = dirs.cache / "planetiler-sources"
+    aux = {}
+    for key, given, flag, url in (
+            ("water", args.water_polygons_file, "--water-polygons-file", sources.WATER_POLYGONS_URL),
+            ("natural_earth", args.natural_earth_file, "--natural-earth-file", sources.NATURAL_EARTH_URL),
+            ("lake_centerlines", args.lake_centerlines_file, "--lake-centerlines-file", sources.LAKE_CENTERLINES_URL)):
+        aux[key] = safe_file(given, flag) if given else _download_aux(url, src_dir, flag)
+    return aux
+
+
+def _download_aux(url: str, src_dir: Path, flag: str) -> Path:
+    try:
+        return download(url, src_dir / url.rsplit("/", 1)[1])
+    except BuildError as e:
+        raise BuildError(f"could not download {url}; download it elsewhere and pass {flag}") from e
 
 
 def _header_bbox(h: dict) -> list | None:
