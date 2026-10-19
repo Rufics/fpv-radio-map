@@ -149,63 +149,74 @@ export function satelliteTile(url: string): Promise<ArrayBuffer> {
 /** Weather tiles: wind arrows, precipitation blobs, temperature tint; time shifts the field. */
 export function weatherTile(url: string): Promise<ArrayBuffer> {
   const [z, x, y] = parseZxy(url);
-  const kind = url.match(/mockwx:\/\/(\w+)/)?.[1] ?? 'wind';
-  const timeMatch = decodeURIComponent(url).match(/(\d{4}-\d{2}-\d{2}T\d{2})/);
+  const kind = /mockwx:\/\/(\w+)/.exec(url)?.[1] ?? 'wind';
+  const timeMatch = /(\d{4}-\d{2}-\d{2}T\d{2})/.exec(decodeURIComponent(url));
   const hours = timeMatch ? new Date(timeMatch[1] + ':00:00Z').getTime() / 3.6e6 : 0;
   const size = 256;
   const c = new OffscreenCanvas(size, size);
   const ctx = c.getContext('2d')!;
-  if (kind === 'wind') {
-    const step = 48;
-    for (let py = step / 2; py < size; py += step) {
-      for (let px = step / 2; px < size; px += step) {
-        const ll = tileToLonLat(z, x + px / size, y + py / size);
-        const fromDeg = 290 + 25 * Math.sin(ll.lon * 3 + hours / 6);
-        const speed = 6 + 3 * Math.sin(ll.lat * 5 + hours / 4);
-        const to = ((fromDeg + 180) * Math.PI) / 180;
-        const len = 8 + speed * 1.4;
-        const dx = Math.sin(to) * len;
-        const dy = -Math.cos(to) * len;
-        ctx.strokeStyle = 'rgba(185, 203, 255, 0.85)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(px - dx / 2, py - dy / 2);
-        ctx.lineTo(px + dx / 2, py + dy / 2);
-        ctx.stroke();
-        const ang = Math.atan2(dy, dx);
-        ctx.beginPath();
-        ctx.moveTo(px + dx / 2, py + dy / 2);
-        ctx.lineTo(px + dx / 2 - 6 * Math.cos(ang - 0.5), py + dy / 2 - 6 * Math.sin(ang - 0.5));
-        ctx.lineTo(px + dx / 2 - 6 * Math.cos(ang + 0.5), py + dy / 2 - 6 * Math.sin(ang + 0.5));
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(185, 203, 255, 0.85)';
-        ctx.fill();
-      }
-    }
-  } else {
-    const img = ctx.createImageData(size / 4, size / 4);
-    const q = size / 4;
-    for (let py = 0; py < q; py++) {
-      for (let px = 0; px < q; px++) {
-        const ll = tileToLonLat(z, x + (px + 0.5) / q, y + (py + 0.5) / q);
-        const i = (py * q + px) * 4;
-        if (kind === 'precipitation') {
-          const v = Math.sin(ll.lon * 22 + hours / 3) * Math.cos(ll.lat * 30 - hours / 5) + 0.3 * Math.sin(ll.lon * 61);
-          const a = Math.max(0, v - 0.35) * 260;
-          img.data.set([90, 150, 255, Math.min(170, a)], i);
-        } else {
-          const t = 4 + 3 * Math.sin(ll.lat * 8 + hours / 12) - (elevation(ll.lat, ll.lon) - 450) / 150;
-          const f = Math.max(0, Math.min(1, (t + 2) / 12));
-          img.data.set([80 + 170 * f, 110 + 40 * (1 - Math.abs(f - 0.5) * 2), 255 - 200 * f, 90], i);
-        }
-      }
-    }
-    const small = new OffscreenCanvas(q, q);
-    small.getContext('2d')!.putImageData(img, 0, 0);
-    ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(small, 0, 0, size, size);
-  }
+  if (kind === 'wind') drawWindArrows(ctx, z, x, y, size, hours);
+  else drawWeatherField(ctx, kind, z, x, y, size, hours);
   return canvasToBuffer(c);
+}
+
+/** Wind layer: one arrow every 48 px, pointing where the wind blows to. */
+function drawWindArrows(ctx: OffscreenCanvasRenderingContext2D, z: number, x: number, y: number, size: number, hours: number): void {
+  const step = 48;
+  for (let py = step / 2; py < size; py += step) {
+    for (let px = step / 2; px < size; px += step) {
+      const ll = tileToLonLat(z, x + px / size, y + py / size);
+      const fromDeg = 290 + 25 * Math.sin(ll.lon * 3 + hours / 6);
+      const speed = 6 + 3 * Math.sin(ll.lat * 5 + hours / 4);
+      const to = ((fromDeg + 180) * Math.PI) / 180;
+      const len = 8 + speed * 1.4;
+      const dx = Math.sin(to) * len;
+      const dy = -Math.cos(to) * len;
+      ctx.strokeStyle = 'rgba(185, 203, 255, 0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(px - dx / 2, py - dy / 2);
+      ctx.lineTo(px + dx / 2, py + dy / 2);
+      ctx.stroke();
+      const ang = Math.atan2(dy, dx);
+      ctx.beginPath();
+      ctx.moveTo(px + dx / 2, py + dy / 2);
+      ctx.lineTo(px + dx / 2 - 6 * Math.cos(ang - 0.5), py + dy / 2 - 6 * Math.sin(ang - 0.5));
+      ctx.lineTo(px + dx / 2 - 6 * Math.cos(ang + 0.5), py + dy / 2 - 6 * Math.sin(ang + 0.5));
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(185, 203, 255, 0.85)';
+      ctx.fill();
+    }
+  }
+}
+
+/** Precipitation or temperature layer: a coarse field (a quarter of the tile size) scaled up smoothly. */
+function drawWeatherField(ctx: OffscreenCanvasRenderingContext2D, kind: string, z: number, x: number, y: number, size: number, hours: number): void {
+  const img = ctx.createImageData(size / 4, size / 4);
+  const q = size / 4;
+  for (let py = 0; py < q; py++) {
+    for (let px = 0; px < q; px++) {
+      const ll = tileToLonLat(z, x + (px + 0.5) / q, y + (py + 0.5) / q);
+      const i = (py * q + px) * 4;
+      img.data.set(kind === 'precipitation' ? precipitationRgba(ll, hours) : temperatureRgba(ll, hours), i);
+    }
+  }
+  const small = new OffscreenCanvas(q, q);
+  small.getContext('2d')!.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(small, 0, 0, size, size);
+}
+
+function precipitationRgba(ll: { lat: number; lon: number }, hours: number): number[] {
+  const v = Math.sin(ll.lon * 22 + hours / 3) * Math.cos(ll.lat * 30 - hours / 5) + 0.3 * Math.sin(ll.lon * 61);
+  const a = Math.max(0, v - 0.35) * 260;
+  return [90, 150, 255, Math.min(170, a)];
+}
+
+function temperatureRgba(ll: { lat: number; lon: number }, hours: number): number[] {
+  const t = 4 + 3 * Math.sin(ll.lat * 8 + hours / 12) - (elevation(ll.lat, ll.lon) - 450) / 150;
+  const f = Math.max(0, Math.min(1, (t + 2) / 12));
+  return [80 + 170 * f, 110 + 40 * (1 - Math.abs(f - 0.5) * 2), 255 - 200 * f, 90];
 }
 
 // ---------------- vector data ----------------
@@ -266,8 +277,9 @@ export function baseMap(): FeatureCollection {
     bankN.push([x, y + 0.28]);
     bankS.push([x, y - 0.28]);
   }
+  bankS.reverse();
   const features: Feature[] = [
-    polygon([...bankN, ...bankS.reverse()], { layer: 'water', class: 'river' }),
+    polygon([...bankN, ...bankS], { layer: 'water', class: 'river' }),
     line(river, { layer: 'waterway', class: 'river' }),
     line([[-20, -1.2], [-8, -1.6], [-3, -0.9], [2.5, -1.9], [9, -0.6], [20, -1.4]], { layer: 'transportation', class: 'primary' }),
     line([[-1.6, -1.1], [-0.4, 0.6], [-1.2, 2.4], [-2.4, 3.3], [-3.5, 6.8]], { layer: 'transportation', class: 'minor' }),

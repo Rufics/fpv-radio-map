@@ -120,7 +120,9 @@ export class PhoneLayoutComponent {
     const w = this.ws.why();
     if (!v || !w || v.legIndex !== w.leg) return null;
     const otherOk = (['control', 'video'] as const).filter((k) => k !== v.link).some((k) => this.ws.whyLeg()?.worst?.[k]?.reachable);
-    return `${v.text}${otherOk ? ` ${v.link === 'video' ? 'Control' : 'Video'} still works.` : ''}`;
+    const other = v.link === 'video' ? 'Control' : 'Video';
+    const otherText = otherOk ? ` ${other} still works.` : '';
+    return `${v.text}${otherText}`;
   });
 
   protected example(): void {

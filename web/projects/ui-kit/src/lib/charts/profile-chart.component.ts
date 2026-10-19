@@ -1,11 +1,19 @@
 import { Component, DestroyRef, ElementRef, afterNextRender, computed, inject, input, signal } from '@angular/core';
 import { Diffraction, Profile } from '../models/api.models';
 import { RfFormat } from '../format/rf-format';
-import { computeProfileGeometry, niceStep } from './profile-geometry';
+import { ProfileGeometry, computeProfileGeometry, niceStep } from './profile-geometry';
 
 interface Tick {
   pos: number;
   label: string;
+}
+
+/** Plot area and the distance/height to pixel scales of one render. */
+interface ChartFrame {
+  X: (d: number) => number;
+  Y: (m: number) => number;
+  x0: number;
+  x1: number;
 }
 
 /**
@@ -160,31 +168,10 @@ export class ProfileChartComponent {
     const intrusions = g.intrusions.map((i) => `${line(i.polygon.map(([d, m]) => [X(d), Y(m)] as [number, number]))} Z`);
 
     const dif = this.diffraction();
-    let obstacle = null;
-    const blocking = g.intrusions.length > 0 || (dif && dif.lineOfSight === false);
-    if (blocking) {
-      const worstIntrusion = g.intrusions.reduce<(typeof g.intrusions)[number] | null>(
-        (m, i) => (!m || i.clearance < m.clearance ? i : m),
-        null,
-      );
-      const d = dif?.dominant?.distanceM ?? dif?.d1M ?? worstIntrusion?.maxD ?? g.worst.d;
-      const edge = dif?.edgeHeightM ?? dif?.dominant?.groundMslM ?? worstIntrusion?.maxSurface ?? g.worst.surface;
-      const loss = this.lossDb() ?? dif?.lossDb;
-      const text = `${this.obstacleName()} ${RfFormat.format(edge, 'm')}${loss !== undefined ? ` · ${RfFormat.format(-loss, 'db')}` : ''}`;
-      const boxW = Math.max(150, text.length * 7.4 + 24);
-      const x = X(d);
-      obstacle = {
-        x,
-        y: Y(edge),
-        boxX: Math.min(Math.max(x - boxW / 2, x0), x1 - boxW),
-        boxY: 8,
-        boxW,
-        text,
-        title: `edge ${RfFormat.full(edge, 'm')} MSL at ${RfFormat.full(d, 'km3')}${loss !== undefined ? `, loss ${RfFormat.full(loss, 'db')}` : ''}`,
-      };
-    }
+    const blocking = g.intrusions.length > 0 || dif?.lineOfSight === false;
+    const obstacle = blocking ? this.obstacleView(g, dif, { X, Y, x0, x1 }) : null;
     const first = s[0];
-    const last = s[s.length - 1];
+    const last = s.at(-1)!;
     const aria =
       `Terrain profile ${this.fromLabel()} to ${this.toLabel()}, ${RfFormat.format(g.lengthM, 'km3')}. ` +
       (blocking ? `Terrain enters the first Fresnel zone; worst clearance ${RfFormat.format(g.worst.clearanceM, 'm+')}.` : 'First Fresnel zone is clear.');
@@ -212,4 +199,31 @@ export class ProfileChartComponent {
       aria,
     };
   });
+
+  /** Label box over the dominant obstacle (or the worst Fresnel intrusion). */
+  private obstacleView(g: ProfileGeometry, dif: Diffraction | undefined, frame: ChartFrame) {
+    const { X, Y, x0, x1 } = frame;
+    const worstIntrusion = g.intrusions.reduce<(typeof g.intrusions)[number] | null>(
+      (m, i) => (!m || i.clearance < m.clearance ? i : m),
+      null,
+    );
+    const d = dif?.dominant?.distanceM ?? dif?.d1M ?? worstIntrusion?.maxD ?? g.worst.d;
+    const edge =
+      dif?.edgeHeightM ?? dif?.dominant?.groundMslM ?? worstIntrusion?.maxSurface ?? g.worst.surface;
+    const loss = this.lossDb() ?? dif?.lossDb;
+    const lossText = loss !== undefined ? ` · ${RfFormat.format(-loss, 'db')}` : '';
+    const lossTitle = loss !== undefined ? `, loss ${RfFormat.full(loss, 'db')}` : '';
+    const text = `${this.obstacleName()} ${RfFormat.format(edge, 'm')}${lossText}`;
+    const boxW = Math.max(150, text.length * 7.4 + 24);
+    const x = X(d);
+    return {
+      x,
+      y: Y(edge),
+      boxX: Math.min(Math.max(x - boxW / 2, x0), x1 - boxW),
+      boxY: 8,
+      boxW,
+      text,
+      title: `edge ${RfFormat.full(edge, 'm')} MSL at ${RfFormat.full(d, 'km3')}${lossTitle}`,
+    };
+  }
 }

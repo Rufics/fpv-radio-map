@@ -9,12 +9,14 @@ import {
   DrawMarker,
   RouteDeltaLayer,
   DrawPoint,
+  FixPreview,
   LayerPanelComponent,
   LayerRegistry,
   LegDrawStatus,
   LimitsLayer,
   MapContext,
   MapViewComponent,
+  Mission,
   MissionPoint,
   RfFormat,
   RouteDrawing,
@@ -27,7 +29,7 @@ import {
   destinationPoint,
   distanceM,
 } from '@rfmap/ui-kit';
-import { FpvWorkspace, LINK_LETTER, endsAtTurnBack } from '../core/fpv-workspace.service';
+import { FpvWorkspace, LINK_LETTER, LegRowVm, endsAtTurnBack } from '../core/fpv-workspace.service';
 import { CompareService } from '../core/fpv-core';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
@@ -134,13 +136,13 @@ export class MapStageComponent {
   ];
 
   private tool?: RouteTool;
-  private coverage = new CoverageLayer();
-  private limits = new LimitsLayer();
-  private coverageDelta = new CoverageDeltaLayer();
-  private missingData = new MissingDataLayer();
-  private routeDelta = new RouteDeltaLayer();
+  private readonly coverage = new CoverageLayer();
+  private readonly limits = new LimitsLayer();
+  private readonly coverageDelta = new CoverageDeltaLayer();
+  private readonly missingData = new MissingDataLayer();
+  private readonly routeDelta = new RouteDeltaLayer();
   protected readonly cmp = inject(CompareService);
-  private weather: WeatherLayer[] = [];
+  private readonly weather: WeatherLayer[] = [];
   private tags: Marker[] = [];
   private readonly ready = signal(false);
   private fittedFor: string | null = null;
@@ -248,7 +250,7 @@ export class MapStageComponent {
     });
   }
 
-  onReady(map: MlMap): void {
+  onReady(_map: MlMap): void {
     const cfg = this.ws.data.mapConfig();
     if (cfg) {
       for (const def of createStandardLayers(cfg, this.forecastTime())) {
@@ -267,7 +269,6 @@ export class MapStageComponent {
         if (this.ws.store.result()) this.ws.openWhy(i + 1);
       },
     });
-    void map;
     this.ready.set(true);
   }
 
@@ -276,7 +277,6 @@ export class MapStageComponent {
     const m = this.ws.shown();
     if (!m) return { pilot: null, waypoints: [], legs: [] };
     const preview = this.ws.store.preview();
-    const before = preview?.before;
     const rows = this.ws.legRows();
     const ground = this.ws.groundAt();
     const g = (v: number | undefined, agl: number) => (v !== undefined ? `${RfFormat.format(v, 'm', { unit: false })} + ${RfFormat.format(agl, 'm')}` : `${RfFormat.format(agl, 'm')} AGL`);
@@ -291,22 +291,35 @@ export class MapStageComponent {
         ariaLabel: last ? `Target B, ${RfFormat.format(w.aglM, 'm')} above ground` : `Waypoint ${i + 1}, ${RfFormat.format(w.aglM, 'm')} above ground`,
       };
     });
-    const legs = rows
-      .filter((r) => !r.isReturn)
-      .map((r, i) => {
-        const changed = !!before && !samePoint(before.waypoints[i], m.waypoints[i], before, m, i);
-        let status: LegDrawStatus = r.tone === 'blocked' ? 'blocked' : r.tone === 'warn' ? 'missing' : r.tone === 'ok' ? 'ok' : 'pending';
-        if (preview) {
-          const prevRow = this.previewBaseStatus(i);
-          status = changed ? 'preview' : prevRow;
-        }
-        const km = RfFormat.format(r.lengthM, 'km1');
-        let label: string | undefined = r.mark ? `${km} · ${r.mark}` : km;
-        if (changed) label = `${km} · ${RfFormat.format(r.aglM, 'm')}`;
-        else if (!preview && r.tone === 'ok' && before === undefined && this.ws.store.result() && m.waypoints[i]?.aglM !== 120) label = `${km} · ${RfFormat.format(r.aglM, 'm')} ✓`;
-        if (preview && !changed) label = this.previewBaseLabel(i) ?? label;
-        return { status, label };
-      });
+    const legs = rows.filter((r) => !r.isReturn).map((r, i) => this.legDrawing(r, i, m, preview));
+    const markers = this.obstructionMarkers(preview);
+    // keep the return label clear of an obstruction marker, which tends to sit mid-way on the pilot line
+    const ret = this.returnLegDrawing(m, rows, turn, markers.length ? 0.78 : 0.5);
+    return { pilot, waypoints, legs, markers, returnLeg: ret };
+  });
+
+  private legDrawing(r: LegRowVm, i: number, m: Mission, preview: FixPreview | null): { status: LegDrawStatus; label: string | undefined } {
+    const before = preview?.before;
+    const changed = !!before && !samePoint(before.waypoints[i], m.waypoints[i], before, m, i);
+    let status = legStatusOfTone(r.tone);
+    if (preview) {
+      const prevRow = this.previewBaseStatus(i);
+      status = changed ? 'preview' : prevRow;
+    }
+    return { status, label: this.legLabel(r, i, m, preview, changed) };
+  }
+
+  private legLabel(r: LegRowVm, i: number, m: Mission, preview: FixPreview | null, changed: boolean): string | undefined {
+    const km = RfFormat.format(r.lengthM, 'km1');
+    if (changed) return `${km} · ${RfFormat.format(r.aglM, 'm')}`;
+    const label = r.mark ? `${km} · ${r.mark}` : km;
+    if (preview) return this.previewBaseLabel(i) ?? label;
+    if (r.tone === 'ok' && this.ws.store.result() && m.waypoints[i]?.aglM !== 120) return `${km} · ${RfFormat.format(r.aglM, 'm')} ✓`;
+    return label;
+  }
+
+  /** The ridge that blocks the verdict link, outside of a fix preview. */
+  private obstructionMarkers(preview: FixPreview | null): DrawMarker[] {
     const markers: DrawMarker[] = [];
     const v = this.ws.verdict();
     if (!preview && v) {
@@ -316,24 +329,27 @@ export class MapStageComponent {
         markers.push({ kind: 'obstruction', symbol: '✕', lat: d.lat, lon: d.lon, caption: `Ridge ${RfFormat.format(dom?.edgeHeightM ?? d.groundMslM, 'm')}`, ariaLabel: `Obstruction ${RfFormat.format(dom?.edgeHeightM ?? d.groundMslM, 'm')}` });
       }
     }
+    return markers;
+  }
+
+  private returnLegDrawing(m: Mission, rows: LegRowVm[], turn: boolean, labelAt: number): RouteDrawing['returnLeg'] {
     const retRow = rows.find((r) => r.isReturn);
-    const ret =
-      m.returnToPilot !== false && retRow
-        ? {
-            from: m.waypoints[m.waypoints.length - 1],
-            label: turn ? `Turn back · ${RfFormat.format(retRow.lengthM, 'km1')}` : retRow.tone === 'blocked' && !this.compact() ? `Return · ${retRow.mark}` : undefined,
-            // keep the label clear of an obstruction marker, which tends to sit mid-way on the pilot line
-            labelAt: markers.length ? 0.78 : 0.5,
-          }
-        : null;
-    return { pilot, waypoints, legs, markers, returnLeg: ret };
-  });
+    const from = m.waypoints.at(-1);
+    if (m.returnToPilot === false || !retRow || !from) return null;
+    return { from, label: this.returnLegLabel(retRow, turn), labelAt };
+  }
+
+  private returnLegLabel(retRow: LegRowVm, turn: boolean): string | undefined {
+    if (turn) return `Turn back · ${RfFormat.format(retRow.lengthM, 'km1')}`;
+    return retRow.tone === 'blocked' && !this.compact() ? `Return · ${retRow.mark}` : undefined;
+  }
 
   private previewBaseStatus(i: number): LegDrawStatus {
     const before = this.ws.store.result()?.legs?.[i];
     if (!before) return 'pending';
     const failing = (['control', 'video'] as const).some((k) => before.worst?.[k]?.reachable === false);
-    return failing ? 'blocked' : before.status === 'missing-data' ? 'missing' : 'ok';
+    if (failing) return 'blocked';
+    return before.status === 'missing-data' ? 'missing' : 'ok';
   }
 
   private previewBaseLabel(i: number): string | undefined {
@@ -350,26 +366,13 @@ export class MapStageComponent {
     const preview = this.ws.store.preview();
     const turnPreview = !!preview && endsAtTurnBack(preview.after);
     const radio = (grid?.limitPolygon as Geometry | undefined) ?? null;
-    let radioKm: number | null = null;
-    let radioAnchor: Position | null = null;
-    if (radio && m) {
-      const coords = flatCoords(radio);
-      let best = -Infinity;
-      for (const c of coords) {
-        const d = distanceM(m.pilot, { lat: c[1], lon: c[0] });
-        if (d > (radioKm ?? 0)) radioKm = d;
-        const score = -c[0] + c[1] * 0.3; // westernmost-north point for the label
-        if (score > best) {
-          best = score;
-          radioAnchor = c;
-        }
-      }
-    }
+    const { radioKm, radioAnchor } = radio && m ? radioLimitExtent(radio, m.pilot) : { radioKm: null, radioAnchor: null };
     const b = r?.battery;
     const battery = m && b?.rangeM && !turnPreview && !endsAtTurnBack(m) ? { lat: m.pilot.lat, lon: m.pilot.lon, radiusM: b.rangeM / 2 } : null;
+    const linkName = this.ws.heatLink() === 'control' ? 'Control' : 'Video';
     return {
       radio,
-      radioLabel: radioKm ? `${this.ws.heatLink() === 'control' ? 'Control' : 'Video'} link limit · ${RfFormat.format(radioKm, 'km1')}` : '',
+      radioLabel: radioKm ? `${linkName} link limit · ${RfFormat.format(radioKm, 'km1')}` : '',
       radioAnchor,
       battery,
       batteryLabel: battery ? `Battery return limit · ${RfFormat.format(battery.radiusM, 'km1')}` : '',
@@ -398,6 +401,36 @@ export class MapStageComponent {
 function samePoint(a: MissionPoint | undefined, b: MissionPoint | undefined, _bm: unknown, _am: unknown, _i: number): boolean {
   if (!a || !b) return a === b;
   return a.lat === b.lat && a.lon === b.lon && a.aglM === b.aglM && a.label === b.label;
+}
+
+function legStatusOfTone(tone: LegRowVm['tone']): LegDrawStatus {
+  switch (tone) {
+    case 'blocked':
+      return 'blocked';
+    case 'warn':
+      return 'missing';
+    case 'ok':
+      return 'ok';
+    default:
+      return 'pending';
+  }
+}
+
+/** Farthest distance of the radio limit from the pilot, and the point its label is anchored to. */
+function radioLimitExtent(radio: Geometry, pilot: MissionPoint): { radioKm: number | null; radioAnchor: Position | null } {
+  let radioKm: number | null = null;
+  let radioAnchor: Position | null = null;
+  let best = -Infinity;
+  for (const c of flatCoords(radio)) {
+    const d = distanceM(pilot, { lat: c[1], lon: c[0] });
+    if (d > (radioKm ?? 0)) radioKm = d;
+    const score = -c[0] + c[1] * 0.3; // westernmost-north point for the label
+    if (score > best) {
+      best = score;
+      radioAnchor = c;
+    }
+  }
+  return { radioKm, radioAnchor };
 }
 
 function flatCoords(g: Geometry): Position[] {

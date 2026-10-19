@@ -81,8 +81,10 @@ ${wps.map((p, i) => placemark(this.pointName(p, i, wps.length), p, i === wps.len
   toGpx(mission: Mission): ExportedFile {
     const wps = mission.waypoints;
     const ext = (p: MissionPoint) => `<extensions><rfmap:aglM>${n(p.aglM)}</rfmap:aglM></extensions>`;
-    const wpt = (tag: 'wpt' | 'rtept', name: string, p: MissionPoint, sym?: string) =>
-      `  <${tag} lat="${n(p.lat)}" lon="${n(p.lon)}"><name>${xmlEscape(name)}</name>${sym ? `<sym>${sym}</sym>` : ''}${ext(p)}</${tag}>`;
+    const wpt = (tag: 'wpt' | 'rtept', name: string, p: MissionPoint, sym?: string) => {
+      const symTag = sym ? `<sym>${sym}</sym>` : '';
+      return `  <${tag} lat="${n(p.lat)}" lon="${n(p.lon)}"><name>${xmlEscape(name)}</name>${symTag}${ext(p)}</${tag}>`;
+    };
     const route = [wpt('rtept', mission.pilot.label ?? 'A', mission.pilot), ...wps.map((p, i) => wpt('rtept', this.pointName(p, i, wps.length), p))];
     if (mission.returnToPilot !== false) route.push(wpt('rtept', 'A · return', mission.pilot));
     const content = `<?xml version="1.0" encoding="UTF-8"?>

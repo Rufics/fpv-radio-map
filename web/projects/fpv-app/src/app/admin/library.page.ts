@@ -157,8 +157,8 @@ export class LibraryPage implements OnInit {
   protected readonly draftSource = computed(() => this.sourceText((this.parsed().value as Entry | undefined) ?? {}));
   protected readonly draftVersion = computed(() => (this.parsed().value as Entry | undefined)?.version);
 
-  async ngOnInit(): Promise<void> {
-    await this.reload();
+  ngOnInit(): void {
+    this.reload().catch((e) => this.message.set({ ok: false, text: ApiError.from(e).message }));
   }
 
   protected async selectKind(k: LibraryKind): Promise<void> {
@@ -218,7 +218,8 @@ export class LibraryPage implements OnInit {
     if (typeof e['gainDbi'] === 'number') return `${e['gainDbi']} dBi`;
     if (typeof e['capacityAh'] === 'number') return `${Math.round((e['capacityAh'] as number) * 1000)} mAh · ${e['cellsSeries']}S ${e['chemistry']}`;
     if (typeof e['massKg'] === 'number') return `${e['massKg']} kg · cruise ${e['cruiseAirspeedMps']} m/s`;
-    return String(e['kind'] ?? e.id ?? '');
+    const label = e['kind'] ?? e.id;
+    return typeof label === 'string' || typeof label === 'number' || typeof label === 'boolean' ? String(label) : '';
   }
 
   protected async save(): Promise<void> {
@@ -237,21 +238,25 @@ export class LibraryPage implements OnInit {
       const current = saved && typeof saved === 'object' ? saved : list.find((e) => e.id === (value.id ?? id));
       if (current) this.select(current);
       else this.selectedId.set(value.id ?? id);
-      this.message.set({ ok: true, text: `Saved${current?.version !== undefined ? ` as version ${current.version}` : ''}.` });
+      const versionSuffix = current?.version !== undefined ? ` as version ${current.version}` : '';
+      this.message.set({ ok: true, text: `Saved${versionSuffix}.` });
       void this.data.reloadLibrary();
     } catch (e) {
-      const err = ApiError.from(e);
-      if (err.status === 401 || err.status === 403) this.message.set({ ok: false, text: 'Set the admin token first (top right).' });
-      else if (err.status === 422) {
-        this.serverIssues.set(err.issues);
-        this.message.set({ ok: false, text: 'The server rejected the entry.' });
-      } else if (err.status === 409) {
-        this.conflict.set(!!this.selectedId());
-        this.message.set({ ok: false, text: this.selectedId() ? `Someone saved this item after version ${value.version ?? '?'} that you edited. Nothing was saved. ${err.message}` : err.message });
-      } else this.message.set({ ok: false, text: err.message });
+      this.showSaveError(ApiError.from(e), value);
     } finally {
       this.busy.set(false);
     }
+  }
+
+  private showSaveError(err: ApiError, value: Entry): void {
+    if (err.status === 401 || err.status === 403) this.message.set({ ok: false, text: 'Set the admin token first (top right).' });
+    else if (err.status === 422) {
+      this.serverIssues.set(err.issues);
+      this.message.set({ ok: false, text: 'The server rejected the entry.' });
+    } else if (err.status === 409) {
+      this.conflict.set(!!this.selectedId());
+      this.message.set({ ok: false, text: this.selectedId() ? `Someone saved this item after version ${value.version ?? '?'} that you edited. Nothing was saved. ${err.message}` : err.message });
+    } else this.message.set({ ok: false, text: err.message });
   }
 
   protected async importFile(ev: Event): Promise<void> {

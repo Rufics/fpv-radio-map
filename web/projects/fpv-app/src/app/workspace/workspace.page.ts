@@ -48,7 +48,11 @@ export class WorkspacePage implements OnInit {
     inject(DestroyRef).onDestroy(() => mq.removeEventListener('change', on));
   }
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
+    this.init().catch((e) => this.loadError.set(ApiError.from(e).message));
+  }
+
+  private async init(): Promise<void> {
     await this.data.load();
     if (this.loader.status().length === 0) void this.loader.loadAll(this.data.modules());
     const id = this.id();

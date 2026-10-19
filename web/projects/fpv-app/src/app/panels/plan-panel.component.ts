@@ -4,6 +4,7 @@ import {
   JobPart,
   JobProgressComponent,
   LinkKind,
+  RadioProfile,
   RfFormat,
   RfNumComponent,
   SegmentedComponent,
@@ -222,7 +223,7 @@ export class PlanPanelComponent {
     return this.ws.evaluated().map((kind: LinkKind) => {
       const setup = m.links[kind];
       const p = this.ws.data.radio(setup?.radio);
-      return { kind, letter: kind === 'control' ? 'C' : 'V', name: p?.name ?? setup?.radio ?? 'not set', source: p ? (p.verified ? 'library' : 'library · unverified') : 'pick one' };
+      return { kind, letter: kind === 'control' ? 'C' : 'V', name: p?.name ?? setup?.radio ?? 'not set', source: this.radioSource(p) };
     });
   });
 
@@ -257,4 +258,9 @@ export class PlanPanelComponent {
   }
 
   protected readonly fmt = RfFormat;
+
+  private radioSource(p: RadioProfile | undefined): string {
+    if (!p) return 'pick one';
+    return p.verified ? 'library' : 'library · unverified';
+  }
 }

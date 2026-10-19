@@ -182,26 +182,39 @@ export class ShareDialogComponent implements OnInit {
 
   protected readonly cards = computed<LinkCard[]>(() => {
     const now = Date.now();
-    const make = (role: Role, title: string, hint: string): LinkCard => {
-      const tok = this.tokens()[role];
-      const active = this.links().filter((l) => l.role === role && !l.revoked && !(l.expiresAt && Date.parse(l.expiresAt) <= now));
-      const link = tok ? (active.find((l) => l.linkId === tok.linkId) ?? null) : this.hidden()[role] ? null : (active[active.length - 1] ?? null);
-      const url = tok && link ? `${location.origin}/m/${role === 'edit' ? 'e' : 'v'}/${tok.token}` : null;
-      const opened = link?.lastOpenedAt ? `last opened ${ShareDialogComponent.fmt(link.lastOpenedAt)}` : '';
-      const status: string[] = [];
-      let paused = false;
-      if (link) {
-        if (link.openCount !== undefined) status.push(`opened ${link.openCount} ${link.openCount === 1 ? 'time' : 'times'}`);
-        status.push(link.expiresAt ? `expires ${ShareDialogComponent.fmt(link.expiresAt)}` : 'no expiry');
-        if (link.pausedUntil && Date.parse(link.pausedUntil) > now) {
-          paused = true;
-          status.push(`paused after wrong PINs until ${ShareDialogComponent.fmt(link.pausedUntil)}`);
-        }
-      }
-      return { role, title, hint: opened || hint, link, url, status, paused };
-    };
-    return [make('edit', 'Can edit', 'PIN required · revoke with owner key'), make('view', 'View only', 'PIN required · opens on phone')];
+    return [this.linkCard('edit', 'Can edit', 'PIN required · revoke with owner key', now), this.linkCard('view', 'View only', 'PIN required · opens on phone', now)];
   });
+
+  private linkCard(role: Role, title: string, hint: string, now: number): LinkCard {
+    const tok = this.tokens()[role];
+    const link = this.cardLink(role, now);
+    const rolePath = role === 'edit' ? 'e' : 'v';
+    const url = tok && link ? `${location.origin}/m/${rolePath}/${tok.token}` : null;
+    const opened = link?.lastOpenedAt ? `last opened ${ShareDialogComponent.fmt(link.lastOpenedAt)}` : '';
+    const { status, paused } = link ? ShareDialogComponent.linkStatus(link, now) : { status: [], paused: false };
+    return { role, title, hint: opened || hint, link, url, status, paused };
+  }
+
+  /** The link a card shows: the one just created in this dialog, else the newest active one (unless hidden). */
+  private cardLink(role: Role, now: number): ShareLink | null {
+    const tok = this.tokens()[role];
+    const active = this.links().filter((l) => l.role === role && !l.revoked && !(l.expiresAt && Date.parse(l.expiresAt) <= now));
+    if (tok) return active.find((l) => l.linkId === tok.linkId) ?? null;
+    if (this.hidden()[role]) return null;
+    return active.at(-1) ?? null;
+  }
+
+  private static linkStatus(link: ShareLink, now: number): { status: string[]; paused: boolean } {
+    const status: string[] = [];
+    let paused = false;
+    if (link.openCount !== undefined) status.push(`opened ${link.openCount} ${link.openCount === 1 ? 'time' : 'times'}`);
+    status.push(link.expiresAt ? `expires ${ShareDialogComponent.fmt(link.expiresAt)}` : 'no expiry');
+    if (link.pausedUntil && Date.parse(link.pausedUntil) > now) {
+      paused = true;
+      status.push(`paused after wrong PINs until ${ShareDialogComponent.fmt(link.pausedUntil)}`);
+    }
+    return { status, paused };
+  }
 
   private async refresh(): Promise<void> {
     const id = this.missionId();
@@ -226,7 +239,7 @@ export class ShareDialogComponent implements OnInit {
   protected async create(role: Role): Promise<void> {
     const id = this.missionId();
     const pin = this.pins()[role];
-    if (!/^[0-9]{6}$/.test(pin)) {
+    if (!/^\d{6}$/.test(pin)) {
       this.pinError.update((e) => ({ ...e, [role]: 'The PIN must be exactly 6 digits.' }));
       return;
     }
@@ -319,7 +332,7 @@ export class ShareDialogComponent implements OnInit {
     try {
       const { compare: _skip, ...opts } = fpvCoreOptions(m);
       const options: FpvCoreOptions = { ...opts, export: [kind], kmlAltitude: this.kmlAltitude(), exportStepM: opts.exportStepM ?? 50 };
-      const req: Mission = { ...m, modules: { ...(m.modules ?? {}), [FPV_CORE]: options as Record<string, unknown> } };
+      const req: Mission = { ...m, modules: { ...m.modules, [FPV_CORE]: options as Record<string, unknown> } };
       const result = await firstValueFrom(this.api.calcRoute(this.ws.store.missionId(), req));
       const file = fpvCoreData(result)?.export?.[kind];
       if (!file?.content) throw new Error(`The server returned no ${kind.toUpperCase()} file.`);

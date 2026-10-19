@@ -44,7 +44,7 @@ export class MissingDataLayer extends StyleLayerSet {
     const features: Feature[] = [];
     for (const s of shapes) {
       const b = s.area?.bbox;
-      if (b && b.length === 4) {
+      if (b?.length === 4) {
         const [w, so, e, n] = b;
         features.push({
           type: 'Feature',
@@ -58,11 +58,17 @@ export class MissingDataLayer extends StyleLayerSet {
       }
     }
     this.data = { type: 'FeatureCollection', features };
-    (this.map?.getSource('rf-missing') as GeoJSONSource | undefined)?.setData(this.data);
+    this.pushData(this.map);
   }
 
   override attach(map: MlMap, beforeId: string | undefined): void {
     super.attach(map, beforeId);
-    (map.getSource('rf-missing') as GeoJSONSource | undefined)?.setData(this.data);
+    this.pushData(map);
+  }
+
+  private pushData(map: MlMap | undefined): void {
+    (map?.getSource('rf-missing') as GeoJSONSource | undefined)
+      ?.setData(this.data)
+      .catch((e: unknown) => console.error('Missing data shapes could not be updated', e));
   }
 }

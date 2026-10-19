@@ -94,7 +94,7 @@ export class StateCardsComponent {
 
   protected async withoutWeather(): Promise<void> {
     this.ws.store.update((m) => {
-      const modules = { ...(m.modules ?? {}) };
+      const modules = { ...m.modules };
       delete modules['rf.weather'];
       return { ...m, modules };
     });
@@ -120,8 +120,10 @@ export class StateCardsComponent {
     if (!m) return;
     const md = this.ws.missingLeg()?.leg.missingData;
     let area: string;
-    if (md?.bbox) area = `${this.bboxText(md.bbox)}${md.source ? ` (${md.source})` : ''}`;
-    else {
+    if (md?.bbox) {
+      const source = md.source ? ` (${md.source})` : '';
+      area = `${this.bboxText(md.bbox)}${source}`;
+    } else {
       const pts = [m.pilot, ...m.waypoints];
       const lats = pts.map((p) => p.lat);
       const lons = pts.map((p) => p.lon);

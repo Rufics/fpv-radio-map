@@ -63,7 +63,30 @@ export function pointName(m: Mission, i: number): string {
 
 /** A mission whose last point is a turn-back point flies back from there. */
 export function endsAtTurnBack(m: Mission): boolean {
-  return m.waypoints[m.waypoints.length - 1]?.label === 'T';
+  return m.waypoints.at(-1)?.label === 'T';
+}
+
+function linkPillTone(ok: boolean, missing: boolean): Tone {
+  if (!ok) return 'blocked';
+  return missing ? 'warn' : 'ok';
+}
+
+function linkPillMark(ok: boolean, missing: boolean): string {
+  if (!ok) return '✕';
+  return missing ? '?' : '✓';
+}
+
+function forecastTierText(tier: string): string {
+  switch (tier) {
+    case 'hourly':
+      return 'forecast hourly';
+    case 'long-range':
+      return 'long-range forecast';
+    case 'off':
+      return 'weather off · standard atmosphere';
+    default:
+      return 'beyond the forecast · standard atmosphere';
+  }
 }
 
 /** FPV view of the mission state: pills, leg rows, verdict, battery, why-drawer selection. */
@@ -111,35 +134,40 @@ export class FpvWorkspace {
     const r = this.store.result();
     const m = this.mission();
     if (!r || !m) return [];
-    const pills: PillVm[] = [];
     const legs = r.legs ?? [];
     const missing = legs.some((l) => l.status === 'missing-data');
-    for (const kind of ['control', 'video'] as LinkKind[]) {
-      const letter = LINK_LETTER[kind];
-      if (!this.evaluated().includes(kind)) continue;
-      const margins = legs.map((l) => l.worst?.[kind]?.marginDb).filter((x): x is number => x !== undefined);
-      if (margins.length === 0) {
-        pills.push({ key: kind, tone: 'warn', text: `${letter} ? not calculated` });
-        continue;
-      }
-      const worst = Math.min(...margins);
-      const ok = worst >= 0;
-      pills.push({
-        key: kind,
-        tone: ok ? (missing ? 'warn' : 'ok') : 'blocked',
-        text: `${letter} ${ok ? (missing ? '?' : '✓') : '✕'} ${RfFormat.format(worst, 'db+')}${missing && ok ? ' · part missing' : ''}`,
-        title: `Worst ${kind} margin along the route: ${RfFormat.full(worst, 'db+')}`,
-      });
-    }
-    const b = r.battery;
-    if (this.batteryFailure()) pills.push({ key: 'battery', tone: 'warn', text: 'Battery ? not checked', title: 'The battery module failed; the verdict is missing, not assumed fine.' });
-    else if (b) {
-      if ((b.shortfallM ?? 0) > 0) pills.push({ key: 'battery', tone: 'warn', text: `Battery ! ${RfFormat.format(b.shortfallM, 'km1')} short`, title: RfFormat.full(b.shortfallM, 'km3') + ' short' });
-      else if (endsAtTurnBack(m)) pills.push({ key: 'battery', tone: 'ok', text: 'Battery ✓ turn back at T' });
-      else pills.push({ key: 'battery', tone: 'ok', text: `Battery ✓ ${RfFormat.format(b.rangeM, 'km1')} range` });
-    }
+    const pills: PillVm[] = (['control', 'video'] as LinkKind[])
+      .filter((kind) => this.evaluated().includes(kind))
+      .map((kind) => this.linkPill(kind, legs, missing));
+    const battery = this.batteryPill(r, m);
+    if (battery) pills.push(battery);
     return pills;
   });
+
+  /** Pill for one evaluated link: its worst margin along the route. */
+  private linkPill(kind: LinkKind, legs: LegResult[], missing: boolean): PillVm {
+    const letter = LINK_LETTER[kind];
+    const margins = legs.map((l) => l.worst?.[kind]?.marginDb).filter((x): x is number => x !== undefined);
+    if (margins.length === 0) return { key: kind, tone: 'warn', text: `${letter} ? not calculated` };
+    const worst = Math.min(...margins);
+    const ok = worst >= 0;
+    return {
+      key: kind,
+      tone: linkPillTone(ok, missing),
+      text: `${letter} ${linkPillMark(ok, missing)} ${RfFormat.format(worst, 'db+')}${missing && ok ? ' · part missing' : ''}`,
+      title: `Worst ${kind} margin along the route: ${RfFormat.full(worst, 'db+')}`,
+    };
+  }
+
+  /** Battery pill, or null when there is no battery verdict to show. */
+  private batteryPill(r: RouteResult, m: Mission): PillVm | null {
+    const b = r.battery;
+    if (this.batteryFailure()) return { key: 'battery', tone: 'warn', text: 'Battery ? not checked', title: 'The battery module failed; the verdict is missing, not assumed fine.' };
+    if (!b) return null;
+    if ((b.shortfallM ?? 0) > 0) return { key: 'battery', tone: 'warn', text: `Battery ! ${RfFormat.format(b.shortfallM, 'km1')} short`, title: RfFormat.full(b.shortfallM, 'km3') + ' short' };
+    if (endsAtTurnBack(m)) return { key: 'battery', tone: 'ok', text: 'Battery ✓ turn back at T' };
+    return { key: 'battery', tone: 'ok', text: `Battery ✓ ${RfFormat.format(b.rangeM, 'km1')} range` };
+  }
 
   // ---------- legs ----------
   /** Leg by its 1-based number in the UI. Legs come in route order; LegResult.index is 0-based. */
@@ -177,10 +205,10 @@ export class FpvWorkspace {
         aglM: w.aglM,
       };
     });
-    if (m.returnToPilot !== false && m.waypoints.length > 0) {
+    const last = m.waypoints.at(-1);
+    if (m.returnToPilot !== false && last) {
       // The server adds the leg last → pilot when returnToPilot; it is evaluated like any other leg.
       const index = rows.length + 1;
-      const last = m.waypoints[m.waypoints.length - 1];
       const leg = this.legResult(r, index);
       const back = leg?.lengthM ?? distanceM(last, m.pilot);
       const from = pointName(m, m.waypoints.length - 1);
@@ -203,7 +231,7 @@ export class FpvWorkspace {
   });
 
   private legMark(leg: LegResult | undefined): Pick<LegRowVm, 'mark' | 'markLabel' | 'tone' | 'failing'> {
-    const failing = (['control', 'video'] as LinkKind[]).filter((k) => leg?.worst?.[k] && leg.worst[k]!.reachable === false);
+    const failing = (['control', 'video'] as LinkKind[]).filter((k) => leg?.worst?.[k]?.reachable === false);
     if (!leg) return { mark: '', markLabel: '', tone: 'none', failing };
     if (leg.status === 'missing-data') return { mark: '? no data', markLabel: 'No elevation data, not calculated', tone: 'warn', failing };
     if (failing.length) return { mark: `${failing.map((k) => LINK_LETTER[k]).join(' ')} ✕`, markLabel: `${failing.join(' and ')} link blocked`, tone: 'blocked', failing };
@@ -291,7 +319,9 @@ export class FpvWorkspace {
     const calc = this.store.result()?.battery?.rangeM;
     const range = calc ?? estimateRangeM(b, d);
     const label = b ? `${b.cellsSeries}S ${Math.round(b.capacityAh * 1000)} mAh` : (m.battery ?? 'no battery');
-    return `${label} · ${range !== null && range !== undefined ? (calc ? '' : '≈ ') + RfFormat.format(range, 'km1') : '—'}`;
+    const approx = calc ? '' : '≈ ';
+    const rangeText = range !== null && range !== undefined ? approx + RfFormat.format(range, 'km1') : '—';
+    return `${label} · ${rangeText}`;
   });
 
   readonly batteryCard = computed(() => {
@@ -330,8 +360,7 @@ export class FpvWorkspace {
     // the result says which tier it used; before a calculation, the horizon tells what to expect
     const r = this.store.result();
     const tier = r?.forecastTier ?? this.data.tierFor(planned ? m.time.utc! : null);
-    const tierText =
-      tier === 'hourly' ? 'forecast hourly' : tier === 'long-range' ? 'long-range forecast' : tier === 'off' ? 'weather off · standard atmosphere' : 'beyond the forecast · standard atmosphere';
+    const tierText = forecastTierText(tier);
     const day = planned ? t.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' : 'Now · ';
     return `${day}${hm} local · ${tierText}`;
   });
