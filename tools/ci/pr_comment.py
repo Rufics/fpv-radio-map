@@ -5,7 +5,8 @@
     python3 -I tools/ci/pr_comment.py post    # in the data folder: posts report.md
 
 `find` looks up the open pull request whose head is the CI run's head commit, writes the run's
-jobs to jobs.json and prints `number=`, `coverage=` and `coverage_url=` lines for $GITHUB_OUTPUT.
+jobs to jobs.json and prints `number=`, `coverage=`, `coverage_url=`, `web_coverage=` and
+`web_coverage_url=` lines for $GITHUB_OUTPUT.
 It prints nothing when no open pull request has that head any more. `post` creates or updates the
 one report comment on pull request PR_NUMBER.
 
@@ -91,12 +92,19 @@ def find():
         [{"name": j["name"], "result": j.get("conclusion") or j.get("status"), "url": j.get("html_url")} for j in jobs]))
     artifacts = [a for a in paginate(f"/repos/{repo}/actions/runs/{run_id}/artifacts", {}, key="artifacts")
                  if not a.get("expired")]
-    html = next((a for a in artifacts if a["name"] == "coverage-cpp-html"), None)
-    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    run_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{repo}/actions/runs/{run_id}"
     print(f"number={int(pr['number'])}")
-    print(f"coverage={'true' if any(a['name'] == 'coverage-cpp' for a in artifacts) else 'false'}")
-    url = f"{server}/{repo}/actions/runs/{run_id}/artifacts/{int(html['id'])}" if html else ""
-    print(f"coverage_url={url}")
+    for output, name in (("coverage", "coverage-cpp"), ("web_coverage", "coverage-web")):
+        present, url = coverage_artifacts(artifacts, name, run_url)
+        print(f"{output}={'true' if present else 'false'}")
+        print(f"{output}_url={url}")
+
+
+def coverage_artifacts(artifacts, name, run_url):
+    """Whether the run has the coverage data artifact `name`, and the link to its HTML report."""
+    html = next((a for a in artifacts if a["name"] == f"{name}-html"), None)
+    present = any(a["name"] == name for a in artifacts)
+    return present, f"{run_url}/artifacts/{int(html['id'])}" if html else ""
 
 
 def post():
