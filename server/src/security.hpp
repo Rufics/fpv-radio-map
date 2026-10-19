@@ -39,7 +39,7 @@ public:
     [[nodiscard]] std::string hash(std::string_view pin) const;
     [[nodiscard]] bool verify(const std::string& stored, std::string_view pin) const;
 
-    static Cost costFromName(const std::string& name);
+    static Cost costFromName(std::string_view name);
 
 private:
     unsigned long long opsLimit_;

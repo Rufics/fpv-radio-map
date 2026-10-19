@@ -30,7 +30,8 @@ public:
     json invoke(const std::string& method, const json& request) override {
         if (method != "route.analyze") throw rfmod::UnknownMethod(method);
         const Mission m = Mission::fromJson(request.at("mission"));
-        std::optional<json> drone, battery;
+        std::optional<json> drone;
+        std::optional<json> battery;
         if (!m.droneId.empty() && !m.batteryId.empty()) {
             drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
             battery = host().call("library.get", {{"kind", "batteries"}, {"id", m.batteryId}});

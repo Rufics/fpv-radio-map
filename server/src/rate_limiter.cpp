@@ -4,7 +4,7 @@
 
 namespace rfmap {
 
-RateLimiter::RateLimiter(std::map<std::string, Config::RateLimit> limits, const IClock& clock)
+RateLimiter::RateLimiter(Limits limits, const IClock& clock)
     : limits_(std::move(limits)), clock_(clock) {}
 
 void RateLimiter::take(const std::string& cls, const std::string& client) {

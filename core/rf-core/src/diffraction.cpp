@@ -1,5 +1,6 @@
 #include "rfcore/diffraction.hpp"
 
+#include "rfcore/errors.hpp"
 #include "rfcore/propagation.hpp"
 
 #include <cmath>
@@ -47,8 +48,10 @@ DiffractionResult BullingtonDiffraction::compute(const PathGeometry& geometry, M
         if (tanFromStart > bestFromStart) { bestFromStart = tanFromStart; idxStart = i; }
         if (tanFromEnd > bestFromEnd) { bestFromEnd = tanFromEnd; idxEnd = i; }
 
-        const double v = KnifeEdge::nu(rel.heightAbove, lambda, rel.d1, rel.d2);
-        if (v > bestNu) { bestNu = v; idxNu = i; }
+        if (const double v = KnifeEdge::nu(rel.heightAbove, lambda, rel.d1, rel.d2); v > bestNu) {
+            bestNu = v;
+            idxNu = i;
+        }
 
         const Metres r1 = FresnelZone::radius(1, lambda, rel.d1, rel.d2);
         const double clearance = -rel.heightAbove.value() / r1.value();
@@ -72,11 +75,15 @@ DiffractionResult BullingtonDiffraction::compute(const PathGeometry& geometry, M
         // Trans-horizon / obstructed: intersect the steepest line from each antenna.
         const PlanePoint ps = tops[idxStart];
         const PlanePoint pe = tops[idxEnd];
-        const double ax = ps.x - t.x, ay = ps.y - t.y;  // direction from the first antenna
-        const double bx = pe.x - r.x, by = pe.y - r.y;  // direction from the second antenna
+        // Direction from the first antenna.
+        const double ax = ps.x - t.x;
+        const double ay = ps.y - t.y;
+        // Direction from the second antenna.
+        const double bx = pe.x - r.x;
+        const double by = pe.y - r.y;
         const double denom = ax * by - ay * bx;
         if (denom == 0.0) {
-            throw std::runtime_error("BullingtonDiffraction: tangent lines are parallel");
+            throw DegenerateGeometryError("BullingtonDiffraction: tangent lines are parallel");
         }
         const double u = ((r.x - t.x) * by - (r.y - t.y) * bx) / denom;
         const PlanePoint edge{t.x + u * ax, t.y + u * ay};

@@ -1,5 +1,7 @@
 #include "pg_auth_store.hpp"
 
+#include "service_errors.hpp"
+
 #include <sodium.h>
 
 namespace rfmap {
@@ -14,9 +16,9 @@ TimePoint fromEpochSeconds(double s) {
 
 Digest digestFromHex(const std::string& hex) {
     Digest d{};
-    std::size_t len = 0;
-    if (sodium_hex2bin(d.data(), d.size(), hex.c_str(), hex.size(), nullptr, &len, nullptr) != 0 || len != d.size()) {
-        throw std::runtime_error("bad digest in database");
+    if (std::size_t len = 0;
+        sodium_hex2bin(d.data(), d.size(), hex.c_str(), hex.size(), nullptr, &len, nullptr) != 0 || len != d.size()) {
+        throw StoredDataError("bad digest in database");
     }
     return d;
 }
@@ -103,7 +105,7 @@ FailureOutcome PgAuthStore::recordFailure(const std::string& linkId, int maxAtte
             "where id = $1 "
             "returning failed_attempts, (failed_attempts = 0) as locked, extract(epoch from locked_until)::float8",
             linkId, maxAttempts, static_cast<double>(lockout.count()), epochSeconds(now));
-        if (r.empty()) throw std::runtime_error("link vanished");
+        if (r.empty()) throw StoredDataError("link vanished");
         if (r[0][1].as<bool>()) return FailureOutcome{0, fromEpochSeconds(r[0][2].as<double>())};
         return FailureOutcome{maxAttempts - r[0][0].as<int>(), std::nullopt};
     });

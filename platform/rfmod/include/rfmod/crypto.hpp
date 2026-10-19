@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -10,6 +11,12 @@
 namespace rfmod {
 
 using Bytes = std::vector<std::uint8_t>;
+
+/// libsodium could not be initialised, so no key or hash operation can run.
+class SodiumInitError : public std::runtime_error {
+public:
+    SodiumInitError() : std::runtime_error("libsodium failed to initialise") {}
+};
 
 /// SHA-256 helpers (libsodium).
 struct Sha256 {
@@ -35,7 +42,7 @@ public:
     [[nodiscard]] bool verify(std::string_view message, const Bytes& signature) const;
     [[nodiscard]] const std::array<std::uint8_t, kSize>& raw() const { return key_; }
 
-    friend bool operator==(const PublicKey& a, const PublicKey& b) { return a.key_ == b.key_; }
+    friend bool operator==(const PublicKey& a, const PublicKey& b) = default;
 
 private:
     std::array<std::uint8_t, kSize> key_{};

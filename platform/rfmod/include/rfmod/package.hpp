@@ -6,10 +6,12 @@
 #include "rfmod/trust.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 namespace rfmod {
 
@@ -23,7 +25,7 @@ namespace rfmod {
 /// The signature covers the exact bytes of META/files.sha256, so one signature vouches for
 /// every byte of the package.
 struct PackageFiles {
-    std::map<std::string, std::string> files;  ///< path -> content (binary-safe)
+    std::map<std::string, std::string, std::less<>> files;  ///< path -> content (binary-safe)
 };
 
 struct PackageLimits {
@@ -36,7 +38,7 @@ class PackageReader {
 public:
     /// Unpacks in memory. Refuses absolute paths, "..", links, devices and anything over the limits;
     /// each refusal is a failed check in `report`.
-    static std::optional<PackageFiles> read(const std::string& archive, const PackageLimits& limits,
+    static std::optional<PackageFiles> read(std::string_view archive, const PackageLimits& limits,
                                             ValidationReport& report);
 };
 

@@ -2,6 +2,7 @@
 
 #include "fpv/world.hpp"
 
+#include <format>
 #include <string>
 #include <vector>
 
@@ -35,7 +36,7 @@ struct Mission {
         out.name = m.value("name", "");
         out.pilot = wp(m.at("pilot"), "Pilot");
         int i = 1;
-        for (const json& p : m.at("waypoints")) out.waypoints.push_back(wp(p, "WP" + std::to_string(i++)));
+        for (const json& p : m.at("waypoints")) out.waypoints.push_back(wp(p, std::format("WP{}", i++)));
         out.returnToPilot = m.value("returnToPilot", true);
         out.evaluate = m.value("evaluate", "both");
         out.droneId = m.value("drone", "");

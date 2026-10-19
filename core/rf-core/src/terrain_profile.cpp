@@ -33,7 +33,7 @@ ProfileResult ProfileBuilder::build(const GeoPoint& from, const GeoPoint& to, st
         throw std::invalid_argument("ProfileBuilder: start and end are the same point");
     }
     const std::vector<GeoPoint> points = geodesy_.sample(from, to, spacing);
-    const double n = static_cast<double>(points.size() - 1);
+    const auto n = static_cast<double>(points.size() - 1);
 
     std::vector<ProfileSample> samples;
     samples.reserve(points.size());
@@ -53,7 +53,7 @@ ProfileResult ProfileBuilder::build(const GeoPoint& from, const GeoPoint& to, st
             result.missing.push_back({*gapStart, distance});
             gapStart.reset();
         }
-        samples.push_back({distance, e->heightMsl, Metres(0.0), e->uncertainty, points[i]});
+        samples.emplace_back(distance, e->heightMsl, Metres(0.0), e->uncertainty, points[i]);
     }
     if (gapStart) {
         result.missing.push_back({*gapStart, inv.distance});

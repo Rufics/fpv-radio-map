@@ -18,13 +18,18 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <functional>
 #include <map>
+#include <ranges>
+#include <span>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -39,38 +44,55 @@ constexpr const char* kHostVersion = RFMAP_HOST_VERSION;
 constexpr const char* kHostVersion = "0.1.0";
 #endif
 
+/// A file the tool was asked to read or write could not be.
+class FileError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+/// A host call a module made that --fixtures does not answer.
+class MissingFixture : public std::runtime_error {
+public:
+    explicit MissingFixture(const std::string& method)
+        : std::runtime_error(method + " is not available in rfmod test (add it to --fixtures)") {}
+};
+
 struct Args {
     std::vector<std::string> positional;
-    std::multimap<std::string, std::string> flags;
+    std::multimap<std::string, std::string, std::less<>> flags;
 
-    [[nodiscard]] std::string get(const std::string& k, const std::string& fallback = {}) const {
+    [[nodiscard]] std::string get(std::string_view k, const std::string& fallback = {}) const {
         const auto it = flags.find(k);
         return it == flags.end() ? fallback : it->second;
     }
-    [[nodiscard]] std::vector<std::string> all(const std::string& k) const {
+    [[nodiscard]] std::vector<std::string> all(std::string_view k) const {
         std::vector<std::string> out;
-        for (auto [a, b] = flags.equal_range(k); a != b; ++a) out.push_back(a->second);
+        const auto [first, last] = flags.equal_range(k);
+        for (const std::string& value : std::ranges::subrange(first, last) | std::views::values) {
+            out.push_back(value);
+        }
         return out;
     }
 };
 
-Args parseArgs(int argc, char** argv, int from) {
+Args parseArgs(std::span<char* const> words) {
     Args a;
-    for (int i = from; i < argc; ++i) {
-        std::string s = argv[i];
-        if (s.starts_with("--") || s == "-o") {
-            if (i + 1 >= argc) throw std::invalid_argument("missing value for " + s);
-            a.flags.emplace(s == "-o" ? "--out" : s, argv[++i]);
-        } else {
+    auto next = words.begin();
+    while (next != words.end()) {
+        const std::string s = *next++;
+        if (!s.starts_with("--") && s != "-o") {
             a.positional.push_back(s);
+            continue;
         }
+        if (next == words.end()) throw std::invalid_argument("missing value for " + s);
+        a.flags.emplace(s == "-o" ? "--out" : s, *next++);
     }
     return a;
 }
 
 std::string readFile(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
-    if (!in) throw std::runtime_error("cannot read " + p.string());
+    if (!in) throw FileError("cannot read " + p.string());
     std::ostringstream s;
     s << in.rdbuf();
     return s.str();
@@ -80,7 +102,7 @@ void writeFile(const fs::path& p, const std::string& content, mode_t mode = 0644
     if (p.has_parent_path()) fs::create_directories(p.parent_path());
     std::ofstream out(p, std::ios::binary | std::ios::trunc);
     out << content;
-    if (!out) throw std::runtime_error("cannot write " + p.string());
+    if (!out) throw FileError("cannot write " + p.string());
     out.close();
     chmod(p.c_str(), mode);
 }
@@ -109,11 +131,12 @@ public:
     explicit FixtureHost(json fixtures) : fixtures_(std::move(fixtures)) {}
     json call(const std::string&, const std::string& method, const json&) override {
         if (fixtures_.contains(method)) return fixtures_.at(method);
-        throw std::runtime_error(method + " is not available in rfmod test (add it to --fixtures)");
+        throw MissingFixture(method);
     }
     void log(const std::string& id, int level, const std::string& message) override {
-        static const char* names[] = {"debug", "info", "warn", "error"};
-        std::cerr << "[" << id << " " << names[std::clamp(level, 0, 3)] << "] " << message << "\n";
+        static constexpr std::array<const char*, 4> names = {"debug", "info", "warn", "error"};
+        std::cerr << "[" << id << " " << names.at(static_cast<std::size_t>(std::clamp(level, 0, 3))) << "] " << message
+                  << "\n";
     }
 
 private:
@@ -330,7 +353,7 @@ int main(int argc, char** argv) {
     }
     const std::string cmd = argv[1];
     try {
-        const Args a = parseArgs(argc, argv, 2);
+        const Args a = parseArgs(std::span<char* const>(argv, static_cast<std::size_t>(argc)).subspan(2));
         if (cmd == "keygen") return cmdKeygen(a);
         if (cmd == "new") return cmdNew(a);
         if (cmd == "pack") return cmdPack(a);

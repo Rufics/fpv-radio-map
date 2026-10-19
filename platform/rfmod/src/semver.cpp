@@ -9,13 +9,9 @@
 namespace rfmod {
 namespace {
 
-bool isDigits(std::string_view s) {
-    if (s.empty()) return false;
-    for (char c : s) {
-        if (c < '0' || c > '9') return false;
-    }
-    return true;
-}
+bool isDigit(char c) { return c >= '0' && c <= '9'; }
+
+bool isDigits(std::string_view s) { return !s.empty() && std::ranges::all_of(s, isDigit); }
 
 bool isIdentChar(char c) {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-';
@@ -103,14 +99,14 @@ std::optional<Version> Version::tryParse(std::string_view text) {
 }
 
 std::string Version::str() const {
-    std::string out = std::to_string(major_) + "." + std::to_string(minor_) + "." + std::to_string(patch_);
+    std::string out = std::format("{}.{}.{}", major_, minor_, patch_);
     for (std::size_t i = 0; i < pre_.size(); ++i) {
         out += (i == 0 ? "-" : ".") + pre_[i];
     }
     return out;
 }
 
-std::strong_ordering operator<=>(const Version& a, const Version& b) {
+std::strong_ordering Version::compare(const Version& a, const Version& b) {
     if (auto c = a.major_ <=> b.major_; c != 0) return c;
     if (auto c = a.minor_ <=> b.minor_; c != 0) return c;
     if (auto c = a.patch_ <=> b.patch_; c != 0) return c;
@@ -139,7 +135,7 @@ std::strong_ordering operator<=>(const Version& a, const Version& b) {
 
 void VersionRange::appendComparators(std::string_view token, Set& out) {
     auto take = [&token](std::string_view prefix) {
-        if (token.substr(0, prefix.size()) == prefix) {
+        if (token.starts_with(prefix)) {
             token.remove_prefix(prefix.size());
             return true;
         }
@@ -207,17 +203,18 @@ VersionRange VersionRange::parse(std::string_view text) {
 }
 
 bool VersionRange::contains(const Version& v) const {
+    using enum Op;
     for (const Set& set : sets_) {
         bool ok = true;
         bool prereleaseAllowed = !v.isPrerelease();
         for (const Comparator& c : set) {
             const auto cmp = v <=> c.version;
             switch (c.op) {
-                case Op::Eq: ok = ok && cmp == 0; break;
-                case Op::Gt: ok = ok && cmp > 0; break;
-                case Op::Ge: ok = ok && cmp >= 0; break;
-                case Op::Lt: ok = ok && cmp < 0; break;
-                case Op::Le: ok = ok && cmp <= 0; break;
+                case Eq: ok = ok && cmp == 0; break;
+                case Gt: ok = ok && cmp > 0; break;
+                case Ge: ok = ok && cmp >= 0; break;
+                case Lt: ok = ok && cmp < 0; break;
+                case Le: ok = ok && cmp <= 0; break;
             }
             if (c.version.isPrerelease() && c.version.major() == v.major() && c.version.minor() == v.minor() &&
                 c.version.patch() == v.patch()) {

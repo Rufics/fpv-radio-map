@@ -4,7 +4,9 @@
 
 #include <filesystem>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfmod {
@@ -19,6 +21,12 @@ struct TrustedKey {
     [[nodiscard]] bool firstParty() const { return builtIn; }
 };
 
+/// The trust store file could not be written.
+class TrustStoreWriteError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 /// The signing keys this host accepts. The owner key is compiled in; the admin adds or
 /// removes the others, which are kept in a JSON file.
 class TrustStore {
@@ -27,7 +35,7 @@ public:
     TrustStore(std::string_view ownerKeyText, std::filesystem::path storePath);
 
     [[nodiscard]] const std::vector<TrustedKey>& keys() const { return keys_; }
-    [[nodiscard]] std::optional<TrustedKey> find(const std::string& keyId) const;
+    [[nodiscard]] std::optional<TrustedKey> find(std::string_view keyId) const;
 
     /// Adds an admin key. Throws std::invalid_argument for a bad key or a duplicate.
     const TrustedKey& add(const PublicKey& key, std::string label);

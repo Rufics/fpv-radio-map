@@ -78,7 +78,7 @@ struct ProfileResult {
 
 class ProfileBuilder {
 public:
-    ProfileBuilder(const IElevationSource& source, Geodesy geodesy = {});
+    explicit ProfileBuilder(const IElevationSource& source, Geodesy geodesy = {});
 
     /// Samples the terrain from `from` to `to` at the source's native resolution
     /// (or `step` when given and finer).
@@ -87,7 +87,7 @@ public:
 
 private:
     const IElevationSource& source_;
-    Geodesy geodesy_;
+    [[no_unique_address]] Geodesy geodesy_;
 };
 
 }  // namespace rfcore

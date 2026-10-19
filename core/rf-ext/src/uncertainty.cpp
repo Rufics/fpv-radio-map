@@ -12,7 +12,12 @@ namespace {
 rfcore::TerrainProfile shifted(const rfcore::TerrainProfile& p, double interior, double start, double end) {
     std::vector<rfcore::ProfileSample> s = p.samples();
     for (std::size_t i = 0; i < s.size(); ++i) {
-        const double sign = i == 0 ? start : (i + 1 == s.size() ? end : interior);
+        double sign = interior;
+        if (i == 0) {
+            sign = start;
+        } else if (i + 1 == s.size()) {
+            sign = end;
+        }
         s[i].groundMsl = s[i].groundMsl + rfcore::Metres(sign * s[i].uncertainty.value());
     }
     return rfcore::TerrainProfile(std::move(s), p.sourceName(), p.azimuthDeg(), p.midLatitudeDeg());
@@ -32,11 +37,12 @@ void widenOverCorners(const std::vector<rfcore::LinkResult>& corners, std::strin
 }  // namespace
 
 std::string toString(MarginBand::Verdict v) {
+    using enum MarginBand::Verdict;
     switch (v) {
-        case MarginBand::Verdict::Reliable: return "reliable";
-        case MarginBand::Verdict::Marginal: return "marginal";
-        case MarginBand::Verdict::Blocked: return "blocked";
-        case MarginBand::Verdict::BlockedMayWork: return "blocked-may-work";
+        case Reliable: return "reliable";
+        case Marginal: return "marginal";
+        case Blocked: return "blocked";
+        case BlockedMayWork: return "blocked-may-work";
     }
     return "blocked";
 }
@@ -48,19 +54,34 @@ UncertaintyAnalyzer::Extremes UncertaintyAnalyzer::knifeEdgeExtremes(double lo, 
     // tenth of that so none is skipped, then refine each bracketed one.
     auto refine = [&j](double a, double b, bool findMax) {
         const double g = (std::sqrt(5.0) - 1.0) / 2.0;
-        double c = b - g * (b - a), d = a + g * (b - a);
-        double fc = j(c), fd = j(d);
-        for (int i = 0; i < 200 && b - a > 1e-15 * std::max(1.0, std::abs(a)); ++i) {
+        double c = std::lerp(b, a, g);
+        double d = std::lerp(a, b, g);
+        double fc = j(c);
+        double fd = j(d);
+        for (int i = 0; i < 200; ++i) {
+            if (b - a <= 1e-15 * std::max(1.0, std::abs(a))) {
+                break;
+            }
             if ((fc > fd) == findMax) {
-                b = d; d = c; fd = fc; c = b - g * (b - a); fc = j(c);
+                b = d;
+                d = c;
+                fd = fc;
+                c = std::lerp(b, a, g);
+                fc = j(c);
             } else {
-                a = c; c = d; fc = fd; d = a + g * (b - a); fd = j(d);
+                a = c;
+                c = d;
+                fc = fd;
+                d = std::lerp(a, b, g);
+                fd = j(d);
             }
         }
         return j((a + b) / 2.0);
     };
-    double prev = lo, fPrev = j(lo);
-    double x = lo, fx = fPrev;
+    double prev = lo;
+    double fPrev = j(lo);
+    double x = lo;
+    double fx = fPrev;
     while (x < hi) {
         const double step = 0.1 / (std::abs(x) + 1.0);
         const double next = std::min(hi, x + step);
@@ -88,7 +109,8 @@ MarginBand UncertaintyAnalyzer::analyze(const rfcore::TerrainProfile& profile, r
             }
         }
     }
-    double nuLo = nominal.diffraction.nu, nuHi = nominal.diffraction.nu;
+    double nuLo = nominal.diffraction.nu;
+    double nuHi = nominal.diffraction.nu;
     for (const auto& c : corners) {
         nuLo = std::min(nuLo, c.diffraction.nu);
         nuHi = std::max(nuHi, c.diffraction.nu);
@@ -97,7 +119,8 @@ MarginBand UncertaintyAnalyzer::analyze(const rfcore::TerrainProfile& profile, r
 
     // Every other term: its own extremes over the corners (they depend on the end heights only
     // through the ray length and geometry, which also peak at corners).
-    double worstLoss = 0.0, bestLoss = 0.0;
+    double worstLoss = 0.0;
+    double bestLoss = 0.0;
     for (const auto& t : nominal.terms) {
         const std::string& id = t.id;
         if (id == "diffraction") {
@@ -105,7 +128,8 @@ MarginBand UncertaintyAnalyzer::analyze(const rfcore::TerrainProfile& profile, r
             bestLoss += j.min;
             continue;
         }
-        double hi = t.value.value(), lo = hi;
+        double hi = t.value.value();
+        double lo = hi;
         widenOverCorners(corners, id, lo, hi);
         worstLoss += hi;
         bestLoss += lo;

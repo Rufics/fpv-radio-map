@@ -8,6 +8,7 @@
 #include <rfcore/geodesy.hpp>
 #include <rfmod/module.hpp>
 
+#include <format>
 #include <functional>
 #include <optional>
 #include <stdexcept>
@@ -94,7 +95,7 @@ public:
     }
 
     static json point(const LatLon& p) { return {{"lat", p.lat}, {"lon", p.lon}}; }
-    static std::string describe(const LatLon& p) { return std::to_string(p.lat) + ", " + std::to_string(p.lon); }
+    static std::string describe(const LatLon& p) { return std::format("{:f}, {:f}", p.lat, p.lon); }
 
 private:
     const rfmod::HostClient& host_;
@@ -129,7 +130,7 @@ public:
         for (std::size_t i = 0; i < pts.size(); ++i) {
             const LatLon p{pts[i].latitudeDeg, pts[i].longitudeDeg};
             const double d = pts.size() == 1 ? 0.0 : total * static_cast<double>(i) / static_cast<double>(pts.size() - 1);
-            out.push_back({d, groundMsl(p), 0.0, p});
+            out.emplace_back(d, groundMsl(p), 0.0, p);
         }
         return out;
     }

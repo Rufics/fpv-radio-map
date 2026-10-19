@@ -10,10 +10,18 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfmod {
+
+/// A file in the registry directory could not be written.
+class RegistryWriteError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 enum class ModuleState { Active, Disabled, MissingDependency, Failed };
 std::string toString(ModuleState s);
@@ -74,6 +82,8 @@ private:
     void reloadLocked();
     /// Shuts every loaded module down, in reverse dependency order, and forgets all entries.
     void shutdownAll();
+    /// Shuts one module down, logging (not throwing) a failure.
+    void shutdownLogged(IModuleInstance& instance) const;
     /// The module installed in `dir`, re-verified; nullopt (with a notice) if it fails verification.
     [[nodiscard]] std::optional<Entry> readInstalled(const std::filesystem::path& dir,
                                                      std::vector<std::string>& notices) const;
@@ -103,7 +113,7 @@ private:
     /// Takes the instance out of the entry, then shuts it down outside mutex_.
     void retire(Entry& e);
     void writeState(const Entry& e) const;
-    [[nodiscard]] std::vector<std::string> dependentsOf(const std::string& id) const;
+    [[nodiscard]] std::vector<std::string> dependentsOf(std::string_view id) const;
     void unpack(const PackageFiles& files, const std::filesystem::path& dir) const;
 
     RegistryConfig config_;

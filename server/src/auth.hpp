@@ -8,13 +8,14 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfmap {
 
 enum class Role { Edit, View };
 std::string toString(Role r);
-Role roleFromString(const std::string& s);  ///< throws HttpError 400
+Role roleFromString(std::string_view s);  ///< throws HttpError 400
 
 struct LinkRecord {
     std::string linkId;
@@ -85,8 +86,8 @@ public:
 
 private:
     std::mutex mutex_;
-    std::map<std::string, Digest> owners_;
-    std::map<std::string, LinkRecord> links_;
+    std::map<std::string, Digest, std::less<>> owners_;
+    std::map<std::string, LinkRecord, std::less<>> links_;
     std::map<Digest, SessionRecord> sessions_;
 };
 
@@ -120,8 +121,8 @@ public:
         LinkRecord record;
         std::string token;  ///< shown once
     };
-    CreatedLink createLink(const std::string& missionId, const std::string& ownerKey, Role role, const std::string& pin,
-                           const std::string& label, std::optional<TimePoint> expiresAt = std::nullopt);
+    CreatedLink createLink(const std::string& missionId, const std::string& ownerKey, Role role, std::string_view pin,
+                           std::string_view label, std::optional<TimePoint> expiresAt = std::nullopt);
     std::vector<LinkRecord> listLinks(const std::string& missionId, const std::string& ownerKey);
     void revokeLink(const std::string& missionId, const std::string& ownerKey, const std::string& linkId);
 

@@ -4,8 +4,10 @@
 // std::source_location. Compiled as C++20, its headers would declare ones that take it and
 // the link fails; hide the feature so the headers match the library's ABI.
 #include <version>
-#undef __cpp_lib_source_location
+#undef __cpp_lib_source_location  // NOSONAR(cpp:S959): a library feature macro <version> defines; see above
 #include <pqxx/pqxx>
+
+#include "logger.hpp"
 
 #include <condition_variable>
 #include <filesystem>
@@ -56,6 +58,9 @@ public:
     std::vector<std::string> migrate(const std::filesystem::path& sqlDir);
 
 private:
+    /// Returns a leased connection to the pool and wakes one waiting lease.
+    void giveBack(std::unique_ptr<pqxx::connection> c);
+
     struct Lease {
         explicit Lease(Database& db);
         ~Lease();
@@ -68,6 +73,7 @@ private:
     std::mutex mutex_;
     std::condition_variable available_;
     std::vector<std::unique_ptr<pqxx::connection>> idle_;
+    Logger log_;
 };
 
 }  // namespace rfmap

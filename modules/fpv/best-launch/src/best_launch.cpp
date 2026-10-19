@@ -1,11 +1,25 @@
 #include "best_launch.hpp"
 
 #include <algorithm>
+#include <format>
+#include <optional>
 
 namespace fpv::launch {
 namespace {
 constexpr const char* kId = "fpv.best-launch";
+
+/// Worst margin along the route when launching from `ground`, or nothing when the launch
+/// point has no terrain data.
+std::optional<WorstMargin> worstFrom(const IWorld& world, const ILinkEvaluator& eval, const std::vector<std::string>& links,
+                                     const End& ground, const std::vector<RoutePoint>& samples) {
+    try {
+        (void)world.groundMsl(ground.position);
+        return worstAlongRoute(eval, links, ground, samples);
+    } catch (const MissingTerrain&) {
+        return std::nullopt;
+    }
 }
+}  // namespace
 
 json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eval) {
     const Mission mission = Mission::fromJson(request.at("mission"));
@@ -34,14 +48,13 @@ json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eva
         std::vector<Scored> scored;
         std::size_t noData = 0;
         for (const LatLon& p : grid) {
-            try {
-                (void)world.groundMsl(p);
-                scored.push_back({p, worstAlongRoute(eval, links, {p, agl}, samples)});
-            } catch (const MissingTerrain&) {
+            if (std::optional<WorstMargin> w = worstFrom(world, eval, links, {p, agl}, samples)) {
+                scored.emplace_back(p, std::move(*w));
+            } else {
                 ++noData;
             }
         }
-        std::sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) { return a.w.marginDb > b.w.marginDb; });
+        std::ranges::sort(scored, [](const Scored& a, const Scored& b) { return a.w.marginDb > b.w.marginDb; });
 
         json cells = json::array();
         for (const Scored& s : scored) {
@@ -51,7 +64,7 @@ json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eva
         data["current"] = {{"worstMarginDb", now.marginDb}, {"link", now.link}};
         data["notes"] = {"Each candidate is scored by its worst margin over every evaluated link at points every " +
                          fixed(stepM, 0) + " m along the way out and at the target; points in between are not checked."};
-        if (noData > 0) data["notes"].push_back(std::to_string(noData) + " grid points have no terrain data and were skipped.");
+        if (noData > 0) data["notes"].push_back(std::format("{} grid points have no terrain data and were skipped.", noData));
 
         if (scored.empty()) {
             reasons.push_back(reason(kId, "warn", "No launch point in the area has terrain data."));

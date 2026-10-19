@@ -49,8 +49,8 @@ public:
     static constexpr int kMaxDepth = 4;
 
 private:
-    json linkEvaluate(const json& req);
-    json profileGet(const json& req);
+    json linkEvaluate(const json& req) const;
+    json profileGet(const json& req) const;
     json elevationPoint(const json& req) const;
     json weatherPoint(const json& req);
     json libraryGet(const json& req) const;

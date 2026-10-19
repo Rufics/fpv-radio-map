@@ -2,6 +2,9 @@
 
 #include "security.hpp"
 
+#include <exception>
+#include <stdexcept>
+
 namespace rfmap {
 
 namespace {
@@ -23,6 +26,31 @@ private:
     const std::atomic<bool>& cancelled_;
 };
 
+/// Sets a job's final state when its run ends, also when a part threw something the part's
+/// handlers do not contain, so a job never stays "running".
+class JobFinisher {
+public:
+    JobFinisher(std::mutex& mutex, std::string& state, const std::atomic<bool>& cancelled, const bool& failed)
+        : mutex_(mutex), state_(state), cancelled_(cancelled), failed_(failed) {}
+    ~JobFinisher() {
+        const std::lock_guard lock(mutex_);
+        if (cancelled_) state_ = "cancelled";
+        else if (failed_ || std::uncaught_exceptions() > exceptions_) state_ = "failed";
+        else state_ = "done";
+    }
+    JobFinisher(const JobFinisher&) = delete;
+    JobFinisher& operator=(const JobFinisher&) = delete;
+    JobFinisher(JobFinisher&&) = delete;
+    JobFinisher& operator=(JobFinisher&&) = delete;
+
+private:
+    std::mutex& mutex_;
+    std::string& state_;
+    const std::atomic<bool>& cancelled_;
+    const bool& failed_;
+    int exceptions_ = std::uncaught_exceptions();
+};
+
 }  // namespace
 
 JobManager::JobManager(Calculator& calc, int jobThreads, int cellThreads, int keepMinutes, Logger& log)
@@ -30,7 +58,7 @@ JobManager::JobManager(Calculator& calc, int jobThreads, int cellThreads, int ke
 
 JobManager::~JobManager() {
     std::lock_guard lock(mutex_);
-    for (auto& [id, j] : jobs_) j->cancelled = true;
+    for (const auto& [id, j] : jobs_) j->cancelled = true;
 }
 
 void JobManager::sweep() {
@@ -41,7 +69,7 @@ void JobManager::sweep() {
     }
 }
 
-json JobManager::start(const std::string& missionId, const json& mission) {
+json JobManager::start(std::string_view missionId, const json& mission) {
     auto job = std::make_shared<Job>();
     job->id = Secrets::randomToken(12);
     job->missionId = missionId;
@@ -70,14 +98,11 @@ void JobManager::runJob(Job& job, const json& mission) {
         job.state = "running";
     }
     bool failed = false;
+    const JobFinisher finisher(mutex_, job.state, job.cancelled, failed);
     for (Part& part : job.parts) {
         if (job.cancelled) break;
         runPart(job, part, mission, failed);
     }
-    const std::lock_guard lock(mutex_);
-    if (job.cancelled) job.state = "cancelled";
-    else if (failed) job.state = "failed";
-    else job.state = "done";
 }
 
 void JobManager::runPart(const Job& job, Part& part, const json& mission, bool& failed) {
@@ -93,16 +118,25 @@ void JobManager::runPart(const Job& job, Part& part, const json& mission, bool& 
         part.progress = 1.0;
         grid.erase("cached");
         part.grid = std::move(grid);
-    } catch (const std::exception& e) {
-        const std::lock_guard lock(mutex_);
-        part.state = job.cancelled ? "waiting" : "failed";
-        part.error = e.what();
-        failed = !job.cancelled;
-        if (failed) log_.warn("coverage", "job " + job.id + " part " + part.name + ": " + e.what());
+    } catch (const nlohmann::json::exception& e) {
+        // A part is contained: whatever the calculation throws becomes the part's error.
+        recordFailure(job, part, e.what(), failed);
+    } catch (const std::runtime_error& e) {
+        recordFailure(job, part, e.what(), failed);
+    } catch (const std::logic_error& e) {
+        recordFailure(job, part, e.what(), failed);
     }
 }
 
-std::shared_ptr<JobManager::Job> JobManager::find(const std::string& missionId, const std::string& jobId) {
+void JobManager::recordFailure(const Job& job, Part& part, const char* what, bool& failed) {
+    const std::lock_guard lock(mutex_);
+    part.state = job.cancelled ? "waiting" : "failed";
+    part.error = what;
+    failed = !job.cancelled;
+    if (failed) log_.warn("coverage", "job " + job.id + " part " + part.name + ": " + what);
+}
+
+std::shared_ptr<JobManager::Job> JobManager::find(std::string_view missionId, std::string_view jobId) {
     std::lock_guard lock(mutex_);
     const auto it = jobs_.find(jobId);
     // Another mission's job reads as unknown, so ids cannot be probed across missions.
@@ -148,7 +182,9 @@ json JobManager::grid(const std::string& missionId, const std::string& jobId, co
 std::size_t JobManager::running() const {
     std::lock_guard lock(mutex_);
     std::size_t n = 0;
-    for (const auto& [id, j] : jobs_) n += j->state == "running" || j->state == "queued";
+    for (const auto& [id, j] : jobs_) {
+        if (j->state == "running" || j->state == "queued") ++n;
+    }
     return n;
 }
 

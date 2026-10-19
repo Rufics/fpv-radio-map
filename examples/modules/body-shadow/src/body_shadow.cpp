@@ -8,6 +8,7 @@
 #include <rfmod/module.hpp>
 
 #include <cmath>
+#include <format>
 
 namespace {
 
@@ -23,7 +24,7 @@ public:
         source_ = options.value("source", std::string());
         uncertaintyDb_ = options.value("uncertaintyDb", 0.0);
         if (!std::isfinite(lossDb_) || lossDb_ < 0.0) throw rfmod::BadRequest("lossDb must be a finite number >= 0");
-        host.log(RFMOD_LOG_INFO, "body shadow loss " + std::to_string(lossDb_) + " dB");
+        host.log(RFMOD_LOG_INFO, std::format("body shadow loss {:f} dB", lossDb_));
     }
 
     rfmod::json invoke(const std::string& method, const rfmod::json& request) override {
@@ -51,7 +52,7 @@ private:
         rfmod::json notes = rfmod::json::array();
         if (uncertaintyDb_ > 0.0) {
             notes.push_back({{"what", "Body shadow"},
-                             {"detail", "user value ±" + std::to_string(uncertaintyDb_) + " dB"}});
+                             {"detail", std::format("user value ±{:f} dB", uncertaintyDb_)}});
         }
         return {{"terms",
                  {{{"id", "example.body-shadow/ground"},

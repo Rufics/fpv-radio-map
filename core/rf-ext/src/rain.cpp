@@ -12,7 +12,9 @@ namespace rfext {
 namespace {
 
 struct Term {
-    double a, b, c;
+    double a;
+    double b;
+    double c;
 };
 
 // ITU-R P.838-3 Tables 1-4.
@@ -20,24 +22,28 @@ constexpr std::array<Term, 4> kKH{{{-5.33980, -0.10008, 1.13098},
                                    {-0.35351, 1.26970, 0.45400},
                                    {-0.23789, 0.86036, 0.15354},
                                    {-0.94158, 0.64552, 0.16817}}};
-constexpr double kKHm = -0.18961, kKHc = 0.71147;
+constexpr double kKHm = -0.18961;
+constexpr double kKHc = 0.71147;
 constexpr std::array<Term, 4> kKV{{{-3.80595, 0.56934, 0.81061},
                                    {-3.44965, -0.22911, 0.51059},
                                    {-0.39902, 0.73042, 0.11899},
                                    {0.50167, 1.07319, 0.27195}}};
-constexpr double kKVm = -0.16398, kKVc = 0.63297;
+constexpr double kKVm = -0.16398;
+constexpr double kKVc = 0.63297;
 constexpr std::array<Term, 5> kAH{{{-0.14318, 1.82442, -0.55187},
                                    {0.29591, 0.77564, 0.19822},
                                    {0.32177, 0.63773, 0.13164},
                                    {-5.37610, -0.96230, 1.47828},
                                    {16.1721, -3.29980, 3.43990}}};
-constexpr double kAHm = 0.67849, kAHc = -1.95537;
+constexpr double kAHm = 0.67849;
+constexpr double kAHc = -1.95537;
 constexpr std::array<Term, 5> kAV{{{-0.07771, 2.33840, -0.76284},
                                    {0.56727, 0.95545, 0.54039},
                                    {-0.20238, 1.14520, 0.26809},
                                    {-48.2991, 0.791669, 0.116226},
                                    {48.5833, 0.791459, 0.116479}}};
-constexpr double kAVm = -0.053739, kAVc = 0.83433;
+constexpr double kAVm = -0.053739;
+constexpr double kAVc = 0.83433;
 
 template <std::size_t N>
 double series(const std::array<Term, N>& t, double m, double c, double x) {

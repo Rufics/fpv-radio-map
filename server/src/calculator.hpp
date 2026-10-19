@@ -61,8 +61,8 @@ public:
 private:
     json evaluateLeg(const json& mission, std::size_t index, const json& from, const json& to,
                      const std::vector<std::pair<LinkKind, ResolvedLink>>& links, const CalcContext& ctx,
-                     std::vector<ModuleFailure>& failures);
-    void runRouteModules(const json& mission, json& result, const CalcContext& ctx);
+                     std::vector<ModuleFailure>& failures) const;
+    void runRouteModules(const json& mission, json& result, const CalcContext& ctx) const;
 
     struct CoverageRun;
     /// One pool thread of a coverage calculation: takes rows until none are left.

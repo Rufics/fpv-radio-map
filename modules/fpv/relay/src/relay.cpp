@@ -1,6 +1,7 @@
 #include "relay.hpp"
 
 #include <algorithm>
+#include <optional>
 
 namespace fpv::relay {
 namespace {
@@ -11,6 +12,18 @@ json hopsJson(const Hops& h) {
     return {{"pilotToRelay", {{"worstMarginDb", h.first.marginDb}, {"link", h.first.link}}},
             {"relayToDrone", {{"worstMarginDb", h.second.marginDb}, {"link", h.second.link}, {"sample", h.second.sample}}},
             {"scoreDb", h.score()}};
+}
+
+/// Both hops through a relay at `relay`, or nothing when the relay spot has no terrain data
+/// (such a cell is not a candidate).
+std::optional<Hops> relayCandidate(const IWorld& world, const ILinkEvaluator& eval, const std::vector<std::string>& links,
+                                   const End& pilot, const End& relay, const std::vector<RoutePoint>& samples) {
+    try {
+        (void)world.groundMsl(relay.position);
+        return evaluateRelay(eval, links, pilot, relay, samples);
+    } catch (const MissingTerrain&) {
+        return std::nullopt;
+    }
 }
 
 }  // namespace
@@ -71,14 +84,11 @@ json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eva
         };
         std::vector<Scored> scored;
         for (const LatLon& p : area.grid(world, cellM, maxPoints)) {
-            try {
-                (void)world.groundMsl(p);
-                scored.push_back({p, evaluateRelay(eval, links, pilot, {p, relayAgl}, samples)});
-            } catch (const MissingTerrain&) {
-                // Ignored: a cell without terrain data is not a candidate.
+            if (std::optional<Hops> h = relayCandidate(world, eval, links, pilot, {p, relayAgl}, samples)) {
+                scored.emplace_back(p, std::move(*h));
             }
         }
-        std::sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) { return a.h.score() > b.h.score(); });
+        std::ranges::sort(scored, [](const Scored& a, const Scored& b) { return a.h.score() > b.h.score(); });
         json cells = json::array();
         for (const Scored& s : scored) {
             json c = hopsJson(s.h);

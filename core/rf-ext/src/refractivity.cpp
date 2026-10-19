@@ -33,8 +33,8 @@ double Refractivity::gradientPerKm(const AirSample& lower, const AirSample& uppe
 std::optional<RefractionEstimate> refractionForPath(const std::vector<AirSample>& column, Metres highestAntennaMsl) {
     if (column.size() < 2) return std::nullopt;
     std::vector<AirSample> sorted = column;
-    std::sort(sorted.begin(), sorted.end(),
-              [](const AirSample& a, const AirSample& b) { return a.heightMsl.value() < b.heightMsl.value(); });
+    std::ranges::sort(sorted,
+                      [](const AirSample& a, const AirSample& b) { return a.heightMsl.value() < b.heightMsl.value(); });
     const AirSample& surface = sorted.front();
     for (std::size_t i = 1; i < sorted.size(); ++i) {
         if (sorted[i].heightMsl.value() >= highestAntennaMsl.value() && sorted[i].heightMsl.value() > surface.heightMsl.value()) {

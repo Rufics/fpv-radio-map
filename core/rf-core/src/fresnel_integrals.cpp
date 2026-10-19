@@ -1,6 +1,7 @@
 #include "rfcore/fresnel_integrals.hpp"
 
 #include "rfcore/constants.hpp"
+#include "rfcore/errors.hpp"
 
 #include <cmath>
 #include <complex>
@@ -46,7 +47,7 @@ void series(double x, double& c, double& s) {
         odd = !odd;
         n += 2;
     }
-    throw std::runtime_error("FresnelIntegrals: series did not converge");
+    throw ConvergenceError("FresnelIntegrals: series did not converge");
 }
 
 // Continued fraction for x > 1.5. Returns w = (1/2 - C) + i (1/2 - S).
@@ -79,7 +80,7 @@ std::complex<double> complementContinuedFraction(double x) {
             return cd(0.5, 0.5) * phase * h;
         }
     }
-    throw std::runtime_error("FresnelIntegrals: continued fraction did not converge");
+    throw ConvergenceError("FresnelIntegrals: continued fraction did not converge");
 }
 
 }  // namespace

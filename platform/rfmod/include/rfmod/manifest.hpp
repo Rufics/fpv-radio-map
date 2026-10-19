@@ -6,9 +6,11 @@
 
 #include <nlohmann/json.hpp>
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfmod {
@@ -55,13 +57,13 @@ struct Manifest {
     std::vector<Dependency> optionalDependencies;  ///< manifest "optional"
     std::vector<std::string> provides;
     std::vector<std::string> methods;
-    std::map<std::string, std::string> entry;  ///< platform -> lib/... path
+    std::map<std::string, std::string, std::less<>> entry;  ///< platform -> lib/... path
     std::optional<UiExtension> ui;
     std::optional<std::string> optionsSchema;
     Limits limits;
     nlohmann::json raw;
 
-    [[nodiscard]] bool hasCapability(const std::string& capability) const;
+    [[nodiscard]] bool hasCapability(std::string_view capability) const;
 };
 
 /// The platform key of this build, for example "linux-x86_64".

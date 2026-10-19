@@ -24,10 +24,13 @@ public:
     [[nodiscard]] bool isPrerelease() const { return !pre_.empty(); }
     [[nodiscard]] std::string str() const;
 
-    friend std::strong_ordering operator<=>(const Version& a, const Version& b);
+    friend std::strong_ordering operator<=>(const Version& a, const Version& b) { return compare(a, b); }
     friend bool operator==(const Version& a, const Version& b) { return (a <=> b) == 0; }
 
 private:
+    /// SemVer precedence (build metadata is not stored, so it never counts).
+    static std::strong_ordering compare(const Version& a, const Version& b);
+
     unsigned major_ = 0;
     unsigned minor_ = 0;
     unsigned patch_ = 0;

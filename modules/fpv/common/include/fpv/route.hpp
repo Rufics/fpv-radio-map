@@ -4,9 +4,17 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
 #include <stdexcept>
+#include <string>
 
 namespace fpv {
+
+/// Thrown when a point is asked of a route that has no legs (a programming error).
+class EmptyRouteError : public std::logic_error {
+public:
+    using std::logic_error::logic_error;
+};
 
 /// One geodesic leg between two waypoints. The drone's AGL changes linearly in along-leg
 /// distance between the two ends (the server's convention).
@@ -39,7 +47,7 @@ public:
         for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
             const InverseResult inv = world.inverse(pts[i].position, pts[i + 1].position);
             const bool ret = mission.returnToPilot && i + 2 == pts.size();
-            legs_.push_back({i, pts[i], pts[i + 1], inv.distanceM, inv.azimuth1Deg, at, ret});
+            legs_.emplace_back(i, pts[i], pts[i + 1], inv.distanceM, inv.azimuth1Deg, at, ret);
             at += inv.distanceM;
         }
         length_ = at;
@@ -53,7 +61,7 @@ public:
 
     /// The exact point at a distance along the route (geodesic direct from the leg start).
     [[nodiscard]] RoutePoint at(double s) const {
-        if (legs_.empty()) throw std::logic_error("empty route");
+        if (legs_.empty()) throw EmptyRouteError("empty route");
         s = std::clamp(s, 0.0, length_);
         std::size_t i = 0;
         while (i + 1 < legs_.size() && s > legs_[i].startM + legs_[i].lengthM) ++i;
@@ -81,9 +89,7 @@ inline json reason(const std::string& moduleId, const std::string& severity, con
 
 /// Formats a number for preview text with a fixed number of decimals. Display only.
 inline std::string fixed(double v, int decimals) {
-    char buf[64];
-    (void)std::snprintf(buf, sizeof buf, "%.*f", decimals, v);
-    return buf;
+    return std::format("{:.{}f}", v, std::max(decimals, 0));
 }
 
 }  // namespace fpv

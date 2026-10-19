@@ -2,6 +2,8 @@
 
 #include <httplib.h>
 
+#include <charconv>
+#include <format>
 #include <fstream>
 #include <regex>
 #include <shared_mutex>
@@ -23,8 +25,7 @@ void sendJson(Res& res, int status, const json& body) {
 std::string header(const Req& req, const char* name) { return req.has_header(name) ? req.get_header_value(name) : ""; }
 
 std::string bearer(const Req& req) {
-    const std::string h = header(req, "Authorization");
-    if (h.starts_with("Bearer ")) return h.substr(7);
+    if (const std::string h = header(req, "Authorization"); h.starts_with("Bearer ")) return h.substr(7);
     return {};
 }
 
@@ -38,7 +39,8 @@ rfcore::GeoPoint parseLatLon(const std::string& text) {
     static const std::regex re(R"(^\s*(-?[0-9]+(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)\s*,\s*(-?[0-9]+(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)\s*$)");
     std::smatch m;
     if (!std::regex_match(text, m, re)) throw HttpError(400, "expected lat,lon, got '" + text + "'");
-    const double lat = std::stod(m[1]), lon = std::stod(m[2]);
+    const double lat = std::stod(m[1]);
+    const double lon = std::stod(m[2]);
     if (lat < -90 || lat > 90 || lon < -180 || lon > 180) throw HttpError(400, "lat,lon out of range");
     return {lat, lon};
 }
@@ -130,12 +132,12 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
     if (config_.adminToken.empty()) log_.warn("startup", "admin.token is not set: the admin API is disabled");
     else if (config_.adminToken.size() < 24) log_.warn("startup", "admin.token is shorter than 24 characters");
 
-    db_ = std::make_unique<Database>(config_.database.url, config_.database.poolSize);
-    for (const auto& m : db_->migrate(sqlDir)) log_.info("startup", "applied migration " + m);
+    store_.db = std::make_unique<Database>(config_.database.url, config_.database.poolSize);
+    for (const auto& m : store_.db->migrate(sqlDir)) log_.info("startup", "applied migration " + m);
 
-    schemas_ = std::make_unique<SchemaRegistry>(config_.schemasDir);
-    schemas_->addInline("calc-path", calcPathSchema());
-    schemas_->addInline("link-create", {{"type", "object"},
+    store_.schemas = std::make_unique<SchemaRegistry>(config_.schemasDir);
+    store_.schemas->addInline("calc-path", calcPathSchema());
+    store_.schemas->addInline("link-create", {{"type", "object"},
                                         {"required", {"role", "pin"}},
                                         {"properties",
                                          {{"role", {{"enum", {"edit", "view"}}}},
@@ -143,30 +145,31 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
                                           {"label", {{"type", "string"}, {"maxLength", 120}}},
                                           {"expiresAt", {{"type", "string"}, {"format", "date-time"}}}}}});
 
-    authStore_ = std::make_unique<PgAuthStore>(*db_);
-    pins_ = std::make_unique<PinHasher>(PinHasher::costFromName(config_.auth.argon2Cost));
-    auth_ = std::make_unique<AuthService>(
-        *authStore_, *pins_, clock_,
+    store_.authStore = std::make_unique<PgAuthStore>(*store_.db);
+    store_.pins = std::make_unique<PinHasher>(PinHasher::costFromName(config_.auth.argon2Cost));
+    store_.auth = std::make_unique<AuthService>(
+        *store_.authStore, *store_.pins, clock_,
         AuthService::Settings{config_.auth.pinMaxAttempts, std::chrono::minutes(config_.auth.pinLockoutMinutes),
                               std::chrono::hours(config_.auth.sessionTtlHours)});
-    missions_ = std::make_unique<MissionStore>(*db_);
-    library_ = std::make_unique<Library>(*db_, *schemas_);
-    builtins_ = std::make_unique<BuiltinModules>(db_.get(), *schemas_, RFMAP_HOST_VERSION);
-    if (builtins_->enabled(BuiltinModules::kRadioProfiles)) {
-        for (const auto& line : library_->seed(config_.seedDir)) log_.info("library", line);
+    store_.missions = std::make_unique<MissionStore>(*store_.db);
+    store_.library = std::make_unique<Library>(*store_.db, *store_.schemas);
+    store_.builtins = std::make_unique<BuiltinModules>(store_.db.get(), *store_.schemas, RFMAP_HOST_VERSION);
+    if (store_.builtins->enabled(BuiltinModules::kRadioProfiles)) {
+        for (const auto& line : store_.library->seed(config_.seedDir)) log_.info("library", line);
     }
 
-    blocks_ = std::make_unique<BlockCache>(config_.cache.demBlocksMb << 20, [](const RasterBlock& b) {
+    terrain_.blocks = std::make_unique<BlockCache>(config_.cache.demBlocksMb << 20, [](const RasterBlock& b) {
         return b.values.size() * sizeof(float) + sizeof(RasterBlock);
     });
     if (!config_.data.dem.empty()) {
-        auto raster = std::make_shared<GdalRaster>(config_.data.dem, *blocks_);
+        auto raster = std::make_shared<GdalRaster>(config_.data.dem, *terrain_.blocks);
         std::string name = config_.data.demName;
         if (name.empty()) name = manifestSourceName(config_.data.dem);
         if (name.empty()) name = config_.data.dem.filename().string();
-        dem_ = std::make_shared<DemSource>(raster, name, config_.data.demStatedErrorM, config_.data.demStatedErrorSource);
-        log_.info("terrain", "DEM " + config_.data.dem.string() + " (" + raster->dataType() + ", step " +
-                                 std::to_string(raster->nativeResolution().value()) + " m): " + name);
+        terrain_.dem =
+            std::make_shared<DemSource>(raster, name, config_.data.demStatedErrorM, config_.data.demStatedErrorSource);
+        log_.info("terrain", std::format("DEM {} ({}, step {} m): {}", config_.data.dem.string(), raster->dataType(),
+                                         std::to_string(raster->nativeResolution().value()), name));
         if (!config_.data.demStatedErrorM.has_value()) {
             log_.warn("terrain", "data.demStatedErrorM is not set: results carry no terrain error");
         }
@@ -179,43 +182,45 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
         log_.warn("terrain", "land cover " + config_.data.landcover.string() +
                                  " not found: clutter is not applied and results say so");
     } else if (!config_.data.landcover.empty()) {
-        auto raster = std::make_shared<GdalRaster>(config_.data.landcover, *blocks_);
+        auto raster = std::make_shared<GdalRaster>(config_.data.landcover, *terrain_.blocks);
         std::string name = config_.data.landcoverName;
         if (name.empty()) name = manifestSourceName(config_.data.landcover);
         if (name.empty()) name = config_.data.landcover.filename().string();
-        landcover_ = std::make_shared<LandCoverSource>(raster, name);
+        terrain_.landcover = std::make_shared<LandCoverSource>(raster, name);
     }
 
-    resultTable_ = std::make_unique<PgResultTable>(*db_);
-    results_ = std::make_unique<ResultCache>(
+    resultStore_.table = std::make_unique<PgResultTable>(*store_.db);
+    resultStore_.cache = std::make_unique<ResultCache>(
         ResultCache::Limits{config_.cache.resultMemoryMb << 20, config_.cache.resultTableRows,
                             config_.cache.resultTableMb << 20},
-        resultTable_.get());
+        resultStore_.table.get());
     loadCacheSettings();
 
-    if (!config_.weather.baseUrl.empty()) forecastSource_ = std::make_unique<OpenMeteoSource>(config_.weather);
+    if (!config_.weather.baseUrl.empty()) forecast_.source = std::make_unique<OpenMeteoSource>(config_.weather);
     else log_.warn("weather", "weather.baseUrl is not set: no forecasts, k = 4/3 everywhere");
-    weather_ = std::make_unique<WeatherService>(config_.weather, forecastSource_.get(), clock_);
+    forecast_.service = std::make_unique<WeatherService>(config_.weather, forecast_.source.get(), clock_);
 
     // Modules can call back into the server from init, so the host must be complete before
     // the registry loads anything.
-    host_ = std::make_unique<ServerHostServices>(nullptr, nullptr, nullptr, nullptr, log_);
-    trust_ = std::make_unique<rfmod::TrustStore>(ownerKeyText, config_.modules.trustStore);
-    runner_ = std::make_unique<ModuleRunner>(nullptr);
-    links_ = std::make_unique<LinkService>(dem_, landcover_, *library_, *builtins_, runner_.get(), RFMAP_HOST_VERSION);
-    calc_ = std::make_unique<Calculator>(*links_, *weather_, *builtins_, *runner_, *results_, log_);
-    host_->bind(links_.get(), library_.get(), weather_.get(), [this](const json& m) { return calc_->contextFor(m); },
-                schemas_.get());
+    modules_.host = std::make_unique<ServerHostServices>(nullptr, nullptr, nullptr, nullptr, log_);
+    modules_.trust = std::make_unique<rfmod::TrustStore>(ownerKeyText, config_.modules.trustStore);
+    modules_.runner = std::make_unique<ModuleRunner>(nullptr);
+    links_ = std::make_unique<LinkService>(terrain_.dem, terrain_.landcover, *store_.library, *store_.builtins,
+                                           modules_.runner.get(), RFMAP_HOST_VERSION);
+    calc_ = std::make_unique<Calculator>(*links_, *forecast_.service, *store_.builtins, *modules_.runner,
+                                         *resultStore_.cache, log_);
+    modules_.host->bind(links_.get(), store_.library.get(), forecast_.service.get(),
+                        [this](const json& m) { return calc_->contextFor(m); }, store_.schemas.get());
 
     rfmod::RegistryConfig rc;
     rc.root = config_.modules.root;
     rc.workerExecutable = config_.modules.worker;
     rc.hostVersion = rfmod::Version::parse(RFMAP_HOST_VERSION);
     rc.isolateAll = config_.modules.isolateAll;
-    registry_ = std::make_unique<rfmod::ModuleRegistry>(rc, *trust_, *host_);
-    registry_->reload();
-    runner_->setRegistry(registry_.get());
-    for (const auto& n : registry_->notices()) log_.warn("modules", n);
+    modules_.registry = std::make_unique<rfmod::ModuleRegistry>(rc, *modules_.trust, *modules_.host);
+    modules_.registry->reload();
+    modules_.runner->setRegistry(modules_.registry.get());
+    for (const auto& n : modules_.registry->notices()) log_.warn("modules", n);
 
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
@@ -228,11 +233,11 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
 Application::~Application() {
     if (http_) http_->stop();
     jobs_.reset();
-    registry_.reset();
+    modules_.registry.reset();
 }
 
 bool Application::listen() {
-    log_.info("http", "listening on " + config_.server.listen + ":" + std::to_string(config_.server.port));
+    log_.info("http", std::format("listening on {}:{}", config_.server.listen, config_.server.port));
     return http_->listen(config_.server.listen, config_.server.port);
 }
 
@@ -240,26 +245,26 @@ int Application::bindAny() { return http_->bind_to_any_port(config_.server.liste
 void Application::serveBound() { http_->listen_after_bind(); }
 void Application::stop() { http_->stop(); }
 
-void Application::loadCacheSettings() {
-    const auto stored = db_->tx([](pqxx::work& w) -> std::optional<json> {
+void Application::loadCacheSettings() const {
+    const auto stored = store_.db->tx([](pqxx::work& w) -> std::optional<json> {
         const auto r = w.exec("select value::text from settings where key = 'cache.limits'");
         if (r.empty()) return std::nullopt;
         return json::parse(r[0][0].as<std::string>());
     });
     if (!stored) return;
-    if (stored->contains("demBlocksBytes")) blocks_->setLimit(stored->at("demBlocksBytes").get<std::size_t>());
-    ResultCache::Limits l = results_->limits();
+    if (stored->contains("demBlocksBytes")) terrain_.blocks->setLimit(stored->at("demBlocksBytes").get<std::size_t>());
+    ResultCache::Limits l = resultStore_.cache->limits();
     l.memoryBytes = stored->value("resultMemoryBytes", l.memoryBytes);
     l.tableRows = stored->value("resultTableRows", l.tableRows);
     l.tableBytes = stored->value("resultTableBytes", l.tableBytes);
-    results_->setLimits(l);
+    resultStore_.cache->setLimits(l);
 }
 
-json Application::cacheTiers() {
-    const CacheStats dem = blocks_->stats();
-    const CacheStats mem = results_->memoryStats();
-    const auto table = results_->tableStats();
-    const auto limits = results_->limits();
+json Application::cacheTiers() const {
+    const CacheStats dem = terrain_.blocks->stats();
+    const CacheStats mem = resultStore_.cache->memoryStats();
+    const auto table = resultStore_.cache->tableStats();
+    const auto limits = resultStore_.cache->limits();
     const auto rate = [](std::size_t h, std::size_t m) {
         return h + m == 0 ? 0.0 : static_cast<double>(h) / static_cast<double>(h + m);
     };
@@ -280,24 +285,26 @@ std::string Application::bundleGrant(const std::string& moduleId, TimePoint unti
     return exp + "." + Secrets::mac(grantSecret_, moduleId + "|" + exp);
 }
 
-bool Application::grantValid(const std::string& moduleId, const std::string& grant) const {
+bool Application::grantValid(const std::string& moduleId, std::string_view grant) const {
     const auto dot = grant.find('.');
-    if (dot == std::string::npos) return false;
-    const std::string exp = grant.substr(0, dot);
-    try {
-        if (Clock::from_time_t(std::stoll(exp)) < Clock::now()) return false;
-    } catch (const std::exception&) {
+    if (dot == std::string_view::npos) return false;
+    const std::string_view exp = grant.substr(0, dot);
+    std::time_t expiry = 0;
+    if (const auto [end, ec] = std::from_chars(exp.data(), exp.data() + exp.size(), expiry);
+        ec != std::errc{} || end != exp.data() + exp.size()) {
         return false;
     }
-    return Secrets::constantTimeEqual(grant.substr(dot + 1), Secrets::mac(grantSecret_, moduleId + "|" + exp));
+    if (Clock::from_time_t(expiry) < Clock::now()) return false;
+    return Secrets::constantTimeEqual(grant.substr(dot + 1),
+                                      Secrets::mac(grantSecret_, std::format("{}|{}", moduleId, exp)));
 }
 
 json Application::moduleList(bool admin) {
-    json out = builtins_->list();
+    json out = store_.builtins->list();
     json installed;
     {
-        std::shared_lock gate(runner_->gate());
-        installed = registry_->list();
+        std::shared_lock gate(modules_.runner->gate());
+        installed = modules_.registry->list();
     }
     for (json& m : installed) {
         m["builtIn"] = false;
@@ -332,8 +339,8 @@ json Application::mapConfig() const {
         }
         dropUnbuiltLayers(out, config_.data.dem);
     }
-    if (dem_) {
-        const rfcore::GeoPoint c = dem_->raster().centre();
+    if (terrain_.dem) {
+        const rfcore::GeoPoint c = terrain_.dem->raster().centre();
         out["center"] = {c.longitudeDeg, c.latitudeDeg};
     }
     if (config_.raw.contains("map")) out.merge_patch(config_.raw.at("map"));
@@ -361,7 +368,7 @@ json Application::body(const Req& req) const {
     }
 }
 
-Principal Application::session(const Req& req) { return auth_->authenticate(bearer(req)); }
+Principal Application::session(const Req& req) const { return store_.auth->authenticate(bearer(req)); }
 
 bool Application::isAdmin(const Req& req) const {
     const std::string t = bearer(req);
@@ -434,10 +441,17 @@ void Application::dispatch(const std::string& rateClass, const Run& run, const R
         sendHttpError(res, e);
     } catch (const json::exception& e) {
         sendJson(res, 400, {{"message", std::string("malformed request: ") + e.what()}});
-    } catch (const std::exception& e) {
-        log_.error("http", req.method + " " + redacted(req.path) + ": " + e.what());
-        sendJson(res, 500, {{"message", "internal error"}});
+    } catch (const std::runtime_error& e) {
+        internalError(req, res, e.what());
+    } catch (const std::logic_error& e) {
+        internalError(req, res, e.what());
     }
+    // Anything else (std::bad_alloc, ...) reaches the server's exception handler set in routes().
+}
+
+void Application::internalError(const Req& req, Res& res, std::string_view what) {
+    log_.error("http", std::format("{} {}: {}", req.method, redacted(req.path), what));
+    sendJson(res, 500, {{"message", "internal error"}});
 }
 
 template <typename Api, typename Method>
@@ -450,12 +464,19 @@ auto Application::route(std::string rateClass, Method method) {
 void Application::routes() {
     httplib::Server& s = *http_;
     const int threads = config_.server.threads;
-    s.new_task_queue = [threads] { return new httplib::ThreadPool(static_cast<std::size_t>(threads)); };
+    // httplib takes ownership of the queue it gets and deletes it when the server stops.
+    s.new_task_queue = [threads] {
+        return std::make_unique<httplib::ThreadPool>(static_cast<std::size_t>(threads)).release();
+    };
     s.set_payload_max_length(config_.server.maxUploadBytes);
     s.set_read_timeout(30, 0);
     s.set_write_timeout(120, 0);
     s.set_logger([this](const Req& req, const Res& res) {
-        log_.info("http", req.method + " " + redacted(req.path) + " " + std::to_string(res.status));
+        log_.info("http", std::format("{} {} {}", req.method, redacted(req.path), res.status));
+    });
+    // Errors dispatch does not answer itself; without a handler httplib would put what() in a header.
+    s.set_exception_handler([this](const Req& req, Res& res, const std::exception_ptr&) {
+        internalError(req, res, "unexpected exception");
     });
     s.set_error_handler([](const Req&, Res& res) {
         if (res.body.empty()) sendJson(res, res.status, {{"message", httplib::status_message(res.status)}});
@@ -522,18 +543,22 @@ void Application::routes() {
 }
 
 void Application::MissionApi::getHealth(const Req&, Res& res) const {
-    sendJson(res, 200, {{"ok", true}, {"version", RFMAP_HOST_VERSION}, {"dem", app.dem_ != nullptr},
-                        {"landcover", app.landcover_ != nullptr}, {"weather", app.weather_->configured()}});
+    sendJson(res, 200,
+             {{"ok", true},
+              {"version", RFMAP_HOST_VERSION},
+              {"dem", app.terrain_.dem != nullptr},
+              {"landcover", app.terrain_.landcover != nullptr},
+              {"weather", app.forecast_.service->configured()}});
 }
 
 // ---- missions ----
 
 void Application::MissionApi::postMission(const Req& req, Res& res) const {
     const json doc = app.body(req);
-    app.schemas_->require("mission", doc);
+    app.store_.schemas->require("mission", doc);
     const AuthService::OwnerKey key = AuthService::newOwnerKey();
-    const std::string id = app.missions_->create(doc, key.hash);
-    const std::string sess = app.auth_->createSession(id, Role::Edit, std::nullopt);
+    const std::string id = app.store_.missions->create(doc, key.hash);
+    const std::string sess = app.store_.auth->createSession(id, Role::Edit, std::nullopt);
     res.set_header("ETag", "\"1\"");
     sendJson(res, 201, {{"missionId", id}, {"ownerKey", key.plain}, {"session", sess}, {"revision", 1}});
 }
@@ -542,11 +567,11 @@ void Application::MissionApi::getMission(const Req& req, Res& res) const {
     const Principal p = app.session(req);
     const std::string id = req.matches[1];
     if (p.missionId != id) throw HttpError(403, "this session belongs to another mission");
-    const auto m = app.missions_->get(id);
+    const auto m = app.store_.missions->get(id);
     if (!m) throw HttpError(404, "no such mission");
     json out = {{"mission", m->doc}, {"role", toString(p.role)}, {"revision", m->revision}};
     if (m->lastResult.has_value()) out["lastResult"] = *m->lastResult;
-    res.set_header("ETag", "\"" + std::to_string(m->revision) + "\"");
+    res.set_header("ETag", std::format("\"{}\"", m->revision));
     sendJson(res, 200, out);
 }
 
@@ -557,14 +582,14 @@ void Application::MissionApi::putMission(const Req& req, Res& res) const {
     if (p.role != Role::Edit) throw HttpError(403, "this is a read-only link");
     const int expected = ifMatchRevision(req);
     const json doc = app.body(req);
-    app.schemas_->require("mission", doc);
-    const auto rev = app.missions_->save(id, doc, expected);
+    app.store_.schemas->require("mission", doc);
+    const auto rev = app.store_.missions->save(id, doc, expected);
     if (!rev.has_value()) {
-        const auto cur = app.missions_->get(id);
+        const auto cur = app.store_.missions->get(id);
         if (!cur) throw HttpError(404, "no such mission");
         throw HttpError(409, "someone saved this mission in between", {{"revision", cur->revision}});
     }
-    res.set_header("ETag", "\"" + std::to_string(*rev) + "\"");
+    res.set_header("ETag", std::format("\"{}\"", *rev));
     sendJson(res, 200, {{"revision", *rev}});
 }
 
@@ -572,36 +597,37 @@ void Application::MissionApi::putMission(const Req& req, Res& res) const {
 
 void Application::MissionApi::getLinks(const Req& req, Res& res) const {
     json out = json::array();
-    for (const auto& l : app.auth_->listLinks(req.matches[1], header(req, "X-Owner-Key"))) out.push_back(AuthService::linkJson(l));
+    for (const auto& l : app.store_.auth->listLinks(req.matches[1], header(req, "X-Owner-Key"))) out.push_back(AuthService::linkJson(l));
     sendJson(res, 200, out);
 }
 
 void Application::MissionApi::postLink(const Req& req, Res& res) const {
     const std::string id = req.matches[1];
     const std::string key = header(req, "X-Owner-Key");
-    app.auth_->requireOwner(id, key);  // before looking at the body, so strangers learn nothing
+    app.store_.auth->requireOwner(id, key);  // before looking at the body, so strangers learn nothing
     const json b = app.body(req);
-    app.schemas_->require("link-create", b);
+    app.store_.schemas->require("link-create", b);
     std::optional<TimePoint> expires;
     if (b.contains("expiresAt")) {
         expires = parseIsoUtc(b.at("expiresAt").get<std::string>());
         if (!expires.has_value()) throw HttpError(422, "expiresAt is not ISO 8601 UTC");
     }
     const auto created =
-        app.auth_->createLink(id, key, roleFromString(b.at("role")), b.at("pin"), b.value("label", ""), expires);
+        app.store_.auth->createLink(id, key, roleFromString(b.at("role").get<std::string>()),
+                                 b.at("pin").get<std::string>(), b.value("label", ""), expires);
     json out = AuthService::linkJson(created.record);
     out["token"] = created.token;
     sendJson(res, 201, out);
 }
 
 void Application::MissionApi::deleteLink(const Req& req, Res& res) const {
-    app.auth_->revokeLink(req.matches[1], header(req, "X-Owner-Key"), req.matches[2]);
+    app.store_.auth->revokeLink(req.matches[1], header(req, "X-Owner-Key"), req.matches[2]);
     res.status = 204;
 }
 
 void Application::MissionApi::getLink(const Req& req, Res& res) const {
-    const LinkRecord l = app.auth_->peekLink(req.matches[1]);
-    const auto m = app.missions_->get(l.missionId);
+    const LinkRecord l = app.store_.auth->peekLink(req.matches[1]);
+    const auto m = app.store_.missions->get(l.missionId);
     json out = {{"role", toString(l.role)}, {"missionName", m ? m->doc.value("name", "") : ""}};
     if (l.expiresAt.has_value()) out["expiresAt"] = isoUtc(*l.expiresAt);
     if (l.lockedUntil.has_value() && *l.lockedUntil > app.clock_.now()) out["pausedUntil"] = isoUtc(*l.lockedUntil);
@@ -611,8 +637,8 @@ void Application::MissionApi::getLink(const Req& req, Res& res) const {
 void Application::MissionApi::postLinkOpen(const Req& req, Res& res) const {
     const json b = app.body(req);
     if (!b.contains("pin") || !b.at("pin").is_string()) throw HttpError(400, "pin is required");
-    const auto opened = app.auth_->openLink(req.matches[1], b.at("pin"));
-    const auto m = app.missions_->get(opened.missionId);
+    const auto opened = app.store_.auth->openLink(req.matches[1], b.at("pin"));
+    const auto m = app.store_.missions->get(opened.missionId);
     sendJson(res, 200, {{"session", opened.session}, {"missionId", opened.missionId}, {"role", toString(opened.role)},
                         {"missionName", m ? m->doc.value("name", "") : ""}});
 }
@@ -622,37 +648,38 @@ void Application::MissionApi::postLinkOpen(const Req& req, Res& res) const {
 void Application::MissionApi::postCalcPath(const Req& req, Res& res) const {
     (void)app.session(req);
     const json b = app.body(req);
-    app.schemas_->require("calc-path", b);
-    const std::shared_lock gate(app.runner_->gate());
+    app.store_.schemas->require("calc-path", b);
+    const std::shared_lock gate(app.modules_.runner->gate());
     sendJson(res, 200, app.calc_->path(b));
 }
 
 void Application::MissionApi::postCalcRoute(const Req& req, Res& res) const {
     const Principal p = app.session(req);
     const json mission = app.body(req);
-    app.schemas_->require("mission", mission);
+    app.store_.schemas->require("mission", mission);
     std::optional<int> revision;
-    if (const auto stored = app.missions_->get(p.missionId); stored.has_value() && stored->doc == mission) {
+    if (const auto stored = app.store_.missions->get(p.missionId); stored.has_value() && stored->doc == mission) {
         revision = stored->revision;
     }
     json result;
     {
-        const std::shared_lock gate(app.runner_->gate());
+        const std::shared_lock gate(app.modules_.runner->gate());
         result = app.calc_->route(mission, revision);
     }
-    if (revision.has_value() && p.role == Role::Edit) app.missions_->storeResultIfCurrent(p.missionId, mission, result);
+    if (revision.has_value() && p.role == Role::Edit) app.store_.missions->storeResultIfCurrent(p.missionId, mission, result);
     sendJson(res, 200, result);
 }
 
 void Application::MissionApi::postCalcCoverage(const Req& req, Res& res) const {
     const Principal p = app.session(req);
     const json mission = app.body(req);
-    app.schemas_->require("mission", mission);
+    app.store_.schemas->require("mission", mission);
     const std::size_t cells = Calculator::coverageCells(mission);
     if (cells == 0) throw HttpError(422, "coverage needs coverage.radiusM, coverage.cellM and coverage.droneAglM");
     if (cells > app.config_.coverage.maxCells) {
-        throw HttpError(422, "the grid would have " + std::to_string(cells) + " cells; this server allows " +
-                                 std::to_string(app.config_.coverage.maxCells) + ". Use a larger cellM or a smaller radius.");
+        throw HttpError(422, std::format("the grid would have {} cells; this server allows {}. Use a larger cellM or a "
+                                         "smaller radius.",
+                                         cells, app.config_.coverage.maxCells));
     }
     if (app.jobs_->running() >= static_cast<std::size_t>(app.config_.coverage.maxJobs) * 4) {
         throw HttpError(503, "too many coverage jobs queued; try again shortly", {{"retryAfterS", 30}});
@@ -691,34 +718,34 @@ void Application::MissionApi::getElevationProfile(const Req& req, Res& res) cons
 
 std::string Application::libraryKind(const std::string& kind) const {
     (void)SchemaRegistry::libraryFile(kind);
-    if (kind == "radio-profiles" && !builtins_->enabled(BuiltinModules::kRadioProfiles)) {
+    if (kind == "radio-profiles" && !store_.builtins->enabled(BuiltinModules::kRadioProfiles)) {
         throw HttpError(404, "radio profiles (rf.radio-profiles) are disabled on this server");
     }
     return kind;
 }
 
 void Application::DataApi::getLibraryList(const Req& req, Res& res) const {
-    sendJson(res, 200, app.library_->list(app.libraryKind(req.matches[1])));
+    sendJson(res, 200, app.store_.library->list(app.libraryKind(req.matches[1])));
 }
 
 void Application::DataApi::getLibraryItem(const Req& req, Res& res) const {
-    const auto item = app.library_->get(app.libraryKind(req.matches[1]), req.matches[2]);
+    const auto item = app.store_.library->get(app.libraryKind(req.matches[1]), req.matches[2]);
     if (!item) throw HttpError(404, "no such library item");
     sendJson(res, 200, *item);
 }
 
 void Application::DataApi::getLibraryHistory(const Req& req, Res& res) const {
-    sendJson(res, 200, app.library_->history(app.libraryKind(req.matches[1]), req.matches[2]));
+    sendJson(res, 200, app.store_.library->history(app.libraryKind(req.matches[1]), req.matches[2]));
 }
 
 void Application::DataApi::postLibraryItem(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    sendJson(res, 201, app.library_->add(app.libraryKind(req.matches[1]), app.body(req), "admin@" + app.client(req)));
+    sendJson(res, 201, app.store_.library->add(app.libraryKind(req.matches[1]), app.body(req), "admin@" + app.client(req)));
 }
 
 void Application::DataApi::putLibraryItem(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    sendJson(res, 200, app.library_->update(app.libraryKind(req.matches[1]), req.matches[2], app.body(req), "admin@" + app.client(req)));
+    sendJson(res, 200, app.store_.library->update(app.libraryKind(req.matches[1]), req.matches[2], app.body(req), "admin@" + app.client(req)));
 }
 
 // ---- weather ----
@@ -733,7 +760,7 @@ void Application::DataApi::getWeatherPoint(const Req& req, Res& res) const {
         if (!parsed) throw HttpError(400, "timeUtc is not ISO 8601");
         t = *parsed;
     }
-    const ForecastAt f = app.weather_->at(lat, lon, t);
+    const ForecastAt f = app.forecast_.service->at(lat, lon, t);
     json out = f.point;
     out["notes"] = json::array();
     for (const auto& n : f.notes) out["notes"].push_back({{"what", n.what}, {"detail", n.detail}});
@@ -741,8 +768,8 @@ void Application::DataApi::getWeatherPoint(const Req& req, Res& res) const {
 }
 
 void Application::DataApi::getWeatherHorizon(const Req&, Res& res) const {
-    const rfcore::GeoPoint probe = app.dem_ ? app.dem_->raster().centre() : rfcore::GeoPoint{0.0, 0.0};
-    sendJson(res, 200, app.weather_->horizon(probe.latitudeDeg, probe.longitudeDeg));
+    const rfcore::GeoPoint probe = app.terrain_.dem ? app.terrain_.dem->raster().centre() : rfcore::GeoPoint{0.0, 0.0};
+    sendJson(res, 200, app.forecast_.service->horizon(probe.latitudeDeg, probe.longitudeDeg));
 }
 
 void Application::DataApi::getMapConfig(const Req&, Res& res) const { sendJson(res, 200, app.mapConfig()); }
@@ -757,10 +784,10 @@ void Application::DataApi::getModuleFile(const Req& req, Res& res) const {
     std::optional<std::filesystem::path> file;
     bool alpha = false;
     {
-        const std::shared_lock gate(app.runner_->gate());
+        const std::shared_lock gate(app.modules_.runner->gate());
         // publicFile serves ui/ and the options schema only, never lib/.
-        file = app.registry_->publicFile(id, path);
-        if (const auto* m = app.registry_->instance(id)) alpha = m->manifest().lifecycle == rfmod::Lifecycle::Alpha;
+        file = app.modules_.registry->publicFile(id, path);
+        if (const auto* m = app.modules_.registry->instance(id)) alpha = m->manifest().lifecycle == rfmod::Lifecycle::Alpha;
     }
     if (!file.has_value()) throw HttpError(404, "no such module file");
     if (alpha && !app.isAdmin(req) && !(req.has_param("grant") && app.grantValid(id, req.get_param_value("grant")))) {
@@ -782,8 +809,8 @@ void Application::AdminApi::postAdminModule(const Req& req, Res& res) const {
     const bool install = !req.has_param("install") || req.get_param_value("install") != "false";
     rfmod::ValidationReport report;
     {
-        const std::unique_lock gate(app.runner_->gate());
-        report = app.registry_->upload(req.body, install);
+        const std::unique_lock gate(app.modules_.runner->gate());
+        report = app.modules_.registry->upload(req.body, install);
     }
     app.log_.info("modules", std::string("upload ") + (report.ok() ? "passed" : "refused") + (install ? ", install" : ", check only"));
     sendJson(res, 200, report.toJson());
@@ -797,13 +824,13 @@ void Application::AdminApi::putAdminModule(const Req& req, Res& res) const {
     if (b.contains("enabled")) enabled = b.at("enabled").get<bool>();
     std::optional<json> options;
     if (b.contains("options")) options = b.at("options");
-    if (app.builtins_->isBuiltin(id)) {
-        app.builtins_->set(id, enabled, options);
+    if (app.store_.builtins->isBuiltin(id)) {
+        app.store_.builtins->set(id, enabled, options);
     } else {
-        const std::unique_lock gate(app.runner_->gate());
+        const std::unique_lock gate(app.modules_.runner->gate());
         try {
-            if (options.has_value()) app.registry_->setOptions(id, *options);
-            if (enabled.has_value()) app.registry_->setEnabled(id, *enabled);
+            if (options.has_value()) app.modules_.registry->setOptions(id, *options);
+            if (enabled.has_value()) app.modules_.registry->setEnabled(id, *enabled);
         } catch (const std::invalid_argument& e) {
             throw HttpError(422, e.what());
         }
@@ -813,10 +840,10 @@ void Application::AdminApi::putAdminModule(const Req& req, Res& res) const {
 
 void Application::AdminApi::deleteAdminModule(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    if (app.builtins_->isBuiltin(req.matches[1])) throw HttpError(422, "built-in modules can be disabled, not removed");
-    const std::unique_lock gate(app.runner_->gate());
+    if (app.store_.builtins->isBuiltin(req.matches[1])) throw HttpError(422, "built-in modules can be disabled, not removed");
+    const std::unique_lock gate(app.modules_.runner->gate());
     try {
-        app.registry_->remove(req.matches[1]);
+        app.modules_.registry->remove(req.matches[1]);
     } catch (const std::invalid_argument& e) {
         throw HttpError(422, e.what());
     }
@@ -825,13 +852,13 @@ void Application::AdminApi::deleteAdminModule(const Req& req, Res& res) const {
 
 void Application::AdminApi::getAdminNotices(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    const std::shared_lock gate(app.runner_->gate());
-    sendJson(res, 200, app.registry_->notices());
+    const std::shared_lock gate(app.modules_.runner->gate());
+    sendJson(res, 200, app.modules_.registry->notices());
 }
 
 json Application::trustedKeys() const {
     json out = json::array();
-    for (const auto& k : trust_->keys()) {
+    for (const auto& k : modules_.trust->keys()) {
         out.push_back({{"id", k.key.id()}, {"label", k.label}, {"key", k.key.toText()}, {"builtIn", k.builtIn},
                        {"firstParty", k.firstParty()}});
     }
@@ -840,33 +867,33 @@ json Application::trustedKeys() const {
 
 void Application::AdminApi::getAdminKeys(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    const std::shared_lock gate(app.runner_->gate());
+    const std::shared_lock gate(app.modules_.runner->gate());
     sendJson(res, 200, app.trustedKeys());
 }
 
 void Application::AdminApi::postAdminKey(const Req& req, Res& res) const {
     app.requireAdmin(req);
     const json b = app.body(req);
-    const std::unique_lock gate(app.runner_->gate());
+    const std::unique_lock gate(app.modules_.runner->gate());
     try {
-        app.trust_->add(rfmod::PublicKey::fromText(b.at("key").get<std::string>()), b.value("label", ""));
+        app.modules_.trust->add(rfmod::PublicKey::fromText(b.at("key").get<std::string>()), b.value("label", ""));
     } catch (const std::invalid_argument& e) {
         throw HttpError(422, e.what());
     }
-    app.registry_->reload();
+    app.modules_.registry->reload();
     sendJson(res, 201, app.trustedKeys());
 }
 
 void Application::AdminApi::deleteAdminKey(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    const std::unique_lock gate(app.runner_->gate());
+    const std::unique_lock gate(app.modules_.runner->gate());
     try {
-        app.trust_->remove(req.matches[1]);
+        app.modules_.trust->remove(req.matches[1]);
     } catch (const std::invalid_argument& e) {
         throw HttpError(409, e.what());
     }
     // Modules signed with the removed key stop loading now, not only at the next start.
-    app.registry_->reload();
+    app.modules_.registry->reload();
     res.status = 204;
 }
 
@@ -879,8 +906,8 @@ void Application::AdminApi::putAdminCache(const Req& req, Res& res) const {
     app.requireAdmin(req);
     const json b = app.body(req);
     if (!b.is_array()) throw HttpError(422, "send [{id, limitBytes?, limitRows?}]");
-    ResultCache::Limits l = app.results_->limits();
-    std::size_t demLimit = app.blocks_->stats().limitBytes;
+    ResultCache::Limits l = app.resultStore_.cache->limits();
+    std::size_t demLimit = app.terrain_.blocks->stats().limitBytes;
     for (const json& t : b) {
         if (const std::string id = t.at("id"); id == "dem-blocks") demLimit = t.value("limitBytes", demLimit);
         else if (id == "results-memory") l.memoryBytes = t.value("limitBytes", l.memoryBytes);
@@ -889,11 +916,11 @@ void Application::AdminApi::putAdminCache(const Req& req, Res& res) const {
             l.tableRows = t.value("limitRows", l.tableRows);
         } else throw HttpError(422, "unknown cache tier " + id);
     }
-    app.blocks_->setLimit(demLimit);
-    app.results_->setLimits(l);
+    app.terrain_.blocks->setLimit(demLimit);
+    app.resultStore_.cache->setLimits(l);
     const json stored = {{"demBlocksBytes", demLimit}, {"resultMemoryBytes", l.memoryBytes},
                          {"resultTableRows", l.tableRows}, {"resultTableBytes", l.tableBytes}};
-    app.db_->tx([&stored](pqxx::work& w) {
+    app.store_.db->tx([&stored](pqxx::work& w) {
         w.exec_params("insert into settings(key, value) values ('cache.limits', $1::jsonb) "
                       "on conflict (key) do update set value = excluded.value", stored.dump());
     });
@@ -903,9 +930,9 @@ void Application::AdminApi::putAdminCache(const Req& req, Res& res) const {
 void Application::AdminApi::deleteAdminCache(const Req& req, Res& res) const {
     app.requireAdmin(req);
     const std::string tier = req.has_param("tier") ? req.get_param_value("tier") : "all";
-    if (tier == "dem-blocks" || tier == "all") app.blocks_->clear();
-    if (tier == "results-memory" || tier == "all") app.results_->clearMemory();
-    if (tier == "results-table" || tier == "all") app.results_->clearTable();
+    if (tier == "dem-blocks" || tier == "all") app.terrain_.blocks->clear();
+    if (tier == "results-memory" || tier == "all") app.resultStore_.cache->clearMemory();
+    if (tier == "results-table" || tier == "all") app.resultStore_.cache->clearTable();
     if (tier != "all" && tier != "dem-blocks" && tier != "results-memory" && tier != "results-table") {
         throw HttpError(422, "unknown cache tier " + tier);
     }

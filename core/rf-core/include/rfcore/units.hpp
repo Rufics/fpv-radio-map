@@ -17,12 +17,13 @@ public:
 
     [[nodiscard]] constexpr double value() const { return value_; }
 
-    constexpr Quantity operator+(Quantity other) const { return Quantity(value_ + other.value_); }
-    constexpr Quantity operator-(Quantity other) const { return Quantity(value_ - other.value_); }
+    friend constexpr Quantity operator+(Quantity lhs, Quantity rhs) { return Quantity(lhs.value_ + rhs.value_); }
+    friend constexpr Quantity operator-(Quantity lhs, Quantity rhs) { return Quantity(lhs.value_ - rhs.value_); }
     constexpr Quantity operator-() const { return Quantity(-value_); }
-    constexpr Quantity operator*(double factor) const { return Quantity(value_ * factor); }
-    constexpr Quantity operator/(double divisor) const { return Quantity(value_ / divisor); }
-    constexpr double operator/(Quantity other) const { return value_ / other.value_; }
+    friend constexpr Quantity operator*(Quantity q, double factor) { return Quantity(q.value_ * factor); }
+    friend constexpr Quantity operator*(double factor, Quantity q) { return Quantity(factor * q.value_); }
+    friend constexpr Quantity operator/(Quantity q, double divisor) { return Quantity(q.value_ / divisor); }
+    friend constexpr double operator/(Quantity lhs, Quantity rhs) { return lhs.value_ / rhs.value_; }
     constexpr Quantity& operator+=(Quantity other) { value_ += other.value_; return *this; }
     constexpr Quantity& operator-=(Quantity other) { value_ -= other.value_; return *this; }
 
@@ -31,9 +32,6 @@ public:
 private:
     double value_{0.0};
 };
-
-template <class Tag>
-constexpr Quantity<Tag> operator*(double factor, Quantity<Tag> q) { return q * factor; }
 
 struct MetresTag {};
 struct HertzTag {};
@@ -72,10 +70,16 @@ public:
 
     [[nodiscard]] constexpr double value() const { return value_; }
 
-    constexpr DecibelMilliwatt operator+(Decibel gain) const { return DecibelMilliwatt(value_ + gain.value()); }
-    constexpr DecibelMilliwatt operator-(Decibel loss) const { return DecibelMilliwatt(value_ - loss.value()); }
-    constexpr Decibel operator-(DecibelMilliwatt other) const { return Decibel(value_ - other.value_); }
-    constexpr DecibelMilliwatt operator+(DecibelIsotropic gain) const { return DecibelMilliwatt(value_ + gain.value()); }
+    friend constexpr DecibelMilliwatt operator+(DecibelMilliwatt level, Decibel gain) {
+        return DecibelMilliwatt(level.value_ + gain.value());
+    }
+    friend constexpr DecibelMilliwatt operator-(DecibelMilliwatt level, Decibel loss) {
+        return DecibelMilliwatt(level.value_ - loss.value());
+    }
+    friend constexpr Decibel operator-(DecibelMilliwatt lhs, DecibelMilliwatt rhs) { return Decibel(lhs.value_ - rhs.value_); }
+    friend constexpr DecibelMilliwatt operator+(DecibelMilliwatt level, DecibelIsotropic gain) {
+        return DecibelMilliwatt(level.value_ + gain.value());
+    }
 
     constexpr auto operator<=>(const DecibelMilliwatt&) const = default;
 
@@ -89,18 +93,18 @@ private:
 };
 
 namespace literals {
-constexpr Metres operator""_m(long double v) { return Metres(static_cast<double>(v)); }
-constexpr Metres operator""_m(unsigned long long v) { return Metres(static_cast<double>(v)); }
-constexpr Metres operator""_km(long double v) { return Metres(static_cast<double>(v) * 1000.0); }
-constexpr Metres operator""_km(unsigned long long v) { return Metres(static_cast<double>(v) * 1000.0); }
-constexpr Hertz operator""_MHz(long double v) { return Hertz(static_cast<double>(v) * 1e6); }
-constexpr Hertz operator""_MHz(unsigned long long v) { return Hertz(static_cast<double>(v) * 1e6); }
-constexpr Hertz operator""_GHz(long double v) { return Hertz(static_cast<double>(v) * 1e9); }
-constexpr Hertz operator""_GHz(unsigned long long v) { return Hertz(static_cast<double>(v) * 1e9); }
-constexpr Decibel operator""_dB(long double v) { return Decibel(static_cast<double>(v)); }
-constexpr Decibel operator""_dB(unsigned long long v) { return Decibel(static_cast<double>(v)); }
-constexpr DecibelMilliwatt operator""_dBm(long double v) { return DecibelMilliwatt(static_cast<double>(v)); }
-constexpr DecibelMilliwatt operator""_dBm(unsigned long long v) { return DecibelMilliwatt(static_cast<double>(v)); }
+consteval Metres operator""_m(long double v) { return Metres(static_cast<double>(v)); }
+consteval Metres operator""_m(unsigned long long v) { return Metres(static_cast<double>(v)); }
+consteval Metres operator""_km(long double v) { return Metres(static_cast<double>(v) * 1000.0); }
+consteval Metres operator""_km(unsigned long long v) { return Metres(static_cast<double>(v) * 1000.0); }
+consteval Hertz operator""_MHz(long double v) { return Hertz(static_cast<double>(v) * 1e6); }
+consteval Hertz operator""_MHz(unsigned long long v) { return Hertz(static_cast<double>(v) * 1e6); }
+consteval Hertz operator""_GHz(long double v) { return Hertz(static_cast<double>(v) * 1e9); }
+consteval Hertz operator""_GHz(unsigned long long v) { return Hertz(static_cast<double>(v) * 1e9); }
+consteval Decibel operator""_dB(long double v) { return Decibel(static_cast<double>(v)); }
+consteval Decibel operator""_dB(unsigned long long v) { return Decibel(static_cast<double>(v)); }
+consteval DecibelMilliwatt operator""_dBm(long double v) { return DecibelMilliwatt(static_cast<double>(v)); }
+consteval DecibelMilliwatt operator""_dBm(unsigned long long v) { return DecibelMilliwatt(static_cast<double>(v)); }
 }  // namespace literals
 
 }  // namespace rfcore

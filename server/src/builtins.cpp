@@ -24,11 +24,12 @@ BuiltinModules::BuiltinModules(Database* db, SchemaRegistry& schemas, std::strin
                 {"source", {{"type", "string"}, {"maxLength", 300}}}}}}}}}}}};
     entries_[kWeather] = {"Weather and refraction",
                           "Forecast refractivity gradient gives k per path (ITU-R P.453-14); forecast rain adds a "
-                          "loss term (ITU-R P.838-3). Opt in per mission with modules[\"rf.weather\"].",
+                          "loss term (ITU-R P.838-3). "
+                          R"(Opt in per mission with modules["rf.weather"].)",
                           {"loss.contributor", "refraction"}, noOptions, true, json::object()};
     entries_[kClutter] = {"Land cover clutter",
                           "Raises the terrain profile by the admin's height per ESA WorldCover class; treated as opaque. "
-                          "Opt in per mission with modules[\"rf.clutter\"], {\"disabledClasses\": [codes]} turns classes off.",
+                          R"(Opt in per mission with modules["rf.clutter"], {"disabledClasses": [codes]} turns classes off.)",
                           {"profile.conditioner"}, clutterOptions, true, json::object()};
     entries_[kUncertainty] = {"Uncertainty band",
                               "Margin band and verdict from the DEM's stated vertical error, propagated exactly "
@@ -37,7 +38,7 @@ BuiltinModules::BuiltinModules(Database* db, SchemaRegistry& schemas, std::strin
     entries_[kRadioProfiles] = {"Radio profiles",
                                 "The radio-profiles library kind, seeded unverified from data/library/radio-profiles.",
                                 {"library.kind"}, noOptions, true, json::object()};
-    for (auto& [id, e] : entries_) schemas_.addInline("builtin:" + id, e.optionsSchema);
+    for (const auto& [id, e] : entries_) schemas_.addInline("builtin:" + id, e.optionsSchema);
 
     if (!db_) return;
     db_->tx([this](pqxx::work& w) {

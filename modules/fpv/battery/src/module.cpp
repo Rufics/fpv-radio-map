@@ -3,6 +3,7 @@
 #include "analysis.hpp"
 
 #include <cmath>
+#include <format>
 
 namespace fpv::battery {
 namespace {
@@ -55,7 +56,7 @@ json BatteryModule::selftest() {
     bool ok = true;
     auto check = [&checks, &ok](const std::string& name, double got, double want, double tol) {
         const bool pass = std::abs(got - want) <= tol;
-        checks.push_back({{"name", name}, {"ok", pass}, {"detail", "got " + std::to_string(got) + ", want " + std::to_string(want)}});
+        checks.push_back({{"name", name}, {"ok", pass}, {"detail", std::format("got {:f}, want {:f}", got, want)}});
         ok = ok && pass;
     };
     // Calm: 4 km at 10 m/s = 400 s at 100 W = 11.111 Wh.

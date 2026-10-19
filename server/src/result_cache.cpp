@@ -2,6 +2,8 @@
 
 #include "security.hpp"
 
+#include <string_view>
+
 namespace rfmap {
 
 std::string inputHash(const json& inputs) { return Secrets::hex(Secrets::sha256(inputs.dump())); }
@@ -51,7 +53,7 @@ IResultTable::Usage PgResultTable::usage() {
 }
 
 ResultCache::ResultCache(Limits limits, IResultTable* table)
-    : memory_(limits.memoryBytes, [](const std::string& s) { return s.size(); }), table_(table), limits_(limits) {}
+    : memory_(limits.memoryBytes, [](std::string_view s) { return s.size(); }), table_(table), limits_(limits) {}
 
 std::optional<json> ResultCache::get(const std::string& hash) {
     if (auto hit = memory_.get(hash)) return json::parse(*hit);

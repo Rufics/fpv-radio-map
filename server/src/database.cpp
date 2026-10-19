@@ -4,6 +4,7 @@
 #include <fstream>
 #include <set>
 #include <sstream>
+#include <system_error>
 
 namespace rfmap {
 
@@ -22,15 +23,26 @@ Database::Lease::~Lease() {
     if (broken || !conn->is_open()) {
         try {
             conn = std::make_unique<pqxx::connection>(db.url_);
-        } catch (...) {
-            // Ignored: keep the dead one; the next lease fails fast with a clear error instead of hanging.
+        } catch (const pqxx::failure& e) {
+            // Keep the dead one: the next lease fails fast with a clear error instead of hanging.
+            db.log_.warn("database", std::string("reconnect failed: ") + e.what());
         }
     }
-    {
-        std::lock_guard lock(db.mutex_);
-        db.idle_.push_back(std::move(conn));
+    try {
+        db.giveBack(std::move(conn));
+    } catch (const std::system_error& e) {
+        // The pool lock failed: the connection is lost and the pool is one smaller from now on.
+        db.log_.error("database", std::string("cannot return a connection to the pool: ") + e.what());
     }
-    db.available_.notify_one();
+}
+
+void Database::giveBack(std::unique_ptr<pqxx::connection> c) {
+    {
+        const std::lock_guard lock(mutex_);
+        // Never reallocates: the connection came out of idle_, whose capacity does not shrink.
+        idle_.push_back(std::move(c));
+    }
+    available_.notify_one();
 }
 
 std::vector<std::string> Database::migrate(const std::filesystem::path& sqlDir) {
@@ -38,7 +50,7 @@ std::vector<std::string> Database::migrate(const std::filesystem::path& sqlDir) 
     for (const auto& e : std::filesystem::directory_iterator(sqlDir)) {
         if (e.is_regular_file() && e.path().extension() == ".sql") files.push_back(e.path());
     }
-    std::sort(files.begin(), files.end());
+    std::ranges::sort(files);
     std::vector<std::string> applied;
     tx([&files, &applied](pqxx::work& w) {
         // One server migrates at a time, even with several replicas starting together.

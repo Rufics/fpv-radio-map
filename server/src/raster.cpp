@@ -11,6 +11,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <format>
 #include <fstream>
 #include <stdexcept>
 
@@ -18,7 +19,11 @@ namespace rfmap {
 namespace fs = std::filesystem;
 
 namespace {
-std::atomic<std::uint64_t> nextRasterId{1};
+/// A process-wide id per opened raster, so block cache keys of different rasters never meet.
+std::uint64_t nextRasterId() {
+    static std::atomic<std::uint64_t> next{1};
+    return next++;
+}
 
 std::uint64_t blockKey(std::uint64_t raster, int bx, int by) {
     return (raster << 44) ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(bx)) << 22) ^
@@ -26,7 +31,7 @@ std::uint64_t blockKey(std::uint64_t raster, int bx, int by) {
 }
 }  // namespace
 
-GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), cache_(cache), id_(nextRasterId++) {
+GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), cache_(cache), id_(nextRasterId()) {
     static std::once_flag once;
     std::call_once(once, [] {
         GDALAllRegister();
@@ -88,7 +93,7 @@ GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), c
     std::error_code ec;
     const auto size = fs::file_size(file, ec);
     const auto mtime = fs::last_write_time(file, ec).time_since_epoch().count();
-    identity_ = fs::absolute(file).string() + ":" + std::to_string(size) + ":" + std::to_string(mtime);
+    identity_ = std::format("{}:{}:{}", fs::absolute(file).string(), size, mtime);
 }
 
 GdalRaster::~GdalRaster() {
@@ -126,8 +131,8 @@ std::optional<double> GdalRaster::valueAt(const rfcore::GeoPoint& p) const {
     const double colF = inverse_[0] + x * inverse_[1] + y * inverse_[2];
     const double rowF = inverse_[3] + x * inverse_[4] + y * inverse_[5];
     if (!(colF >= 0.0 && rowF >= 0.0 && colF < width_ && rowF < height_)) return std::nullopt;
-    const int col = static_cast<int>(colF);
-    const int row = static_cast<int>(rowF);
+    const auto col = static_cast<int>(colF);
+    const auto row = static_cast<int>(rowF);
     const auto b = block(col / blockW_, row / blockH_);
     const float v = b->values[static_cast<std::size_t>(row % blockH_) * static_cast<std::size_t>(b->width) +
                               static_cast<std::size_t>(col % blockW_)];

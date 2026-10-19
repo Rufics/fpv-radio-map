@@ -90,7 +90,7 @@ std::vector<std::string> commonLinks(const Mission& a, const Mission& b) {
     std::vector<std::string> links;
     const std::vector<std::string> lb = b.links();
     for (const std::string& l : a.links()) {
-        if (std::find(lb.begin(), lb.end(), l) != lb.end()) links.push_back(l);
+        if (std::ranges::find(lb, l) != lb.end()) links.push_back(l);
     }
     return links;
 }
@@ -103,7 +103,8 @@ json compare(const json& missionA, const json& compareOpt, const IWorld& world, 
     const std::string name = compareOpt.value("name", "B");
     const Mission a = Mission::fromJson(missionA);
     const Mission b = Mission::fromJson(missionB);
-    const Route routeA(a, world), routeB(b, world);
+    const Route routeA(a, world);
+    const Route routeB(b, world);
     const std::vector<RoutePoint> samplesA = routeSamples(routeA, stepM);
     const std::vector<RoutePoint> samplesB = routeSamples(routeB, stepM);
     const auto evalA = evalFor(missionA);
@@ -151,14 +152,14 @@ std::vector<RoutePoint> exportVertices(const Route& route, double stepM) {
     std::vector<RoutePoint> out;
     for (const Leg& leg : route.legs()) {
         const RoutePoint start = route.at(leg.startM);
-        out.push_back({leg.from.position, leg.from.aglM, leg.index, start.courseDeg});
+        out.emplace_back(leg.from.position, leg.from.aglM, leg.index, start.courseDeg);
         for (std::size_t i = 1; static_cast<double>(i) * stepM < leg.lengthM; ++i) {
             out.push_back(route.at(leg.startM + static_cast<double>(i) * stepM));
         }
     }
     if (!route.legs().empty()) {
         const Leg& last = route.legs().back();
-        out.push_back({last.to.position, last.to.aglM, last.index, route.at(route.length()).courseDeg});
+        out.emplace_back(last.to.position, last.to.aglM, last.index, route.at(route.length()).courseDeg);
     }
     return out;
 }

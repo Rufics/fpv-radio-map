@@ -8,6 +8,7 @@
 #include <rfcore/constants.hpp>
 
 #include <cmath>
+#include <format>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -57,10 +58,13 @@ public:
 
     [[nodiscard]] bool contains(const LatLon& p) const {
         bool inside = false;
-        const double px = p.lon, py = mercY(p.lat);
+        const double px = p.lon;
+        const double py = mercY(p.lat);
         for (std::size_t i = 0, j = ring_.size() - 1; i < ring_.size(); j = i++) {
-            const double xi = ring_[i].lon, yi = mercY(ring_[i].lat);
-            const double xj = ring_[j].lon, yj = mercY(ring_[j].lat);
+            const double xi = ring_[i].lon;
+            const double yi = mercY(ring_[i].lat);
+            const double xj = ring_[j].lon;
+            const double yj = mercY(ring_[j].lat);
             if ((yi > py) != (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside;
         }
         return inside;
@@ -69,7 +73,10 @@ public:
     /// Grid points inside the area, spaced `cellM` along geodesics north and east from the
     /// area's south-west corner. Throws BadRequest above `maxPoints`.
     [[nodiscard]] std::vector<LatLon> grid(const IWorld& world, double cellM, std::size_t maxPoints) const {
-        double s = 90, w = 180, n = -90, e = -180;
+        double s = 90;
+        double w = 180;
+        double n = -90;
+        double e = -180;
         for (const LatLon& p : ring_) {
             s = std::min(s, p.lat);
             n = std::max(n, p.lat);
@@ -89,9 +96,9 @@ public:
                 if (!contains(p)) continue;
                 out.push_back(p);
                 if (out.size() > maxPoints) {
-                    throw rfmod::BadRequest("the area holds more than " + std::to_string(maxPoints) +
-                                            " candidate points at " + std::to_string(static_cast<int>(cellM)) +
-                                            " m; draw a smaller area or use a larger cell");
+                    throw rfmod::BadRequest(std::format("the area holds more than {} candidate points at {} m; draw a "
+                                                        "smaller area or use a larger cell",
+                                                        maxPoints, static_cast<int>(cellM)));
                 }
             }
         }

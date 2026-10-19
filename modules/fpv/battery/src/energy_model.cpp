@@ -10,27 +10,43 @@ namespace {
 
 constexpr double kDeg = rfcore::constants::kPi / 180.0;
 
+/// One Simpson panel: the interval, the integrand at both ends and the midpoint, and the
+/// panel's Simpson estimate.
+struct SimpsonPanel {
+    double a;
+    double b;
+    double fa;
+    double fm;
+    double fb;
+    double whole;
+};
+
 // Adaptive Simpson to a relative tolerance close to double precision. The integrand is smooth
 // (the course along a geodesic changes slowly), so this converges to the exact integral.
 template <typename F>
-double simpson(const F& f, double a, double b, double fa, double fm, double fb, double whole, double tol, int depth) {
-    const double m = (a + b) / 2.0;
-    const double lm = (a + m) / 2.0, rm = (m + b) / 2.0;
-    const double flm = f(lm), frm = f(rm);
-    const double left = (m - a) / 6.0 * (fa + 4.0 * flm + fm);
-    const double right = (b - m) / 6.0 * (fm + 4.0 * frm + fb);
-    const double delta = left + right - whole;
-    if (depth <= 0 || std::abs(delta) <= 15.0 * tol) return left + right + delta / 15.0;
-    return simpson(f, a, m, fa, flm, fm, left, tol / 2.0, depth - 1) +
-           simpson(f, m, b, fm, frm, fb, right, tol / 2.0, depth - 1);
+double simpson(const F& f, const SimpsonPanel& p, double tol, int depth) {
+    const double m = (p.a + p.b) / 2.0;
+    const double lm = (p.a + m) / 2.0;
+    const double rm = (m + p.b) / 2.0;
+    const double flm = f(lm);
+    const double frm = f(rm);
+    const double left = (m - p.a) / 6.0 * (p.fa + 4.0 * flm + p.fm);
+    const double right = (p.b - m) / 6.0 * (p.fm + 4.0 * frm + p.fb);
+    if (const double delta = left + right - p.whole; depth <= 0 || std::abs(delta) <= 15.0 * tol) {
+        return left + right + delta / 15.0;
+    }
+    return simpson(f, SimpsonPanel{p.a, m, p.fa, flm, p.fm, left}, tol / 2.0, depth - 1) +
+           simpson(f, SimpsonPanel{m, p.b, p.fm, frm, p.fb, right}, tol / 2.0, depth - 1);
 }
 
 template <typename F>
 double integrate(const F& f, double a, double b) {
     if (b <= a) return 0.0;
-    const double fa = f(a), fb = f(b), fm = f((a + b) / 2.0);
+    const double fa = f(a);
+    const double fb = f(b);
+    const double fm = f((a + b) / 2.0);
     const double whole = (b - a) / 6.0 * (fa + 4.0 * fm + fb);
-    return simpson(f, a, b, fa, fm, fb, whole, std::abs(whole) * 1e-12 + 1e-15, 40);
+    return simpson(f, SimpsonPanel{a, b, fa, fm, fb, whole}, std::abs(whole) * 1e-12 + 1e-15, 40);
 }
 
 }  // namespace
@@ -68,7 +84,7 @@ BatterySpec BatterySpec::fromJson(const json& j) {
     for (const json& p : j.value("temperatureDerating", json::array())) {
         b.derating.emplace_back(p.at("celsius").get<double>(), p.at("factor").get<double>());
     }
-    std::sort(b.derating.begin(), b.derating.end());
+    std::ranges::sort(b.derating);
     return b;
 }
 
@@ -93,10 +109,8 @@ BatterySpec::Derated BatterySpec::deratingAt(std::optional<double> t) const {
     return {derating.back().second, "measured factor"};  // single point equal to t
 }
 
-EnergyModel::EnergyModel(DroneSpec drone, Air air, const IWorld& world)
-    : drone_(std::move(drone)), air_(air), world_(world), power_(0.0) {
-    power_ = cruisePowerW();
-}
+EnergyModel::EnergyModel(DroneSpec drone, const Air& air, const IWorld& world)
+    : drone_(std::move(drone)), air_(air), world_(world), power_(cruisePowerW()) {}
 
 double EnergyModel::cruisePowerW() const {
     if (drone_.powerDensityExponent == 0.0) return drone_.cruisePowerW;
@@ -191,7 +205,8 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
     if (p.neededWh <= p.usableWh) {
         p.rangeM = route.length();
     } else {
-        double lo = 0.0, hi = route.length();
+        double lo = 0.0;
+        double hi = route.length();
         while (hi - lo > 1e-3) {
             const double mid = (lo + hi) / 2.0;
             (model_.routeWh(route, mid) <= p.usableWh ? lo : hi) = mid;
@@ -208,7 +223,8 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
         return model_.routeWh(route, s) + model_.segmentWh(pt.position, pt.aglM, mission.pilot.position, mission.pilot.aglM);
     };
     const double out = route.outboundLength();
-    double lastOk = -1.0, firstBad = -1.0;
+    double lastOk = -1.0;
+    double firstBad = -1.0;
     for (std::size_t i = 0;; ++i) {
         const double s = std::min(out, static_cast<double>(i) * step_);
         if (costAt(s) <= p.usableWh) {
@@ -224,7 +240,8 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
         return p;
     }
     if (firstBad > lastOk) {
-        double lo = lastOk, hi = firstBad;
+        double lo = lastOk;
+        double hi = firstBad;
         while (hi - lo > 1e-3) {
             const double mid = (lo + hi) / 2.0;
             (costAt(mid) <= p.usableWh ? lo : hi) = mid;
