@@ -182,7 +182,11 @@ export class ModulesPage implements OnInit {
 
   protected readonly deprecatedCount = computed(() => this.modules().filter((m) => m.lifecycle === 'deprecated').length);
 
-  async ngOnInit(): Promise<void> {
+  ngOnInit(): void {
+    this.loadModules().catch((e) => this.error.set(ApiError.from(e).message));
+  }
+
+  private async loadModules(): Promise<void> {
     try {
       this.modules.set(await this.api.modules());
     } catch (e) {
@@ -267,10 +271,12 @@ export class ModulesPage implements OnInit {
     return (c.detail ?? '').toLowerCase().startsWith('warning');
   }
   protected checkClass(c: { ok?: boolean; detail?: string }): string {
-    return !c.ok ? 'bad' : this.isWarning(c) ? 'warn' : 'ok';
+    if (!c.ok) return 'bad';
+    return this.isWarning(c) ? 'warn' : 'ok';
   }
   protected checkMark(c: { ok?: boolean; detail?: string }): string {
-    return !c.ok ? '✕' : this.isWarning(c) ? '!' : '✓';
+    if (!c.ok) return '✕';
+    return this.isWarning(c) ? '!' : '✓';
   }
   protected checkedAgo(): string {
     const s = Math.max(1, Math.round((Date.now() - this.checkedAt) / 1000));

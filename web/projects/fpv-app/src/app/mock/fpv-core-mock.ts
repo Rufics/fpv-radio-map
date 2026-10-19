@@ -35,46 +35,56 @@ const sameGeometry = (a: Mission, b: Mission) => {
 export function fpvCoreMock(mission: Mission): FpvCoreData {
   const opts = (mission.modules?.['fpv.core'] as FpvCoreOptions | undefined) ?? {};
   const data: FpvCoreData = {};
-  if (opts.compare) {
-    const b = applyMergePatch(structuredClone(mission), opts.compare.patch);
-    const stepM = opts.stepM ?? 100;
-    const aligned = sameGeometry(mission, b);
-    const out: FpvCompareData = { name: opts.compare.name ?? 'B', mission: b, aligned, stepM, links: {} };
-    for (const kind of linksEvaluated(mission.evaluate) as LinkKind[]) {
-      const ga = coverageGrid(mission, kind);
-      const gb = coverageGrid(b, kind);
-      const sa = samples(mission, stepM);
-      const sb = samples(b, stepM);
-      // anchor the grid samples to the route result, so A's worst margin equals the route verdict
-      const routeWorst = Math.min(...(routeResult(mission, 'normal').legs ?? []).map((l) => l.worst?.[kind]?.marginDb ?? Infinity));
-      const rawA = sa.map((p) => sampleGrid(ga, p.lon, p.lat) ?? -99);
-      const shift = Number.isFinite(routeWorst) ? routeWorst - Math.min(...rawA) : 0;
-      const ma = rawA.map((v) => v + shift);
-      const mb = sb.map((p) => (sampleGrid(gb, p.lon, p.lat) ?? -99) + shift);
-      const worst = (v: number[]) => v.reduce((w, x, i) => (x < w.worstMarginDb ? { worstMarginDb: x, sample: i } : w), { worstMarginDb: Infinity, sample: 0 });
-      const wa = worst(ma);
-      const wb = worst(mb);
-      const link: NonNullable<FpvCompareData['links']>[LinkKind] = { a: wa, b: wb, deltaWorstDb: wb.worstMarginDb - wa.worstMarginDb };
-      if (aligned) {
-        const points: FpvComparePoint[] = sa.map((p, i) => ({ lat: p.lat, lon: p.lon, aMarginDb: ma[i], bMarginDb: mb[i], deltaDb: mb[i] - ma[i] }));
-        link.points = points;
-        link.pointsBetter = points.filter((p) => p.deltaDb > 1e-9).length;
-        link.pointsWorse = points.filter((p) => p.deltaDb < -1e-9).length;
-      }
-      out.links![kind] = link;
-    }
-    data.compare = out;
-  }
-  if (opts.export?.length) {
-    data.export = {};
-    const step = opts.exportStepM ?? 50;
-    const ex = new MissionExporter();
-    for (const f of opts.export) {
-      if (f === 'gpx') data.export.gpx = { mediaType: 'application/gpx+xml', content: ex.toGpx(mission).content };
-      else data.export.kml = { mediaType: 'application/vnd.google-earth.kml+xml', content: kml(mission, step, opts.kmlAltitude ?? 'relativeToGround') };
-    }
-  }
+  if (opts.compare) data.compare = compareData(mission, opts.compare, opts.stepM ?? 100);
+  if (opts.export?.length) data.export = exportData(mission, opts);
   return data;
+}
+
+/** data.compare: route A (the mission) against B (the mission with the merge patch applied). */
+function compareData(mission: Mission, compare: NonNullable<FpvCoreOptions['compare']>, stepM: number): FpvCompareData {
+  const b = applyMergePatch(structuredClone(mission), compare.patch);
+  const aligned = sameGeometry(mission, b);
+  const out: FpvCompareData = { name: compare.name ?? 'B', mission: b, aligned, stepM, links: {} };
+  for (const kind of linksEvaluated(mission.evaluate) as LinkKind[]) {
+    out.links![kind] = compareLink(mission, b, kind, stepM, aligned);
+  }
+  return out;
+}
+
+function compareLink(mission: Mission, b: Mission, kind: LinkKind, stepM: number, aligned: boolean): NonNullable<FpvCompareData['links']>[LinkKind] {
+  const ga = coverageGrid(mission, kind);
+  const gb = coverageGrid(b, kind);
+  const sa = samples(mission, stepM);
+  const sb = samples(b, stepM);
+  // anchor the grid samples to the route result, so A's worst margin equals the route verdict
+  const routeWorst = Math.min(...(routeResult(mission, 'normal').legs ?? []).map((l) => l.worst?.[kind]?.marginDb ?? Infinity));
+  const rawA = sa.map((p) => sampleGrid(ga, p.lon, p.lat) ?? -99);
+  const shift = Number.isFinite(routeWorst) ? routeWorst - Math.min(...rawA) : 0;
+  const ma = rawA.map((v) => v + shift);
+  const mb = sb.map((p) => (sampleGrid(gb, p.lon, p.lat) ?? -99) + shift);
+  const worst = (v: number[]) => v.reduce((w, x, i) => (x < w.worstMarginDb ? { worstMarginDb: x, sample: i } : w), { worstMarginDb: Infinity, sample: 0 });
+  const wa = worst(ma);
+  const wb = worst(mb);
+  const link: NonNullable<FpvCompareData['links']>[LinkKind] = { a: wa, b: wb, deltaWorstDb: wb.worstMarginDb - wa.worstMarginDb };
+  if (aligned) {
+    const points: FpvComparePoint[] = sa.map((p, i) => ({ lat: p.lat, lon: p.lon, aMarginDb: ma[i], bMarginDb: mb[i], deltaDb: mb[i] - ma[i] }));
+    link.points = points;
+    link.pointsBetter = points.filter((p) => p.deltaDb > 1e-9).length;
+    link.pointsWorse = points.filter((p) => p.deltaDb < -1e-9).length;
+  }
+  return link;
+}
+
+/** data.export: the requested files (GPX, KML) for the mission. */
+function exportData(mission: Mission, opts: FpvCoreOptions): NonNullable<FpvCoreData['export']> {
+  const exported: NonNullable<FpvCoreData['export']> = {};
+  const step = opts.exportStepM ?? 50;
+  const ex = new MissionExporter();
+  for (const f of opts.export ?? []) {
+    if (f === 'gpx') exported.gpx = { mediaType: 'application/gpx+xml', content: ex.toGpx(mission).content };
+    else exported.kml = { mediaType: 'application/vnd.google-earth.kml+xml', content: kml(mission, step, opts.kmlAltitude ?? 'relativeToGround') };
+  }
+  return exported;
 }
 
 function kml(m: Mission, stepM: number, mode: 'relativeToGround' | 'absolute'): string {
@@ -82,7 +92,10 @@ function kml(m: Mission, stepM: number, mode: 'relativeToGround' | 'absolute'): 
   const coord = (p: MissionPoint) => `${p.lon.toFixed(7)},${p.lat.toFixed(7)},${alt(p).toFixed(1)}`;
   const pts = [m.pilot, ...m.waypoints];
   const marks = pts
-    .map((p, i) => `    <Placemark><name>${xmlEscape(p.label ?? (i === 0 ? 'A' : `WP${i}`))}</name><Point><altitudeMode>${mode}</altitudeMode><coordinates>${coord(p)}</coordinates></Point></Placemark>`)
+    .map((p, i) => {
+      const name = p.label ?? (i === 0 ? 'A' : `WP${i}`);
+      return `    <Placemark><name>${xmlEscape(name)}</name><Point><altitudeMode>${mode}</altitudeMode><coordinates>${coord(p)}</coordinates></Point></Placemark>`;
+    })
     .join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">

@@ -1,6 +1,7 @@
 import { Component, computed, inject, input, signal } from '@angular/core';
 import {
   BudgetChartComponent,
+  BudgetTerm,
   LinkKind,
   ProfileChartComponent,
   RfFormat,
@@ -125,7 +126,10 @@ export class WhyDrawerComponent {
     // where along the leg the worst sample was taken
     const along = link.sample?.alongLegM;
     const atEnd = along === undefined || leg.lengthM === undefined || Math.abs(leg.lengthM - along) < 1;
-    const where = atEnd ? `at ${to}` : along! < 1 ? `at ${leg.from ?? 'the start'}` : `${RfFormat.format(along, 'km1')} into the leg`;
+    let where: string;
+    if (atEnd) where = `at ${to}`;
+    else if (along! < 1) where = `at ${leg.from ?? 'the start'}`;
+    else where = `${RfFormat.format(along, 'km1')} into the leg`;
     const subtitle = `A → drone ${where} · ${w.link} ${mhz}`;
     const title = `${failing ? 'Why leg' : 'Leg'} ${w.leg}${failing ? ' fails' : ' · reachable'} · ${subtitle}`;
     const links = (['control', 'video'] as LinkKind[])
@@ -133,7 +137,7 @@ export class WhyDrawerComponent {
       .map((k) => ({ kind: k, label: `${LINK_LETTER[k]} ${leg.worst?.[k]?.reachable === false ? '✕' : '✓'}` }));
     const terms = (link.terms ?? [])
       .filter((t) => t.valueDb > 0)
-      .map((t) => ({ id: t.id, label: t.id === 'fspl' ? 'Free-space loss' : t.id === 'diffraction' ? 'Ridge diffraction' : t.label, value: t.valueDb, source: t.source, kind: 'db' as const }));
+      .map((t) => ({ id: t.id, label: this.termLabel(t), value: t.valueDb, source: t.source, kind: 'db' as const }));
     const gains = (link.terms ?? []).filter((t) => t.valueDb <= 0);
     const toPoint = m.waypoints[w.leg - 1] ?? m.pilot;
     const fix = (leg.reasons ?? []).find((r) => r.fix && (!r.link || r.link === w.link))?.fix;
@@ -156,4 +160,9 @@ export class WhyDrawerComponent {
       fixTitle: fix?.title ? fix.title.replace(/^Fly /, '').replace(/^./, (c) => c.toLowerCase()) : '',
     };
   });
+
+  private termLabel(t: BudgetTerm): string {
+    if (t.id === 'fspl') return 'Free-space loss';
+    return t.id === 'diffraction' ? 'Ridge diffraction' : t.label;
+  }
 }

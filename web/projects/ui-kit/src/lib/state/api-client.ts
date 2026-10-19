@@ -134,7 +134,7 @@ export class RfmapApiClient {
   }
 
   createLink(missionId: string, req: CreateLinkRequest, ownerKey?: string): Promise<CreatedShareLink> {
-    if (!/^[0-9]{6}$/.test(req.pin)) return Promise.reject(new ApiError(400, 'The PIN must be 6 digits'));
+    if (!/^\d{6}$/.test(req.pin)) return Promise.reject(new ApiError(400, 'The PIN must be 6 digits'));
     return this.run(this.http.post<CreatedShareLink>(this.url(`/missions/${encodeURIComponent(missionId)}/links`), req, { headers: this.ownerHeaders(missionId, ownerKey) }));
   }
 

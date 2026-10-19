@@ -59,11 +59,11 @@ export function fresnelRadius(lambda: number, d1: number, d2: number): number {
 export function computeProfileGeometry(input: ProfileInput): ProfileGeometry {
   const pts = [...input.profile.points].sort((a, b) => a.distanceM - b.distanceM);
   if (pts.length < 2) throw new Error('A profile needs at least two points');
-  const L = input.profile.lengthM ?? pts[pts.length - 1].distanceM;
+  const L = input.profile.lengthM ?? pts.at(-1)!.distanceM;
   const k = input.kFactor ?? 4 / 3;
   const lambda = SPEED_OF_LIGHT / input.frequencyHz;
   const fromMsl = input.fromAntennaMslM ?? pts[0].groundMslM + input.fromAglM;
-  const toMsl = input.toAntennaMslM ?? pts[pts.length - 1].groundMslM + input.toAglM;
+  const toMsl = input.toAntennaMslM ?? pts.at(-1)!.groundMslM + input.toAglM;
 
   const samples: ProfileSample[] = pts.map((p) => {
     const d1 = p.distanceM;
@@ -115,6 +115,13 @@ export function niceStep(span: number, targetTicks = 4): number {
   const raw = span / Math.max(1, targetTicks);
   const pow = 10 ** Math.floor(Math.log10(raw));
   const n = raw / pow;
-  const step = n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10;
-  return step * pow;
+  return niceMantissa(n) * pow;
+}
+
+/** Rounds a normalised step (1 ≤ n < 10) to the nearest 1-2-5-10 value. */
+function niceMantissa(n: number): number {
+  if (n < 1.5) return 1;
+  if (n < 3) return 2;
+  if (n < 7) return 5;
+  return 10;
 }

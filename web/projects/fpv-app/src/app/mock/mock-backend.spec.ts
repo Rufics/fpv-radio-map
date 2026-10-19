@@ -121,6 +121,8 @@ describe('MockBackend through the API client', () => {
     const saved = (await settle(api.saveLibraryEntry('batteries', 'test-pack', { ...battery, version: 1, notes: 'checked' }))) as { version: number };
     expect(saved.version).toBe(2);
     expect((await rejection(api.saveLibraryEntry('batteries', 'test-pack', { ...battery, version: 1 }))).status).toBe(409);
+    expect((await rejection(api.saveLibraryEntry('batteries', 'test-pack', { ...battery }))).message).toContain('since version ?;');
+    expect((await rejection(api.saveLibraryEntry('batteries', 'test-pack', { ...battery, version: { n: 1 } }))).message).toContain('since version {"n":1}; now at version 2');
     expect((await rejection(api.saveLibraryEntry('batteries', 'nope', { ...battery, id: 'nope', version: 1 }))).status).toBe(404);
     expect(await settle(api.libraryHistory('batteries', 'test-pack'))).toHaveLength(1);
     expect((await settle(api.libraryItem('batteries', 'test-pack')))['version']).toBe(2);

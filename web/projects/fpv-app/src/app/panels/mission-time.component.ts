@@ -91,7 +91,9 @@ export class MissionTimeComponent {
   });
   protected readonly relative = computed(() => {
     const days = Math.round((this.startOfDay(this.when()) - this.startOfDay(new Date())) / 86400e3);
-    return days === 0 ? 'today' : days === 1 ? 'tomorrow' : days > 0 ? `in ${days} days` : `${-days} days ago`;
+    if (days === 0) return 'today';
+    if (days === 1) return 'tomorrow';
+    return days > 0 ? `in ${days} days` : `${-days} days ago`;
   });
   protected readonly runText = computed(() => {
     const r = this.data.horizon()?.runUtc;
@@ -116,7 +118,8 @@ export class MissionTimeComponent {
   });
 
   protected tierText(t: string): string {
-    return t === 'hourly' ? 'hourly forecast' : t === 'long-range' ? 'long-range forecast' : 'no forecast';
+    if (t === 'hourly') return 'hourly forecast';
+    return t === 'long-range' ? 'long-range forecast' : 'no forecast';
   }
 
   private startOfDay(d: Date): number {

@@ -15,9 +15,14 @@ export function waterfall(terms: BudgetTerm[]): WaterfallStep[] {
   return terms.map((term) => {
     const from = level;
     level -= term.valueDb;
-    const kind = term.valueDb < 0 ? 'gain' : term.id === 'fspl' || term.id.startsWith('free-space') ? 'path' : 'loss';
-    return { term, from, to: level, kind };
+    return { term, from, to: level, kind: stepKind(term) };
   });
+}
+
+/** Negative terms are gains; free-space path loss is drawn apart from the other losses. */
+function stepKind(term: BudgetTerm): WaterfallStep['kind'] {
+  if (term.valueDb < 0) return 'gain';
+  return term.id === 'fspl' || term.id.startsWith('free-space') ? 'path' : 'loss';
 }
 
 /** dB waterfall for any link: every term as a bar, received level, required level. */
@@ -76,7 +81,7 @@ export class BudgetChartComponent {
     const terms = this.terms() ?? [];
     if (terms.length === 0) return null;
     const steps = waterfall(terms);
-    const received = this.receivedDbm() ?? steps[steps.length - 1].to;
+    const received = this.receivedDbm() ?? steps.at(-1)!.to;
     const required = this.requiredDbm();
     const w = this.width();
     const pad = 28;
@@ -107,6 +112,7 @@ export class BudgetChartComponent {
     const ry = 10 + steps.length * rowH + 7;
     const rText = RfFormat.format(received, 'dbm', { unit: false });
     const ok = required === undefined || received >= required;
+    const reqAria = required !== undefined ? `, required ${RfFormat.format(required, 'dbm')}` : '';
     const ticks = [];
     for (let t = lo; t <= hi; t += 50) ticks.push({ x: X(t), label: RfFormat.format(t, t > 0 ? 'db+' : 'db', { unit: false }).replace('.00', '') });
     return {
@@ -128,7 +134,7 @@ export class BudgetChartComponent {
         anchor: 'start' as const,
         title: RfFormat.full(received, 'dbm'),
       },
-      aria: `Link budget waterfall: received ${RfFormat.format(received, 'dbm')}${required !== undefined ? `, required ${RfFormat.format(required, 'dbm')}` : ''}`,
+      aria: `Link budget waterfall: received ${RfFormat.format(received, 'dbm')}${reqAria}`,
     };
   });
 }

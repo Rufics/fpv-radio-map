@@ -31,13 +31,22 @@ export class DeltaScale {
 
   /** CSS colour for a route segment. */
   css(deltaDb: number): string {
-    const rgb = Math.abs(deltaDb) < this.deadBandDb ? DeltaScale.SAME : deltaDb > 0 ? DeltaScale.BETTER : DeltaScale.WORSE;
+    const rgb = { same: DeltaScale.SAME, better: DeltaScale.BETTER, worse: DeltaScale.WORSE }[
+      this.direction(deltaDb)
+    ];
     return `rgb(${rgb.join(',')})`;
   }
 
   /** Text mark so the direction never depends on colour alone. */
   mark(deltaDb: number): '▲' | '▼' | '=' {
-    return Math.abs(deltaDb) < this.deadBandDb ? '=' : deltaDb > 0 ? '▲' : '▼';
+    const marks = { same: '=', better: '▲', worse: '▼' } as const;
+    return marks[this.direction(deltaDb)];
+  }
+
+  /** Inside the dead band B and A count as the same. */
+  private direction(deltaDb: number): 'same' | 'better' | 'worse' {
+    if (Math.abs(deltaDb) < this.deadBandDb) return 'same';
+    return deltaDb > 0 ? 'better' : 'worse';
   }
 }
 
@@ -79,6 +88,76 @@ export interface CoverageDelta {
 
 const EPS = 1e-9;
 
+/** How B's cells sit on A's: B cell = A cell shifted by dr rows and dc cols. */
+interface GridOffset {
+  alignment: CoverageDelta['alignment'];
+  dr: number;
+  dc: number;
+}
+
+/** Size and row-major margins of one grid side. */
+interface GridCells {
+  cols: number;
+  rows: number;
+  margin: (number | null)[];
+}
+
+const NOT_ALIGNED: GridOffset = { alignment: 'none', dr: 0, dc: 0 };
+
+interface CellSize {
+  dLat: number;
+  dLon: number;
+}
+
+function sameCellSize(ca: CellSize, cb: CellSize): boolean {
+  return Math.abs(ca.dLat - cb.dLat) <= EPS * ca.dLat && Math.abs(ca.dLon - cb.dLon) <= EPS * ca.dLon;
+}
+
+function isWholeNumber(v: number): boolean {
+  return Math.abs(v - Math.round(v)) < 1e-6;
+}
+
+/** Offset of B's cells against A's, or NOT_ALIGNED when cell sizes or origins do not coincide. */
+function gridOffset(a: CoverageGrid, b: CoverageGrid): GridOffset {
+  const ca = cellDeg(a);
+  const cb = cellDeg(b);
+  const oa = northWest(a);
+  const ob = northWest(b);
+  if (!ca || !cb || !oa || !ob || !sameCellSize(ca, cb)) return NOT_ALIGNED;
+  const rows = (ob.lat - oa.lat) / ca.dLat; // B starts this many rows north of A
+  const cols = (oa.lon - ob.lon) / ca.dLon; // B starts this many cols west of A
+  if (!isWholeNumber(rows) || !isWholeNumber(cols)) return NOT_ALIGNED;
+  const dr = Math.round(rows);
+  const dc = Math.round(cols);
+  const same = dr === 0 && dc === 0 && a.cols === b.cols && a.rows === b.rows;
+  return { alignment: same ? 'same' : 'shifted', dr, dc };
+}
+
+function cellDelta(va: number | null | undefined, vb: number | null | undefined): number | null {
+  return va === null || va === undefined || vb === null || vb === undefined ? null : vb - va;
+}
+
+/** Marks every A cell that has a B cell at `offset` as comparable and writes B − A into `out`. */
+function diffAlignedCells(
+  a: GridCells,
+  b: GridCells,
+  offset: GridOffset,
+  out: (number | null)[],
+  comparable: boolean[],
+): void {
+  for (let r = 0; r < a.rows; r++) {
+    const rb = r + offset.dr;
+    if (rb < 0 || rb >= b.rows) continue;
+    for (let c = 0; c < a.cols; c++) {
+      const cbI = c + offset.dc;
+      if (cbI < 0 || cbI >= b.cols) continue;
+      const i = r * a.cols + c;
+      comparable[i] = true;
+      out[i] = cellDelta(a.margin[i], b.margin[rb * b.cols + cbI]);
+    }
+  }
+}
+
 /**
  * B − A where the cells coincide exactly, and nothing else: no resampling, no nearest cell.
  * Cells coincide when both grids use the same cell size in degrees and B's origin is offset from A's by a
@@ -91,39 +170,26 @@ export function subtractGrids(a: CoverageGrid, b: CoverageGrid): CoverageDelta |
   const n = a.cols * a.rows;
   const out: (number | null)[] = new Array(n).fill(null);
   const comparable: boolean[] = new Array(n).fill(false);
-  const ca = cellDeg(a);
-  const cb = cellDeg(b);
-  const oa = northWest(a);
-  const ob = northWest(b);
-  let alignment: CoverageDelta['alignment'] = 'none';
-  let dr = 0;
-  let dc = 0;
-  if (ca && cb && oa && ob && Math.abs(ca.dLat - cb.dLat) <= EPS * ca.dLat && Math.abs(ca.dLon - cb.dLon) <= EPS * ca.dLon) {
-    const rows = (ob.lat - oa.lat) / ca.dLat; // B starts this many rows north of A
-    const cols = (oa.lon - ob.lon) / ca.dLon; // B starts this many cols west of A
-    if (Math.abs(rows - Math.round(rows)) < 1e-6 && Math.abs(cols - Math.round(cols)) < 1e-6) {
-      dr = Math.round(rows);
-      dc = Math.round(cols);
-      alignment = dr === 0 && dc === 0 && a.cols === b.cols && a.rows === b.rows ? 'same' : 'shifted';
-    }
-  }
-  if (alignment !== 'none') {
-    for (let r = 0; r < a.rows; r++) {
-      const rb = r + dr;
-      if (rb < 0 || rb >= b.rows) continue;
-      for (let c = 0; c < a.cols; c++) {
-        const cbI = c + dc;
-        if (cbI < 0 || cbI >= b.cols) continue;
-        const i = r * a.cols + c;
-        comparable[i] = true;
-        const va = a.marginDb[i];
-        const vb = b.marginDb[rb * b.cols + cbI];
-        out[i] = va === null || va === undefined || vb === null || vb === undefined ? null : vb - va;
-      }
-    }
+  const offset = gridOffset(a, b);
+  if (offset.alignment !== 'none') {
+    const cellsA = { cols: a.cols, rows: a.rows, margin: a.marginDb };
+    const cellsB = { cols: b.cols, rows: b.rows, margin: b.marginDb };
+    diffAlignedCells(cellsA, cellsB, offset, out, comparable);
   }
   const notComparableCells = comparable.reduce((k, ok) => k + (ok ? 0 : 1), 0);
-  return { grid: { ...a, marginDb: out, marginWorstDb: undefined, limitPolygon: undefined }, comparable, notComparableCells, alignment };
+  return {
+    grid: { ...a, marginDb: out, marginWorstDb: undefined, limitPolygon: undefined },
+    comparable,
+    notComparableCells,
+    alignment: offset.alignment,
+  };
+}
+
+/** RGBA pixels of a heatmap drawn with s × s pixels per grid cell. */
+interface CellRaster {
+  data: Uint8ClampedArray;
+  cols: number;
+  s: number;
 }
 
 /** Heatmap of a B − A grid with the diverging DeltaScale. */
@@ -194,23 +260,40 @@ export class CoverageDeltaLayer extends StyleLayerSet {
     const ctx = canvas.getContext('2d');
     if (!ctx) return this.url;
     const img = ctx.createImageData(cols * s, rows * s);
-    const m = grid.marginDb ?? [];
-    const hatch: [number, number, number, number] = [...DeltaScale.SAME, 150];
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const i = r * cols + c;
-        const col = delta.comparable[i] ? this.scale.color(m[i]) : null;
-        for (let y = 0; y < s; y++) {
-          for (let x = 0; x < s; x++) {
-            const px = ((r * s + y) * cols * s + (c * s + x)) * 4;
-            if (col) img.data.set(col, px);
-            else if (!delta.comparable[i] && ((r * s + y + c * s + x) % 4 === 0)) img.data.set(hatch, px);
-          }
-        }
-      }
-    }
+    this.paintCells(delta, { data: img.data, cols, s });
     ctx.putImageData(img, 0, 0);
     return canvas.toDataURL('image/png');
+  }
+
+  /** Comparable cells in the delta colour (none inside the dead band), the others hatched grey. */
+  private paintCells(delta: CoverageDelta, raster: CellRaster): void {
+    const rows = delta.grid.rows ?? 0;
+    const m = delta.grid.marginDb ?? [];
+    const hatch: [number, number, number, number] = [...DeltaScale.SAME, 150];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < raster.cols; c++) {
+        const i = r * raster.cols + c;
+        const col = delta.comparable[i] ? this.scale.color(m[i]) : hatch;
+        if (col) this.paintCell(raster, r, c, col, !delta.comparable[i]);
+      }
+    }
+  }
+
+  /** Sets the s × s pixels of cell r/c to `rgba`; hatched sets only every 4th diagonal. */
+  private paintCell(
+    raster: CellRaster,
+    r: number,
+    c: number,
+    rgba: number[],
+    hatched: boolean,
+  ): void {
+    const { data, cols, s } = raster;
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        if (hatched && (r * s + y + c * s + x) % 4 !== 0) continue;
+        data.set(rgba, ((r * s + y) * cols * s + (c * s + x)) * 4);
+      }
+    }
   }
 }
 
@@ -259,6 +342,8 @@ export class RouteDeltaLayer extends StyleLayerSet {
       });
     }
     this.data = { type: 'FeatureCollection', features };
-    (this.map?.getSource('rf-route-delta') as GeoJSONSource | undefined)?.setData(this.data);
+    (this.map?.getSource('rf-route-delta') as GeoJSONSource | undefined)
+      ?.setData(this.data)
+      .catch((e: unknown) => console.error('Route difference could not be updated', e));
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { ApiError, CoverageDelta, LinkKind, Mission, MissionStore, RfmapApiClient, RouteResult, applyMergePatch, subtractGrids } from '@rfmap/ui-kit';
+import { ApiError, CoverageDelta, Job, LinkKind, Mission, MissionStore, RfmapApiClient, RouteResult, applyMergePatch, subtractGrids } from '@rfmap/ui-kit';
 import { FpvDataService } from './fpv-data.service';
 
 /** Module id of the FPV core module (modules/fpv/core). Its options go to mission.modules["fpv.core"]. */
@@ -96,7 +96,7 @@ export class CompareService {
   /** Set scenario B and calculate both. */
   async compare(name: string, patch: Record<string, unknown>): Promise<void> {
     this.clearDiff();
-    this.store.update((m) => ({ ...m, modules: { ...(m.modules ?? {}), [FPV_CORE]: { ...fpvCoreOptions(m), compare: { name: name || 'B', patch } } } }));
+    this.store.update((m) => ({ ...m, modules: { ...m.modules, [FPV_CORE]: { ...fpvCoreOptions(m), compare: { name: name || 'B', patch } } } }));
     await this.store.calculate();
   }
 
@@ -105,7 +105,7 @@ export class CompareService {
     this.clearDiff();
     this.store.update((m) => {
       const { compare: _drop, ...rest } = fpvCoreOptions(m);
-      const modules = { ...(m.modules ?? {}) };
+      const modules = { ...m.modules };
       if (Object.keys(rest).length) modules[FPV_CORE] = rest as Record<string, unknown>;
       else delete modules[FPV_CORE];
       return { ...m, modules };
@@ -136,15 +136,8 @@ export class CompareService {
     this.diffState.set('running');
     try {
       const id = this.store.missionId();
-      let job = await this.api.startCoverage(id, { ...b, evaluate: link });
-      while (job.state === 'queued' || job.state === 'running') {
-        await new Promise((r) => setTimeout(r, 400));
-        if (run !== this.run) {
-          void this.api.cancelJob(id, job.jobId ?? '').catch(() => undefined);
-          return;
-        }
-        job = await this.api.getJob(id, job.jobId ?? '');
-      }
+      const job = await this.waitForJob(id, await this.api.startCoverage(id, { ...b, evaluate: link }), run);
+      if (!job) return;
       if (job.state !== 'done') throw new Error(`Coverage for B ${job.state}.`);
       const gridB = await this.api.getCoverage(id, job.jobId ?? '', link);
       if (run !== this.run) return;
@@ -160,5 +153,16 @@ export class CompareService {
       this.diffState.set('failed');
       this.diffError.set(ApiError.from(e).message);
     }
+  }
+
+  /** Polls a coverage job until it is finished; null when a newer run took over (the job is then cancelled). */
+  private async waitForJob(id: string | null, job: Job, run: number): Promise<Job | null> {
+    if (job.state !== 'queued' && job.state !== 'running') return job;
+    await new Promise((r) => setTimeout(r, 400));
+    if (run !== this.run) {
+      void this.api.cancelJob(id, job.jobId ?? '').catch(() => undefined);
+      return null;
+    }
+    return this.waitForJob(id, await this.api.getJob(id, job.jobId ?? ''), run);
   }
 }
