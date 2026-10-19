@@ -147,11 +147,14 @@ class FindTest(ApiTestCase):
 
     def test_writes_jobs_and_outputs_for_the_one_matching_pull_request(self):
         artifacts = [{"name": "coverage-cpp", "id": 5}, {"name": "coverage-cpp-html", "id": 6},
-                     {"name": "old", "id": 7, "expired": True}]
+                     {"name": "old", "id": 7, "expired": True}, {"name": "coverage-web", "id": 8},
+                     {"name": "coverage-web-html", "id": 9}]
         github, out, _ = self.run_find([self.pr(12, sha="b" * 40), self.pr(34)], artifacts)
         self.assertEqual(out.splitlines(), [
             "number=34", "coverage=true",
-            f"coverage_url=https://github.example/{REPO}/actions/runs/77/artifacts/6"])
+            f"coverage_url=https://github.example/{REPO}/actions/runs/77/artifacts/6",
+            "web_coverage=true",
+            f"web_coverage_url=https://github.example/{REPO}/actions/runs/77/artifacts/9"])
         self.assertIn("head=someone%3Afeature%2Fx", github.calls[0][1])
         self.assertEqual(json.loads(Path("jobs.json").read_text()), [
             {"name": "Build", "result": "success", "url": "https://github.com/j/1"},
@@ -159,7 +162,8 @@ class FindTest(ApiTestCase):
 
     def test_without_coverage_artifacts_the_outputs_say_so(self):
         _, out, _ = self.run_find([self.pr(34)], [{"name": "coverage-cpp-html", "id": 6, "expired": True}])
-        self.assertEqual(out.splitlines()[1:], ["coverage=false", "coverage_url="])
+        self.assertEqual(out.splitlines()[1:], ["coverage=false", "coverage_url=", "web_coverage=false",
+                                                "web_coverage_url="])
 
     def test_no_or_several_matches_report_nothing(self):
         cases = {

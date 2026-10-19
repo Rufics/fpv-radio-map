@@ -2,14 +2,21 @@
 """Builds the Markdown CI report that is posted to a pull request and to the job summary.
 
     cd <data folder> && python3 -I path/to/tools/ci/report.py > report.md
+    cd <data folder> && python3 -I path/to/tools/ci/report.py --all-tests > all-tests.md
 
-The script takes no arguments and reads only fixed names under the current directory, so no
+The first form writes the report; `--all-tests` writes the list of every test, one folded table
+per module, for the run summary (the pull request comment would be too long with it). The
+script takes no other arguments and reads only fixed names under the current directory, so no
 input can point it at another file:
 
-    tests/*.xml             JUnit results (ctest --output-junit, vitest junit reporter)
+    tests/*.xml             JUnit results (ctest --output-junit, vitest junit reporter,
+                            unittest_junit.py); see junit.py
     coverage/coverage.json  gcovr JSON report of the instrumented C++ build
     coverage/changes.diff   `git diff --unified=0` of the pull request
     coverage/commit.txt     the commit the coverage was measured on; uncovered lines link to it
+    coverage-web/web.lcov   LCOV of the web unit tests, paths from the repository root
+    coverage-web/changes.diff, coverage-web/commit.txt
+                            the same as above, from the web job; used when the C++ ones are absent
     jobs.json               the run's jobs as listed by the Actions API: [{name, result, url}]
 
 Environment, all optional:
@@ -18,6 +25,7 @@ Environment, all optional:
     REPORT_SHA           the pull request's head commit, shown in the headline
     REPORT_RUN_URL       link to the workflow run
     REPORT_COVERAGE_URL  link to the HTML coverage artifact
+    REPORT_WEB_COVERAGE_URL  link to the HTML web coverage artifact
     GITHUB_REPOSITORY    owner/name, for links to the uncovered lines
 
 Every input may come from a pull request of a fork, so it is treated as untrusted data: sizes are
@@ -29,6 +37,12 @@ import re
 import sys
 from pathlib import Path
 
+# `python3 -I` leaves the script's folder off the path; junit.py sits next to this file in the
+# trusted checkout, never in the data folder this script runs in.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from junit import JUnitParser, SourceLocation, TestCase  # noqa: E402
+from lcov import LcovParser, WebComponents  # noqa: E402
+
 MARKER = "<!-- rfmap-ci-report -->"
 MAX_INPUT_BYTES = 64 * 1024 * 1024
 MAX_LISTED = 20
@@ -38,9 +52,20 @@ JOB_NAMES = {"clang-tidy": "C++ static analysis", "cpp": "C++ build and tests", 
              "fuzz": "Fuzz C++", "web": "Web build and tests"}
 # Jobs that only orchestrate the run; they are not results worth a row.
 HIDDEN_JOBS = {"changes", "report", "Changed parts", "Test report"}
-SUITES = {"cpp.xml": "C++", "web-ui-kit.xml": "Web: ui-kit", "web-fpv-app.xml": "Web: fpv-app"}
+SUITES = {"cpp.xml": "C++", "web-ui-kit.xml": "Web: ui-kit", "web-fpv-app.xml": "Web: fpv-app",
+          "python-ci.xml": "Python: tools/ci"}
+# CTest labels (the module of a C++ test) in the order of the coverage areas.
+TEST_MODULE_ORDER = ("rf-core", "rf-ext", "rfmod", "fpv", "server", "example")
+# The failure excerpts of one report, so the comment stays far below GitHub's 65536 characters.
+MAX_REASONS_CHARS = 30000
+# The list of all tests goes to the run summary, which takes at most 1 MiB per step.
+MAX_ALL_TESTS_CHARS = 900_000
+OUTCOME_ICONS = {"passed": "✅", "failed": "❌", "skipped": "⏭️"}
+LEGEND = ("<sub>🟢 80% or more · 🟡 60–80% · 🔴 below 60%. Coverage is reported, not enforced. "
+          "Test code is not counted.</sub>")
 ICONS = {"success": "✅", "skipped": "⏭️", "cancelled": "🚫", "failure": "❌"}
 DETAILS_END = "</details>"
+COVERAGE_ALIGN = "|---|---:|---:|"
 FPV = "FPV modules"
 
 # Coverage areas, most specific prefix first. Files that match none count in "All C++" only.
@@ -131,57 +156,15 @@ def as_int(v):
 # --------------------------------------------------------------------------------------------
 # Tests (JUnit)
 
-TESTCASE = re.compile(r"<testcase\b([^>]*?)(/>|>(.*?)</testcase>)", re.S)
-ROOT = re.compile(r"<testsuites?\b[^>]*>")
-
-
-def _attr(tag, name):
-    m = re.search(rf'\s{name}="([^"]*)"', tag)
-    return m.group(1) if m else None
-
-
-def _unescape_xml(s):
-    for a, b in (("&quot;", '"'), ("&apos;", "'"), ("&lt;", "<"), ("&gt;", ">"), ("&amp;", "&")):
-        s = s.replace(a, b)
-    return s
-
-
-FAILED_BODY = re.compile(r"<(failure|error)\b")
-FAILED_STATUS = re.compile(r'\sstatus="fail(ed)?"')
-SKIPPED_BODY = re.compile(r"<skipped\b")
-SKIPPED_STATUS = re.compile(r'\sstatus="(notrun|disabled|skipped)"')
-
-
-def _case_name(attrs):
-    name = _unescape_xml(_attr(attrs, "name") or "?")
-    cls = _unescape_xml(_attr(attrs, "classname") or "")
-    return f"{cls} › {name}" if cls and cls != name else name
-
-
-def _outcome(attrs, body):
-    """"failed", "skipped" or "passed" for one test case."""
-    if FAILED_BODY.search(body) or FAILED_STATUS.search(attrs):
-        return "failed"
-    if SKIPPED_BODY.search(body) or SKIPPED_STATUS.search(attrs):
-        return "skipped"
-    return "passed"
-
-
-def _declared_total(xml):
-    """The test count the runner wrote on the root element, or 0."""
-    root = ROOT.search(xml)
-    return max(as_int(_attr(root.group(0), "tests")), 0) if root else 0
-
-
 def parse_junit(xml):
-    """Totals and failed test names of one JUnit file."""
-    cases = TESTCASE.findall(xml)
-    outcomes = [(_outcome(attrs, body), attrs) for attrs, _, body in cases]
-    failed = [_case_name(attrs) for outcome, attrs in outcomes if outcome == "failed"]
-    skipped = sum(1 for outcome, _ in outcomes if outcome == "skipped")
+    """Totals, failed test names and the test cases of one JUnit file."""
+    parsed = JUnitParser().parse(xml)
+    failed = [c.name for c in parsed.cases if c.failed]
+    skipped = sum(1 for c in parsed.cases if c.skipped)
     # Prefer the count the runner wrote on the root element; fall back to counting cases.
-    total = max(_declared_total(xml) or len(cases), len(failed) + skipped)
-    return {"total": total, "failed": failed, "skipped": skipped, "passed": total - len(failed) - skipped}
+    total = max(parsed.declared_total or len(parsed.cases), len(failed) + skipped)
+    return {"total": total, "failed": failed, "skipped": skipped, "passed": total - len(failed) - skipped,
+            "cases": list(parsed.cases)}
 
 
 def read_suites():
@@ -347,11 +330,229 @@ def normalize_jobs(value):
 
 
 # --------------------------------------------------------------------------------------------
+# Test details
+
+
+def html_text(text, limit=200):
+    """Plain text for an HTML element such as <summary>: no tags, links or mentions."""
+    s = re.sub(r"[\x00-\x1f\x7f]+", " ", str(text)).strip()
+    if len(s) > limit:
+        s = s[: limit - 1] + "…"
+    s = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return s.replace("@", "@&#8203;").replace("://", ":&#8203;//")
+
+
+def code_block(text):
+    """A fenced block that no backtick run in the text can close."""
+    longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+    fence = "`" * max(3, longest + 1)
+    return [f"{fence}text", text, fence]
+
+
+class ModuleTally:
+    """Test counts of one module of a suite."""
+
+    def __init__(self, label):
+        self.label = label
+        self.passed = self.failed = self.skipped = 0
+        self.seconds = 0.0
+
+    def add(self, case):
+        if case.failed:
+            self.failed += 1
+        elif case.skipped:
+            self.skipped += 1
+        else:
+            self.passed += 1
+        self.seconds += case.seconds
+
+    def row(self):
+        icon = ICONS["failure"] if self.failed else ICONS["success"]
+        failed = f"**{self.failed}**" if self.failed else "0"
+        return (f"| {md(self.label, 80)} | {icon} | {self.passed} | {failed} | {self.skipped} "
+                f"| {self.seconds:.1f} s |")
+
+
+class TestDetails:
+    """The failed tests with their reasons, and the test counts per module."""
+
+    def __init__(self, suites, repo=None, commit=None):
+        self.suites = suites
+        self.repo = repo
+        self.commit = commit
+        self.failed = [(s["label"], c) for s in suites for c in self.cases_of(s) if c.failed]
+
+    @staticmethod
+    def cases_of(suite):
+        """The test cases of a suite; a summary without them still lists its failed names."""
+        if suite.get("cases"):
+            return suite["cases"]
+        return [TestCase(name=n, outcome="failed") for n in suite.get("failed", [])]
+
+    def failures_section(self):
+        if not self.failed:
+            return []
+        out = [f"<details open><summary><b>Failed tests</b> ({len(self.failed)})</summary>", ""]
+        budget = MAX_REASONS_CHARS
+        for suite, case in self.failed[:MAX_LISTED]:
+            lines, used = self._failure(suite, case, budget)
+            out += lines
+            budget -= used
+        if len(self.failed) > MAX_LISTED:
+            out += [f"… and {len(self.failed) - MAX_LISTED} more failed tests; see the workflow run.", ""]
+        return out + [DETAILS_END, ""]
+
+    def _failure(self, suite, case, budget):
+        """The lines of one failed test, and how much of the reason budget they use."""
+        where = " · ".join(p for p in (suite, case.module, case.name) if p)
+        if not case.reason:
+            return [f"- {md(where, 400)}", ""], 0
+        out = [f"<details><summary>{html_text(where, 400)}</summary>", ""]
+        location = SourceLocation.find(case.reason)
+        if location and safe_path(location[0]):
+            out += [self._location_link(*location), ""]
+        if len(case.reason) <= budget:
+            out += [*code_block(case.reason), ""]
+            used = len(case.reason)
+        else:
+            out += ["The reason is in the log of the workflow run.", ""]
+            used = 0
+        return out + [DETAILS_END, ""], used
+
+    def _location_link(self, path, line):
+        text = f"`{path}:{line}`"
+        if not (self.repo and self.commit):
+            return text
+        return f"[{text}](https://github.com/{self.repo}/blob/{self.commit}/{path}#L{line})"
+
+    def modules_section(self):
+        tallies = self._tallies()
+        if not tallies:
+            return []
+        out = ["<details><summary>Tests per module</summary>", "",
+               "| Module | Result | Passed | Failed | Skipped | Time |", "|---|:---:|---:|---:|---:|---:|"]
+        out += [t.row() for t in tallies]
+        return out + ["", DETAILS_END, ""]
+
+    def _tallies(self):
+        tallies = {}
+        for suite in self.suites:
+            for case in suite.get("cases") or []:
+                label = self._module_label(suite["label"], case.module)
+                tallies.setdefault(label, ModuleTally(label)).add(case)
+        return sorted(tallies.values(), key=lambda t: self._order(t.label))
+
+    @staticmethod
+    def _module_label(suite, module):
+        return f"{suite}: {module}" if module else suite
+
+    @staticmethod
+    def _order(label):
+        """C++ modules in the order of the coverage areas, then the other suites by name."""
+        suite, _, module = label.partition(": ")
+        if suite != "C++":
+            return (1, len(TEST_MODULE_ORDER), label)
+        rank = next((i for i, p in enumerate(TEST_MODULE_ORDER) if module.startswith(p)), len(TEST_MODULE_ORDER))
+        return (0, rank, label)
+
+
+class AllTestsList:
+    """Every test of the run, one folded table per module, for the run summary."""
+
+    def __init__(self, suites, limit=MAX_ALL_TESTS_CHARS):
+        self.suites = suites
+        self.limit = limit
+
+    def render(self):
+        groups = self._groups()
+        total = sum(len(cases) for cases in groups.values())
+        out = [f"### All tests ({total})", ""]
+        if not groups:
+            return "\n".join(out + ["No test results were found.", ""])
+        used = 0
+        for label in sorted(groups, key=TestDetails._order):
+            block = self._block(label, groups[label])
+            used += sum(len(line) + 1 for line in block)
+            if used > self.limit:
+                out += ["… the list is cut here; the JUnit files are in the artifacts of the run.", ""]
+                break
+            out += block
+        return "\n".join(out)
+
+    def _groups(self):
+        groups = {}
+        for suite in self.suites:
+            for case in suite.get("cases") or []:
+                groups.setdefault(TestDetails._module_label(suite["label"], case.module), []).append(case)
+        return groups
+
+    @staticmethod
+    def _block(label, cases):
+        failed = sum(1 for c in cases if c.failed)
+        icon = ICONS["failure"] if failed else ICONS["success"]
+        counts = plural(len(cases), "test") + (f", {failed} failed" if failed else "")
+        out = [f"<details><summary>{icon} {html_text(label, 80)}: {counts}</summary>", "",
+               "| Test | Result | Time |", "|---|:---:|---:|"]
+        ordered = sorted(cases, key=lambda c: (not c.failed, c.name))
+        out += [f"| {md(c.name, 300)} | {OUTCOME_ICONS[c.outcome]} | {c.seconds:.2f} s |" for c in ordered]
+        return out + ["", DETAILS_END, ""]
+
+
+# --------------------------------------------------------------------------------------------
+# Web coverage (LCOV)
+
+
+def summarize_web_coverage(files):
+    """Totals, per project and per folder of the web sources."""
+    total, areas, components = _empty(), {}, {}
+    for path, f in files.items():
+        _add(total, f)
+        c = WebComponents.of(path)
+        if not c:
+            continue
+        _add(areas.setdefault(c[0], _empty()), f)
+        _add(components.setdefault(c, {"area": c[0], "component": c[1], **_empty()}), f)
+    return {"total": total, "areas": areas, "components": list(components.values())}
+
+
+def parse_web_coverage(text):
+    """Per-file web coverage of an LCOV report: product code with safe repository paths only."""
+    files = LcovParser("web").parse(text).items()
+    return {p: f for p, f in files if safe_path(p) and "/tests/" not in p and ".spec." not in p}
+
+
+class WebCoverageSection:
+    """The web coverage: per project, the changed lines and a breakdown per folder."""
+
+    def __init__(self, files, diff, repo, commit):
+        self.summary = summarize_web_coverage(files)
+        self.changed = changed_line_coverage(files, diff) if diff is not None else None
+        self.diff = diff
+        self.repo = repo
+        self.commit = commit
+
+    def line_pct(self):
+        t = self.summary["total"]
+        return pct(t["linesCovered"], t["lines"])
+
+    def lines(self):
+        areas = self.summary["areas"]
+        out = ["#### Web coverage", "", "| Project | Lines | Functions |", COVERAGE_ALIGN]
+        out += [_coverage_row(md(name, 60), areas[name]) for name in sorted(areas)]
+        out += [_coverage_row("All web", self.summary["total"], strong=True), ""]
+        if self.changed and self.changed["total"]:
+            out += _changed_lines(self.changed, self.repo, self.commit)
+        elif self.diff is not None:
+            out += ["**Changed lines:** this pull request changes no executable web line.", ""]
+        return out + _components(self.summary["components"], sorted(areas))
+
+
+# --------------------------------------------------------------------------------------------
 # Report
 
 
 def build_report(jobs=None, suites=(), coverage=None, diff=None, sha=None, commit=None, repo=None,
-                 run_url=None, coverage_url=None):
+                 run_url=None, coverage_url=None, *, web_coverage=None, web_coverage_url=None):
     ctx = {
         "jobs": normalize_jobs(jobs if jobs is not None else {}),
         "suites": list(suites),
@@ -362,15 +563,22 @@ def build_report(jobs=None, suites=(), coverage=None, diff=None, sha=None, commi
     ctx["commit"] = checked(SAFE_SHA, commit) or ctx["sha"]
     ctx["cov"] = summarize_coverage(coverage) if coverage else None
     ctx["changed"] = changed_line_coverage(coverage, diff) if ctx["cov"] and diff is not None else None
-    ctx["failed_tests"] = [(s["label"], n) for s in ctx["suites"] for n in s["failed"]]
+    ctx["web"] = WebCoverageSection(web_coverage, diff, ctx["repo"], ctx["commit"]) if web_coverage else None
+    details = TestDetails(ctx["suites"], ctx["repo"], ctx["commit"])
+    ctx["failed_tests"] = details.failed
     ctx["ran"] = any(j["result"] != "skipped" for j in ctx["jobs"]) or bool(ctx["suites"])
 
-    lines = [MARKER, *_headline(ctx), *_failed_tests(ctx["failed_tests"])]
+    lines = [MARKER, *_headline(ctx), *details.failures_section()]
     if ctx["ran"]:
         lines += _jobs_table(ctx)
+    lines += details.modules_section()
     if ctx["cov"]:
         lines += _coverage_section(ctx)
-    lines += _footer(checked(SAFE_URL, run_url), checked(SAFE_URL, coverage_url))
+    if ctx["web"]:
+        lines += ctx["web"].lines()
+    if ctx["cov"] or ctx["web"]:
+        lines += [LEGEND, ""]
+    lines += _footer(checked(SAFE_URL, run_url), checked(SAFE_URL, coverage_url), checked(SAFE_URL, web_coverage_url))
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).rstrip() + "\n"
 
 
@@ -402,20 +610,14 @@ def _key_facts(ctx):
     if ctx["cov"]:
         t = ctx["cov"]["total"]
         facts.append(f"C++ line coverage **{fmt_pct(pct(t['linesCovered'], t['lines']))}**")
-    if ctx["changed"] and ctx["changed"]["total"]:
-        c = ctx["changed"]
-        facts.append(f"changed lines **{fmt_pct(pct(c['covered'], c['total']))}** covered")
+    if ctx["web"]:
+        facts.append(f"web line coverage **{fmt_pct(ctx['web'].line_pct())}**")
+    changed = [c for c in (ctx["changed"], ctx["web"] and ctx["web"].changed) if c]
+    total = sum(c["total"] for c in changed)
+    if total:
+        covered = sum(c["covered"] for c in changed)
+        facts.append(f"changed lines **{fmt_pct(pct(covered, total))}** covered")
     return facts
-
-
-def _failed_tests(failed):
-    if not failed:
-        return []
-    out = ["<details open><summary><b>Failed tests</b></summary>", ""]
-    out += [f"- {md(suite, 40)}: {md(name, 300)}" for suite, name in failed[:MAX_LISTED]]
-    if len(failed) > MAX_LISTED:
-        out.append(f"- … and {len(failed) - MAX_LISTED} more")
-    return out + ["", DETAILS_END, ""]
 
 
 def _suites_of(job, suites):
@@ -472,17 +674,14 @@ def _coverage_row(label, t, strong=False):
 
 def _coverage_section(ctx):
     cov, changed = ctx["cov"], ctx["changed"]
-    out = ["#### C++ coverage", "", "| Area | Lines | Functions |", "|---|---:|---:|"]
+    out = ["#### C++ coverage", "", "| Area | Lines | Functions |", COVERAGE_ALIGN]
     out += [_coverage_row(label, cov["areas"][name]) for name, label in AREAS if name in cov["areas"]]
     out += [_coverage_row("All C++", cov["total"], strong=True), ""]
     if changed and changed["total"]:
         out += _changed_lines(changed, ctx["repo"], ctx["commit"])
     elif ctx["diff"] is not None:
         out += ["**Changed lines:** this pull request changes no executable C++ line.", ""]
-    out += _components(cov["components"])
-    out += ["<sub>🟢 80% or more · 🟡 60–80% · 🔴 below 60%. Coverage is reported, not enforced. "
-            "Test code is not counted.</sub>", ""]
-    return out
+    return out + _components(cov["components"], [name for name, _ in AREAS])
 
 
 def _changed_lines(changed, repo, commit):
@@ -525,11 +724,11 @@ def _uncovered_list(uncovered, repo, commit):
     return out
 
 
-def _components(components):
+def _components(components, order):
+    """The coverage of each component, folded away, grouped by area in the given order."""
     if not components:
         return []
-    order = [name for name, _ in AREAS]
-    out = ["<details><summary>Coverage per component</summary>", "", "| Component | Lines | Functions |", "|---|---:|---:|"]
+    out = ["<details><summary>Coverage per component</summary>", "", "| Component | Lines | Functions |", COVERAGE_ALIGN]
     for c in sorted(components, key=lambda c: (order.index(c["area"]), c["component"])):
         lp = pct(c["linesCovered"], c["lines"])
         out.append(f"| {md(c['component'], 60)} | {dot(lp)} {fmt_pct(lp)} <sub>{c['linesCovered']}/{c['lines']}</sub> "
@@ -537,12 +736,14 @@ def _components(components):
     return out + ["", DETAILS_END, ""]
 
 
-def _footer(run_url, coverage_url):
+def _footer(run_url, coverage_url, web_coverage_url=None):
     links = []
     if run_url:
-        links.append(f"[Workflow run]({run_url})")
+        links.append(f"[Workflow run and the list of all tests]({run_url})")
     if coverage_url:
         links.append(f"[HTML coverage report]({coverage_url})")
+    if web_coverage_url:
+        links.append(f"[HTML web coverage report]({web_coverage_url})")
     return [" · ".join(links)] if links else []
 
 
@@ -557,10 +758,22 @@ def _json(text, default):
         return default
 
 
+def _first_of(*names):
+    """The text of the first of the files that exists, or None."""
+    return next((t for t in map(read_capped, names) if t is not None), None)
+
+
 def main():
+    args = sys.argv[1:]
+    if args not in ([], ["--all-tests"]):
+        sys.exit("usage: report.py [--all-tests]")
+    if args:
+        sys.stdout.write(AllTestsList(read_suites()).render())
+        return
     coverage = read_capped("coverage/coverage.json")
-    diff = read_capped("coverage/changes.diff")
-    commit = read_capped("coverage/commit.txt")
+    web_coverage = read_capped("coverage-web/web.lcov")
+    diff = _first_of("coverage/changes.diff", "coverage-web/changes.diff")
+    commit = _first_of("coverage/commit.txt", "coverage-web/commit.txt")
     jobs = _json(read_capped("jobs.json"), None)
     if jobs is None:
         jobs = _json(os.environ.get("REPORT_JOBS"), {})
@@ -574,6 +787,8 @@ def main():
         repo=os.environ.get("GITHUB_REPOSITORY"),
         run_url=os.environ.get("REPORT_RUN_URL"),
         coverage_url=os.environ.get("REPORT_COVERAGE_URL"),
+        web_coverage=parse_web_coverage(web_coverage) if web_coverage is not None else None,
+        web_coverage_url=os.environ.get("REPORT_WEB_COVERAGE_URL"),
     ))
 
 

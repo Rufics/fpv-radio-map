@@ -26,4 +26,4 @@ target_compile_definitions(rfmod_tests PRIVATE
   RFMOD_LIB_BETA="$<TARGET_FILE:rfmod_test_beta>"
   RFMOD_LIB_BROKEN="$<TARGET_FILE:rfmod_test_broken>")
 include(GoogleTest)
-gtest_discover_tests(rfmod_tests)
+gtest_discover_tests(rfmod_tests PROPERTIES LABELS rfmod)

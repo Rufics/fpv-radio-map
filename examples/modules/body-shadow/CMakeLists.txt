@@ -35,6 +35,7 @@ if(TARGET rfmod AND RFMAP_BUILD_TESTS)
   add_test(NAME example_body_shadow_test
     COMMAND $<TARGET_FILE:rfmod> test ${CMAKE_CURRENT_BINARY_DIR}/example.body-shadow-1.0.0.rfmod
             --trust ${_keys}/dev-owner.pub --trust ${_keys}/dev-thirdparty.pub)
+  set_tests_properties(example_body_shadow_pack PROPERTIES LABELS example.body-shadow)
   set_tests_properties(example_body_shadow_test PROPERTIES DEPENDS example_body_shadow_pack
-                       PASS_REGULAR_EXPRESSION "All checks passed")
+                       PASS_REGULAR_EXPRESSION "All checks passed" LABELS example.body-shadow)
 endif()

@@ -8,6 +8,9 @@ The Angular test runner writes source paths relative to the web/ folder (SF:proj
 SonarQube resolves them against the repository root, so it would find none of the files. Every
 relative SF: line gets the --base folder in front of it; absolute paths are left as they are. All
 paths given must lie inside the repository. The exit code is 2 on a usage error, 0 otherwise.
+
+With --skip-missing, reports that do not exist are left out (Vitest writes none for a project
+whose tests failed), and nothing is written when none exists.
 """
 import argparse
 import sys
@@ -80,19 +83,27 @@ class Command:
         parser = argparse.ArgumentParser(description="Merge LCOV reports with repository-relative paths.")
         parser.add_argument("--base", required=True, help="folder the report paths are relative to")
         parser.add_argument("--output", required=True, help="merged report to write")
+        parser.add_argument("--skip-missing", action="store_true", help="leave out reports that do not exist")
         parser.add_argument("reports", nargs="+", help="LCOV reports to merge")
         return parser
 
     def run(self, argv):
         args = self._parser().parse_args(argv)
         try:
+            reports = self._existing(args.reports) if args.skip_missing else args.reports
+            if not reports:
+                print("sonar_lcov: none of the reports exists; nothing written")
+                return 0
             rebaser = LcovRebaser(self._paths.relative(args.base))
-            target = LcovMerger(self._paths, rebaser).merge(args.reports, args.output)
+            target = LcovMerger(self._paths, rebaser).merge(reports, args.output)
         except (ValueError, OSError) as error:
             print(f"sonar_lcov: {error}", file=sys.stderr)
             return 2
-        print(f"sonar_lcov: {len(args.reports)} report(s) -> {target.relative_to(self._paths.resolve('.'))}")
+        print(f"sonar_lcov: {len(reports)} report(s) -> {target.relative_to(self._paths.resolve('.'))}")
         return 0
+
+    def _existing(self, reports):
+        return [name for name in reports if self._paths.resolve(name).is_file()]
 
 
 if __name__ == "__main__":
