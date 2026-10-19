@@ -1,9 +1,10 @@
 #include "rfmod/host.hpp"
 
+#include "worker_exec.hpp"
+
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
-#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -20,28 +21,10 @@ namespace rfmod {
 namespace {
 
 constexpr long long kStartupTimeoutMs = 10000;
-constexpr int kProtocolFd = 3;  // the worker's end of the socket, see tools/rfmod-worker.cpp
 
 long long nowMs() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-}
-
-// Runs between fork and exec, so it takes only string literals: their length is known at compile
-// time and nothing has to scan memory.
-template <std::size_t N>
-[[noreturn]] void childFail(int errPipe, const char (&what)[N]) {
-    (void)!write(errPipe, what, N - 1);
-    _exit(127);
-}
-
-/// The worker's resource limits. Runs between fork and exec: only async-signal-safe calls.
-bool applyWorkerLimits(rlim_t memBytes) {
-    const rlimit as{memBytes, memBytes};
-    const rlimit zero{0, 0};
-    const rlimit files{32, 32};
-    return setrlimit(RLIMIT_AS, &as) == 0 && setrlimit(RLIMIT_CORE, &zero) == 0 &&
-           setrlimit(RLIMIT_FSIZE, &zero) == 0 && setrlimit(RLIMIT_NOFILE, &files) == 0;
 }
 
 }  // namespace
@@ -121,21 +104,7 @@ void IsolatedModule::start() {
         close(err[1]);
         throw ModuleError("load_failed", std::string("fork: ") + std::strerror(errno));
     }
-    if (pid == 0) {
-        if (const int devnull = open("/dev/null", O_RDONLY);
-            devnull < 0 || dup2(devnull, 0) < 0 || dup2(err[1], 1) < 0 || dup2(err[1], 2) < 0 ||
-            dup2(sock[1], kProtocolFd) < 0) {
-            childFail(err[1], "rfmod: cannot set up worker descriptors\n");
-        }
-        // Close everything else the host had open (database sockets, listening sockets, ...).
-        close_range(kProtocolFd + 1, ~0u, 0);
-        if (!applyWorkerLimits(memBytes)) childFail(2, "rfmod: cannot apply resource limits\n");
-        if (chdir(dir.c_str()) != 0) childFail(2, "rfmod: cannot enter module directory\n");
-        // The worker path is operator configuration, the library path is confined to the registry root
-        // and argv is fixed; nothing here is request input.
-        execve(argv[0], argv.data(), envp.data());  // NOSONAR(cpp:S2076, cpp:S2083): see above
-        childFail(2, "rfmod: cannot start rfmod-worker\n");
-    }
+    if (pid == 0) WorkerExec::run({argv.data(), envp.data(), dir.c_str(), sock[1], err[1], memBytes});
 
     close(sock[1]);
     close(err[1]);

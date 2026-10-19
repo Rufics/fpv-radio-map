@@ -912,3 +912,65 @@ TEST_F(Integration, AnalogVideoGetsAPictureGrade) {
     EXPECT_FALSE(ungraded.body.contains("analogGrade"));
     EXPECT_NE(ungraded.body["uncertainty"].dump().find("Analog grade"), std::string::npos);
 }
+
+TEST_F(Integration, AlphaBundlesNeedTheAdminOrTheirGrant) {
+    // The probe, restaged as an alpha module with a UI bundle.
+    const fs::path stage = fs::temp_directory_path() / "rfmap-alpha-probe-stage";
+    fs::remove_all(stage);
+    fs::copy(fs::path(PROBE_STAGE), stage, fs::copy_options::recursive);
+    json manifest = json::parse(readFile(stage / "manifest.json"));
+    manifest["lifecycle"] = "alpha";
+    manifest["provides"].push_back("ui.panel");
+    manifest["ui"] = {{"bundle", "ui/panel.js"}, {"slots", {"side.panels"}}};
+    std::ofstream(stage / "manifest.json") << manifest.dump(2);
+    fs::create_directories(stage / "ui");
+    std::ofstream(stage / "ui" / "panel.js") << "export default {};\n";
+    const std::string pkg =
+        rfmod::PackageWriter::pack(stage, rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-owner.secret")));
+    fs::remove_all(stage);
+    httplib::Client c("127.0.0.1", env->port);
+    c.set_read_timeout(60, 0);
+    const auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
+    ASSERT_TRUE(up);
+    ASSERT_EQ(up->status, 200) << up->body;
+    ASSERT_TRUE(json::parse(up->body)["ok"].get<bool>()) << up->body;
+
+    const auto probeIn = [](const json& list) {
+        const auto it = std::ranges::find_if(list, [](const json& m) { return m["id"] == "test.probe"; });
+        return it == list.end() ? json() : *it;
+    };
+    // Anyone else sees the module without its bundle; the admin's listing signs the bundle URL.
+    EXPECT_FALSE(probeIn(call("GET", "/modules").body).contains("ui"));
+    const json listed = probeIn(call("GET", "/modules", nullptr, admin()).body);
+    ASSERT_TRUE(listed.contains("ui")) << listed;
+    const std::string bundle = listed["ui"]["bundle"].get<std::string>();
+    const auto grant = bundle.find("?grant=");
+    ASSERT_NE(grant, std::string::npos) << bundle;
+
+    const std::string file = "/api/v1/modules/test.probe/ui/panel.js";
+    const auto granted = c.Get(file + bundle.substr(grant));
+    ASSERT_TRUE(granted);
+    EXPECT_EQ(granted->status, 200);
+    EXPECT_EQ(granted->get_header_value("Cache-Control"), "private, no-store");
+    EXPECT_EQ(c.Get(file)->status, 404);
+    EXPECT_EQ(c.Get(file + "?grant=1.forged")->status, 404);
+    EXPECT_EQ(c.Get(file, admin())->status, 200);
+
+    EXPECT_LT(call("DELETE", "/admin/modules/test.probe", nullptr, admin()).status, 300);
+}
+
+TEST_F(Integration, AntennasOutOfBandOrCrossPolarisedAreNoted) {
+    const json patch = {{"id", "test-air-patch-5g8"}, {"name", "Test 5.8 GHz patch"}, {"version", 1}, {"verified", true},
+                        {"type", "patch"}, {"gainDbi", 8}, {"polarization", "rhcp"},
+                        {"bandHz", {5.6e9, 6e9}},
+                        {"source", {{"kind", "standard"}, {"reference", "test patch"}}}};
+    ASSERT_EQ(call("POST", "/library/antennas", patch, admin()).status, 201);
+    json link = controlLink();
+    link["airAntenna"] = "test-air-patch-5g8";
+    const json req = {{"from", point(48.50, 35.20, 1.5)}, {"to", point(48.51, 35.21, 100)}, {"kind", "control"}, {"link", link}};
+    const auto r = call("POST", "/calc/path", req, bearer(sessionFor(mission())));
+    ASSERT_EQ(r.status, 200) << r.body;
+    const std::string body = r.body.dump();
+    EXPECT_NE(body.find("Test 5.8 GHz patch is specified for 5600-6000 MHz"), std::string::npos) << body;
+    EXPECT_NE(body.find("differ in polarisation"), std::string::npos) << body;
+}

@@ -769,8 +769,8 @@ void Application::DataApi::getModuleFile(const Req& req, Res& res) const {
         if (const auto* m = app.modules_.registry->instance(id)) alpha = m->manifest().lifecycle == rfmod::Lifecycle::Alpha;
     }
     if (!file.has_value()) throw HttpError(404, "no such module file");
-    const bool granted = req.has_param("grant") && app.grants_.valid(id, req.get_param_value("grant"), Clock::now());
-    if (alpha && !app.isAdmin(req) && !granted) {
+    // An absent grant reads as empty, which is never valid.
+    if (alpha && !app.isAdmin(req) && !app.grants_.valid(id, req.get_param_value("grant"), Clock::now())) {
         throw HttpError(404, "no such module file");
     }
     const std::ifstream in(*file, std::ios::binary);

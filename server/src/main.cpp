@@ -8,11 +8,8 @@
 #include "app.hpp"
 #include "command_line.hpp"
 
-#include <httplib.h>
-
 #include <atomic>
 #include <csignal>
-#include <cstdlib>
 #include <format>
 #include <iostream>
 #include <string_view>
@@ -28,39 +25,16 @@ std::atomic<rfmap::Application*>& runningApplication() {
 void onSignal(int) {
     if (rfmap::Application* app = runningApplication().load()) app->stop();
 }
-
-/// For container health checks: the runtime image has no curl.
-int health(const std::string& base) {
-    httplib::Client client(base);
-    client.set_connection_timeout(3);
-    client.set_read_timeout(3);
-    const auto res = client.Get("/api/v1/health");
-    if (res && res->status == 200) return 0;
-    std::cerr << "rfmap-server: health check failed" << (res ? std::format(" with HTTP {}", res->status) : "") << "\n";
-    return 1;
-}
-
-/// Does what the command line asks instead of serving; returns the process exit code.
-int answerWithoutServing(const rfmap::CommandLine& cmd) {
-    using enum rfmap::CommandLine::Action;
-    switch (cmd.action()) {
-        case Health: return health(cmd.healthUrl());
-        case Help: std::cout << rfmap::CommandLine::kUsage; return 0;
-        case Invalid: std::cerr << "unknown argument " << cmd.invalidArgument() << "\n"; return 2;
-        case Serve: break;
-    }
-    return 0;
-}
 }  // namespace
 
 int main(int argc, char** argv) {
     std::vector<std::string_view> args;
     for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
-    const auto cmd = rfmap::CommandLine::parse(args, [](const char* name) { return std::getenv(name); },
-                                               RFMAP_DEFAULT_SQL_DIR);
-    if (cmd.action() != rfmap::CommandLine::Action::Serve) return answerWithoutServing(cmd);
+    const auto env = rfmap::Config::processEnvironment();
+    const auto cmd = rfmap::CommandLine::parse(args, env, RFMAP_DEFAULT_SQL_DIR);
+    if (cmd.action() != rfmap::CommandLine::Action::Serve) return cmd.answerWithoutServing(std::cout, std::cerr);
     try {
-        rfmap::Application app(rfmap::Config::load(cmd.configFile(), rfmap::Config::processEnvironment()),
+        rfmap::Application app(rfmap::Config::load(cmd.configFile(), env),
                                RFMAP_OWNER_PUBKEY_TEXT, RFMAP_OWNER_KEY_IS_DEV != 0, cmd.sqlDir());
         runningApplication() = &app;
         (void)std::signal(SIGTERM, onSignal);
