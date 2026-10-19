@@ -66,6 +66,9 @@ class FakeBuild:
         return self.log.read_text(encoding="utf-8").splitlines()
 
 
+STAGE = Path("stage")
+
+
 def module(module_id, *requires, version="1.0.0"):
     return {"id": module_id, "version": version, "requires": [{"id": r, "version": "^1"} for r in requires]}
 
@@ -78,11 +81,11 @@ class StagedModuleTest(unittest.TestCase):
 
     def test_refuses_a_manifest_without_version(self):
         with self.assertRaisesRegex(PackError, "cannot read version"):
-            StagedModule(Path("s"), {"id": "fpv.core"})
+            StagedModule(STAGE, {"id": "fpv.core"})
 
     def test_refuses_a_requirement_without_id(self):
         with self.assertRaisesRegex(PackError, "cannot read id"):
-            StagedModule(Path("s"), {"id": "fpv.relay", "version": "1.0.0", "requires": [{"version": "^1"}]})
+            StagedModule(STAGE, {"id": "fpv.relay", "version": "1.0.0", "requires": [{"version": "^1"}]})
 
 
 class ModuleCatalogTest(unittest.TestCase):
@@ -100,8 +103,9 @@ class ModuleCatalogTest(unittest.TestCase):
 
     def test_unknown_requirement_is_an_error(self):
         catalog = self.catalog(module("relay", "missing"))
+        relay = catalog.get("relay")
         with self.assertRaisesRegex(PackError, "missing is not staged"):
-            catalog.dependencies_of(catalog.get("relay"))
+            catalog.dependencies_of(relay)
 
 
 class CommandTest(unittest.TestCase):
