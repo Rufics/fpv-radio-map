@@ -2,6 +2,7 @@
 
 #include "common.hpp"
 #include "config.hpp"
+#include "service_errors.hpp"
 
 #include <rfcore/link_budget.hpp>
 #include <rfext/refractivity.hpp>
@@ -15,6 +16,7 @@
 namespace rfmap {
 
 /// Where forecasts come from. OpenMeteoSource in the server; tests inject fixed responses.
+/// A forecast service. A service that cannot answer throws ForecastUnavailableError.
 class IForecastSource {
 public:
     virtual ~IForecastSource() = default;

@@ -441,12 +441,10 @@ void Application::dispatch(const std::string& rateClass, const Run& run, const R
         sendHttpError(res, e);
     } catch (const json::exception& e) {
         sendJson(res, 400, {{"message", std::string("malformed request: ") + e.what()}});
-    } catch (const std::runtime_error& e) {
-        internalError(req, res, e.what());
-    } catch (const std::logic_error& e) {
+    } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): HTTP boundary, any other failure is a logged 500
         internalError(req, res, e.what());
     }
-    // Anything else (std::bad_alloc, ...) reaches the server's exception handler set in routes().
+    // A non-std exception reaches the server's exception handler set in routes().
 }
 
 void Application::internalError(const Req& req, Res& res, std::string_view what) {

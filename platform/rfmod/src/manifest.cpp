@@ -86,6 +86,46 @@ std::string currentPlatform() {
     return std::string(os) + "-" + arch;
 }
 
+bool ManifestParser::checkDependencies(const Manifest& m, ValidationReport& report) {
+    std::set<std::string, std::less<>> seen;
+    bool depsOk = true;
+    std::string depDetail = "dependency ids are unique and not the module itself";
+    for (const auto* list : {&m.dependencies, &m.optionalDependencies}) {
+        for (const Dependency& d : *list) {
+            if (d.id == m.id || !seen.insert(d.id).second) {
+                depsOk = false;
+                depDetail = "dependency " + d.id + " is listed twice or is the module itself";
+            }
+        }
+    }
+    report.add("manifest.dependencies", depsOk, depDetail);
+    return depsOk;
+}
+
+bool ManifestParser::checkDeprecation(const json& d, Manifest& m, ValidationReport& report) {
+    try {
+        Deprecation dep{Version::parse(d.at("since").get<std::string>()),
+                        Version::parse(d.at("removedIn").get<std::string>()), d.value("replacement", ""),
+                        d.at("message").get<std::string>()};
+        // Kubernetes-style window: removal at least 3 minor releases after deprecation, or a later major.
+        const bool windowOk = dep.removedIn.major() > dep.since.major() ||
+                              (dep.removedIn.major() == dep.since.major() &&
+                               dep.removedIn.minor() >= dep.since.minor() + kMinDeprecationMinors);
+        report.add("deprecation.window", windowOk,
+                   std::format("deprecated in {}, removed in {} (needs at least {} minor releases)", dep.since.str(),
+                               dep.removedIn.str(), kMinDeprecationMinors));
+        const bool lifecycleOk = m.lifecycle == Lifecycle::Deprecated;
+        report.add("deprecation.lifecycle", lifecycleOk, "a deprecation block requires lifecycle \"deprecated\"");
+        m.deprecation = std::move(dep);
+        return windowOk && lifecycleOk;
+    } catch (const std::invalid_argument& e) {
+        report.add("deprecation.window", false, e.what());
+    } catch (const json::exception& e) {
+        report.add("deprecation.window", false, e.what());
+    }
+    return false;
+}
+
 std::optional<Manifest> ManifestParser::parse(const json& document, const Version& hostVersion,
                                               ValidationReport& report) {
     CollectingErrors errors;
@@ -150,41 +190,9 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
           m.entry.contains(platform) ? "library for " + platform + ": " + m.entry.at(platform)
                                   : "no library for " + platform + " in entry");
 
-    std::set<std::string, std::less<>> seen;
-    bool depsOk = true;
-    std::string depDetail = "dependency ids are unique and not the module itself";
-    for (const auto* list : {&m.dependencies, &m.optionalDependencies}) {
-        for (const Dependency& d : *list) {
-            if (d.id == m.id || !seen.insert(d.id).second) {
-                depsOk = false;
-                depDetail = "dependency " + d.id + " is listed twice or is the module itself";
-            }
-        }
-    }
-    check("manifest.dependencies", depsOk, depDetail);
+    ok = checkDependencies(m, report) && ok;
 
-    if (document.contains("deprecation")) {
-        const json& d = document.at("deprecation");
-        try {
-            Deprecation dep{Version::parse(d.at("since").get<std::string>()),
-                            Version::parse(d.at("removedIn").get<std::string>()), d.value("replacement", ""),
-                            d.at("message").get<std::string>()};
-            // Kubernetes-style window: removal at least 3 minor releases after deprecation, or a later major.
-            const bool windowOk = dep.removedIn.major() > dep.since.major() ||
-                                  (dep.removedIn.major() == dep.since.major() &&
-                                   dep.removedIn.minor() >= dep.since.minor() + kMinDeprecationMinors);
-            check("deprecation.window", windowOk,
-                  std::format("deprecated in {}, removed in {} (needs at least {} minor releases)", dep.since.str(),
-                              dep.removedIn.str(), kMinDeprecationMinors));
-            check("deprecation.lifecycle", m.lifecycle == Lifecycle::Deprecated,
-                  "a deprecation block requires lifecycle \"deprecated\"");
-            m.deprecation = std::move(dep);
-        } catch (const std::invalid_argument& e) {
-            check("deprecation.window", false, e.what());
-        } catch (const json::exception& e) {
-            check("deprecation.window", false, e.what());
-        }
-    }
+    if (document.contains("deprecation")) ok = checkDeprecation(document.at("deprecation"), m, report) && ok;
 
     if (document.contains("ui")) {
         m.ui = UiExtension{document.at("ui").at("bundle").get<std::string>(),

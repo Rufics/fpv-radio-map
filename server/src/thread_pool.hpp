@@ -47,12 +47,12 @@ private:
     void loop(const std::stop_token& stop) {
         while (true) {
             std::function<void()> task;
-            {
-                std::unique_lock lock(mutex_);
-                // Wakes on a task or on the stop request; a stopping worker still drains the queue.
-                if (!wake_.wait(lock, stop, [this] { return !tasks_.empty(); })) return;
+            // Wakes on a task or on the stop request; a stopping worker still drains the queue.
+            if (std::unique_lock lock(mutex_); wake_.wait(lock, stop, [this] { return !tasks_.empty(); })) {
                 task = std::move(tasks_.front());
                 tasks_.pop_front();
+            } else {
+                return;
             }
             task();
         }
@@ -60,7 +60,7 @@ private:
 
     std::deque<std::function<void()>> tasks_;
     std::mutex mutex_;
-    std::condition_variable_any wake_;
+    std::condition_variable_any wake_;  // NOSONAR(cpp:S8467): only the _any variant can wait on a stop_token
     /// Declared last: destroyed first, so the workers stop before the queue they use goes.
     std::vector<std::jthread> workers_;
 };

@@ -5,7 +5,7 @@
 //   rfmod pack DIR --key NAME.secret [-o FILE.rfmod]
 //   rfmod inspect FILE.rfmod
 //   rfmod check FILE.rfmod --trust KEY.pub [--trust ...] [--host-version X.Y.Z]
-//   rfmod test FILE.rfmod --trust KEY.pub [--with DEP.rfmod ...] [--worker PATH] [--fixtures FILE.json]
+//   rfmod test FILE.rfmod --trust KEY.pub [--with DEP.rfmod ...] [--fixtures FILE.json]
 //
 // "check" runs every upload check except the self-test; "test" also runs the self-test in a
 // worker exactly as the server does. Host calls are answered from --fixtures
@@ -221,8 +221,8 @@ int cmdTest(const Args& a, const char* argv0) {
     const PrivateDir tmp(fs::current_path() / ".rfmod-test-");
     rfmod::RegistryConfig cfg;
     cfg.root = tmp.path();
-    cfg.workerExecutable =
-        a.get("--worker", (fs::canonical("/proc/self/exe").parent_path() / "rfmod-worker").string());
+    // The worker is always the one installed next to this tool, never a path from the command line.
+    cfg.workerExecutable = fs::canonical("/proc/self/exe").parent_path() / "rfmod-worker";
     (void)argv0;
     cfg.hostVersion = rfmod::Version::parse(a.get("--host-version", kHostVersion));
     int rc = 1;
@@ -341,7 +341,7 @@ void usage() {
                  "  rfmod pack DIR --key NAME.secret [-o FILE.rfmod]\n"
                  "  rfmod inspect FILE.rfmod\n"
                  "  rfmod check FILE.rfmod --trust KEY.pub [--host-version X.Y.Z]\n"
-                 "  rfmod test FILE.rfmod --trust KEY.pub [--with DEP.rfmod ...] [--worker PATH] [--fixtures FILE.json]\n";
+                 "  rfmod test FILE.rfmod --trust KEY.pub [--with DEP.rfmod ...] [--fixtures FILE.json]\n";
 }
 
 }  // namespace

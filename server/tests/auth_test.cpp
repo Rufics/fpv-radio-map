@@ -1,9 +1,11 @@
 #include "auth.hpp"
 #include "rate_limiter.hpp"
+#include "security.hpp"
 #include "test_support.hpp"
 
 #include <gtest/gtest.h>
 
+#include <stdexcept>
 #include <utility>
 
 using namespace rfmap;
@@ -187,4 +189,22 @@ TEST(RateLimiterTest, BurstThenRefillAtTheConfiguredRate) {
     EXPECT_NO_THROW(limiter.take("open", "192.0.2.2"));  // per client
     clock.advance(std::chrono::seconds(10));
     EXPECT_NO_THROW(limiter.take("open", "192.0.2.1"));
+}
+
+TEST(PinHasherCost, EveryNameMapsToItsCost) {
+    EXPECT_EQ(PinHasher::costFromName("interactive"), PinHasher::Cost::Interactive);
+    EXPECT_EQ(PinHasher::costFromName("moderate"), PinHasher::Cost::Moderate);
+    EXPECT_EQ(PinHasher::costFromName("sensitive"), PinHasher::Cost::Sensitive);
+    EXPECT_THROW((void)PinHasher::costFromName("fast"), std::invalid_argument);
+    // Building a hasher only sets its limits; hashing at these costs is too slow for a unit test.
+    EXPECT_NO_THROW(PinHasher{PinHasher::Cost::Moderate});
+    EXPECT_NO_THROW(PinHasher{PinHasher::Cost::Sensitive});
+}
+
+TEST(Secrets, MacDependsOnKeyAndMessage) {
+    const std::string mac = Secrets::mac("key", "message");
+    EXPECT_EQ(mac, Secrets::mac("key", "message"));
+    EXPECT_NE(mac, Secrets::mac("other key", "message"));
+    EXPECT_NE(mac, Secrets::mac("key", "other message"));
+    EXPECT_EQ(mac.size(), 64u);  // 32 bytes, hex
 }

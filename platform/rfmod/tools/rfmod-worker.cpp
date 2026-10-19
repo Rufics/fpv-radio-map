@@ -95,7 +95,7 @@ int hostCall(rfmod_host_context* self, const char* method, const char* request, 
     return RFMOD_ERR_HOST_CALL;
 }
 
-void hostLog(rfmod_host_context* self, int level, const char* message) {
+void hostLog(rfmod_host_context* self, int level, const char* message) {  // NOSONAR(cpp:S995): the ABI callback type
     self->channel.send({{"t", "log"}, {"level", level}, {"message", message ? message : ""}});
 }
 

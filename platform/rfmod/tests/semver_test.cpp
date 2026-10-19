@@ -46,3 +46,12 @@ TEST(Semver, CaretAndTildeAtTheLargestNumber) {
     EXPECT_THROW((void)VersionRange::parse("~1.4294967295.0"), std::invalid_argument);
     EXPECT_TRUE(VersionRange::parse("^4294967294.0.0").contains(Version::parse("4294967294.7.0")));
 }
+
+TEST(Semver, EveryComparatorOperator) {
+    EXPECT_TRUE(VersionRange::parse("=1.2.3").contains(Version::parse("1.2.3")));
+    EXPECT_FALSE(VersionRange::parse("=1.2.3").contains(Version::parse("1.2.4")));
+    EXPECT_TRUE(VersionRange::parse(">1.0.0").contains(Version::parse("1.0.1")));
+    EXPECT_FALSE(VersionRange::parse(">1.0.0").contains(Version::parse("1.0.0")));
+    EXPECT_TRUE(VersionRange::parse("<=2.0.0").contains(Version::parse("2.0.0")));
+    EXPECT_FALSE(VersionRange::parse("<=2.0.0").contains(Version::parse("2.0.1")));
+}

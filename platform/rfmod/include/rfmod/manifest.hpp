@@ -78,6 +78,12 @@ public:
 
     /// Minimum distance between deprecation and removal, Kubernetes style: 3 minor releases.
     static constexpr unsigned kMinDeprecationMinors = 3;
+
+private:
+    /// Dependency ids are unique and not the module itself; adds the check, returns whether it passed.
+    static bool checkDependencies(const Manifest& m, ValidationReport& report);
+    /// Reads the deprecation block into `m` and checks its window and lifecycle.
+    static bool checkDeprecation(const nlohmann::json& d, Manifest& m, ValidationReport& report);
 };
 
 }  // namespace rfmod

@@ -379,7 +379,7 @@ std::size_t outerOfHole(const std::vector<Ring>& rings, const std::vector<std::s
 class RowsExhaustedOnThrow {
 public:
     RowsExhaustedOnThrow(std::atomic<std::size_t>& nextRow, std::size_t rows)
-        : nextRow_(nextRow), rows_(rows), unwinding_(std::uncaught_exceptions()) {}
+        : nextRow_(nextRow), rows_(rows) {}
     ~RowsExhaustedOnThrow() {
         if (std::uncaught_exceptions() > unwinding_) nextRow_ = rows_;
     }
@@ -391,7 +391,7 @@ public:
 private:
     std::atomic<std::size_t>& nextRow_;
     std::size_t rows_;
-    int unwinding_;
+    int unwinding_ = std::uncaught_exceptions();
 };
 
 }  // namespace

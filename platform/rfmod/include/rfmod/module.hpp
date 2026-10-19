@@ -131,43 +131,35 @@ struct ModuleAdapter {
         }
     }
 
-    /// Maps the exception being handled to an ABI status. With `response`, the error goes back
-    /// to the host as a JSON error object; without, it goes to the host log (if the module is
-    /// initialised). Only called from guarded(), inside its handler.
-    static int translateCurrentException(char** response) noexcept {
-        const auto report = [response](int status, const char* code, const char* message) noexcept {
-            if (response) {
-                *response = error(code, message);
-            } else if (const auto& host = instance()->host_) {
-                host->log(RFMOD_LOG_ERROR, message);
-            }
-            return status;
-        };
-        try {
-            throw;
-        } catch (const UnknownMethod& e) {
-            return report(RFMOD_ERR_UNKNOWN_METHOD, "unknown_method", e.what());
-        } catch (const BadRequest& e) {
-            return report(RFMOD_ERR_BAD_REQUEST, "bad_request", e.what());
-        } catch (const json::exception& e) {
-            return report(RFMOD_ERR_BAD_REQUEST, "bad_request", e.what());
-        } catch (const HostError& e) {
-            return report(RFMOD_ERR_HOST_CALL, "host_call", e.what());
-        } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): C ABI boundary, every other module error is internal
-            return report(RFMOD_ERR_INTERNAL, "internal", e.what());
-        } catch (...) {  // NOSONAR(cpp:S2738): C ABI boundary, no exception may unwind into the host
-            return report(RFMOD_ERR_INTERNAL, "internal", "unknown exception");
+    /// Hands an error to the host and returns `status`. With `response`, the error goes back as a
+    /// JSON error object; without, it goes to the host log (if the module is initialised).
+    static int report(char** response, int status, const char* code, const char* message) noexcept {
+        if (response) {
+            *response = error(code, message);
+        } else if (const auto& host = instance()->host_) {
+            host->log(RFMOD_LOG_ERROR, message);
         }
+        return status;
     }
 
     /// Runs `body` (which returns an ABI status) so that no exception crosses the C ABI: every
-    /// exception becomes a status, reported as translateCurrentException() describes.
+    /// exception becomes a status, reported as report() describes.
     template <typename Body>
     static int guarded(char** response, Body&& body) noexcept {
         try {
             return std::forward<Body>(body)();
-        } catch (...) {  // NOSONAR(cpp:S2738): C ABI boundary, translated to a status right here
-            return translateCurrentException(response);
+        } catch (const UnknownMethod& e) {
+            return report(response, RFMOD_ERR_UNKNOWN_METHOD, "unknown_method", e.what());
+        } catch (const BadRequest& e) {
+            return report(response, RFMOD_ERR_BAD_REQUEST, "bad_request", e.what());
+        } catch (const json::exception& e) {
+            return report(response, RFMOD_ERR_BAD_REQUEST, "bad_request", e.what());
+        } catch (const HostError& e) {
+            return report(response, RFMOD_ERR_HOST_CALL, "host_call", e.what());
+        } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): C ABI boundary, every other module error is internal
+            return report(response, RFMOD_ERR_INTERNAL, "internal", e.what());
+        } catch (...) {  // NOSONAR(cpp:S2738): C ABI boundary, no exception may unwind into the host
+            return report(response, RFMOD_ERR_INTERNAL, "internal", "unknown exception");
         }
     }
 

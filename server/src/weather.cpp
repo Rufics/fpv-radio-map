@@ -204,7 +204,7 @@ std::optional<json> WeatherService::fetchOrError(double lat, double lon, const C
         return fetchCached(lat, lon, tier);
     } catch (const json::exception& e) {
         error = e.what();
-    } catch (const std::runtime_error& e) {
+    } catch (const ForecastUnavailableError& e) {
         error = e.what();
     }
     return std::nullopt;
@@ -228,7 +228,7 @@ std::optional<TimePoint> WeatherService::tryRunTime() const {
         return source_->runTime();
     } catch (const json::exception&) {
         return std::nullopt;
-    } catch (const std::runtime_error&) {
+    } catch (const ForecastUnavailableError&) {
         return std::nullopt;
     } catch (const std::invalid_argument&) {
         return std::nullopt;  // a time the clock cannot hold

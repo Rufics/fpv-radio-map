@@ -31,9 +31,9 @@ private:
 };
 
 /// The forecast service being unreachable.
-class SourceDown : public std::runtime_error {
+class SourceDown : public ForecastUnavailableError {
 public:
-    SourceDown() : std::runtime_error("connection refused") {}
+    SourceDown() : ForecastUnavailableError("connection refused") {}
 };
 
 /// A source that answers per model tier, can name a run time, and fails for the tiers told to.

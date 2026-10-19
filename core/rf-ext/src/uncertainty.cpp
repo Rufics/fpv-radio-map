@@ -9,6 +9,38 @@
 namespace rfext {
 namespace {
 
+/// Golden-section refinement of a turning point of the knife-edge loss J(ν).
+class KnifeEdgeSearch {
+public:
+    static double loss(double nu) { return rfcore::KnifeEdge::loss(nu).value(); }
+
+    /// J at the maximum (findMax) or minimum of J inside [a, b], which brackets one turning point.
+    static double refine(double a, double b, bool findMax) {
+        const double g = (std::sqrt(5.0) - 1.0) / 2.0;
+        double c = std::lerp(b, a, g);
+        double d = std::lerp(a, b, g);
+        double fc = loss(c);
+        double fd = loss(d);
+        for (int i = 0; i < 200; ++i) {
+            if (b - a <= 1e-15 * std::max(1.0, std::abs(a))) break;
+            if ((fc > fd) == findMax) {
+                b = d;
+                d = c;
+                fd = fc;
+                c = std::lerp(b, a, g);
+                fc = loss(c);
+            } else {
+                a = c;
+                c = d;
+                fc = fd;
+                d = std::lerp(a, b, g);
+                fd = loss(d);
+            }
+        }
+        return loss((a + b) / 2.0);
+    }
+};
+
 rfcore::TerrainProfile shifted(const rfcore::TerrainProfile& p, double interior, double start, double end) {
     std::vector<rfcore::ProfileSample> s = p.samples();
     for (std::size_t i = 0; i < s.size(); ++i) {
@@ -48,36 +80,10 @@ std::string toString(MarginBand::Verdict v) {
 }
 
 UncertaintyAnalyzer::Extremes UncertaintyAnalyzer::knifeEdgeExtremes(double lo, double hi) {
-    auto j = [](double v) { return rfcore::KnifeEdge::loss(v).value(); };
+    const auto j = KnifeEdgeSearch::loss;
     Extremes e{std::min(j(lo), j(hi)), std::max(j(lo), j(hi))};
     // Turning points of J lie about 1/|ν| apart for ν < 0 (the Fresnel phase is πν²/2); step at a
     // tenth of that so none is skipped, then refine each bracketed one.
-    auto refine = [&j](double a, double b, bool findMax) {
-        const double g = (std::sqrt(5.0) - 1.0) / 2.0;
-        double c = std::lerp(b, a, g);
-        double d = std::lerp(a, b, g);
-        double fc = j(c);
-        double fd = j(d);
-        for (int i = 0; i < 200; ++i) {
-            if (b - a <= 1e-15 * std::max(1.0, std::abs(a))) {
-                break;
-            }
-            if ((fc > fd) == findMax) {
-                b = d;
-                d = c;
-                fd = fc;
-                c = std::lerp(b, a, g);
-                fc = j(c);
-            } else {
-                a = c;
-                c = d;
-                fc = fd;
-                d = std::lerp(a, b, g);
-                fd = j(d);
-            }
-        }
-        return j((a + b) / 2.0);
-    };
     double prev = lo;
     double fPrev = j(lo);
     double x = lo;
@@ -87,8 +93,8 @@ UncertaintyAnalyzer::Extremes UncertaintyAnalyzer::knifeEdgeExtremes(double lo, 
         const double next = std::min(hi, x + step);
         const double fNext = j(next);
         if (x > lo) {
-            if (fx >= fPrev && fx >= fNext) e.max = std::max(e.max, refine(prev, next, true));
-            if (fx <= fPrev && fx <= fNext) e.min = std::min(e.min, refine(prev, next, false));
+            if (fx >= fPrev && fx >= fNext) e.max = std::max(e.max, KnifeEdgeSearch::refine(prev, next, true));
+            if (fx <= fPrev && fx <= fNext) e.min = std::min(e.min, KnifeEdgeSearch::refine(prev, next, false));
         }
         prev = x;
         fPrev = fx;
