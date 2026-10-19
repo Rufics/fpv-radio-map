@@ -63,7 +63,10 @@ public:
 
     [[nodiscard]] CacheStats memoryStats() const { return memory_.stats(); }
     struct TableStats {
-        std::size_t rows, bytes, hits, misses;
+        std::size_t rows;
+        std::size_t bytes;
+        std::size_t hits;
+        std::size_t misses;
     };
     [[nodiscard]] TableStats tableStats() const;
 

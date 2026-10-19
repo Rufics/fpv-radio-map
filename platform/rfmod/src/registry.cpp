@@ -12,6 +12,7 @@
 #include <set>
 #include <sstream>
 #include <string_view>
+#include <system_error>
 
 namespace rfmod {
 namespace fs = std::filesystem;
@@ -36,7 +37,7 @@ void writeFileAtomic(const ConfinedRoot& root, const fs::path& p, std::string_vi
     {
         std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
         out.write(content.data(), static_cast<std::streamsize>(content.size()));
-        if (!out) throw std::runtime_error("cannot write " + tmp.string());
+        if (!out) throw RegistryWriteError("cannot write " + tmp.string());
     }
     fs::rename(tmp, target);
 }
@@ -62,7 +63,9 @@ std::optional<std::string> validateOptions(const fs::path& dir, const Manifest& 
         v.set_root_schema(json::parse(readFile(dir / *m.optionsSchema)));
         v.validate(options);
         return std::nullopt;
-    } catch (const std::exception& e) {
+    } catch (const std::invalid_argument& e) {  // the validator's verdict, or a schema it cannot use
+        return std::string("options rejected: ") + e.what();
+    } catch (const json::exception& e) {  // the options schema is not JSON
         return std::string("options rejected: ") + e.what();
     }
 }
@@ -97,11 +100,12 @@ std::string selfTestDetail(const json& result, bool passed) {
 }  // namespace
 
 std::string toString(ModuleState s) {
+    using enum ModuleState;
     switch (s) {
-        case ModuleState::Active: return "active";
-        case ModuleState::Disabled: return "disabled";
-        case ModuleState::MissingDependency: return "missing-dependency";
-        case ModuleState::Failed: return "failed";
+        case Active: return "active";
+        case Disabled: return "disabled";
+        case MissingDependency: return "missing-dependency";
+        case Failed: return "failed";
     }
     return "failed";
 }
@@ -119,13 +123,21 @@ ModuleRegistry::~ModuleRegistry() {
     for (const auto& id : std::ranges::reverse_view(order_)) {
         auto e = entries_.find(id);
         if (e != entries_.end() && e->second.instance) {
-            try {
-                e->second.instance->shutdown();
-            } catch (...) {
-                // Ignored: one module failing to shut down must not stop the others.
-            }
+            shutdownLogged(*e->second.instance);
             e->second.instance.reset();
         }
+    }
+}
+
+void ModuleRegistry::shutdownLogged(IModuleInstance& instance) const {
+    // One module failing to shut down must not stop the others, so the failure is only logged.
+    try {
+        instance.shutdown();
+    } catch (const ModuleError& e) {
+        services_.log(instance.manifest().id, RFMOD_LOG_WARN,
+                      std::format("shutdown failed: {}: {}", e.code(), e.what()));
+    } catch (const std::system_error& e) {
+        services_.log(instance.manifest().id, RFMOD_LOG_WARN, std::format("shutdown failed: {}", e.what()));
     }
 }
 
@@ -195,9 +207,12 @@ void ModuleRegistry::checkDependencies(const Manifest& m, ValidationReport& repo
     }
     const std::string optionalDetail = optionalDependencySummary(m);
     if (problems.empty()) {
-        report.pass("dependencies", m.dependencies.empty() ? "no required dependencies"
-                                                            : std::to_string(m.dependencies.size()) + " required, all active" +
-                                                                  (optionalDetail.empty() ? "" : "; optional: " + optionalDetail));
+        std::string detail = "no required dependencies";
+        if (!m.dependencies.empty()) {
+            detail = std::format("{} required, all active", m.dependencies.size());
+            if (!optionalDetail.empty()) detail += std::format("; optional: {}", optionalDetail);
+        }
+        report.pass("dependencies", detail);
     } else {
         std::string all;
         for (const auto& p : problems) all += (all.empty() ? "" : "; ") + p;
@@ -219,7 +234,13 @@ void ModuleRegistry::runSelfTest(const VerifiedPackage& pkg, const fs::path& sta
         report.add("selftest", passed, selfTestDetail(result, passed));
     } catch (const ModuleError& e) {
         report.fail("selftest", e.code() + ": " + e.what());
-    } catch (const std::exception& e) {
+    } catch (const json::exception& e) {  // a malformed self-test reply
+        report.fail("selftest", e.what());
+    } catch (const PathEscapeError& e) {  // a package path that leaves the staging directory
+        report.fail("selftest", e.what());
+    } catch (const RegistryWriteError& e) {
+        report.fail("selftest", e.what());
+    } catch (const std::system_error& e) {  // unpacking failed, or no worker could be started
         report.fail("selftest", e.what());
     }
 }
@@ -275,7 +296,7 @@ void ModuleRegistry::writeState(const Entry& e) const {
     writeFileAtomic(root_, e.dir / kStateFile, state.dump(2) + "\n");
 }
 
-std::vector<std::string> ModuleRegistry::dependentsOf(const std::string& id) const {
+std::vector<std::string> ModuleRegistry::dependentsOf(std::string_view id) const {
     std::vector<std::string> out;
     for (const auto& [otherId, e] : entries_) {
         if (!e.enabled) continue;
@@ -361,13 +382,7 @@ void ModuleRegistry::shutdownAll() {
         notices_.clear();
     }
     // In reverse dependency order, outside mutex_: shutdown is module code.
-    for (const auto& instance : retired) {
-        try {
-            instance->shutdown();
-        } catch (...) {
-            // Ignored: one module failing to shut down must not stop the others.
-        }
-    }
+    for (const auto& instance : retired) shutdownLogged(*instance);
 }
 
 std::optional<ModuleRegistry::Entry> ModuleRegistry::readInstalled(const fs::path& dir,
@@ -479,7 +494,13 @@ bool ModuleRegistry::start(const std::string& id, Entry& e, std::unique_lock<std
     lock.unlock();
     try {
         instance = load(e.manifest, e.signer, e.dir, e.options, false);
-    } catch (const std::exception& ex) {
+    } catch (const ModuleError& ex) {
+        error = ex.what();
+    } catch (const json::exception& ex) {  // a malformed manifest or worker reply
+        error = ex.what();
+    } catch (const PathEscapeError& ex) {  // a library path that leaves the registry root
+        error = ex.what();
+    } catch (const std::system_error& ex) {  // no worker process could be started
         error = ex.what();
     }
     lock.lock();
@@ -585,8 +606,10 @@ std::optional<fs::path> ModuleRegistry::publicFile(const std::string& id, const 
     if (it == entries_.end() || it->second.state != ModuleState::Active) return std::nullopt;
     // Only the UI bundle directory and the options schema are public; never lib/.
     const bool isUi = path.starts_with("ui/");
-    const bool isSchema = it->second.manifest.optionsSchema == path;
-    if ((!isUi && !isSchema) || path.find("..") != std::string::npos) return std::nullopt;
+    if (const bool isSchema = it->second.manifest.optionsSchema == path;
+        (!isUi && !isSchema) || path.find("..") != std::string::npos) {
+        return std::nullopt;
+    }
     fs::path p = it->second.dir / path;
     if (!fs::is_regular_file(p)) return std::nullopt;
     return p;

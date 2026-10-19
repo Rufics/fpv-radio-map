@@ -3,11 +3,19 @@
 #include "common.hpp"
 
 #include <filesystem>
+#include <functional>
 #include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace rfmap {
+
+/// A configuration file that cannot be read.
+class ConfigError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
 
 /// Server configuration: a JSON file, then environment overrides.
 ///
@@ -17,9 +25,12 @@ namespace rfmap {
 /// RFMAP_OPEN_METEO_URL, RFMAP_DEM, RFMAP_LANDCOVER.
 class Config {
 public:
-    static Config load(const std::filesystem::path& file, const std::map<std::string, std::string>& env);
+    /// Environment variables by name.
+    using Environment = std::map<std::string, std::string, std::less<>>;
+
+    static Config load(const std::filesystem::path& file, const Environment& env);
     static Config fromJson(json doc);
-    static std::map<std::string, std::string> processEnvironment();
+    static Environment processEnvironment();
 
     struct Server {
         std::string listen = "0.0.0.0";
@@ -28,12 +39,14 @@ public:
         bool trustProxy = false;  ///< use the last X-Forwarded-For hop as the client address
         std::size_t maxBodyBytes = 1u << 20;
         std::size_t maxUploadBytes = 64u << 20;
-    } server;
+    };
+    Server server;
 
     struct Database {
         std::string url = "postgresql://rfmap@localhost/rfmap";
         int poolSize = 8;
-    } database;
+    };
+    Database database;
 
     std::string adminToken;  ///< empty = admin API disabled
 
@@ -47,7 +60,8 @@ public:
         std::string demStatedErrorSource;
         std::string demName;  ///< shown in results; defaults to manifest.json next to the DEM, then the file name
         std::string landcoverName;
-    } data;
+    };
+    Data data;
 
     std::filesystem::path schemasDir = "schemas";
     std::filesystem::path seedDir = "data/library";
@@ -57,7 +71,8 @@ public:
         std::filesystem::path worker = "/usr/lib/rfmap/rfmod-worker";
         std::filesystem::path trustStore = "/var/lib/rfmap/keys.json";
         bool isolateAll = false;
-    } modules;
+    };
+    Modules modules;
 
     struct WeatherTier {
         std::string name;    ///< "hourly" or "long-range"
@@ -71,37 +86,41 @@ public:
         int cacheMinutes = 30;
         std::string metaUrl;  ///< optional model meta.json giving the run time
         int staleAfterHours = 12;
-    } weather;
+    };
+    Weather weather;
 
     struct Cache {
         std::size_t demBlocksMb = 256;
         std::size_t resultMemoryMb = 64;
         std::size_t resultTableRows = 20000;
         std::size_t resultTableMb = 1024;
-    } cache;
+    };
+    Cache cache;
 
     struct Auth {
         int sessionTtlHours = 168;
         int pinMaxAttempts = 5;
         int pinLockoutMinutes = 15;
         std::string argon2Cost = "moderate";
-    } auth;
+    };
+    Auth auth;
 
     struct RateLimit {
         double perMinute;
         double burst;
     };
     /// Per client address and class: default, open (PIN attempts), create, calc, admin, upload.
-    std::map<std::string, RateLimit> rateLimits{{"default", {600, 120}},  {"open", {10, 5}},
-                                                {"create", {20, 10}},     {"calc", {120, 30}},
-                                                {"admin", {60, 20}},      {"coverage", {6, 3}}};
+    std::map<std::string, RateLimit, std::less<>> rateLimits{{"default", {600, 120}}, {"open", {10, 5}},
+                                                             {"create", {20, 10}},     {"calc", {120, 30}},
+                                                             {"admin", {60, 20}},      {"coverage", {6, 3}}};
 
     struct Coverage {
         int threads = 4;
         std::size_t maxCells = 250000;
         int maxJobs = 4;
         int keepMinutes = 120;
-    } coverage;
+    };
+    Coverage coverage;
 
     json raw;  ///< the merged document, for the admin page (secrets removed)
 };

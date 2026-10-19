@@ -11,7 +11,7 @@ constexpr const char* kId = "fpv.battery";
 
 Air airFrom(const json& weather, const json& options) {
     Air a;
-    auto num = [](const json& j, const char* k) -> std::optional<double> {
+    auto num = [](const json& j, const char* k) {
         return j.is_object() && j.contains(k) && j.at(k).is_number() ? std::optional<double>(j.at(k).get<double>()) : std::nullopt;
     };
     a.densityKgM3 = num(weather, "airDensityKgM3");

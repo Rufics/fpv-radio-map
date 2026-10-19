@@ -4,6 +4,8 @@
 #include <dlfcn.h>
 
 #include <bit>
+#include <cstdio>
+#include <format>
 
 /// What rfmod_host::context points to for an in-process module: which module is calling and
 /// where its calls go. Opaque to the module.
@@ -26,7 +28,7 @@ struct InProcessModule::Bridge {
             last = self->services->call(self->moduleId, method ? method : "", req).dump();
             *response = last.c_str();
             return RFMOD_OK;
-        } catch (const std::exception& e) {
+        } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): C ABI boundary, host services may fail with any error
             last = e.what();
             *response = last.c_str();
             return RFMOD_ERR_HOST_CALL;
@@ -36,8 +38,9 @@ struct InProcessModule::Bridge {
     static void log(rfmod_host_context* self, int level, const char* message) {
         try {
             self->services->log(self->moduleId, level, message ? message : "");
-        } catch (...) {
-            // Ignored: an exception must not cross the C ABI, and a lost log line is harmless.
+        } catch (...) {  // NOSONAR(cpp:S2738): C ABI boundary, nothing may unwind into module code
+            // The host log itself failed; stderr is the last place left to say so.
+            (void)std::fputs("rfmod: host log failed, a module log line was lost\n", stderr);
         }
     }
 };
@@ -46,8 +49,8 @@ struct InProcessModule::Bridge {
 struct InProcessModule::Library {
     struct Close {
         template <typename Handle>
-        void operator()(Handle* handle) const {
-            dlclose(handle);
+        void operator()(Handle* library) const {
+            dlclose(library);
         }
     };
     std::unique_ptr<void, Close> handle;
@@ -88,8 +91,8 @@ InProcessModule::InProcessModule(Manifest manifest, const ConfinedRoot& trustedD
     if (!api_ || api_->abi_version != RFMOD_ABI_VERSION) {
         throw ModuleError("load_failed", "library speaks a different rfmod ABI");
     }
-    const json embedded = json::parse(api_->manifest_json());
-    if (embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
+    if (const json embedded = json::parse(api_->manifest_json());
+        embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
         throw ModuleError("load_failed", "library manifest does not match manifest.json");
     }
     bridge_->context.moduleId = manifest_.id;
@@ -115,7 +118,7 @@ json InProcessModule::invoke(const std::string& method, const json& request) {
     json out = takeResponse(api_, response);
     if (rc != RFMOD_OK) {
         const json err = out.is_object() && out.contains("error") ? out.at("error") : json::object();
-        throw ModuleError(err.value("code", "internal"), err.value("message", "module error " + std::to_string(rc)));
+        throw ModuleError(err.value("code", "internal"), err.value("message", std::format("module error {}", rc)));
     }
     return out;
 }

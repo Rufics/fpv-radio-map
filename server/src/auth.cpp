@@ -1,12 +1,12 @@
 #include "auth.hpp"
 
-#include <regex>
+#include <algorithm>
 
 namespace rfmap {
 
 std::string toString(Role r) { return r == Role::Edit ? "edit" : "view"; }
 
-Role roleFromString(const std::string& s) {
+Role roleFromString(std::string_view s) {
     if (s == "edit") return Role::Edit;
     if (s == "view") return Role::View;
     throw HttpError(400, "role must be edit or view");
@@ -131,11 +131,12 @@ void AuthService::requireOwner(const std::string& missionId, const std::string& 
 }
 
 AuthService::CreatedLink AuthService::createLink(const std::string& missionId, const std::string& ownerKey, Role role,
-                                                 const std::string& pin, const std::string& label,
+                                                 std::string_view pin, std::string_view label,
                                                  std::optional<TimePoint> expiresAt) {
     requireOwner(missionId, ownerKey);
-    static const std::regex sixDigits("^[0-9]{6}$");
-    if (!std::regex_match(pin, sixDigits)) throw HttpError(422, "pin must be exactly 6 digits");
+    if (pin.size() != 6 || !std::ranges::all_of(pin, [](char c) { return c >= '0' && c <= '9'; })) {
+        throw HttpError(422, "pin must be exactly 6 digits");
+    }
     if (label.size() > 120) throw HttpError(422, "label is longer than 120 characters");
     if (expiresAt && *expiresAt <= clock_.now()) throw HttpError(422, "expiresAt is in the past");
     CreatedLink out;

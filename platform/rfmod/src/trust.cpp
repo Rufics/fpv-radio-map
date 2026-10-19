@@ -12,11 +12,11 @@ using json = nlohmann::json;
 
 TrustStore::TrustStore(std::string_view ownerKeyText, std::filesystem::path storePath)
     : storePath_(std::move(storePath)) {
-    keys_.push_back({PublicKey::fromText(ownerKeyText), "Owner (built in)", true});
+    keys_.emplace_back(PublicKey::fromText(ownerKeyText), "Owner (built in)", true);
     load();
 }
 
-std::optional<TrustedKey> TrustStore::find(const std::string& keyId) const {
+std::optional<TrustedKey> TrustStore::find(std::string_view keyId) const {
     for (const TrustedKey& k : keys_) {
         if (k.key.id() == keyId) return k;
     }
@@ -26,7 +26,7 @@ std::optional<TrustedKey> TrustStore::find(const std::string& keyId) const {
 const TrustedKey& TrustStore::add(const PublicKey& key, std::string label) {
     if (find(key.id())) throw std::invalid_argument("key " + key.id() + " is already trusted");
     if (label.empty()) throw std::invalid_argument("a key needs a label");
-    keys_.push_back({key, std::move(label), false});
+    keys_.emplace_back(key, std::move(label), false);
     save();
     return keys_.back();
 }
@@ -45,7 +45,7 @@ void TrustStore::load() {
     const json doc = json::parse(in);
     for (const json& k : doc.at("keys")) {
         const PublicKey key = PublicKey::fromText(k.at("key").get<std::string>());
-        if (!find(key.id())) keys_.push_back({key, k.at("label").get<std::string>(), false});
+        if (!find(key.id())) keys_.emplace_back(key, k.at("label").get<std::string>(), false);
     }
 }
 
@@ -60,7 +60,7 @@ void TrustStore::save() const {
     {
         std::ofstream out(tmp, std::ios::trunc);
         out << json{{"keys", list}}.dump(2) << '\n';
-        if (!out) throw std::runtime_error("cannot write " + tmp.string());
+        if (!out) throw TrustStoreWriteError("cannot write " + tmp.string());
     }
     std::filesystem::rename(tmp, storePath_);
 }

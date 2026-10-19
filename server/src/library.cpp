@@ -2,6 +2,7 @@
 
 #include "security.hpp"
 
+#include <format>
 #include <fstream>
 #include <sstream>
 
@@ -102,8 +103,8 @@ json Library::update(const std::string& kind, const std::string& id, json doc, c
         if (cur.empty()) throw HttpError(404, kind + "/" + id + " does not exist; add it with POST");
         const int current = cur[0][0].as<int>();
         if (edited != current) {
-            throw HttpError(409, "edited version " + std::to_string(edited) + " but the library holds " +
-                                     std::to_string(current), {{"currentVersion", current}});
+            throw HttpError(409, std::format("edited version {} but the library holds {}", edited, current),
+                            {{"currentVersion", current}});
         }
         doc["version"] = current + 1;
         schemas_.require(kind, doc);
@@ -130,14 +131,14 @@ std::vector<std::string> Library::seed(const std::filesystem::path& dir) {
             done) {
             continue;
         }
-        std::size_t added = 0, skipped = 0;
+        std::size_t added = 0;
+        std::size_t skipped = 0;
         for (json item : json::parse(content.str())) {
             item["verified"] = false;
             item["version"] = 1;
-            const auto problems = schemas_.check(kind, item);
-            if (!problems.empty()) {
-                log.push_back("seed " + name + ": " + item.value("id", "?") + " rejected: " + problems.front().pointer +
-                              " " + problems.front().message);
+            if (const auto problems = schemas_.check(kind, item); !problems.empty()) {
+                log.push_back(std::format("seed {}: {} rejected: {} {}", name, item.value("id", "?"),
+                                          problems.front().pointer, problems.front().message));
                 ++skipped;
                 continue;
             }
@@ -151,8 +152,8 @@ std::vector<std::string> Library::seed(const std::filesystem::path& dir) {
         db_.tx([&name, &sha](pqxx::work& w) {
             w.exec_params("insert into seeds_applied(name, sha256) values ($1, $2) on conflict do nothing", name, sha);
         });
-        log.push_back("seeded " + std::to_string(added) + " " + kind + " from " + file.string() + " (unverified)" +
-                      (skipped ? ", " + std::to_string(skipped) + " skipped" : ""));
+        const std::string skippedNote = skipped > 0 ? std::format(", {} skipped", skipped) : "";
+        log.push_back(std::format("seeded {} {} from {} (unverified){}", added, kind, file.string(), skippedNote));
     }
     return log;
 }

@@ -1,5 +1,7 @@
 #include "schemas.hpp"
 
+#include "service_errors.hpp"
+
 #include <nlohmann/json-schema.hpp>
 
 #include <format>
@@ -13,7 +15,7 @@ constexpr const char* kBase = "https://rfmap.local/schemas/";
 
 json readJson(const fs::path& p) {
     std::ifstream in(p);
-    if (!in) throw std::runtime_error("cannot read schema " + p.string());
+    if (!in) throw SchemaFileError("cannot read schema " + p.string());
     return json::parse(in);
 }
 
@@ -21,7 +23,7 @@ class Collector final : public nlohmann::json_schema::basic_error_handler {
 public:
     void error(const nlohmann::json::json_pointer& ptr, const json& instance, const std::string& message) override {
         basic_error_handler::error(ptr, instance, message);
-        problems.push_back({ptr.to_string(), message});
+        problems.emplace_back(ptr.to_string(), message);
     }
     std::vector<SchemaRegistry::Problem> problems;
 };
@@ -86,7 +88,7 @@ void SchemaRegistry::addInline(const std::string& name, const json& schema) {
 std::vector<SchemaRegistry::Problem> SchemaRegistry::check(const std::string& name, const json& doc) const {
     std::lock_guard lock(mutex_);
     const auto it = validators_.find(name);
-    if (it == validators_.end()) throw std::logic_error("no schema named " + name);
+    if (it == validators_.end()) throw ServiceInvariantError("no schema named " + name);
     Collector c;
     it->second->validate(doc, c);
     return c.problems;

@@ -1,6 +1,7 @@
 #include "link_service.hpp"
 
 #include "module_runner.hpp"
+#include "service_errors.hpp"
 
 #include <rfcore/constants.hpp>
 #include <rfcore/earth_model.hpp>
@@ -29,7 +30,7 @@ using rfcore::Metres;
 
 std::string toString(LinkKind k) { return k == LinkKind::Control ? "control" : "video"; }
 
-LinkKind linkKindFromString(const std::string& s) {
+LinkKind linkKindFromString(std::string_view s) {
     if (s == "control") return LinkKind::Control;
     if (s == "video") return LinkKind::Video;
     throw HttpError(422, "link must be control or video");
@@ -49,7 +50,7 @@ std::string fmt(double v, int precision = 6) {
 }
 
 /// P.838 polarisation tilt for an antenna's polarisation, if it has a defined one.
-std::optional<double> tiltOf(const std::string& polarization) {
+std::optional<double> tiltOf(std::string_view polarization) {
     if (polarization == "rhcp" || polarization == "lhcp") return 45.0;
     if (polarization == "linear-horizontal") return 0.0;
     if (polarization == "linear-vertical") return 90.0;
@@ -118,7 +119,7 @@ EarthFactor earthFactor(const rfcore::TerrainProfile& profile, const CalcContext
                         double topMsl, std::vector<rfcore::UncertaintyNote>& notes) {
     EarthFactor out;
     if (!weatherOn) {
-        notes.push_back({"Refraction", "weather not used for this calculation; standard atmosphere k = 4/3"});
+        notes.emplace_back("Refraction", "weather not used for this calculation; standard atmosphere k = 4/3");
         return out;
     }
     if (!ctx.forecast.has_value()) return out;
@@ -136,9 +137,9 @@ EarthFactor earthFactor(const rfcore::TerrainProfile& profile, const CalcContext
         out.k = kf;
         out.source = est->description + ", forecast";
     } else {
-        notes.push_back({"Refraction", "the forecast gradient " + fmt(est->gradientPerKm) +
-                                           " N/km means ducting (k <= 0); the effective-earth model does not "
-                                           "apply, so the standard atmosphere is shown instead"});
+        notes.emplace_back("Refraction", "the forecast gradient " + fmt(est->gradientPerKm) +
+                                             " N/km means ducting (k <= 0); the effective-earth model does not "
+                                             "apply, so the standard atmosphere is shown instead");
     }
     return out;
 }
@@ -284,14 +285,15 @@ ResolvedLink LinkService::resolve(const json& setup, LinkKind kind) const {
     auto [ground, groundRef] = library_.require("antennas", setup.at("groundAntenna").get<std::string>());
     auto [air, airRef] = library_.require("antennas", setup.at("airAntenna").get<std::string>());
     const std::string rk = radio.at("kind").get<std::string>();
-    const bool kindOk = kind == LinkKind::Control ? rk == "control" : (rk == "video-digital" || rk == "video-analog");
-    if (!kindOk) {
+    if (const bool kindOk =
+            kind == LinkKind::Control ? rk == "control" : (rk == "video-digital" || rk == "video-analog");
+        !kindOk) {
         throw HttpError(422, "radio profile '" + radioRef.id + "' is a " + rk + " profile, not usable for the " +
                                  toString(kind) + " link");
     }
     r.txPowerDbm = setup.at("txPowerDbm").get<double>();
-    const auto& steps = radio.at("txPowerDbm");
-    if (std::none_of(steps.begin(), steps.end(), [&r](const json& s) { return s.get<double>() == r.txPowerDbm; })) {
+    if (const auto& steps = radio.at("txPowerDbm");
+        std::ranges::none_of(steps, [&r](const json& s) { return s.get<double>() == r.txPowerDbm; })) {
         throw HttpError(422, "radio profile '" + radioRef.id + "' has no " + fmt(r.txPowerDbm) + " dBm power step",
                         {{"steps", steps}});
     }
@@ -372,36 +374,37 @@ LinkEvaluation LinkService::evaluate(const PreparedPath& path, const ResolvedLin
         const Decibel nf(sens.at("noiseFigureDb").get<double>() + extra);
         b.rx.sensitivity = rfcore::ReceiverSensitivity::compute(bw, nf, Decibel(sens.at("requiredSnrDb").get<double>()));
         b.noiseFloor = rfcore::ReceiverSensitivity::thermalNoiseFloor(bw) + nf;
-        b.notes.push_back({"Receiver sensitivity",
-                           "computed 10log10(kT0B)+30+NF+SNR = " + fmt(b.rx.sensitivity.value()) + " dBm from " +
-                               sourceText(sens)});
+        b.notes.emplace_back("Receiver sensitivity", "computed 10log10(kT0B)+30+NF+SNR = " +
+                                                         fmt(b.rx.sensitivity.value()) + " dBm from " +
+                                                         sourceText(sens));
     } else {
         b.rx.sensitivity = DecibelMilliwatt(sens.at("dBm").get<double>());
-        b.notes.push_back({"Receiver sensitivity", "datasheet figure " + fmt(b.rx.sensitivity.value()) +
-                                                       " dBm as stated by " + sourceText(sens) +
-                                                       "; test conditions are the vendor's"});
+        b.notes.emplace_back("Receiver sensitivity", "datasheet figure " + fmt(b.rx.sensitivity.value()) +
+                                                         " dBm as stated by " + sourceText(sens) +
+                                                         "; test conditions are the vendor's");
     }
     for (const json* ant : {&link.groundAntenna, &link.airAntenna}) {
         const auto& band = ant->at("bandHz");
-        const double lo = band.at(0).get<double>(), hi = band.at(1).get<double>();
+        const double lo = band.at(0).get<double>();
+        const double hi = band.at(1).get<double>();
         if (b.frequency.value() < lo || b.frequency.value() > hi) {
-            b.notes.push_back({"Antenna", ant->value("name", "antenna") + " is specified for " + fmt(lo / 1e6) + "-" +
-                                              fmt(hi / 1e6) + " MHz, not " + fmt(b.frequency.value() / 1e6) +
-                                              " MHz; its gain figure may not hold"});
+            b.notes.emplace_back("Antenna", ant->value("name", "antenna") + " is specified for " + fmt(lo / 1e6) +
+                                                "-" + fmt(hi / 1e6) + " MHz, not " + fmt(b.frequency.value() / 1e6) +
+                                                " MHz; its gain figure may not hold");
         }
     }
     const auto t1 = tiltOf(link.groundAntenna.value("polarization", ""));
-    const auto t2 = tiltOf(link.airAntenna.value("polarization", ""));
-    if (t1.has_value() && t2.has_value() && *t1 == *t2) {
+    if (const auto t2 = tiltOf(link.airAntenna.value("polarization", ""));
+        t1.has_value() && t2.has_value() && *t1 == *t2) {
         b.tiltDeg = t1;
     } else {
-        b.notes.push_back({"Polarisation", "ground and air antennas differ in polarisation; the mismatch loss is not "
-                                           "modelled and rain loss is not applied"});
+        b.notes.emplace_back("Polarisation", "ground and air antennas differ in polarisation; the mismatch loss is "
+                                             "not modelled and rain loss is not applied");
     }
     for (const LibraryRef& r : link.refs) {
         if (!r.verified) {
-            b.notes.push_back({"Library", r.kind + "/" + r.id + " v" + std::to_string(r.version) +
-                                              " is not verified by the admin yet"});
+            b.notes.emplace_back("Library",
+                                 std::format("{}/{} v{} is not verified by the admin yet", r.kind, r.id, r.version));
         }
     }
     return run(path, b, ctx, withBand, withProfile);
@@ -420,7 +423,7 @@ LinkEvaluation LinkService::evaluateRaw(const RawEnds& e, const CalcContext& ctx
     b.rx.feederLoss = Decibel(e.rxFeederDb);
     b.rx.sensitivity = DecibelMilliwatt(e.sensitivityDbm);
     b.rx.requiredMargin = Decibel(e.requiredMarginDb);
-    b.notes.push_back({"Polarisation", "not given in this request; rain loss is not applied"});
+    b.notes.emplace_back("Polarisation", "not given in this request; rain loss is not applied");
     const PreparedPath path = prepare(e.tx, e.rx, ctx);
     if (!path.complete()) {
         throw HttpError(422, "missing elevation data on part of the path; nothing is guessed",
@@ -431,7 +434,7 @@ LinkEvaluation LinkService::evaluateRaw(const RawEnds& e, const CalcContext& ctx
 
 LinkEvaluation LinkService::run(const PreparedPath& path, const Budget& b, const CalcContext& ctx, bool withBand,
                                 bool withProfile) const {
-    if (!path.profile) throw std::logic_error("evaluate needs a complete profile");
+    if (!path.profile) throw ServiceInvariantError("evaluate needs a complete profile");
     LinkEvaluation out;
     std::vector<rfcore::UncertaintyNote> notes = path.notes;
     notes.insert(notes.end(), b.notes.begin(), b.notes.end());

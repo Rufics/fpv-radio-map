@@ -13,13 +13,34 @@
 namespace rfmap {
 
 namespace {
-thread_local const CalcContext* currentContext = nullptr;
-thread_local int hostDepth = 0;
-
-struct DepthGuard {
-    DepthGuard() { ++hostDepth; }
-    ~DepthGuard() { --hostDepth; }
+/// Per-thread host-call state: the calculation context in scope and the host-call nesting depth.
+struct ThreadHostState {
+    const CalcContext* context = nullptr;
+    int depth = 0;
 };
+
+ThreadHostState& threadHostState() {
+    thread_local ThreadHostState state;
+    return state;
+}
+
+/// Counts one level of host-call nesting on this thread while it lives.
+class DepthGuard {
+public:
+    DepthGuard() { ++threadHostState().depth; }
+    ~DepthGuard() { --threadHostState().depth; }
+    DepthGuard(const DepthGuard&) = delete;
+    DepthGuard& operator=(const DepthGuard&) = delete;
+    DepthGuard(DepthGuard&&) = delete;
+    DepthGuard& operator=(DepthGuard&&) = delete;
+};
+
+Logger::Level loggerLevel(int level) {
+    using enum Logger::Level;
+    if (level >= RFMOD_LOG_ERROR) return Error;
+    if (level >= RFMOD_LOG_WARN) return Warn;
+    return Info;
+}
 
 rfcore::GeoPoint geo(const json& p) { return {p.at("lat").get<double>(), p.at("lon").get<double>()}; }
 
@@ -35,9 +56,11 @@ json geodesyDirect(const json& request) {
 }
 }  // namespace
 
-CalcContextScope::CalcContextScope(const CalcContext& ctx) : previous_(currentContext) { currentContext = &ctx; }
-CalcContextScope::~CalcContextScope() { currentContext = previous_; }
-const CalcContext* CalcContextScope::current() { return currentContext; }
+CalcContextScope::CalcContextScope(const CalcContext& ctx) : previous_(threadHostState().context) {
+    threadHostState().context = &ctx;
+}
+CalcContextScope::~CalcContextScope() { threadHostState().context = previous_; }
+const CalcContext* CalcContextScope::current() { return threadHostState().context; }
 
 ServerHostServices::ServerHostServices(LinkService* links, const Library* library, WeatherService* weather,
                                        ContextFactory contexts, Logger& log)
@@ -53,14 +76,13 @@ void ServerHostServices::bind(LinkService* links, const Library* library, Weathe
 }
 
 void ServerHostServices::log(const std::string& moduleId, int level, const std::string& message) {
-    const Logger::Level l = level >= RFMOD_LOG_ERROR  ? Logger::Level::Error
-                            : level >= RFMOD_LOG_WARN ? Logger::Level::Warn
-                                                      : Logger::Level::Info;
-    log_.write(l, "module " + moduleId, message);
+    log_.write(loggerLevel(level), "module " + moduleId, message);
 }
 
 json ServerHostServices::call(const std::string& moduleId, const std::string& method, const json& request) {
-    if (hostDepth >= kMaxDepth) throw HostCallError(std::format("host calls nested deeper than {}", kMaxDepth));
+    if (threadHostState().depth >= kMaxDepth) {
+        throw HostCallError(std::format("host calls nested deeper than {}", kMaxDepth));
+    }
     const DepthGuard depth;
     if (method == "link.evaluate") {
         // The guide's promise: evaluating a link runs loss.contribute, so calling it from there recurses.
@@ -105,7 +127,7 @@ json ServerHostServices::libraryGet(const json& req) const {
     return *item;
 }
 
-json ServerHostServices::profileGet(const json& req) {
+json ServerHostServices::profileGet(const json& req) const {
     if (!links_) throw HostCallError("no terrain model");
     const DemSource& dem = links_->requireDem();
     const rfcore::Geodesy g;
@@ -116,7 +138,7 @@ json ServerHostServices::profileGet(const json& req) {
     if (req.contains("stepM")) step = std::min(step, req.at("stepM").get<double>());
     if (!(step > 0.0)) throw HostCallError("stepM must be positive");
     const auto points = g.sample(from, to, rfcore::Metres(step));
-    const double n = static_cast<double>(points.size() - 1);
+    const auto n = static_cast<double>(points.size() - 1);
     json samples = json::array();
     json missing = json::array();
     std::optional<double> gap;
@@ -140,11 +162,11 @@ json ServerHostServices::profileGet(const json& req) {
     return {{"source", dem.name()}, {"stepM", total / n}, {"samples", samples}, {"missing", missing}};
 }
 
-json ServerHostServices::linkEvaluate(const json& req) {
+json ServerHostServices::linkEvaluate(const json& req) const {
     auto missingError = [](const PreparedPath& p) {
         std::string spans;
         for (const auto& s : p.missing) {
-            spans += (spans.empty() ? "" : ", ") + std::to_string(s.from.value()) + "-" + std::to_string(s.to.value()) + " m";
+            spans += std::format("{}{:f}-{:f} m", spans.empty() ? "" : ", ", s.from.value(), s.to.value());
         }
         return HostCallError("missing-data: no elevation data on " + spans + " of the path; nothing is guessed");
     };

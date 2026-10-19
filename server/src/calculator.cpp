@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <format>
 #include <iterator>
 #include <map>
@@ -145,19 +146,26 @@ json missingDataLeg(json leg, const LegScan& scan, const DemSource& dem, std::si
 
 // ---- route modules ----
 
+/// Runs one call into a module and returns how it failed, or "" when it did not. A module can
+/// fail in any of these ways; the failure is reported in the result, not raised.
+template <class Call>
+std::string moduleCallFailure(const Call& call) {
+    try {
+        call();
+    } catch (const rfmod::ModuleError& e) {
+        return std::format("{}: {}", e.code(), e.what());
+    } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): a module failure is listed, never fails the calculation
+        return e.what();
+    }
+    return {};
+}
+
 /// Calls a module's route.analyze. A failure, or an answer that is not an object, is listed in
 /// result.moduleFailures (once per module, like its loss term failures) and gives nothing.
 std::optional<json> analyzeRoute(const ModuleRunner::Active& a, const json& req, json& result) {
     json resp;
-    std::string failure;
-    try {
-        resp = a.instance->invoke("route.analyze", req);
-        if (!resp.is_object()) failure = "route.analyze did not return an object";
-    } catch (const rfmod::ModuleError& e) {
-        failure = e.code() + ": " + e.what();
-    } catch (const std::exception& e) {
-        failure = e.what();
-    }
+    std::string failure = moduleCallFailure([&a, &req, &resp] { resp = a.instance->invoke("route.analyze", req); });
+    if (failure.empty() && !resp.is_object()) failure = "route.analyze did not return an object";
     if (failure.empty()) return resp;
     appendModuleFailure(result["moduleFailures"], {a.id, failure});
     return std::nullopt;
@@ -256,10 +264,10 @@ std::vector<Edge> boundaryEdges(const std::vector<bool>& inside, std::size_t col
             if (!in(r, c)) continue;
             // y grows southwards here, so counter-clockwise on the map runs: bottom left to
             // bottom right, up the east side, top right to top left, down the west side.
-            if (!in(r + 1, c)) edges.push_back({c, r + 1, c + 1, r + 1});
-            if (!in(r, c + 1)) edges.push_back({c + 1, r + 1, c + 1, r});
-            if (!in(r - 1, c)) edges.push_back({c + 1, r, c, r});
-            if (!in(r, c - 1)) edges.push_back({c, r, c, r + 1});
+            if (!in(r + 1, c)) edges.emplace_back(c, r + 1, c + 1, r + 1);
+            if (!in(r, c + 1)) edges.emplace_back(c + 1, r + 1, c + 1, r);
+            if (!in(r - 1, c)) edges.emplace_back(c + 1, r, c, r);
+            if (!in(r, c - 1)) edges.emplace_back(c, r, c, r + 1);
         }
     }
     return edges;
@@ -293,15 +301,13 @@ std::size_t nextEdge(const std::vector<Edge>& edges, const EdgesFrom& from, cons
 /// Chains edges from `start` until the ring closes, marking them used.
 Ring traceRing(std::vector<Edge>& edges, const EdgesFrom& from, std::size_t start) {
     Ring ring;
-    std::size_t cur = start;
-    while (true) {
+    // The ring closes back at `start`; running out of edges cannot happen on a closed boundary.
+    for (std::size_t cur = start; cur != edges.size();) {
         Edge& e = edges[cur];
         e.used = true;
         ring.emplace_back(e.x0, e.y0);
-        if (e.x1 == edges[start].x0 && e.y1 == edges[start].y0) break;
-        const std::size_t next = nextEdge(edges, from, e);
-        if (next == edges.size()) break;  // cannot happen on a closed boundary
-        cur = next;
+        const bool closed = e.x1 == edges[start].x0 && e.y1 == edges[start].y0;
+        cur = closed ? edges.size() : nextEdge(edges, from, e);
     }
     return ring;
 }
@@ -368,6 +374,26 @@ std::size_t outerOfHole(const std::vector<Ring>& rings, const std::vector<std::s
     return best;
 }
 
+/// Sets a row counter past the last row when its scope is left by an exception, so the other
+/// workers of a coverage calculation take no further rows.
+class RowsExhaustedOnThrow {
+public:
+    RowsExhaustedOnThrow(std::atomic<std::size_t>& nextRow, std::size_t rows)
+        : nextRow_(nextRow), rows_(rows) {}
+    ~RowsExhaustedOnThrow() {
+        if (std::uncaught_exceptions() > unwinding_) nextRow_ = rows_;
+    }
+    RowsExhaustedOnThrow(const RowsExhaustedOnThrow&) = delete;
+    RowsExhaustedOnThrow& operator=(const RowsExhaustedOnThrow&) = delete;
+    RowsExhaustedOnThrow(RowsExhaustedOnThrow&&) = delete;
+    RowsExhaustedOnThrow& operator=(RowsExhaustedOnThrow&&) = delete;
+
+private:
+    std::atomic<std::size_t>& nextRow_;
+    std::size_t rows_;
+    int unwinding_ = std::uncaught_exceptions();
+};
+
 }  // namespace
 
 Calculator::Calculator(LinkService& links, WeatherService& weather, const BuiltinModules& builtins,
@@ -389,8 +415,7 @@ std::vector<LinkKind> Calculator::kindsFor(const json& mission) {
 
 CalcContext Calculator::contextFor(const json& mission) const {
     CalcContext ctx;
-    const json& t = mission.at("time");
-    if (t.value("mode", "now") == "planned") {
+    if (const json& t = mission.at("time"); t.value("mode", "now") == "planned") {
         if (!t.contains("utc")) throw HttpError(422, "time.mode is planned but time.utc is missing");
         const auto parsed = parseIsoUtc(t.at("utc").get<std::string>());
         if (!parsed) throw HttpError(422, "time.utc is not an ISO 8601 date-time");
@@ -470,7 +495,7 @@ json Calculator::path(const json& req) {
 
 json Calculator::evaluateLeg(const json& mission, std::size_t index, const json& from, const json& to,
                              const std::vector<std::pair<LinkKind, ResolvedLink>>& links, const CalcContext& ctx,
-                             std::vector<ModuleFailure>& failures) {
+                             std::vector<ModuleFailure>& failures) const {
     const DemSource& dem = links_.requireDem();
     const rfcore::Geodesy geo;
     const Terminal pilot = Terminal::fromJson(mission.at("pilot"));
@@ -480,8 +505,8 @@ json Calculator::evaluateLeg(const json& mission, std::size_t index, const json&
 
     json leg = {{"index", index}, {"lengthM", length}};
     const std::size_t n = mission.at("waypoints").size();
-    leg["from"] = index == 0 ? label(from, "Pilot") : label(from, "WP" + std::to_string(index));
-    leg["to"] = index < n ? label(to, "WP" + std::to_string(index + 1)) : label(to, "Pilot");
+    leg["from"] = index == 0 ? label(from, "Pilot") : label(from, std::format("WP{}", index));
+    leg["to"] = index < n ? label(to, std::format("WP{}", index + 1)) : label(to, "Pilot");
 
     // Sample positions: the leg's geodesic at the DEM's native step, both ends included. The
     // drone's AGL changes linearly with distance along the leg between the two points' aglM.
@@ -540,7 +565,7 @@ json Calculator::evaluateLeg(const json& mission, std::size_t index, const json&
     return leg;
 }
 
-void Calculator::runRouteModules(const json& mission, json& result, const CalcContext& ctx) {
+void Calculator::runRouteModules(const json& mission, json& result, const CalcContext& ctx) const {
     json soFar = json::object();
     for (const ModuleRunner::Active& a : modules_.optedIn("route.analysis", ctx)) {
         const json req = {{"mission", mission},
@@ -628,23 +653,19 @@ struct Calculator::CoverageRun {
     std::atomic<std::size_t> missingCells{0};
     std::mutex failMutex;
     std::vector<ModuleFailure> failures;
-    std::exception_ptr error;
     [[no_unique_address]] const rfcore::Geodesy geo{};
 };
 
 void Calculator::coverageWorker(CoverageRun& run) {
-    try {
-        for (std::size_t r = run.nextRow++; r < run.grid.rows; r = run.nextRow++) {
-            if (run.progress.cancelled()) return;
-            std::shared_lock gate(modules_.gate());
-            const CalcContextScope scope(run.ctx);
-            coverageRow(run, r);
-            run.progress.report(static_cast<double>(++run.doneRows) / static_cast<double>(run.grid.rows));
-        }
-    } catch (...) {
-        std::lock_guard lock(run.failMutex);
-        if (!run.error) run.error = std::current_exception();
-        run.nextRow = run.grid.rows;
+    // A failing row ends the whole calculation: its exception reaches coverage() through this
+    // worker's future, and the guard hands out the remaining rows so the other workers stop.
+    const RowsExhaustedOnThrow guard(run.nextRow, run.grid.rows);
+    for (std::size_t r = run.nextRow++; r < run.grid.rows; r = run.nextRow++) {
+        if (run.progress.cancelled()) return;
+        std::shared_lock gate(modules_.gate());
+        const CalcContextScope scope(run.ctx);
+        coverageRow(run, r);
+        run.progress.report(static_cast<double>(++run.doneRows) / static_cast<double>(run.grid.rows));
     }
 }
 
@@ -675,14 +696,16 @@ void Calculator::runCoverageModules(const json& mission, LinkKind kind, const Ca
     std::shared_lock gate(modules_.gate());
     const CalcContextScope scope(ctx);
     for (const ModuleRunner::Active& a : modules_.optedIn("coverage.analysis", ctx)) {
-        try {
-            json resp = a.instance->invoke("coverage.analyze", {{"mission", mission}, {"grid", grid},
-                                                                {"options", a.options}, {"link", toString(kind)},
-                                                                {"time", isoUtc(ctx.time)}});
+        const json req = {{"mission", mission},
+                          {"grid", grid},
+                          {"options", a.options},
+                          {"link", toString(kind)},
+                          {"time", isoUtc(ctx.time)}};
+        const std::string failure = moduleCallFailure([&a, &req, &grid, cells] {
+            const json resp = a.instance->invoke("coverage.analyze", req);
             addCoverageModule(grid, resp, a.id, cells);
-        } catch (const std::exception& e) {
-            grid["moduleFailures"].push_back({{"module", a.id}, {"error", e.what()}});
-        }
+        });
+        if (!failure.empty()) grid["moduleFailures"].push_back({{"module", a.id}, {"error", failure}});
     }
 }
 
@@ -712,11 +735,13 @@ json Calculator::coverage(const json& mission, LinkKind kind, CoverageProgress& 
     std::vector<std::future<void>> parts;
     std::generate_n(std::back_inserter(parts), pool.size(),
                     [this, &pool, &run] { return pool.submit([this, &run] { coverageWorker(run); }); });
+    // Every worker must be done with `run` before the first failure is rethrown.
+    for (const auto& f : parts) f.wait();
     for (auto& f : parts) f.get();
-    if (run.error) std::rethrow_exception(run.error);
     if (progress.cancelled()) throw CalculationCancelled();
 
-    json marginJson = json::array(), worstJson = json::array();
+    json marginJson = json::array();
+    json worstJson = json::array();
     std::vector<bool> reachable(g.cols * g.rows, false);
     for (std::size_t i = 0; i < run.margins.size(); ++i) {
         marginJson.push_back(nullable(run.margins[i]));

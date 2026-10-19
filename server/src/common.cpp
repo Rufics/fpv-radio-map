@@ -2,17 +2,13 @@
 
 #include <algorithm>
 #include <ctime>
+#include <format>
 #include <string_view>
 
 namespace rfmap {
 
 std::string isoUtc(TimePoint t) {
-    const std::time_t s = Clock::to_time_t(std::chrono::floor<std::chrono::seconds>(t));
-    std::tm tm{};
-    gmtime_r(&s, &tm);
-    char buf[32];
-    (void)std::strftime(buf, sizeof buf, "%Y-%m-%dT%H:%M:%SZ", &tm);
-    return buf;
+    return std::format("{:%Y-%m-%dT%H:%M:%SZ}", std::chrono::floor<std::chrono::seconds>(t));
 }
 
 namespace {

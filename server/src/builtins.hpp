@@ -47,7 +47,7 @@ private:
     Database* db_;
     SchemaRegistry& schemas_;
     std::string version_;
-    std::map<std::string, Entry> entries_;
+    std::map<std::string, Entry, std::less<>> entries_;
     mutable std::mutex mutex_;
 };
 

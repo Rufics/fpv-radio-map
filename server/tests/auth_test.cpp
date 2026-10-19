@@ -1,9 +1,13 @@
 #include "auth.hpp"
 #include "rate_limiter.hpp"
+#include "security.hpp"
 #include "test_support.hpp"
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <string>
+#include <stdexcept>
 #include <utility>
 
 using namespace rfmap;
@@ -187,4 +191,51 @@ TEST(RateLimiterTest, BurstThenRefillAtTheConfiguredRate) {
     EXPECT_NO_THROW(limiter.take("open", "192.0.2.2"));  // per client
     clock.advance(std::chrono::seconds(10));
     EXPECT_NO_THROW(limiter.take("open", "192.0.2.1"));
+}
+
+TEST(PinHasherCost, EveryNameMapsToItsCost) {
+    EXPECT_EQ(PinHasher::costFromName("interactive"), PinHasher::Cost::Interactive);
+    EXPECT_EQ(PinHasher::costFromName("moderate"), PinHasher::Cost::Moderate);
+    EXPECT_EQ(PinHasher::costFromName("sensitive"), PinHasher::Cost::Sensitive);
+    EXPECT_THROW((void)PinHasher::costFromName("fast"), std::invalid_argument);
+    // Building a hasher only sets its limits; hashing at these costs is too slow for a unit test.
+    EXPECT_NO_THROW(PinHasher{PinHasher::Cost::Moderate});
+    EXPECT_NO_THROW(PinHasher{PinHasher::Cost::Sensitive});
+}
+
+TEST(Secrets, MacDependsOnKeyAndMessage) {
+    const std::string mac = Secrets::mac("key", "message");
+    EXPECT_EQ(mac, Secrets::mac("key", "message"));
+    EXPECT_NE(mac, Secrets::mac("other key", "message"));
+    EXPECT_NE(mac, Secrets::mac("key", "other message"));
+    EXPECT_EQ(mac.size(), 64u);  // 32 bytes, hex
+}
+
+TEST(BundleGrantsTest, IssuedGrantIsValidUntilItExpires) {
+    const BundleGrants grants("secret");
+    const TimePoint now = Clock::from_time_t(1'700'000'000);
+    const std::string grant = grants.issue("fpv.alpha", now + std::chrono::hours(1));
+    EXPECT_TRUE(grants.valid("fpv.alpha", grant, now));
+    EXPECT_TRUE(grants.valid("fpv.alpha", grant, now + std::chrono::hours(1)));
+    EXPECT_FALSE(grants.valid("fpv.alpha", grant, now + std::chrono::hours(2)));
+}
+
+TEST(BundleGrantsTest, GrantIsBoundToItsModuleAndSecret) {
+    const BundleGrants grants("secret");
+    const TimePoint now = Clock::from_time_t(1'700'000'000);
+    const std::string grant = grants.issue("fpv.alpha", now + std::chrono::hours(1));
+    EXPECT_FALSE(grants.valid("fpv.other", grant, now));
+    EXPECT_FALSE(BundleGrants("another").valid("fpv.alpha", grant, now));
+    std::string tampered = grant;
+    tampered.back() = tampered.back() == '0' ? '1' : '0';
+    EXPECT_FALSE(grants.valid("fpv.alpha", tampered, now));
+}
+
+TEST(BundleGrantsTest, MalformedGrantsAreRejected) {
+    const BundleGrants grants;
+    const TimePoint now = Clock::from_time_t(1'700'000'000);
+    EXPECT_FALSE(grants.valid("m", "", now));
+    EXPECT_FALSE(grants.valid("m", "1800000000", now));
+    EXPECT_FALSE(grants.valid("m", "soon.abcdef", now));
+    EXPECT_FALSE(grants.valid("m", "18000x0000.abcdef", now));
 }

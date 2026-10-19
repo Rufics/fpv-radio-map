@@ -3,21 +3,26 @@
 #include <rfext/clutter.hpp>
 
 #include <cmath>
+#include <stdexcept>
 
 namespace rfmap {
 
 namespace {
-thread_local std::string activeContributor;
+/// The module whose loss.contribute runs on this thread, empty outside one.
+std::string& activeContributor() {
+    thread_local std::string id;
+    return id;
 }
+}  // namespace
 
-LossContributionScope::LossContributionScope(std::string moduleId) : previous_(activeContributor) {
-    activeContributor = std::move(moduleId);
+LossContributionScope::LossContributionScope(std::string moduleId) : previous_(activeContributor()) {
+    activeContributor() = std::move(moduleId);
 }
 
 // swap, not assignment: it cannot throw, and this runs in a destructor.
-LossContributionScope::~LossContributionScope() { activeContributor.swap(previous_); }
+LossContributionScope::~LossContributionScope() { activeContributor().swap(previous_); }
 
-const std::string& LossContributionScope::active() { return activeContributor; }
+const std::string& LossContributionScope::active() { return activeContributor(); }
 
 ModuleLossContributor::ModuleLossContributor(rfmod::IModuleInstance& instance, json options, const PathEnds& ends,
                                              TimePoint time, const LandCoverSource* landcover,
@@ -48,8 +53,8 @@ std::vector<rfcore::BudgetTerm> ModuleLossContributor::acceptTerms(const std::st
             dropped.push_back("term '" + id + "' has no finite valueDb");
             continue;
         }
-        out.push_back({id, t.value("label", id), rfcore::Decibel(t.at("valueDb").get<double>()),
-                       t.value("source", moduleId)});
+        out.emplace_back(id, t.value("label", id), rfcore::Decibel(t.at("valueDb").get<double>()),
+                         t.value("source", moduleId));
     }
     return out;
 }
@@ -110,9 +115,10 @@ std::vector<rfcore::BudgetTerm> ModuleLossContributor::contribute(const rfcore::
             }
         }
     } catch (const rfmod::ModuleError& e) {
-        failures_.push_back({id_, e.code() + ": " + e.what()});
-    } catch (const std::exception& e) {
-        failures_.push_back({id_, e.what()});
+        failures_.emplace_back(id_, e.code() + ": " + e.what());
+    } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): a module failure is reported, never fails the calculation
+        // A module failure never fails the calculation: it is reported with the result instead.
+        failures_.emplace_back(id_, e.what());
     }
     const std::scoped_lock lock(lastMutex_);
     lastProfile_ = &ctx.profile;
@@ -131,7 +137,7 @@ std::vector<ModuleRunner::Active> ModuleRunner::optedIn(const std::string& capab
     for (rfmod::IModuleInstance* m : registry_->withCapability(capability)) {
         const std::string& id = m->manifest().id;
         if (!ctx.optedIn(id)) continue;
-        out.push_back({m, id, ctx.optionsFor(id)});
+        out.emplace_back(m, id, ctx.optionsFor(id));
     }
     return out;
 }

@@ -12,6 +12,7 @@
 #include <memory>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 
 namespace rfmod {
 namespace {
@@ -22,16 +23,19 @@ namespace fs = std::filesystem;
 constexpr const char* kFileList = "META/files.sha256";
 constexpr const char* kSignature = "META/signature";
 
-bool safePath(const std::string& p) {
-    if (p.empty() || p.front() == '/' || p.find('\\') != std::string::npos || p.find('\0') != std::string::npos) {
+bool safePath(std::string_view p) {
+    if (p.empty() || p.front() == '/' || p.find('\\') != std::string_view::npos ||
+        p.find('\0') != std::string_view::npos) {
         return false;
     }
     std::size_t start = 0;
     while (start <= p.size()) {
         const std::size_t slash = p.find('/', start);
-        const std::string part = p.substr(start, slash == std::string::npos ? std::string::npos : slash - start);
-        if (part.empty() || part == "." || part == "..") return false;
-        if (slash == std::string::npos) break;
+        const std::size_t length = slash == std::string_view::npos ? std::string_view::npos : slash - start;
+        if (const std::string_view part = p.substr(start, length); part.empty() || part == "." || part == "..") {
+            return false;
+        }
+        if (slash == std::string_view::npos) break;
         start = slash + 1;
     }
     return true;
@@ -289,7 +293,7 @@ private:
 
 }  // namespace
 
-std::optional<PackageFiles> PackageReader::read(const std::string& archiveBytes, const PackageLimits& limits,
+std::optional<PackageFiles> PackageReader::read(std::string_view archiveBytes, const PackageLimits& limits,
                                                 ValidationReport& report) {
     if (archiveBytes.size() > limits.maxPackageBytes) {
         report.fail("archive.size",
@@ -320,7 +324,7 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
     for (const auto& [path, content] : input.files) {
         if (path.starts_with("META/")) continue;
         if (!safePath(path)) throw std::invalid_argument("unsafe path: " + path);
-        files.files.emplace(path, content);
+        files.files.try_emplace(path, content);
     }
     if (!files.files.contains("manifest.json")) throw std::invalid_argument("package needs manifest.json");
     const std::string list = fileList(files);
@@ -338,13 +342,13 @@ std::string PackageWriter::pack(const PackageFiles& input, const SecretKey& key)
     }
     archive_write_set_format_pax_restricted(a.get());
     std::string out;
-    auto openCb = [](archive*, void*) -> int { return ARCHIVE_OK; };
-    auto writeCb = [](archive*, void* ctx, const void* buf, std::size_t len) -> la_ssize_t {
+    // libarchive's write callback type fixes the untyped client data and buffer pointers.
+    auto writeCb = [](archive*, void* ctx, const void* buf, std::size_t len) {  // NOSONAR(cpp:S5008): libarchive API
         static_cast<std::string*>(ctx)->append(static_cast<const char*>(buf), len);
         return static_cast<la_ssize_t>(len);
     };
-    auto closeCb = [](archive*, void*) -> int { return ARCHIVE_OK; };
-    if (archive_write_open(a.get(), &out, openCb, writeCb, closeCb) != ARCHIVE_OK) {
+    // Writing to memory needs no open or close step.
+    if (archive_write_open(a.get(), &out, nullptr, writeCb, nullptr) != ARCHIVE_OK) {
         throw PackageWriteError("archive: " + archiveError(a.get()));
     }
     for (const auto& [path, content] : files.files) {
@@ -377,7 +381,7 @@ std::string PackageWriter::pack(const fs::path& sourceDir, const SecretKey& key)
         std::ifstream in(item.path(), std::ios::binary);
         std::ostringstream content;
         content << in.rdbuf();
-        files.files.emplace(rel, content.str());
+        files.files.try_emplace(rel, content.str());
     }
     return pack(files, key);
 }

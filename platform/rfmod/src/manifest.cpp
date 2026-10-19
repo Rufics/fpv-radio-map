@@ -8,6 +8,8 @@
 #include <format>
 #include <set>
 #include <sstream>
+#include <stdexcept>
+#include <string_view>
 
 namespace rfmod {
 namespace {
@@ -33,11 +35,12 @@ const nlohmann::json_schema::json_validator& schemaValidator() {
     return validator;
 }
 
-Lifecycle parseLifecycle(const std::string& s) {
-    if (s == "alpha") return Lifecycle::Alpha;
-    if (s == "beta") return Lifecycle::Beta;
-    if (s == "stable") return Lifecycle::Stable;
-    return Lifecycle::Deprecated;
+Lifecycle parseLifecycle(std::string_view s) {
+    using enum Lifecycle;
+    if (s == "alpha") return Alpha;
+    if (s == "beta") return Beta;
+    if (s == "stable") return Stable;
+    return Deprecated;
 }
 
 std::string join(const std::vector<std::string>& items) {
@@ -49,17 +52,18 @@ std::string join(const std::vector<std::string>& items) {
 }  // namespace
 
 std::string toString(Lifecycle l) {
+    using enum Lifecycle;
     switch (l) {
-        case Lifecycle::Alpha: return "alpha";
-        case Lifecycle::Beta: return "beta";
-        case Lifecycle::Stable: return "stable";
-        case Lifecycle::Deprecated: return "deprecated";
+        case Alpha: return "alpha";
+        case Beta: return "beta";
+        case Stable: return "stable";
+        case Deprecated: return "deprecated";
     }
     return "alpha";
 }
 
-bool Manifest::hasCapability(const std::string& capability) const {
-    return std::find(provides.begin(), provides.end(), capability) != provides.end();
+bool Manifest::hasCapability(std::string_view capability) const {
+    return std::ranges::find(provides, capability) != provides.end();
 }
 
 std::string currentPlatform() {
@@ -80,6 +84,46 @@ std::string currentPlatform() {
     const char* arch = "unknown";
 #endif
     return std::string(os) + "-" + arch;
+}
+
+bool ManifestParser::checkDependencies(const Manifest& m, ValidationReport& report) {
+    std::set<std::string, std::less<>> seen;
+    bool depsOk = true;
+    std::string depDetail = "dependency ids are unique and not the module itself";
+    for (const auto* list : {&m.dependencies, &m.optionalDependencies}) {
+        for (const Dependency& d : *list) {
+            if (d.id == m.id || !seen.insert(d.id).second) {
+                depsOk = false;
+                depDetail = "dependency " + d.id + " is listed twice or is the module itself";
+            }
+        }
+    }
+    report.add("manifest.dependencies", depsOk, depDetail);
+    return depsOk;
+}
+
+bool ManifestParser::checkDeprecation(const json& d, Manifest& m, ValidationReport& report) {
+    try {
+        Deprecation dep{Version::parse(d.at("since").get<std::string>()),
+                        Version::parse(d.at("removedIn").get<std::string>()), d.value("replacement", ""),
+                        d.at("message").get<std::string>()};
+        // Kubernetes-style window: removal at least 3 minor releases after deprecation, or a later major.
+        const bool windowOk = dep.removedIn.major() > dep.since.major() ||
+                              (dep.removedIn.major() == dep.since.major() &&
+                               dep.removedIn.minor() >= dep.since.minor() + kMinDeprecationMinors);
+        report.add("deprecation.window", windowOk,
+                   std::format("deprecated in {}, removed in {} (needs at least {} minor releases)", dep.since.str(),
+                               dep.removedIn.str(), kMinDeprecationMinors));
+        const bool lifecycleOk = m.lifecycle == Lifecycle::Deprecated;
+        report.add("deprecation.lifecycle", lifecycleOk, "a deprecation block requires lifecycle \"deprecated\"");
+        m.deprecation = std::move(dep);
+        return windowOk && lifecycleOk;
+    } catch (const std::invalid_argument& e) {
+        report.add("deprecation.window", false, e.what());
+    } catch (const json::exception& e) {
+        report.add("deprecation.window", false, e.what());
+    }
+    return false;
 }
 
 std::optional<Manifest> ManifestParser::parse(const json& document, const Version& hostVersion,
@@ -103,7 +147,7 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
     m.abi = document.at("abi").get<unsigned>();
     m.provides = document.at("provides").get<std::vector<std::string>>();
     m.methods = document.value("methods", std::vector<std::string>{});
-    m.entry = document.at("entry").get<std::map<std::string, std::string>>();
+    m.entry = document.at("entry").get<std::map<std::string, std::string, std::less<>>>();
 
     bool ok = true;
     auto check = [&report, &ok](const std::string& name, bool passed, const std::string& detail) {
@@ -118,14 +162,17 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
         auto deps = [](const json& list) {
             std::vector<Dependency> out;
             for (const json& d : list) {
-                out.push_back({d.at("id").get<std::string>(), VersionRange::parse(d.at("version").get<std::string>())});
+                out.emplace_back(d.at("id").get<std::string>(), VersionRange::parse(d.at("version").get<std::string>()));
             }
             return out;
         };
         m.dependencies = deps(document.at("requires"));
         m.optionalDependencies = deps(document.value("optional", json::array()));
         report.pass("manifest.versions", "version " + m.version.str() + " and all ranges parse");
-    } catch (const std::exception& e) {
+    } catch (const std::invalid_argument& e) {
+        check("manifest.versions", false, e.what());
+        return std::nullopt;
+    } catch (const json::exception& e) {
         check("manifest.versions", false, e.what());
         return std::nullopt;
     }
@@ -139,43 +186,13 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
     }
 
     const std::string platform = currentPlatform();
-    check("entry.platform", m.entry.count(platform) == 1,
+    check("entry.platform", m.entry.contains(platform),
           m.entry.contains(platform) ? "library for " + platform + ": " + m.entry.at(platform)
                                   : "no library for " + platform + " in entry");
 
-    std::set<std::string> seen;
-    bool depsOk = true;
-    std::string depDetail = "dependency ids are unique and not the module itself";
-    for (const auto* list : {&m.dependencies, &m.optionalDependencies}) {
-        for (const Dependency& d : *list) {
-            if (d.id == m.id || !seen.insert(d.id).second) {
-                depsOk = false;
-                depDetail = "dependency " + d.id + " is listed twice or is the module itself";
-            }
-        }
-    }
-    check("manifest.dependencies", depsOk, depDetail);
+    ok = checkDependencies(m, report) && ok;
 
-    if (document.contains("deprecation")) {
-        const json& d = document.at("deprecation");
-        try {
-            Deprecation dep{Version::parse(d.at("since").get<std::string>()),
-                            Version::parse(d.at("removedIn").get<std::string>()), d.value("replacement", ""),
-                            d.at("message").get<std::string>()};
-            // Kubernetes-style window: removal at least 3 minor releases after deprecation, or a later major.
-            const bool windowOk = dep.removedIn.major() > dep.since.major() ||
-                                  (dep.removedIn.major() == dep.since.major() &&
-                                   dep.removedIn.minor() >= dep.since.minor() + kMinDeprecationMinors);
-            check("deprecation.window", windowOk,
-                  "deprecated in " + dep.since.str() + ", removed in " + dep.removedIn.str() +
-                      " (needs at least " + std::to_string(kMinDeprecationMinors) + " minor releases)");
-            check("deprecation.lifecycle", m.lifecycle == Lifecycle::Deprecated,
-                  "a deprecation block requires lifecycle \"deprecated\"");
-            m.deprecation = std::move(dep);
-        } catch (const std::exception& e) {
-            check("deprecation.window", false, e.what());
-        }
-    }
+    if (document.contains("deprecation")) ok = checkDeprecation(document.at("deprecation"), m, report) && ok;
 
     if (document.contains("ui")) {
         m.ui = UiExtension{document.at("ui").at("bundle").get<std::string>(),

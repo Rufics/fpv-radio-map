@@ -3,6 +3,7 @@
 #include "relay.hpp"
 
 #include <cmath>
+#include <format>
 
 namespace fpv::relay {
 namespace {
@@ -50,7 +51,7 @@ public:
         const double score = r.at("data").at("chosen").at("scoreDb").get<double>();
         const bool ok = std::abs(direct + 6.0) < 1e-6 && std::abs(score - 2.0) < 1e-6;
         return {{"ok", ok}, {"checks", {{{"name", "direct and relayed budgets"}, {"ok", ok},
-                                         {"detail", std::to_string(direct) + " / " + std::to_string(score)}}}}};
+                                         {"detail", std::format("{:f} / {:f}", direct, score)}}}}};
     }
 };
 

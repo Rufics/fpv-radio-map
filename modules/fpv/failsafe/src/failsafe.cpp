@@ -24,9 +24,9 @@ std::optional<LossPoint> FailsafeAnalyzer::firstLoss(const Route& route) const {
     double good = 0.0;
     for (std::size_t i = 1;; ++i) {
         const double s = std::min(out, static_cast<double>(i) * s_.stepM);
-        const RoutePoint p = route.at(s);
-        if (link_.marginDb(p.position, p.aglM) < 0.0) {
-            double lo = good, hi = s;
+        if (const RoutePoint p = route.at(s); link_.marginDb(p.position, p.aglM) < 0.0) {
+            double lo = good;
+            double hi = s;
             while (hi - lo > 1.0) {
                 const double mid = (lo + hi) / 2.0;
                 const RoutePoint q = route.at(mid);
@@ -46,9 +46,13 @@ RthPlan FailsafeAnalyzer::planRth(const Mission& mission, const Route& route, co
     const double lossGround = world_.groundMsl(loss.point.position);
     const double currentMsl = lossGround + loss.point.aglM;
     const double fixedMsl = homeGround + s_.rthAltitudeAboveHomeM;
-    plan.cruiseMslM = s_.altitudeMode == "fixed" ? fixedMsl
-                    : s_.altitudeMode == "current" ? currentMsl
-                    : std::max(currentMsl, fixedMsl);
+    if (s_.altitudeMode == "fixed") {
+        plan.cruiseMslM = fixedMsl;
+    } else if (s_.altitudeMode == "current") {
+        plan.cruiseMslM = currentMsl;
+    } else {
+        plan.cruiseMslM = std::max(currentMsl, fixedMsl);
+    }
     const InverseResult home = world_.inverse(loss.point.position, mission.pilot.position);
     plan.homeDistanceM = home.distanceM;
 

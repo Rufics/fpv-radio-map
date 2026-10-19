@@ -9,8 +9,8 @@ rfcore::TerrainProfile ClearanceSolver::toProfile(const std::vector<GroundSample
     std::vector<rfcore::ProfileSample> s;
     s.reserve(g.size());
     for (const GroundSample& x : g) {
-        s.push_back({rfcore::Metres(x.distanceM), rfcore::Metres(x.groundMslM), rfcore::Metres(x.obstacleM),
-                     rfcore::Metres(0.0), rfcore::GeoPoint{x.position.lat, x.position.lon}});
+        s.emplace_back(rfcore::Metres(x.distanceM), rfcore::Metres(x.groundMslM), rfcore::Metres(x.obstacleM),
+                       rfcore::Metres(0.0), rfcore::GeoPoint{x.position.lat, x.position.lon});
     }
     return rfcore::TerrainProfile(std::move(s), "route", azimuthDeg, latitudeDeg);
 }
@@ -29,7 +29,8 @@ std::optional<double> ClearanceSolver::requiredAgl(const rfcore::TerrainProfile&
     for (std::size_t i = 1; static_cast<double>(i) * step_ <= maxAgl + 1e-9; ++i) {
         const double h = static_cast<double>(i) * step_;
         if (clearance(profile, pilotAgl, h) >= fraction_) {
-            double lo = prev, hi = h;
+            double lo = prev;
+            double hi = h;
             while (hi - lo > 1e-3) {
                 const double mid = (lo + hi) / 2.0;
                 (clearance(profile, pilotAgl, mid) >= fraction_ ? hi : lo) = mid;

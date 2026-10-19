@@ -44,7 +44,7 @@ public:
 private:
     void add(const std::string& name, const json& schema);
     std::filesystem::path dir_;
-    std::map<std::string, std::unique_ptr<nlohmann::json_schema::json_validator>> validators_;
+    std::map<std::string, std::unique_ptr<nlohmann::json_schema::json_validator>, std::less<>> validators_;
     mutable std::mutex mutex_;
 };
 

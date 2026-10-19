@@ -51,7 +51,7 @@ std::vector<Sample> samplePoints(const Route& route, const Mission& mission, con
     for (const double s : at) {
         const RoutePoint p = route.at(s);
         if (world.inverse(mission.pilot.position, p.position).distanceM < 1.0) continue;
-        samples.push_back({s, p});
+        samples.emplace_back(s, p);
     }
     return samples;
 }
@@ -101,8 +101,8 @@ bool anyBelowRequired(const json& points, std::size_t leg) {
 /// because the AGL is interpolated between them.
 json raiseLegFix(const json& request, const Leg& leg, const std::string& legName, double planned, double need) {
     json wps = request.at("mission").at("waypoints");
-    const std::size_t toIdx = leg.index;          // waypoint index of leg.to
-    if (toIdx < wps.size()) wps[toIdx]["aglM"] = std::max(wps[toIdx].at("aglM").get<double>(), need);
+    // leg.index is also the waypoint index of leg.to.
+    if (const std::size_t toIdx = leg.index; toIdx < wps.size()) wps[toIdx]["aglM"] = std::max(wps[toIdx].at("aglM").get<double>(), need);
     if (leg.index >= 1) wps[leg.index - 1]["aglM"] = std::max(wps[leg.index - 1].at("aglM").get<double>(), need);
     return {{"id", std::format("{}/raise-leg-{}", kId, leg.index)},
             {"title", "Raise " + legName + " to " + fixed(need, 1) + " m"},
@@ -132,7 +132,7 @@ std::optional<json> legReason(const json& request, const Leg& leg, const std::ve
 
 }  // namespace
 
-json analyze(const json& request, const IWorld& world, const std::map<std::string, LinkInput>& links) {
+json analyze(const json& request, const IWorld& world, const LinkInputs& links) {
     const Mission mission = Mission::fromJson(request.at("mission"));
     const json options = request.value("options", json::object());
     Settings set{options.value("clearanceFraction", 0.6), options.value("maxAglM", 500.0), {}};

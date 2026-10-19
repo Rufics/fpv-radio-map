@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -17,17 +18,14 @@ public:
         std::string detail;
     };
 
-    void pass(std::string name, std::string detail = {}) { checks_.push_back({std::move(name), true, std::move(detail)}); }
-    void fail(std::string name, std::string detail) { checks_.push_back({std::move(name), false, std::move(detail)}); }
-    void add(std::string name, bool ok, std::string detail) { checks_.push_back({std::move(name), ok, std::move(detail)}); }
+    void pass(std::string name, std::string detail = {}) { add(std::move(name), true, std::move(detail)); }
+    void fail(std::string name, std::string detail) { add(std::move(name), false, std::move(detail)); }
+    void add(std::string name, bool ok, std::string detail) {
+        checks_.emplace_back(std::move(name), ok, std::move(detail));
+    }
     void merge(const ValidationReport& other) { checks_.insert(checks_.end(), other.checks_.begin(), other.checks_.end()); }
 
-    [[nodiscard]] bool ok() const {
-        for (const Check& c : checks_) {
-            if (!c.ok) return false;
-        }
-        return true;
-    }
+    [[nodiscard]] bool ok() const { return std::ranges::all_of(checks_, &Check::ok); }
     [[nodiscard]] const std::vector<Check>& checks() const { return checks_; }
 
     [[nodiscard]] nlohmann::json toJson() const {

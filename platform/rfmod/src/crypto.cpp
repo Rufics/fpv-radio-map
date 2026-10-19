@@ -2,6 +2,8 @@
 
 #include <sodium.h>
 
+#include <algorithm>
+#include <format>
 #include <stdexcept>
 
 namespace rfmod {
@@ -12,14 +14,14 @@ constexpr std::string_view kSecretPrefix = "rfmod-ed25519-secret:";
 
 void ensureSodium() {
     static const bool ready = sodium_init() >= 0;
-    if (!ready) throw std::runtime_error("libsodium failed to initialise");
+    if (!ready) throw SodiumInitError();
 }
 
 std::string_view stripPrefix(std::string_view text, std::string_view prefix) {
     while (!text.empty() && (text.back() == '\n' || text.back() == '\r' || text.back() == ' ')) text.remove_suffix(1);
     while (!text.empty() && (text.front() == ' ')) text.remove_prefix(1);
-    if (text.substr(0, prefix.size()) != prefix) {
-        throw std::invalid_argument("key text must start with " + std::string(prefix));
+    if (!text.starts_with(prefix)) {
+        throw std::invalid_argument(std::format("key text must start with {}", prefix));
     }
     return text.substr(prefix.size());
 }
@@ -59,10 +61,9 @@ Bytes fromBase64(std::string_view text) {
     if (text.empty()) return {};
     Bytes out(text.size());
     std::size_t len = 0;
-    const char* end = nullptr;
-    if (sodium_base642bin(out.data(), out.size(), text.data(), text.size(), nullptr, &len, &end,
-                          sodium_base64_VARIANT_ORIGINAL) != 0 ||
-        end != text.data() + text.size()) {
+    if (const char* end = nullptr; sodium_base642bin(out.data(), out.size(), text.data(), text.size(), nullptr, &len,
+                                                     &end, sodium_base64_VARIANT_ORIGINAL) != 0 ||
+                                   end != text.data() + text.size()) {
         throw std::invalid_argument("invalid base64");
     }
     out.resize(len);
@@ -72,7 +73,7 @@ Bytes fromBase64(std::string_view text) {
 PublicKey PublicKey::fromBytes(const Bytes& raw) {
     if (raw.size() != kSize) throw std::invalid_argument("Ed25519 public key must be 32 bytes");
     PublicKey k;
-    std::copy(raw.begin(), raw.end(), k.key_.begin());
+    std::ranges::copy(raw, k.key_.begin());
     return k;
 }
 
@@ -101,7 +102,7 @@ SecretKey SecretKey::fromText(std::string_view text) {
     const Bytes raw = fromBase64(stripPrefix(text, kSecretPrefix));
     if (raw.size() != kSize) throw std::invalid_argument("Ed25519 secret key must be 64 bytes");
     SecretKey k;
-    std::copy(raw.begin(), raw.end(), k.key_.begin());
+    std::ranges::copy(raw, k.key_.begin());
     return k;
 }
 

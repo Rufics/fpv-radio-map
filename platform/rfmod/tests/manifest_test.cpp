@@ -67,6 +67,22 @@ TEST(Manifest, DeprecationWindow) {
     EXPECT_TRUE(parses(m));
 }
 
+TEST(Manifest, DeprecationWithAnUnreadableVersionFailsTheWindow) {
+    std::string failed;
+    auto m = baseManifest("fpv.oldthing", "1.4.0");
+    m["lifecycle"] = "deprecated";
+    m["deprecation"] = {{"since", "soon"}, {"removedIn", "0.7.0"}, {"message", "Use fpv.newthing instead."}};
+    EXPECT_FALSE(parses(m, &failed));
+    EXPECT_EQ(failed, "deprecation.window");
+}
+
+TEST(Manifest, EveryLifecycleHasItsName) {
+    EXPECT_EQ(toString(Lifecycle::Alpha), "alpha");
+    EXPECT_EQ(toString(Lifecycle::Beta), "beta");
+    EXPECT_EQ(toString(Lifecycle::Stable), "stable");
+    EXPECT_EQ(toString(Lifecycle::Deprecated), "deprecated");
+}
+
 TEST(Manifest, DependenciesMustBeDistinct) {
     std::string failed;
     auto m = baseManifest("fpv.relay", "1.0.0");

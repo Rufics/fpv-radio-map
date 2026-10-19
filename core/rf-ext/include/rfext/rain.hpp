@@ -8,7 +8,10 @@ namespace rfext {
 class RainAttenuation {
 public:
     struct Coefficients {
-        double kH, alphaH, kV, alphaV;
+        double kH;
+        double alphaH;
+        double kV;
+        double alphaV;
     };
     /// Eqs. (2)-(3) with Tables 1-4. Valid 1-1000 GHz; throws outside that range.
     [[nodiscard]] static Coefficients coefficients(rfcore::Hertz frequency);

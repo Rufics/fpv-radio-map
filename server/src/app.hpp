@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace httplib {
 class Server;
@@ -63,51 +64,73 @@ private:
     /// The HTTP handler that runs `method` of a fresh `Api` inside dispatch.
     template <typename Api, typename Method>
     auto route(std::string rateClass, Method method);
-    void loadCacheSettings();
-    json cacheTiers();
+    /// Logs an unexpected request failure and answers 500 without its details.
+    void internalError(const httplib::Request& req, httplib::Response& res, std::string_view what);
+    void loadCacheSettings() const;
+    [[nodiscard]] json cacheTiers() const;
     json moduleList(bool admin);
     json mapConfig() const;
 
     // request helpers
     [[nodiscard]] std::string client(const httplib::Request& req) const;
     [[nodiscard]] json body(const httplib::Request& req) const;
-    [[nodiscard]] Principal session(const httplib::Request& req);
+    [[nodiscard]] Principal session(const httplib::Request& req) const;
     void requireAdmin(const httplib::Request& req);
     [[nodiscard]] bool isAdmin(const httplib::Request& req) const;
-    [[nodiscard]] std::string bundleGrant(const std::string& moduleId, TimePoint until) const;
-    [[nodiscard]] bool grantValid(const std::string& moduleId, const std::string& grant) const;
     /// The library kind of a path, checked: HttpError 404 for an unknown or disabled kind.
     [[nodiscard]] std::string libraryKind(const std::string& kind) const;
     [[nodiscard]] json trustedKeys() const;
 
+    /// Persistent state: the database and the stores and services built on it.
+    struct Stores {
+        std::unique_ptr<Database> db;
+        std::unique_ptr<SchemaRegistry> schemas;
+        std::unique_ptr<PgAuthStore> authStore;
+        std::unique_ptr<PinHasher> pins;
+        std::unique_ptr<AuthService> auth;
+        std::unique_ptr<MissionStore> missions;
+        std::unique_ptr<Library> library;
+        std::unique_ptr<BuiltinModules> builtins;
+    };
+    /// The terrain rasters and the block cache they read through.
+    struct Terrain {
+        std::unique_ptr<BlockCache> blocks;
+        std::shared_ptr<const DemSource> dem;
+        std::shared_ptr<const LandCoverSource> landcover;
+    };
+    /// Calculation results: the memory tier and the database table behind it.
+    struct ResultStore {
+        std::unique_ptr<PgResultTable> table;
+        std::unique_ptr<ResultCache> cache;
+    };
+    /// The forecast source (absent without weather.baseUrl) and the service over it.
+    struct Forecast {
+        std::unique_ptr<OpenMeteoSource> source;
+        std::unique_ptr<WeatherService> service;
+    };
+    /// Signed modules: the host they call back into, the trusted keys, the runner and the registry.
+    struct Modules {
+        std::unique_ptr<ServerHostServices> host;
+        std::unique_ptr<rfmod::TrustStore> trust;
+        std::unique_ptr<ModuleRunner> runner;
+        std::unique_ptr<rfmod::ModuleRegistry> registry;
+    };
+
+    // Declared in dependency order: members are destroyed in reverse, users before what they use.
     Config config_;
     Logger log_;
     SystemClock clock_;
-    std::unique_ptr<Database> db_;
-    std::unique_ptr<SchemaRegistry> schemas_;
-    std::unique_ptr<PgAuthStore> authStore_;
-    std::unique_ptr<PinHasher> pins_;
-    std::unique_ptr<AuthService> auth_;
-    std::unique_ptr<MissionStore> missions_;
-    std::unique_ptr<Library> library_;
-    std::unique_ptr<BuiltinModules> builtins_;
-    std::unique_ptr<BlockCache> blocks_;
-    std::shared_ptr<const DemSource> dem_;
-    std::shared_ptr<const LandCoverSource> landcover_;
-    std::unique_ptr<PgResultTable> resultTable_;
-    std::unique_ptr<ResultCache> results_;
-    std::unique_ptr<OpenMeteoSource> forecastSource_;
-    std::unique_ptr<WeatherService> weather_;
-    std::unique_ptr<ServerHostServices> host_;
-    std::unique_ptr<rfmod::TrustStore> trust_;
-    std::unique_ptr<ModuleRunner> runner_;
-    std::unique_ptr<rfmod::ModuleRegistry> registry_;
+    Stores store_;
+    Terrain terrain_;
+    ResultStore resultStore_;
+    Forecast forecast_;
+    Modules modules_;
     std::unique_ptr<LinkService> links_;
     std::unique_ptr<Calculator> calc_;
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
     std::unique_ptr<httplib::Server> http_;
-    std::string grantSecret_;
+    BundleGrants grants_;  ///< signs the UI bundle URLs of alpha modules
 };
 
 }  // namespace rfmap

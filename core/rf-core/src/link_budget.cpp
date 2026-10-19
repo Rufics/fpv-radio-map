@@ -4,6 +4,7 @@
 #include "rfcore/propagation.hpp"
 
 #include <algorithm>
+#include <format>
 #include <stdexcept>
 
 namespace rfcore {
@@ -29,14 +30,14 @@ LinkResult LinkEvaluator::evaluate(const TerrainProfile& profile, Hertz frequenc
     out.diffraction = diff;
 
     const Decibel fs = FreeSpaceLoss::compute(out.rayLength, frequency);
-    out.terms.push_back({"tx_gain", "TX antenna gain", -Decibel(tx.antennaGain.value()), "radio profile"});
-    out.terms.push_back({"tx_feeder", "TX feeder loss", tx.feederLoss, "radio profile"});
-    out.terms.push_back({"free_space", "Free-space loss", fs, "ITU-R P.525"});
-    out.terms.push_back({"diffraction", "Terrain diffraction", diff.loss, "ITU-R P.526 Bullington, exact J(ν)"});
+    out.terms.emplace_back("tx_gain", "TX antenna gain", -Decibel(tx.antennaGain.value()), "radio profile");
+    out.terms.emplace_back("tx_feeder", "TX feeder loss", tx.feederLoss, "radio profile");
+    out.terms.emplace_back("free_space", "Free-space loss", fs, "ITU-R P.525");
+    out.terms.emplace_back("diffraction", "Terrain diffraction", diff.loss, "ITU-R P.526 Bullington, exact J(ν)");
     if (diffraction_.options().useEmpiricalCorrection) {
-        out.terms.push_back({"diffraction_correction", "Bullington empirical correction",
-                             BullingtonDiffraction::empiricalCorrection(diff.loss, profile.length()),
-                             "ITU-R P.526 §4.5 (curve fit)"});
+        out.terms.emplace_back("diffraction_correction", "Bullington empirical correction",
+                               BullingtonDiffraction::empiricalCorrection(diff.loss, profile.length()),
+                               "ITU-R P.526 §4.5 (curve fit)");
     }
 
     const PathContext context{profile, geometry, diff, frequency};
@@ -49,8 +50,8 @@ LinkResult LinkEvaluator::evaluate(const TerrainProfile& profile, Hertz frequenc
         }
     }
 
-    out.terms.push_back({"rx_gain", "RX antenna gain", -Decibel(rx.antennaGain.value()), "radio profile"});
-    out.terms.push_back({"rx_feeder", "RX feeder loss", rx.feederLoss, "radio profile"});
+    out.terms.emplace_back("rx_gain", "RX antenna gain", -Decibel(rx.antennaGain.value()), "radio profile");
+    out.terms.emplace_back("rx_feeder", "RX feeder loss", rx.feederLoss, "radio profile");
 
     Decibel total(0.0);
     for (const BudgetTerm& term : out.terms) {
@@ -64,9 +65,9 @@ LinkResult LinkEvaluator::evaluate(const TerrainProfile& profile, Hertz frequenc
     for (const ProfileSample& s : profile.samples()) {
         worst = std::max(worst, s.uncertainty);
     }
-    out.uncertainty.insert(out.uncertainty.begin(),
-                           {"Terrain data", profile.sourceName() + ", stated vertical error up to " +
-                                                std::to_string(worst.value()) + " m on this path"});
+    out.uncertainty.emplace(out.uncertainty.begin(), "Terrain data",
+                            std::format("{}, stated vertical error up to {:f} m on this path", profile.sourceName(),
+                                        worst.value()));
     return out;
 }
 

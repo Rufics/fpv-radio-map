@@ -31,7 +31,7 @@ enum rfmod_abi { RFMOD_ABI_VERSION = 2 };
 #define RFMOD_EXPORT __attribute__((visibility("default")))
 #endif
 
-enum rfmod_status {
+enum rfmod_status { /* NOSONAR(cpp:S3642): C ABI header, must stay a plain C enum */
     RFMOD_OK = 0,
     RFMOD_ERR_UNKNOWN_METHOD = 1,
     RFMOD_ERR_BAD_REQUEST = 2,
@@ -39,7 +39,12 @@ enum rfmod_status {
     RFMOD_ERR_HOST_CALL = 4
 };
 
-enum rfmod_log_level { RFMOD_LOG_DEBUG = 0, RFMOD_LOG_INFO = 1, RFMOD_LOG_WARN = 2, RFMOD_LOG_ERROR = 3 };
+enum rfmod_log_level { /* NOSONAR(cpp:S3642): C ABI header, must stay a plain C enum */
+    RFMOD_LOG_DEBUG = 0,
+    RFMOD_LOG_INFO = 1,
+    RFMOD_LOG_WARN = 2,
+    RFMOD_LOG_ERROR = 3
+};
 
 /* Host state handed back to every host callback. Only the host knows its layout; a module
  * passes the pointer through unchanged and never dereferences it. */

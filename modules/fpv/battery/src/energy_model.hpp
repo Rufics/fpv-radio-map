@@ -66,7 +66,7 @@ public:
     static constexpr double kSeaLevelDensity = 1.225;  // ISA, kg/m³
     static constexpr double kGravity = 9.80665;        // standard, m/s²
 
-    EnergyModel(DroneSpec drone, Air air, const IWorld& world);
+    EnergyModel(DroneSpec drone, const Air& air, const IWorld& world);
 
     /// P0 (ρ0/ρ)^n. Throws std::domain_error if n ≠ 0 and density is unknown.
     [[nodiscard]] double cruisePowerW() const;
@@ -97,7 +97,7 @@ private:
     DroneSpec drone_;
     Air air_;
     const IWorld& world_;
-    double power_;
+    double power_{};  ///< cruise power, set once from the drone and the air
 };
 
 struct TurnBack {

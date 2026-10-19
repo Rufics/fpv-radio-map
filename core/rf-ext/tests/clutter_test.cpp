@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 
+#include <set>
+
 using namespace rfext;
 
 namespace {
@@ -49,4 +51,14 @@ TEST(Clutter, EnabledClassWithoutHeightIsReported) {
     const auto report = ClutterConditioner(settings).apply(profile);
     EXPECT_EQ(report.samplesRaised, 0u);
     EXPECT_EQ(report.samplesWithoutHeight, 1u);
+}
+
+TEST(Clutter, EveryLandCoverHasItsOwnName) {
+    std::set<std::string> names;
+    for (const LandCover c : allLandCovers()) {
+        const std::string name = landCoverName(c);
+        EXPECT_NE(name, "Unknown");
+        EXPECT_TRUE(names.insert(name).second) << name;
+    }
+    EXPECT_EQ(names.size(), allLandCovers().size());
 }

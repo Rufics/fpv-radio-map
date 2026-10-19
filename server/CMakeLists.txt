@@ -9,6 +9,7 @@ find_package(Threads REQUIRED)
 find_package(nlohmann_json 3.11 REQUIRED)
 
 add_library(rfmap_server_lib STATIC
+  src/command_line.cpp
   src/common.cpp
   src/security.cpp
   src/config.cpp

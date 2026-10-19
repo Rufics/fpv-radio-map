@@ -1,30 +1,31 @@
 #include "rfext/clutter.hpp"
 
 #include <algorithm>
+#include <format>
 
 namespace rfext {
 
 const std::vector<LandCover>& allLandCovers() {
-    static const std::vector<LandCover> all = {LandCover::Tree,       LandCover::Shrubland, LandCover::Grassland,
-                                               LandCover::Cropland,   LandCover::BuiltUp,   LandCover::BareSparse,
-                                               LandCover::SnowIce,    LandCover::Water,     LandCover::Wetland,
-                                               LandCover::Mangroves,  LandCover::MossLichen};
+    using enum LandCover;
+    static const std::vector all = {Tree,    Shrubland, Grassland, Cropland,  BuiltUp,   BareSparse,
+                                    SnowIce, Water,     Wetland,   Mangroves, MossLichen};
     return all;
 }
 
 std::string landCoverName(LandCover c) {
+    using enum LandCover;
     switch (c) {
-        case LandCover::Tree: return "Tree cover";
-        case LandCover::Shrubland: return "Shrubland";
-        case LandCover::Grassland: return "Grassland";
-        case LandCover::Cropland: return "Cropland";
-        case LandCover::BuiltUp: return "Built-up";
-        case LandCover::BareSparse: return "Bare / sparse vegetation";
-        case LandCover::SnowIce: return "Snow and ice";
-        case LandCover::Water: return "Permanent water";
-        case LandCover::Wetland: return "Herbaceous wetland";
-        case LandCover::Mangroves: return "Mangroves";
-        case LandCover::MossLichen: return "Moss and lichen";
+        case Tree: return "Tree cover";
+        case Shrubland: return "Shrubland";
+        case Grassland: return "Grassland";
+        case Cropland: return "Cropland";
+        case BuiltUp: return "Built-up";
+        case BareSparse: return "Bare / sparse vegetation";
+        case SnowIce: return "Snow and ice";
+        case Water: return "Permanent water";
+        case Wetland: return "Herbaceous wetland";
+        case Mangroves: return "Mangroves";
+        case MossLichen: return "Moss and lichen";
     }
     return "Unknown";
 }
@@ -97,16 +98,16 @@ std::vector<rfcore::UncertaintyNote> ClutterConditioner::Report::notes() const {
     if (samplesRaised > 0) {
         std::string src;
         for (const auto& s : sources) src += (src.empty() ? "" : "; ") + s;
-        out.push_back({"Clutter", std::to_string(samplesRaised) +
-                                      " samples raised by trees or buildings, treated as opaque (an upper bound on "
-                                      "loss through foliage). Heights: " + src});
+        out.emplace_back("Clutter", std::format("{} samples raised by trees or buildings, treated as opaque (an "
+                                                "upper bound on loss through foliage). Heights: {}",
+                                                samplesRaised, src));
     }
     if (samplesWithoutHeight > 0) {
-        out.push_back({"Clutter", std::to_string(samplesWithoutHeight) +
-                                      " samples in an enabled class have no height data and were left bare"});
+        out.emplace_back("Clutter", std::format("{} samples in an enabled class have no height data and were left bare",
+                                                samplesWithoutHeight));
     }
     if (samplesWithoutCover > 0) {
-        out.push_back({"Clutter", std::to_string(samplesWithoutCover) + " samples have no land cover data"});
+        out.emplace_back("Clutter", std::format("{} samples have no land cover data", samplesWithoutCover));
     }
     return out;
 }

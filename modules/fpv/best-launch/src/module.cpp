@@ -41,7 +41,8 @@ public:
         const LocalWorld world([](const LatLon&) { return std::optional<double>(100.0); }, 30.0);
         const LatLon a{48.5, 35.2};
         const LatLon t = world.direct(a, 90.0, 2000.0).point;
-        const LatLon w0 = world.direct(a, 90.0, 500.0).point, w1 = world.direct(a, 90.0, 1500.0).point;
+        const LatLon w0 = world.direct(a, 90.0, 500.0).point;
+        const LatLon w1 = world.direct(a, 90.0, 1500.0).point;
         const json area = {{{"lat", 48.499}, {"lon", w0.lon}}, {{"lat", 48.501}, {"lon", w0.lon}},
                            {{"lat", 48.501}, {"lon", w1.lon}}, {{"lat", 48.499}, {"lon", w1.lon}}};
         const json mission = {{"pilot", {{"lat", a.lat}, {"lon", a.lon}, {"aglM", 1.5}}},

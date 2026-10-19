@@ -1,16 +1,18 @@
 #include "config.hpp"
 
+#include <unistd.h>  // environ
+
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <fstream>
-
-extern char** environ;
+#include <string_view>
 
 namespace rfmap {
 namespace {
 
 std::string lower(std::string s) {
-    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(s, s.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return s;
 }
 
@@ -30,16 +32,16 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         }
     }
     // Keys absent from the file still get their proper spelling.
-    static const char* known[] = {
+    static constexpr auto known = std::to_array<std::string_view>({
         "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "maxUploadBytes", "database", "url",
         "poolSize", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
         "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "weather",
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "rateLimits", "perMinute", "burst", "coverage",
-        "maxCells", "maxJobs", "keepMinutes", "map"};
-    for (const char* k : known) {
-        if (lower(k) == lower(wanted)) return k;
+        "maxCells", "maxJobs", "keepMinutes", "map"});
+    for (const std::string_view k : known) {
+        if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
     return wanted;
 }
@@ -68,8 +70,8 @@ void readPath(const json& obj, const char* key, std::filesystem::path& out) {
 
 }  // namespace
 
-std::map<std::string, std::string> Config::processEnvironment() {
-    std::map<std::string, std::string> env;
+Config::Environment Config::processEnvironment() {
+    Environment env;
     for (char** e = environ; e && *e; ++e) {
         const std::string kv = *e;
         const auto eq = kv.find('=');
@@ -78,14 +80,14 @@ std::map<std::string, std::string> Config::processEnvironment() {
     return env;
 }
 
-Config Config::load(const std::filesystem::path& file, const std::map<std::string, std::string>& env) {
+Config Config::load(const std::filesystem::path& file, const Environment& env) {
     json doc = json::object();
     if (!file.empty()) {
         std::ifstream in(file);
-        if (!in) throw std::runtime_error("cannot read config file " + file.string());
+        if (!in) throw ConfigError("cannot read config file " + file.string());
         doc = json::parse(in, nullptr, true, true);
     }
-    static const std::map<std::string, std::vector<std::string>> aliases = {
+    static const std::map<std::string, std::vector<std::string>, std::less<>> aliases = {
         {"RFMAP_DATABASE_URL", {"database", "url"}},  {"RFMAP_ADMIN_TOKEN", {"admin", "token"}},
         {"RFMAP_PORT", {"server", "port"}},          {"RFMAP_OPEN_METEO_URL", {"weather", "baseUrl"}},
         {"RFMAP_DEM", {"data", "dem"}},              {"RFMAP_LANDCOVER", {"data", "landcover"}}};
@@ -154,7 +156,7 @@ Config Config::fromJson(json doc) {
     if (w.contains("tiers") && w.at("tiers").is_array()) {
         c.weather.tiers.clear();
         for (const json& t : w.at("tiers")) {
-            c.weather.tiers.push_back({t.value("name", "hourly"), t.value("models", "")});
+            c.weather.tiers.emplace_back(t.value("name", "hourly"), t.value("models", ""));
         }
     }
 

@@ -1,9 +1,10 @@
 #include "rfmod/host.hpp"
 
+#include "worker_exec.hpp"
+
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
-#include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -13,25 +14,17 @@
 #include <cerrno>
 #include <chrono>
 #include <cstring>
-#include <vector>
+#include <format>
+#include <system_error>
 
 namespace rfmod {
 namespace {
 
 constexpr long long kStartupTimeoutMs = 10000;
-constexpr int kProtocolFd = 3;  // the worker's end of the socket, see tools/rfmod-worker.cpp
 
 long long nowMs() {
     using namespace std::chrono;
     return duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-}
-
-// Runs between fork and exec, so it takes only string literals: their length is known at compile
-// time and nothing has to scan memory.
-template <std::size_t N>
-[[noreturn]] void childFail(int errPipe, const char (&what)[N]) {
-    (void)!write(errPipe, what, N - 1);
-    _exit(127);
 }
 
 }  // namespace
@@ -74,31 +67,33 @@ IsolatedModule::IsolatedModule(Manifest manifest, std::filesystem::path library,
 IsolatedModule::~IsolatedModule() {
     try {
         shutdown();
-    } catch (...) {
-        // Ignored: a destructor must not throw; the worker is killed either way.
+    } catch (const std::system_error& e) {
+        // A destructor must not throw, and stop() kills the worker either way: only report it.
+        services_.log(manifest_.id, RFMOD_LOG_WARN, std::format("worker shutdown failed: {}", e.what()));
     }
 }
 
 void IsolatedModule::start() {
-    int sock[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sock) != 0) {
+    std::array<int, 2> sock{};
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sock.data()) != 0) {
         throw ModuleError("load_failed", std::string("socketpair: ") + std::strerror(errno));
     }
-    int err[2];
-    if (pipe2(err, O_CLOEXEC) != 0) {
+    std::array<int, 2> err{};
+    if (pipe2(err.data(), O_CLOEXEC) != 0) {
         close(sock[0]);
         close(sock[1]);
         throw ModuleError("load_failed", std::string("pipe: ") + std::strerror(errno));
     }
 
     // Everything the child needs is prepared before fork: after fork only async-signal-safe calls.
-    const std::string workerPath = worker_.string();
-    const std::string libraryPath = library_.string();
+    // execve takes mutable strings, so argv and envp point into strings this function owns.
+    std::string workerPath = worker_.string();
+    std::string libraryPath = library_.string();
     const std::string dir = library_.parent_path().string();
-    const std::string memory = std::to_string(manifest_.limits.memoryMb);
-    std::vector<char*> argv = {const_cast<char*>(workerPath.c_str()), const_cast<char*>(libraryPath.c_str()),
-                               const_cast<char*>(memory.c_str()), nullptr};
-    char* envp[] = {const_cast<char*>("LC_ALL=C"), nullptr};
+    std::string memory = std::to_string(manifest_.limits.memoryMb);
+    std::string locale = "LC_ALL=C";
+    const std::array<char*, 4> argv = {workerPath.data(), libraryPath.data(), memory.data(), nullptr};
+    const std::array<char*, 2> envp = {locale.data(), nullptr};
     const rlim_t memBytes = static_cast<rlim_t>(manifest_.limits.memoryMb) << 20;
 
     const pid_t pid = fork();
@@ -109,25 +104,7 @@ void IsolatedModule::start() {
         close(err[1]);
         throw ModuleError("load_failed", std::string("fork: ") + std::strerror(errno));
     }
-    if (pid == 0) {
-        const int devnull = open("/dev/null", O_RDONLY);
-        if (devnull < 0 || dup2(devnull, 0) < 0 || dup2(err[1], 1) < 0 || dup2(err[1], 2) < 0 ||
-            dup2(sock[1], kProtocolFd) < 0) {
-            childFail(err[1], "rfmod: cannot set up worker descriptors\n");
-        }
-        // Close everything else the host had open (database sockets, listening sockets, ...).
-        close_range(kProtocolFd + 1, ~0u, 0);
-        const rlimit as{memBytes, memBytes};
-        const rlimit zero{0, 0};
-        const rlimit files{32, 32};
-        if (setrlimit(RLIMIT_AS, &as) != 0 || setrlimit(RLIMIT_CORE, &zero) != 0 ||
-            setrlimit(RLIMIT_FSIZE, &zero) != 0 || setrlimit(RLIMIT_NOFILE, &files) != 0) {
-            childFail(2, "rfmod: cannot apply resource limits\n");
-        }
-        if (chdir(dir.c_str()) != 0) childFail(2, "rfmod: cannot enter module directory\n");
-        execve(argv[0], argv.data(), envp);
-        childFail(2, "rfmod: cannot start rfmod-worker\n");
-    }
+    if (pid == 0) WorkerExec::run({argv.data(), envp.data(), dir.c_str(), sock[1], err[1], memBytes});
 
     close(sock[1]);
     close(err[1]);
@@ -144,8 +121,8 @@ void IsolatedModule::start() {
         if (ready.value("status", 1) != 0) {
             throw ModuleError("init_failed", ready.value("message", std::string("module init failed")));
         }
-        const json embedded = json::parse(ready.value("manifest", std::string("{}")));
-        if (embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
+        if (const json embedded = json::parse(ready.value("manifest", std::string("{}")));
+            embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
             throw ModuleError("load_failed", "library manifest does not match manifest.json");
         }
         const json sb = ready.value("sandbox", json::object());
@@ -180,7 +157,9 @@ void IsolatedModule::stop(bool kill) {
     pid_ = -1;
     if (toWorker_ >= 0) close(toWorker_);
     if (errFromWorker_ >= 0) close(errFromWorker_);
-    toWorker_ = fromWorker_ = errFromWorker_ = -1;
+    toWorker_ = -1;
+    fromWorker_ = -1;
+    errFromWorker_ = -1;
 }
 
 void IsolatedModule::send(const json& message) const {
@@ -199,7 +178,7 @@ void IsolatedModule::answerCallback(const json& msg) {
     try {
         reply["result"] = services_.call(manifest_.id, msg.value("method", ""), msg.value("request", json::object()));
         reply["ok"] = true;
-    } catch (const std::exception& e) {
+    } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): host services may throw anything; the module gets it
         reply["ok"] = false;
         reply["error"] = e.what();
     }
@@ -213,7 +192,7 @@ std::optional<json> IsolatedModule::handleBufferedMessages(std::string_view type
         json msg;
         try {
             msg = json::parse(line);
-        } catch (const std::exception&) {
+        } catch (const json::exception&) {
             throw ModuleError("protocol", manifest_.id + ": worker sent a malformed message");
         }
         if (const std::string t = msg.value("t", ""); t == "log") {
@@ -240,8 +219,8 @@ void IsolatedModule::readWorkerOutput(long long deadlineMs) {
     const long long left = deadlineMs - nowMs();
     if (left <= 0) {
         stop(true);
-        throw ModuleError("timeout", manifest_.id + " did not answer within " +
-                                         std::to_string(manifest_.limits.timeoutMs) + " ms; worker stopped");
+        throw ModuleError("timeout", std::format("{} did not answer within {} ms; worker stopped", manifest_.id,
+                                                 manifest_.limits.timeoutMs));
     }
     std::array<pollfd, 2> fds{{{fromWorker_, POLLIN, 0}, {errFromWorker_, POLLIN, 0}}};
     if (const int rc = poll(fds.data(), fds.size(), static_cast<int>(std::min<long long>(left, 1000))); rc < 0 && errno == EINTR) {
@@ -290,8 +269,9 @@ void IsolatedModule::shutdown() {
     if (pid_ <= 0) return;
     try {
         send({{"t", "shutdown"}});
-    } catch (...) {
-        // Ignored: a worker that cannot be told to stop is stopped by stop() below.
+    } catch (const ModuleError& e) {
+        // A worker that cannot be told to stop is stopped by stop() below.
+        services_.log(manifest_.id, RFMOD_LOG_DEBUG, std::format("worker missed the shutdown request: {}", e.what()));
     }
     stop(false);
 }

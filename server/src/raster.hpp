@@ -68,7 +68,10 @@ private:
     GDALRasterBand* band_ = nullptr;
     OGRCoordinateTransformation* toRaster_ = nullptr;  ///< null when the raster is in WGS84 lon/lat
     std::array<double, 6> inverse_{};
-    int width_ = 0, height_ = 0, blockW_ = 0, blockH_ = 0;
+    int width_ = 0;
+    int height_ = 0;
+    int blockW_ = 0;
+    int blockH_ = 0;
     std::optional<double> noData_;
     rfcore::Metres resolution_{0.0};
     rfcore::GeoPoint centre_{};

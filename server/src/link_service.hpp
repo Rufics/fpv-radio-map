@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfmap {
@@ -20,7 +21,7 @@ class ModuleRunner;
 
 enum class LinkKind { Control, Video };
 std::string toString(LinkKind k);
-LinkKind linkKindFromString(const std::string& s);  ///< HttpError 422 otherwise
+LinkKind linkKindFromString(std::string_view s);  ///< HttpError 422 otherwise
 
 /// One end of a path. Heights are entered above ground; MSL comes from the DEM.
 struct Terminal {
@@ -99,9 +100,14 @@ public:
     struct RawEnds {
         double frequencyHz{};
         double txPowerDbm{};
-        Terminal tx, rx;
-        double txGainDbi{}, txFeederDb{}, rxGainDbi{}, rxFeederDb{};
-        double sensitivityDbm{}, requiredMarginDb{};
+        Terminal tx;
+        Terminal rx;
+        double txGainDbi{};
+        double txFeederDb{};
+        double rxGainDbi{};
+        double rxFeederDb{};
+        double sensitivityDbm{};
+        double requiredMarginDb{};
     };
     [[nodiscard]] LinkEvaluation evaluateRaw(const RawEnds& ends, const CalcContext& ctx) const;
 

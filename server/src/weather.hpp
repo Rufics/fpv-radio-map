@@ -2,6 +2,7 @@
 
 #include "common.hpp"
 #include "config.hpp"
+#include "service_errors.hpp"
 
 #include <rfcore/link_budget.hpp>
 #include <rfext/refractivity.hpp>
@@ -15,6 +16,7 @@
 namespace rfmap {
 
 /// Where forecasts come from. OpenMeteoSource in the server; tests inject fixed responses.
+/// A forecast service. A service that cannot answer throws ForecastUnavailableError.
 class IForecastSource {
 public:
     virtual ~IForecastSource() = default;
@@ -77,7 +79,11 @@ private:
         TimePoint fetched;
     };
     json fetchCached(double lat, double lon, const Config::WeatherTier& tier);
+    /// fetchCached, or nothing with `error` set when the tier's service fails.
+    std::optional<json> fetchOrError(double lat, double lon, const Config::WeatherTier& tier, std::string& error);
     std::optional<TimePoint> runTimeCached();
+    /// The source's run time, or nothing when the source cannot tell or fails.
+    std::optional<TimePoint> tryRunTime() const;
     /// The forecast for `time` in one tier's response, or nothing when it does not cover that
     /// hour. Moves `reach` to the last hour the response covers. Throws on a response that is
     /// not a forecast.
@@ -93,7 +99,7 @@ private:
     IForecastSource* source_;
     const IClock& clock_;
     std::mutex mutex_;
-    std::map<std::string, Cached> cache_;
+    std::map<std::string, Cached, std::less<>> cache_;
     std::optional<std::pair<TimePoint, std::optional<TimePoint>>> run_;
 };
 
