@@ -11,6 +11,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <thread>
@@ -31,6 +32,13 @@ double terrain(int c, int r) {
     if (lat < 48.45 && lon > 35.33) return NAN;
     const double x = (lon - 35.25) / 0.004;
     return 150.0 + 120.0 * std::exp(-x * x);
+}
+
+// Land cover: ESA WorldCover "tree cover" (10) in a strip between lon 35.21 and 35.23, no data
+// (0) elsewhere.
+double landcover(int c, int) {
+    const double lon = kWest + (c + 0.5) * kPx;
+    return lon > 35.21 && lon < 35.23 ? 10.0 : 0.0;
 }
 
 std::string readFile(const fs::path& p) {
@@ -114,6 +122,7 @@ protected:
         fs::remove_all(env->dir);
         fs::create_directories(env->dir);
         rfmap::test::writeCog(env->dir / "dem.cog.tif", kWest, kNorth, kPx, kCols, kRows, terrain);
+        rfmap::test::writeCog(env->dir / "landcover.tif", kWest, kNorth, kPx, kCols, kRows, landcover);
         env->weather = std::make_unique<FakeOpenMeteo>();
 
         // The database is fresh per ctest run (fixture); empty it anyway so reruns work.
@@ -130,7 +139,9 @@ protected:
                      {{"dem", (env->dir / "dem.cog.tif").string()},
                       {"demStatedErrorM", 4.0},
                       {"demStatedErrorSource", "synthetic test terrain, stated LE90"},
-                      {"demName", "Synthetic ridge 3\""}}},
+                      {"demName", "Synthetic ridge 3\""},
+                      {"landcover", (env->dir / "landcover.tif").string()},
+                      {"landcoverName", "Synthetic tree strip"}}},
                     {"schemasDir", RFMAP_SCHEMAS_DIR},
                     {"seedDir", RFMAP_SEED_DIR},
                     {"modules",
@@ -139,12 +150,14 @@ protected:
                       {"trustStore", (env->dir / "keys.json").string()}}},
                     {"weather", {{"baseUrl", "http://127.0.0.1:" + std::to_string(env->weather->port)}}},
                     {"auth", {{"argon2Cost", "interactive"}, {"pinLockoutMinutes", 15}}},
-                    {"coverage", {{"threads", 4}}},
+                    {"coverage", {{"threads", 4}, {"maxCells", 20000}}},
                     // Generous limits: the test makes many requests from one address.
                     {"rateLimits", {{"default", {{"perMinute", 6000}, {"burst", 1000}}},
                                     {"calc", {{"perMinute", 6000}, {"burst", 1000}}},
                                     {"admin", {{"perMinute", 6000}, {"burst", 1000}}},
-                                    {"open", {{"perMinute", 6000}, {"burst", 1000}}}}}};
+                                    {"open", {{"perMinute", 6000}, {"burst", 1000}}},
+                                    {"create", {{"perMinute", 6000}, {"burst", 1000}}},
+                                    {"coverage", {{"perMinute", 6000}, {"burst", 1000}}}}}};
         env->app = std::make_unique<Application>(Config::fromJson(cfg), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true,
                                                  RFMAP_SQL_DIR);
         env->port = env->app->bindAny();
@@ -217,6 +230,39 @@ protected:
                 {"links", {{"control", controlLink()}, {"video", videoLink()}}},
                 {"evaluate", "both"},
                 {"coverage", {{"radiusM", 1500}, {"cellM", 250}, {"droneAglM", 80}}}};
+    }
+    /// A one-leg control-only mission from the pilot to `to`, opting into `modules`.
+    static json shortMission(const json& to, const json& modules = json::object()) {
+        return {{"schema", "mission/v1"},
+                {"name", "Short"},
+                {"time", {{"mode", "now"}}},
+                {"pilot", point(48.50, 35.20, 1.5)},
+                {"waypoints", {to}},
+                {"returnToPilot", false},
+                {"links", {{"control", controlLink()}}},
+                {"evaluate", "control"},
+                {"modules", modules},
+                {"coverage", {{"radiusM", 1000}, {"cellM", 250}, {"droneAglM", 80}}}};
+    }
+    /// The edit session of a newly created copy of `m`.
+    static std::string sessionFor(const json& m) {
+        const auto r = call("POST", "/missions", m);
+        if (r.status != 201) throw std::runtime_error("mission refused: " + r.body.dump());
+        return r.body["session"];
+    }
+    /// Polls a coverage job until it leaves the queue.
+    static json waitForJob(const std::string& id, const std::string& session) {
+        json job;
+        for (int i = 0; i < 600; ++i) {
+            job = call("GET", "/jobs/" + id, nullptr, bearer(session)).body;
+            if (job["state"] != "queued" && job["state"] != "running") break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        return job;
+    }
+    /// Whether `list` holds an object with `key` equal to `value`.
+    static bool has(const json& list, const std::string& key, const json& value) {
+        return std::ranges::any_of(list, [&](const json& j) { return j.is_object() && j.value(key, json()) == value; });
     }
 };
 
@@ -631,4 +677,238 @@ TEST_F(Integration, AdminCacheLimitsAndClear) {
     const auto after = call("GET", "/admin/cache", nullptr, admin());
     EXPECT_EQ(after.body[1]["entries"], 0);
     EXPECT_EQ(after.body[2]["entries"], 0);
+}
+
+TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {
+    const std::string pkg = rfmod::PackageWriter::pack(
+        fs::path(PROBE_STAGE), rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-owner.secret")));
+    httplib::Client c("127.0.0.1", env->port);
+    c.set_read_timeout(60, 0);
+    const auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
+    ASSERT_TRUE(up);
+    ASSERT_EQ(up->status, 200) << up->body;
+    ASSERT_TRUE(json::parse(up->body)["ok"].get<bool>()) << up->body;
+
+    // Good reasons land on their leg or the route, an unknown severity becomes info, and the
+    // module's data and battery estimate are kept.
+    const json answer = {{"test.probe", {{"mode", "answer"}}}};
+    const json m = shortMission(point(48.51, 35.22, 100), answer);
+    const auto r = call("POST", "/calc/route", m, bearer(sessionFor(m)));
+    ASSERT_EQ(r.status, 200) << r.body;
+    EXPECT_TRUE(has(r.body["legs"][0]["reasons"], "text", "on the first leg"));
+    EXPECT_TRUE(has(r.body["reasons"], "text", "on a leg that does not exist"));
+    EXPECT_TRUE(has(r.body["reasons"], "text", "leg is not a number"));
+    for (const auto& reason : r.body["reasons"]) {
+        if (reason.value("text", "") == "unknown severity") EXPECT_EQ(reason["severity"], "info");
+    }
+    EXPECT_EQ(r.body["modules"]["test.probe"], json({{"probe", true}}));
+    EXPECT_EQ(r.body["battery"]["source"], "test.probe");
+    EXPECT_TRUE(r.body["moduleFailures"].empty()) << r.body["moduleFailures"];
+
+    // A module that fails, or answers something that is not an object, is listed once, and the
+    // route is still computed without it.
+    for (const char* mode : {"fail", "not-an-object"}) {
+        const json bad = shortMission(point(48.51, 35.22, 100), {{"test.probe", {{"mode", mode}}}});
+        const auto failed = call("POST", "/calc/route", bad, bearer(sessionFor(bad)));
+        ASSERT_EQ(failed.status, 200) << failed.body;
+        EXPECT_EQ(failed.body["legs"].size(), 1u);
+        const json& failures = failed.body["moduleFailures"];
+        EXPECT_EQ(std::ranges::count_if(failures, [](const json& f) { return f["module"] == "test.probe"; }), 1)
+            << mode << ": " << failures;
+        EXPECT_FALSE(failed.body.contains("battery")) << mode;
+    }
+    const auto notObject = call("POST", "/calc/route", shortMission(point(48.51, 35.22, 100), {{"test.probe", {{"mode", "not-an-object"}}}}),
+                                bearer(sessionFor(m)));
+    EXPECT_NE(notObject.body["moduleFailures"].dump().find("did not return an object"), std::string::npos);
+
+    // A failing loss contributor on a single path.
+    const json path = {{"from", point(48.50, 35.20, 1.5)}, {"to", point(48.50, 35.30, 300)}, {"kind", "control"},
+                       {"link", controlLink()}, {"modules", {{"test.probe", {{"mode", "fail"}}}}}};
+    const auto p = call("POST", "/calc/path", path, bearer(sessionFor(m)));
+    ASSERT_EQ(p.status, 200) << p.body;
+    EXPECT_TRUE(has(p.body["moduleFailures"], "module", "test.probe")) << p.body["moduleFailures"];
+
+    // Coverage: only the layer with one value per cell is kept; a failing module is reported.
+    const std::string session = sessionFor(m);
+    const auto start = call("POST", "/calc/coverage", m, bearer(session));
+    ASSERT_EQ(start.status, 202) << start.body;
+    ASSERT_EQ(waitForJob(start.body["jobId"], session)["state"], "done");
+    const auto grid = call("GET", "/jobs/" + start.body["jobId"].get<std::string>() + "/coverage/control.json", nullptr,
+                           bearer(session));
+    ASSERT_EQ(grid.status, 200) << grid.body;
+    const json& layers = grid.body["modules"]["test.probe"]["layers"];
+    ASSERT_EQ(layers.size(), 1u) << grid.body["modules"];
+    EXPECT_EQ(layers[0]["id"], "fits");
+    EXPECT_TRUE(has(grid.body["reasons"], "text", "probe looked at the grid"));
+
+    const json failing = shortMission(point(48.51, 35.22, 100), {{"test.probe", {{"mode", "fail"}}}});
+    const std::string failingSession = sessionFor(failing);
+    const auto failingStart = call("POST", "/calc/coverage", failing, bearer(failingSession));
+    ASSERT_EQ(failingStart.status, 202);
+    ASSERT_EQ(waitForJob(failingStart.body["jobId"], failingSession)["state"], "done");
+    const auto failingGrid = call("GET", "/jobs/" + failingStart.body["jobId"].get<std::string>() + "/coverage/control.json",
+                                  nullptr, bearer(failingSession));
+    EXPECT_TRUE(has(failingGrid.body["moduleFailures"], "module", "test.probe")) << failingGrid.body;
+
+    // Removal: built-ins can only be disabled; an uploaded module goes away.
+    EXPECT_EQ(call("GET", "/admin/modules/notices", nullptr, admin()).status, 200);
+    EXPECT_EQ(call("GET", "/admin/modules/notices").status, 401);
+    EXPECT_EQ(call("DELETE", "/admin/modules/rf.weather", nullptr, admin()).status, 422);
+    const auto removed = call("DELETE", "/admin/modules/test.probe", nullptr, admin());
+    EXPECT_LT(removed.status, 300) << removed.body;
+    EXPECT_FALSE(has(call("GET", "/modules").body, "id", "test.probe"));
+}
+
+TEST_F(Integration, RouteIntoTheHoleIsMissingDataNotAVerdict) {
+    const json m = shortMission(point(48.42, 35.36, 100));
+    const auto r = call("POST", "/calc/route", m, bearer(sessionFor(m)));
+    ASSERT_EQ(r.status, 200) << r.body;
+    const json& leg = r.body["legs"][0];
+    EXPECT_EQ(leg["status"], "missing-data") << leg;
+    EXPECT_GT(leg["samples"]["missingData"].get<int>(), 0);
+    ASSERT_FALSE(leg["missing"].empty());
+    EXPECT_LE(leg["missing"].size(), 20u);
+    EXPECT_TRUE(leg["missing"][0].contains("alongLegM"));
+    EXPECT_EQ(leg["missingData"]["bbox"].size(), 4u);
+    EXPECT_EQ(leg["reasons"][0]["severity"], "blocked");
+}
+
+TEST_F(Integration, CoverageCountsCellsWithoutTerrainAndHonoursLimits) {
+    json m = shortMission(point(48.46, 35.32, 100));
+    m["pilot"] = point(48.455, 35.325, 1.5);
+    m["coverage"] = {{"radiusM", 1500}, {"cellM", 250}, {"droneAglM", 80}};
+    const std::string session = sessionFor(m);
+    const auto start = call("POST", "/calc/coverage", m, bearer(session));
+    ASSERT_EQ(start.status, 202) << start.body;
+    ASSERT_EQ(waitForJob(start.body["jobId"], session)["state"], "done");
+    const auto grid =
+        call("GET", "/jobs/" + start.body["jobId"].get<std::string>() + "/coverage/control.json", nullptr, bearer(session));
+    ASSERT_EQ(grid.status, 200) << grid.body;
+    EXPECT_GT(grid.body["missingDataCells"].get<int>(), 0);
+
+    // More cells than the server allows.
+    json huge = m;
+    huge["coverage"] = {{"radiusM", 20000}, {"cellM", 50}, {"droneAglM", 80}};
+    EXPECT_EQ(call("POST", "/calc/coverage", huge, bearer(session)).status, 422);
+
+    // A job can be cancelled. Cancelling only raises a flag the runner checks between rows, so a
+    // job that already finished stays done.
+    json big = m;
+    big["pilot"] = point(48.52, 35.25, 1.5);
+    big["coverage"] = {{"radiusM", 6000}, {"cellM", 100}, {"droneAglM", 80}};
+    const std::string bigSession = sessionFor(big);
+    const auto bigStart = call("POST", "/calc/coverage", big, bearer(bigSession));
+    ASSERT_EQ(bigStart.status, 202) << bigStart.body;
+    const std::string id = bigStart.body["jobId"];
+    EXPECT_EQ(call("DELETE", "/jobs/" + id, nullptr, bearer(bigSession)).status, 204);
+    const auto state = waitForJob(id, bigSession)["state"];
+    EXPECT_TRUE(state == "cancelled" || state == "done") << state;
+}
+
+TEST_F(Integration, DataEndpointsAndRequestErrors) {
+    const auto profile = call("GET", "/elevation/profile?from=48.5,35.2&to=48.5,35.3");
+    ASSERT_EQ(profile.status, 200) << profile.body;
+    EXPECT_GT(profile.body.at("points").size(), 10u);
+    const auto holed = call("GET", "/elevation/profile?from=48.5,35.2&to=48.42,35.36");
+    EXPECT_EQ(holed.status, 422);
+    EXPECT_EQ(holed.body["status"], "missing-data") << holed.body;
+    EXPECT_EQ(call("GET", "/elevation/profile?from=48.5,35.2").status, 400);
+
+    const auto item = call("GET", "/library/radio-profiles/elrs-915-50hz");
+    ASSERT_EQ(item.status, 200);
+    EXPECT_EQ(item.body["id"], "elrs-915-50hz");
+    EXPECT_EQ(call("GET", "/library/antennas/no-such-antenna").status, 404);
+
+    const auto weather = call("GET", "/weather/point?lat=48.5&lon=35.2");
+    ASSERT_EQ(weather.status, 200) << weather.body;
+    EXPECT_TRUE(weather.body["notes"].is_array());
+    EXPECT_EQ(call("GET", "/weather/point?lat=48.5&lon=35.2&timeUtc=soon").status, 400);
+    EXPECT_EQ(call("GET", "/weather/point?lat=91&lon=35.2").status, 400);
+    const auto horizon = call("GET", "/weather/horizon");
+    ASSERT_EQ(horizon.status, 200) << horizon.body;
+    EXPECT_TRUE(horizon.body.contains("hourlyUntilUtc")) << horizon.body;
+
+    // A body that is not JSON, and a save without the revision it edits.
+    httplib::Client c("127.0.0.1", env->port);
+    const auto garbled = c.Post("/api/v1/missions", "{not json", "application/json");
+    ASSERT_TRUE(garbled);
+    EXPECT_EQ(garbled->status, 400);
+    const auto created = call("POST", "/missions", mission());
+    const std::string id = created.body["missionId"];
+    const httplib::Headers edit = bearer(created.body["session"]);
+    EXPECT_EQ(call("PUT", "/missions/" + id, mission(), edit).status, 428);
+    httplib::Headers wrongTag = edit;
+    wrongTag.emplace("If-Match", "\"seven\"");
+    EXPECT_EQ(call("PUT", "/missions/" + id, mission(), wrongTag).status, 428);
+
+    // Share links with an expiry.
+    const httplib::Headers ownerKey = {{"X-Owner-Key", created.body["ownerKey"]}};
+    const auto expiring = call("POST", "/missions/" + id + "/links",
+                               {{"role", "view"}, {"pin", "246810"}, {"expiresAt", isoUtc(Clock::now() + std::chrono::hours(2))}},
+                               ownerKey);
+    ASSERT_EQ(expiring.status, 201) << expiring.body;
+    EXPECT_TRUE(expiring.body.contains("expiresAt"));
+    EXPECT_EQ(call("POST", "/missions/" + id + "/links", {{"role", "view"}, {"pin", "246810"}, {"expiresAt", "next week"}},
+                   ownerKey).status,
+              422);
+}
+
+TEST_F(Integration, ClutterRaisesTheProfileWhereTheAdminSaysSo) {
+    const json classes = {{"10", {{"enabled", true}, {"heightM", 20}, {"source", "test survey"}}},
+                          {"50", {{"enabled", true}, {"heightM", 10}, {"source", "test survey"}}}};
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.clutter", {{"options", {{"classes", classes}}}}, admin()).status, 200);
+    json req = {{"from", point(48.50, 35.20, 1.5)}, {"to", point(48.50, 35.24, 30)}, {"kind", "control"},
+                {"link", controlLink()}};
+    const std::string session = sessionFor(mission());
+    const auto bare = call("POST", "/calc/path", req, bearer(session));
+    ASSERT_EQ(bare.status, 200) << bare.body;
+
+    req["modules"] = {{"rf.clutter", {{"disabledClasses", {50, "x"}}}}};
+    const auto trees = call("POST", "/calc/path", req, bearer(session));
+    ASSERT_EQ(trees.status, 200) << trees.body;
+    const std::string notes = trees.body["uncertainty"].dump();
+    EXPECT_NE(notes.find("classes turned off for this mission: 50"), std::string::npos) << notes;
+    EXPECT_LT(trees.body["marginDb"].get<double>(), bare.body["marginDb"].get<double>());
+    bool tree = false;
+    for (const auto& s : trees.body.at("profile").at("points")) tree |= s.value("landCover", 0) == 10;
+    EXPECT_TRUE(tree);
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.clutter", {{"options", json::object()}}, admin()).status, 200);
+}
+
+TEST_F(Integration, AnalogVideoGetsAPictureGrade) {
+    const json grades = {{{"label", "clear"}, {"requiredSnrDb", 10}},
+                         {{"label", "noisy"}, {"requiredSnrDb", 4}},
+                         {{"label", "lost"}, {"requiredSnrDb", 0}}};
+    const json bench = {{"kind", "measurement"}, {"reference", "test bench"}};
+    json computed = {{"id", "test-analog-5g8"}, {"name", "Test analog 5.8 GHz"}, {"version", 1}, {"verified", true},
+                     {"kind", "video-analog"}, {"frequencyHz", 5.8e9}, {"txPowerDbm", {25}},
+                     {"latencyMs", {{"typical", 1}, {"max", 2}}}, {"analogGrades", grades}, {"extraNoiseDb", 2},
+                     {"sensitivity", {{"method", "computed"}, {"bandwidthHz", 8e6}, {"noiseFigureDb", 8},
+                                      {"requiredSnrDb", 0}, {"source", bench}}}};
+    ASSERT_EQ(call("POST", "/library/radio-profiles", computed, admin()).status, 201);
+    json datasheet = computed;
+    datasheet["id"] = "test-analog-datasheet";
+    datasheet["sensitivity"] = {{"method", "datasheet"}, {"dBm", -90}, {"source", bench}};
+    ASSERT_EQ(call("POST", "/library/radio-profiles", datasheet, admin()).status, 201);
+
+    json link = videoLink();
+    link["radio"] = "test-analog-5g8";
+    const json req = {{"from", point(48.50, 35.20, 1.5)}, {"to", point(48.51, 35.21, 100)}, {"kind", "video"}, {"link", link}};
+    const std::string session = sessionFor(mission());
+    const auto graded = call("POST", "/calc/path", req, bearer(session));
+    ASSERT_EQ(graded.status, 200) << graded.body;
+    EXPECT_TRUE(graded.body.contains("snrDb"));
+    EXPECT_EQ(graded.body["analogGrade"], "clear") << graded.body["snrDb"];
+    EXPECT_EQ(graded.body["latencyMaxMs"], 2);
+
+    json far = req;
+    far["to"] = point(48.50, 35.32, 5);
+    EXPECT_NE(call("POST", "/calc/path", far, bearer(session)).body.value("analogGrade", ""), "clear");
+
+    json fromSheet = req;
+    fromSheet["link"]["radio"] = "test-analog-datasheet";
+    const auto ungraded = call("POST", "/calc/path", fromSheet, bearer(session));
+    ASSERT_EQ(ungraded.status, 200) << ungraded.body;
+    EXPECT_FALSE(ungraded.body.contains("analogGrade"));
+    EXPECT_NE(ungraded.body["uncertainty"].dump().find("Analog grade"), std::string::npos);
 }
