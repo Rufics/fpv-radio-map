@@ -29,20 +29,12 @@ def build(args, dirs: Dirs) -> None:
         raise BuildError(f"style template missing: {TEMPLATE}")
     style = json.loads(TEMPLATE.read_text(encoding="utf-8").replace("{{BASE_URL}}", base))
 
-    attributions = []
     for src_id, fname in SOURCE_FILES.items():
-        exists = (dirs.out / fname).exists()
-        if not exists and not args.style_keep_missing:
-            style["sources"].pop(src_id, None)
-            style["layers"] = [l for l in style["layers"] if l.get("source") != src_id]
+        if (dirs.out / fname).exists() or args.style_keep_missing:
+            _set_attribution(style, src_id, read_meta(dirs, fname) or {})
+        else:
+            _drop_source(style, src_id)
             log(f"style: {fname} not built; dropped source '{src_id}' and its layers")
-            continue
-        meta = read_meta(dirs, fname) or {}
-        attr = meta.get("attribution_html") or meta.get("attribution")
-        if attr:
-            style["sources"][src_id]["attribution"] = attr
-            if attr not in attributions:
-                attributions.append(attr)
     wc = read_meta(dirs, "landcover.cog.tif")
     if wc and wc.get("attribution"):
         style["metadata"]["rfmap:landcover-attribution"] = wc["attribution"]
@@ -57,6 +49,21 @@ def build(args, dirs: Dirs) -> None:
         "sources": sorted(style["sources"]), "glyphs": style["glyphs"],
     })
 
+    _copy_fonts(dirs)
+
+
+def _set_attribution(style: dict, src_id: str, meta: dict) -> None:
+    attr = meta.get("attribution_html") or meta.get("attribution")
+    if attr:
+        style["sources"][src_id]["attribution"] = attr
+
+
+def _drop_source(style: dict, src_id: str) -> None:
+    style["sources"].pop(src_id, None)
+    style["layers"] = [layer for layer in style["layers"] if layer.get("source") != src_id]
+
+
+def _copy_fonts(dirs: Dirs) -> None:
     fonts_src = Path(os.environ.get("RFMAP_FONTS_DIR", "/opt/fonts"))
     fonts_dst = dirs.out / "fonts"
     if fonts_src.is_dir():

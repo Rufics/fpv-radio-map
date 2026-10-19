@@ -231,13 +231,12 @@ def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, derived: dict) -> 
     run(["gdalwarp", "-t_srs", "EPSG:3857", "-r", "bilinear", "-tr", repr(res), repr(res),
          "-te", *map(repr, te), "-srcnodata", repr(NODATA), "-dstnodata", repr(NODATA),
          "-multi", "-wo", "NUM_THREADS=ALL_CPUS",
-         "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", "-co", "BIGTIFF=IF_SAFER", str(dem), str(merc)])
+         *raster.tiff_option_args(), str(dem), str(merc)])
     hs = work / "hillshade.tif"
     # 1 EPSG:3857 unit is cos(lat) metres on the ground at the bbox centre.
     scale = math.cos(math.radians(bbox.center_lat))
     run(["gdaldem", "hillshade", "-multidirectional", "-compute_edges", "-z", repr(exaggeration),
-         "-s", repr(scale), "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", "-co", "BIGTIFF=IF_SAFER",
-         str(merc), str(hs)])
+         "-s", repr(scale), *raster.tiff_option_args(), str(merc), str(hs)])
     if style == "alpha":
         rgba = work / "hillshade-rgba.tif"
         _shade_to_rgba(hs, rgba)
@@ -273,7 +272,7 @@ def _shade_to_rgba(src: Path, dst: Path) -> None:
     s_ds = g.Open(str(src))
     drv = g.GetDriverByName("GTiff")
     d_ds = drv.Create(str(dst), s_ds.RasterXSize, s_ds.RasterYSize, 4, g.GDT_Byte,
-                      ["TILED=YES", "COMPRESS=DEFLATE", "BIGTIFF=IF_SAFER", "PHOTOMETRIC=RGB", "ALPHA=YES"])
+                      [*raster.TIFF_OPTIONS, "PHOTOMETRIC=RGB", "ALPHA=YES"])
     d_ds.SetGeoTransform(s_ds.GetGeoTransform())
     d_ds.SetProjection(s_ds.GetProjection())
     band = s_ds.GetRasterBand(1)
