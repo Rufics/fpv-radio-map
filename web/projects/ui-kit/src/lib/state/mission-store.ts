@@ -161,6 +161,8 @@ export class MissionStore {
   undoMove(): void {
     const s = this.lastMove();
     if (!s || !this.canEdit()) return;
+    // A previewed fix was built on the moved mission; applying it would bring the move back.
+    this.preview.set(null);
     this.lastMove.set(null);
     this.mission.set(s.mission);
     this.dirty.set(s.dirty);
@@ -248,7 +250,7 @@ export class MissionStore {
       const job = await this.api.startCoverage(id, mission);
       if (run !== this.runId) return;
       this.job.set(job);
-      this.poll(run, job, () => {
+      this.poll(run, job, mission.pilot, () => {
         jobDone = true;
         finish();
       });
@@ -261,7 +263,7 @@ export class MissionStore {
     }
   }
 
-  private poll(run: number, job: Job, onDone: () => void): void {
+  private poll(run: number, job: Job, pilot: MissionPoint, onDone: () => void): void {
     const fetched = new Set<LinkKind>();
     const step = (j: Job): void => {
       if (run !== this.runId) return;
@@ -273,7 +275,7 @@ export class MissionStore {
           this.api
             .getCoverage(this.missionId(), j.jobId, link)
             .then((grid) => {
-              if (run === this.runId) this.coverage.update((c) => ({ ...c, [link]: grid }));
+              if (this.gridStillFits(run, pilot)) this.coverage.update((c) => ({ ...c, [link]: grid }));
             })
             .catch(() => fetched.delete(link));
         }
@@ -296,6 +298,12 @@ export class MissionStore {
       }, this.pollIntervalMs);
     };
     step(job);
+  }
+
+  /** A grid fetched late belongs to this run and to the pilot position it was computed around. */
+  private gridStillFits(run: number, pilot: MissionPoint): boolean {
+    const now = this.mission()?.pilot;
+    return run === this.runId && !!now && samePilot(now, pilot);
   }
 
   /** Cancel the running calculation (route request and coverage job). */
