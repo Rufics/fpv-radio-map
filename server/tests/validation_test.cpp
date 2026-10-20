@@ -4,7 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <fstream>
+#include <set>
 
 using namespace rfmap;
 
@@ -88,6 +90,25 @@ TEST_F(ValidationTest, SeedRadioProfilesValidateWithCrossFileRefs) {
     const auto p = pointers("radio-profiles", bad);
     EXPECT_NE(std::find(p.begin(), p.end(), "/id"), p.end());
     EXPECT_NE(std::find(p.begin(), p.end(), "/sensitivity"), p.end());
+}
+
+TEST_F(ValidationTest, EverySeedFileValidatesWithUniqueIds) {
+    for (const std::string& kind : SchemaRegistry::libraryKinds()) {
+        const std::filesystem::path file = std::filesystem::path(RFMAP_SEED_DIR) / kind / "seed.json";
+        if (!std::filesystem::exists(file)) continue;
+        std::ifstream in(file);
+        const json seed = json::parse(in, nullptr, false);
+        ASSERT_TRUE(seed.is_array()) << file << " is not a JSON array";
+        std::set<std::string> ids;
+        for (const json& item : seed) {
+            // Typed access throws on a wrong type, so check the type first and let the schema report it.
+            const bool hasId = item.contains("id") && item.at("id").is_string();
+            const std::string id = hasId ? item.at("id").get<std::string>() : "<no string id>";
+            EXPECT_TRUE(schemas.check(kind, item).empty()) << kind << "/" << id;
+            EXPECT_TRUE(ids.insert(id).second) << kind << " repeats '" << id << "'";
+            EXPECT_TRUE(item.contains("verified") && item.at("verified") == false) << kind << "/" << id;
+        }
+    }
 }
 
 TEST_F(ValidationTest, AntennaSchema) {
