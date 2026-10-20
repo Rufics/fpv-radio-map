@@ -101,10 +101,12 @@ TEST_F(ValidationTest, EverySeedFileValidatesWithUniqueIds) {
         ASSERT_TRUE(seed.is_array()) << file << " is not a JSON array";
         std::set<std::string> ids;
         for (const json& item : seed) {
-            const std::string id = item.value("id", std::string());
+            // Typed access throws on a wrong type, so check the type first and let the schema report it.
+            const bool hasId = item.contains("id") && item.at("id").is_string();
+            const std::string id = hasId ? item.at("id").get<std::string>() : "<no string id>";
             EXPECT_TRUE(schemas.check(kind, item).empty()) << kind << "/" << id;
             EXPECT_TRUE(ids.insert(id).second) << kind << " repeats '" << id << "'";
-            EXPECT_EQ(item.value("verified", true), false) << kind << "/" << id;
+            EXPECT_TRUE(item.contains("verified") && item.at("verified") == false) << kind << "/" << id;
         }
     }
 }
