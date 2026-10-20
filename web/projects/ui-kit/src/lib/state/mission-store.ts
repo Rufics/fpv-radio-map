@@ -274,9 +274,7 @@ export class MissionStore {
           fetched.add(link);
           this.api
             .getCoverage(this.missionId(), j.jobId, link)
-            .then((grid) => {
-              if (this.gridStillFits(run, pilot)) this.coverage.update((c) => ({ ...c, [link]: grid }));
-            })
+            .then((grid) => this.keepGrid(run, pilot, link, grid))
             .catch(() => fetched.delete(link));
         }
       }
@@ -300,10 +298,19 @@ export class MissionStore {
     step(job);
   }
 
-  /** A grid fetched late belongs to this run and to the pilot position it was computed around. */
-  private gridStillFits(run: number, pilot: MissionPoint): boolean {
+  /**
+   * A grid fetched late belongs to this run and to the pilot position it was computed around.
+   * If the pilot moved meanwhile, the grid goes into the undo snapshot taken at that position.
+   */
+  private keepGrid(run: number, pilot: MissionPoint, link: LinkKind, grid: CoverageGrid): void {
+    if (run !== this.runId) return;
     const now = this.mission()?.pilot;
-    return run === this.runId && !!now && samePilot(now, pilot);
+    if (now && samePilot(now, pilot)) {
+      this.coverage.update((c) => ({ ...c, [link]: grid }));
+      return;
+    }
+    const s = this.lastMove();
+    if (s && samePilot(s.mission.pilot, pilot)) this.lastMove.set({ ...s, coverage: { ...s.coverage, [link]: grid } });
   }
 
   /** Cancel the running calculation (route request and coverage job). */

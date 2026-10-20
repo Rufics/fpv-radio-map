@@ -223,6 +223,10 @@ describe('MissionStore', () => {
       await settle();
       expect(store.coverage()).toEqual({});
       expect(store.pilotStale()).toBe(true);
+      // the grid fits the position before the move, so undo brings it back
+      store.undoMove();
+      expect(Object.keys(store.coverage())).toEqual(['control']);
+      expect(store.pilotStale()).toBe(false);
     });
 
     it('marks an existing result stale on the first edit', () => {
