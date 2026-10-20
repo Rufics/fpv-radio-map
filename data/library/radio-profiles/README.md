@@ -32,7 +32,7 @@ range claim:
   gain, so no threshold follows from its figures.
 - **HDZero**: the vendor site gives no sensitivity or range; the -105 dBm VRX figure is only on
   reseller pages.
-- **Analog video**: modules publish a sensitivity (TBS Fusion -96 dBm, rapidFIRE better than
-  -96 dBm, the RX5808 module sheet -90 dBm typical) with no test conditions, and an analog profile needs the
-  bandwidth, noise figure and SNR grades for clear, noisy and lost picture, which no datasheet
-  gives. Add them from a bench measurement.
+- **Analog video**: modules publish a sensitivity (TBS Fusion -96 dBm, rapidFIRE better than -96
+  dBm, the RX5808 module sheet -90 dBm typical) with no test conditions, and an analog profile
+  needs the bandwidth, noise figure and SNR grades for clear, noisy and lost picture, which no
+  datasheet gives. Add them from a bench measurement.
