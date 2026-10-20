@@ -44,12 +44,13 @@ class WindowCache:
         self._cache = cache
         cache.mkdir(parents=True, exist_ok=True)
 
+    def is_cached(self, url: str) -> bool:
+        """Whether the window of this tile is already complete in the cache."""
+        return self._destination(url).exists()
+
     def fetch(self, url: str) -> Path:
         """The cached window of one tile; downloaded first if a previous run did not finish it."""
-        stem = url.rsplit("/", 1)[1].removesuffix(".tif")
-        # Named by the exact bbox, not the pixel window, so a cache hit needs no network access.
-        key = "_".join(repr(v) for v in self._bbox.as_list())
-        dest = self._cache / f"{stem}_{key}.tif"
+        dest = self._destination(url)
         if dest.exists():
             log(f"cached: {dest.name}")
             return dest
@@ -57,6 +58,12 @@ class WindowCache:
         self._copy_with_retries(self._remote(url), part)
         part.replace(dest)
         return dest
+
+    def _destination(self, url: str) -> Path:
+        stem = url.rsplit("/", 1)[1].removesuffix(".tif")
+        # Named by the exact bbox, not the pixel window, so a cache hit needs no network access.
+        key = "_".join(repr(v) for v in self._bbox.as_list())
+        return self._cache / f"{stem}_{key}.tif"
 
     @staticmethod
     def _remote(url: str) -> str:
@@ -97,20 +104,21 @@ def build(args, dirs: Dirs) -> None:
     if is_up_to_date(dirs, OUT_NAME, params, args.force):
         return
 
+    cache = WindowCache(bbox, dirs.cache / f"esa-worldcover-{version}-{year}")
     urls, missing = [], []
     for lat in range(math.floor(bbox.min_lat / 3) * 3, math.ceil(bbox.max_lat / 3) * 3, 3):
         for lon in range(math.floor(bbox.min_lon / 3) * 3, math.ceil(bbox.max_lon / 3) * 3, 3):
             tile = _tile_name(lat, lon)
             url = sources.WORLDCOVER_URL.format(version=version, year=year, tile=tile)
-            if http_status(url) in (403, 404):
+            # A cached window needs no network access; only uncached tiles are probed.
+            if cache.is_cached(url) or http_status(url) not in (403, 404):
+                urls.append(url)
+            else:
                 warn(f"WorldCover tile {tile} does not exist (open ocean); area will be no-data (0)")
                 missing.append(tile)
-            else:
-                urls.append(url)
     if not urls:
         raise BuildError("no WorldCover tiles for this bbox")
 
-    cache = WindowCache(bbox, dirs.cache / f"esa-worldcover-{version}-{year}")
     windows = [cache.fetch(u) for u in urls]
     work = fresh_dir(dirs.work / "landcover")
     vrt = work / "mosaic.vrt"

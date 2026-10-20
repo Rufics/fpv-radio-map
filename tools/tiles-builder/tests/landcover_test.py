@@ -69,6 +69,12 @@ class WindowCacheTest(unittest.TestCase):
         runner.assert_not_called()
         header.assert_not_called()
 
+    def test_is_cached_only_after_a_complete_fetch(self) -> None:
+        """A tile counts as cached once its window is complete, so build() can skip probing it."""
+        self.assertFalse(self.cache.is_cached(str(self.tile)))
+        self.cache.fetch(str(self.tile))
+        self.assertTrue(self.cache.is_cached(str(self.tile)))
+
     def test_failed_header_read_is_retried(self) -> None:
         """A failed read of the tile header is retried like a failed copy."""
         real = landcover.raster.srcwin_for_bbox
