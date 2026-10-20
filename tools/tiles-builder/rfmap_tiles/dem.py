@@ -2,8 +2,9 @@
 
 The calculation DEM (out/dem.cog.tif) keeps the source grid and the source
 values bit-for-bit: tiles are mosaicked with a VRT and cut with an integer
-pixel window, never warped or resampled. The server's radio calculations read
-this COG directly. hillshade.pmtiles and contours.pmtiles are derived from the
+pixel window, never warped or resampled. Only with --allow-dem-resample are
+tiles of a coarser grid first duplicated nearest-neighbour onto the finest
+tile's grid. The server's radio calculations read this COG directly. hillshade.pmtiles and contours.pmtiles are derived from the
 same COG and are for display only.
 """
 from __future__ import annotations
@@ -164,7 +165,6 @@ def _build_cog(dirs: Dirs, bbox: BBox, source: str, inputs: list[Path], allow_re
     # Refuse silent resampling: all inputs must share one pixel size.
     sizes = {f: raster.pixel_size(f) for f in files}
     distinct = {(round(dx, 12), round(dy, 12)) for dx, dy in sizes.values()}
-    vrt_opts = []
     resampled = False
     if len(distinct) > 1:
         detail = ", ".join(f"{f.name}: {dx:.9f}x{abs(dy):.9f}" for f, (dx, dy) in sizes.items())
@@ -173,11 +173,11 @@ def _build_cog(dirs: Dirs, bbox: BBox, source: str, inputs: list[Path], allow_re
                              "widens its longitude spacing above 50° latitude). Mosaicking them would "
                              f"resample. Split the bbox at the zone border, or pass --allow-dem-resample. {detail}")
         warn("mixing pixel sizes: coarser tiles are duplicated nearest-neighbour onto the finest grid")
-        vrt_opts = ["-resolution", "highest", "-r", "nearest"]
+        files = raster.FinestGridAligner(files, work).align()
         resampled = True
 
     vrt = work / "mosaic.vrt"
-    run(["gdalbuildvrt", *vrt_opts, "-vrtnodata", repr(NODATA), str(vrt), *map(str, files)])
+    run(["gdalbuildvrt", "-vrtnodata", repr(NODATA), str(vrt), *map(str, files)])
     srcwin = raster.srcwin_for_bbox(vrt, bbox)
     tmp = dirs.out / f".tmp-{DEM_OUT}"
     raster.write_cog(vrt, tmp, srcwin=srcwin, predictor="YES", overview_resampling="AVERAGE",

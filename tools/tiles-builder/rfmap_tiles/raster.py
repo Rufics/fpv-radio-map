@@ -56,6 +56,65 @@ def srcwin_for_bbox(path: str | Path, bbox: BBox) -> tuple[int, int, int, int]:
     return c0, r0, c1 - c0, r1 - r0
 
 
+class FinestGridAligner:
+    """Puts tiles of different pixel size onto the grid of the finest tile.
+
+    A VRT that mixes pixel sizes resamples on every read, and its nearest-neighbour
+    result depends on the read window, so the written COG cannot be verified against
+    it. Coarser tiles are therefore warped once, nearest-neighbour, onto the finest
+    tile's grid (origin included); tiles already on that grid are used unchanged.
+    """
+
+    def __init__(self, files: list[Path], work: Path) -> None:
+        if not files:
+            raise BuildError("no rasters to align")
+        self._files = files
+        self._work = work
+        self._grids = {f: self._grid(f) for f in files}
+        self._ref = min(self._grids.values(), key=lambda g: abs(g[1] * g[5]))
+
+    @staticmethod
+    def _grid(path: Path) -> tuple[float, float, float, float, float, float]:
+        ds = gdal().Open(str(path))
+        gt = ds.GetGeoTransform()
+        if gt[2] or gt[4]:
+            raise BuildError(f"{path.name}: rotated rasters are not supported")
+        return gt[0], gt[1], ds.RasterXSize, gt[3], gt[5], ds.RasterYSize
+
+    def align(self) -> list[Path]:
+        return [f if self._on_reference_grid(f) else self._warp(f) for f in self._files]
+
+    def _on_reference_grid(self, path: Path) -> bool:
+        x0, dx, _, y0, dy, _ = self._grids[path]
+        rx0, rdx, _, ry0, rdy, _ = self._ref
+        same_size = math.isclose(dx, rdx, rel_tol=1e-9) and math.isclose(dy, rdy, rel_tol=1e-9)
+        return same_size and self._is_whole(x0, rx0, rdx) and self._is_whole(y0, ry0, rdy)
+
+    @staticmethod
+    def _is_whole(value: float, origin: float, step: float) -> bool:
+        offset = (value - origin) / step
+        return abs(offset - round(offset)) < 1e-6
+
+    @staticmethod
+    def _snap(value: float, origin: float, step: float) -> tuple[int, float]:
+        """Nearest reference grid line: (index, coordinate). Shared tile edges snap alike."""
+        index = round((value - origin) / step)
+        return index, origin + index * step
+
+    def _warp(self, path: Path) -> Path:
+        x0, dx, nx, y0, dy, ny = self._grids[path]
+        rx0, rdx, _, ry0, rdy, _ = self._ref
+        c0, west = self._snap(x0, rx0, rdx)
+        c1, east = self._snap(x0 + dx * nx, rx0, rdx)
+        r0, north = self._snap(y0, ry0, rdy)
+        r1, south = self._snap(y0 + dy * ny, ry0, rdy)
+        out = self._work / f"aligned-{path.stem}.tif"
+        run(["gdalwarp", "-overwrite", "-r", "near", "-et", "0", *tiff_option_args(),
+             "-te", repr(west), repr(south), repr(east), repr(north),
+             "-ts", str(c1 - c0), str(r1 - r0), str(path), str(out)])
+        return out
+
+
 def write_cog(src: str | Path, dst: Path, *, srcwin: tuple[int, int, int, int] | None,
               predictor: str, overview_resampling: str, nodata: float | None = None,
               out_type: str | None = None, metadata: dict | None = None, threads: str = "ALL_CPUS") -> None:

@@ -45,7 +45,7 @@ Directory layout: the data directory (`--data`, default `$RFMAP_DATA` or the cur
   - Float32, NoData −32768, used only where a tile does not exist.
   - Internal tiles 512×512, DEFLATE + floating-point predictor (lossless).
   - Overviews are averaged; they are for previews only, and calculations read the full-resolution level.
-- Copernicus widens its longitude spacing above 50° latitude. A bbox that spans two spacing zones is **refused** unless `--allow-dem-resample` is given. That flag duplicates pixels nearest-neighbour and records it in the manifest.
+- Copernicus widens its longitude spacing above 50° latitude. A bbox that spans two spacing zones is **refused** unless `--allow-dem-resample` is given. With that flag only the coarser tiles are warped once, nearest-neighbour, onto the grid of the finest tile (this is the one `gdalwarp` in the DEM step), so their pixels are duplicated, never interpolated. The finest tiles stay bit for bit, the COG is still verified pixel by pixel against the mosaic, and the manifest records the duplication.
 
 **Hillshade and contours are display only.** Both are derived from `dem.cog.tif`.
 - Hillshade: the DEM is reprojected to Web Mercator with bilinear resampling. It uses `gdaldem -multidirectional`, and the scale is corrected by cos(latitude) at the bbox centre. The default output is a transparent PNG with black shadows and faint white highlights, so it overlays the dark basemap without greying it out. `--hillshade-style gray` gives classic grey.
@@ -83,6 +83,12 @@ Behind a TLS-intercepting proxy, build with `--secret id=extra_ca,src=/path/ca.c
 - one Sentinel-2 L2A true-colour scene from the public `sentinel-cogs` bucket, downloaded into `inputs/` and used as `--sat-file`. This scene is a test stand-in, **not** a cloudless mosaic.
 
 It then re-runs `all` (every step must report "up to date") and runs `verify`.
+
+`tests/raster_test.py` checks the DEM mosaic across 50° N with synthetic Copernicus-like tiles, which the smoke box does not reach. It needs the GDAL Python bindings, so run it in the image:
+
+```bash
+docker run --rm -v "$PWD/tests:/tests:ro" --entrypoint python3 rfmap/tiles-builder -m unittest discover -s /tests -p '*_test.py'
+```
 
 ## Source attribution (show on the map)
 
