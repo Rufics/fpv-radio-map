@@ -187,7 +187,7 @@ docker compose logs rfmap-server | head -20
 ```
 
 `dem` and `landcover` must be `true`. In the log you should see `applied migration 001_init.sql`,
-`seeded 14 radio-profiles`, `seeded 38 antennas`, `seeded 21 batteries`, `seeded 3 drones`,
+`seeded 14 radio-profiles`, `seeded 4 radio-profiles` (DJI video), `seeded 38 antennas`, `seeded 21 batteries`, `seeded 3 drones`,
 `terrain: DEM /data/dem.cog.tif` and `listening on 0.0.0.0:8080`. No `seeded` line may end in
 `skipped`: a `seed ... rejected` line before it names the entry and the reason. If
 the log says `built with the PUBLIC development owner key`, the key from step 4 did not reach the
@@ -249,9 +249,9 @@ the six `fpv.*` ones. Now delete `owner.secret` from the server, as described in
 ## 7. Fill the equipment library
 
 Pilots pick radios, antennas, batteries and drones from the library, and only the admin edits
-it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), 38 antennas,
-21 batteries and 3 DJI drone profiles, all `verified: false`. The README next to each seed file
-says where each figure comes from:
+it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), 4 DJI video
+profiles, 38 antennas, 21 batteries and 3 DJI drone profiles, all `verified: false`. The README
+next to each seed file says where each figure comes from:
 [radio profiles](../../data/library/radio-profiles/README.md),
 [antennas](../../data/library/antennas/README.md),
 [batteries](../../data/library/batteries/README.md) and
@@ -264,7 +264,8 @@ says where each figure comes from:
    measured; replace them with your own flight logs when you have them.
 3. Add the antennas, batteries and drones you fly that are not seeded. Every link needs a
    ground antenna and an air antenna.
-4. Add your video system as a radio profile if you plan video links.
+4. Add your video system as a radio profile if it is not one of the seeded DJI links
+   (Walksnail, HDZero and analog video are not seeded; see the radio profiles README).
 
 Entries are edited as JSON and checked against the library schema as you type. A plain
 half-wave dipole, for example:
