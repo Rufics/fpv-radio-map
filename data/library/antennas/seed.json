@@ -512,5 +512,320 @@
       "retrieved": "2026-10-20"
     },
     "notes": "Omnidirectional CP antenna for Walksnail Avatar VTX units. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-avata-2-air-2g4",
+    "name": "DJI Avata 2 aircraft antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-QF3W4K23, Antenna Gain Info: WA520 UAV SDR LF/LB/RB/RF ANT1, Gain 1.5 dBi@2.4~2.483GHz, 2 dBi@5.15~5.25GHz, 2 dBi@5.725~5.85GHz, Polarization type Linear",
+      "url": "https://fccid.io/SS3-QF3W4K23/Test-Report/Antenna-Gain-Info-7181229",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "One of the four built-in aircraft antennas (WA520), 2.4 GHz band. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-avata-2-air-5g8",
+    "name": "DJI Avata 2 aircraft antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-QF3W4K23, Antenna Gain Info: WA520 UAV SDR LF/LB/RB/RF ANT1, Gain 1.5 dBi@2.4~2.483GHz, 2 dBi@5.15~5.25GHz, 2 dBi@5.725~5.85GHz, Polarization type Linear",
+      "url": "https://fccid.io/SS3-QF3W4K23/Test-Report/Antenna-Gain-Info-7181229",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "One of the four built-in aircraft antennas (WA520), 5.8 GHz band. The filing gives the same 2 dBi at 5.15-5.25 GHz. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-o4-air-unit-5g8",
+    "name": "DJI O4 Air Unit antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "monopole",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-DF3L290424, Antenna Spec: ZA530 lite SDR Ant, Gain 1.5dBi@5.15~5.25GHz, 1.5dBi@5.725~5.875GHz, Polarization type Linear, Antenna type Monopole",
+      "url": "https://fccid.io/SS3-DF3L290424/Test-Report/Antenna-Spec-7863842",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Stock antenna of the O4 Air Unit (lite). The filing gives the same 1.5 dBi at 5.15-5.25 GHz. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-o4-air-unit-pro-5g8",
+    "name": "DJI O4 Air Unit Pro antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "dipole",
+    "gainDbi": 0.5,
+    "polarization": "lhcp",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-DF3P290424, Antenna Spec: ZA530 PRO antenna, Ant0/Ant1 Gain -0.5dBi@5.15~5.25GHz, 0.5dBi@5.725~5.875GHz, Polarization type Circulization, Antenna type Dipole",
+      "url": "https://fccid.io/SS3-DF3P290424/Test-Report/Antenna-Spec-7880301",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Stock antenna of the O4 Air Unit Pro. The filing says only 'Circulization'; DJI's product page for the O4 Air Unit Pro antenna calls it left-hand circularly polarized, so lhcp is used. The filing states the gain in dBi; it is stored as stated. The filing gives -0.5 dBi at 5.15-5.25 GHz. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-o3-air-unit-5g8",
+    "name": "DJI O3 Air Unit antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-QFP2AS22, Test Report FCC NII 1 of 3: Antenna Gain 1.5dBi for ANT0, 1.5dBi for ANT1; Max. Antenna gain(G) of 5.8GHz SDR: 1.5dBi (uncorrelated antenna gain)",
+      "url": "https://fccid.io/SS3-QFP2AS22/Test-Report/Test-Report-FCC-NII-1-of-3-6019130",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Stock antennas of the O3 Air Unit. The filing does not name the antenna type or polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-avata-air-5g8",
+    "name": "DJI Avata aircraft antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-QF2W4K22, Test Report FCC NII 1 of 2: Antenna Gain 2.5dBi for ANT0, 2.5dBi for ANT1; Max. Antenna gain(G) of 5.8GHz SDR: 2.5dBi (uncorrelated antenna gain)",
+      "url": "https://fccid.io/SS3-QF2W4K22/Test-Report/Test-Report-FCC-NII-1-of-2-6019248",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Built-in antennas of the first-generation Avata. The filing does not name the antenna type or polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-fpv-air-2g4",
+    "name": "DJI FPV aircraft antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-FD1W4K2006, RF Exposure Info: 2.4 G SDR 2403.5-2471.12 MHz Antenna Gain 2.5 dBi; 5.8 G SDR 5728.5-5848.12 MHz Antenna Gain 3 dBi",
+      "url": "https://fccid.io/SS3-FD1W4K2006/RF-Exposure-Info/RF-Exposure-5031606",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Antennas in the DJI FPV landing gear, 2.4 GHz band. The filing does not name the polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-fpv-air-5g8",
+    "name": "DJI FPV aircraft antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 3.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-FD1W4K2006, RF Exposure Info: 2.4 G SDR 2403.5-2471.12 MHz Antenna Gain 2.5 dBi; 5.8 G SDR 5728.5-5848.12 MHz Antenna Gain 3 dBi",
+      "url": "https://fccid.io/SS3-FD1W4K2006/RF-Exposure-Info/RF-Exposure-5031606",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Antennas in the DJI FPV landing gear, 5.8 GHz band. The filing does not name the polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-neo-air-2g4",
+    "name": "DJI Neo aircraft antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.48,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-DN1A062624, Antenna Spec: two antennas, Gain 1.48 / 1.87 dBi@2.4~2.483GHz, 1.2 / 1.03 dBi@5.15~5.25GHz, 2.63 / 3.24 dBi@5.725~5.85GHz, Polarization type Linear",
+      "url": "https://fccid.io/SS3-DN1A062624/Test-Report/Antenna-Spec-7505307",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Built-in antennas of the Neo, 2.4 GHz band. The lower of the two antennas' gains is used. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-neo-air-5g8",
+    "name": "DJI Neo aircraft antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.63,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-DN1A062624, Antenna Spec: two antennas, Gain 1.48 / 1.87 dBi@2.4~2.483GHz, 1.2 / 1.03 dBi@5.15~5.25GHz, 2.63 / 3.24 dBi@5.725~5.85GHz, Polarization type Linear",
+      "url": "https://fccid.io/SS3-DN1A062624/Test-Report/Antenna-Spec-7505307",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Built-in antennas of the Neo, 5.8 GHz band. The lower of the two antennas' gains is used. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-2-5g8",
+    "name": "DJI Goggles 2 antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 3.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-RCDS1821, Test Report NII 1 of 5: two external antennas and two internal antennas (receiving only) for 5.8GHz SDR; Antenna gain(G) of 5.8GHz SDR: 3dBi (uncorrelated antenna gain)",
+      "url": "https://fccid.io/SS3-RCDS1821/Test-Report/Test-Report-NII-1-of-5-6019073",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "External antennas of the DJI Goggles 2. The filing does not name the polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-3-2g4",
+    "name": "DJI Goggles 3 antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "dipole",
+    "gainDbi": 2.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-TKGS323, Antenna Gain Info_SRD: ZV902 Ant0/1 Gain 2dBi@2.4~2.483GHz, 1.5dBi@5.15~5.25GHz, 2.5dBi@5.725~5.875GHz; ZV902 Ant2/3 Gain 3.5dBi on all three bands; Polarization type Linear, Antenna type Dipole",
+      "url": "https://fccid.io/SS3-TKGS323/Test-Report/Antenna-Gain-Info-SRD-7183251",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Video-link antennas of the DJI Goggles 3, 2.4 GHz band. The lower pair (Ant0/1) is used; Ant2/3 is 3.5 dBi. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-3-5g8",
+    "name": "DJI Goggles 3 antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "dipole",
+    "gainDbi": 2.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-TKGS323, Antenna Gain Info_SRD: ZV902 Ant0/1 Gain 2dBi@2.4~2.483GHz, 1.5dBi@5.15~5.25GHz, 2.5dBi@5.725~5.875GHz; ZV902 Ant2/3 Gain 3.5dBi on all three bands; Polarization type Linear, Antenna type Dipole",
+      "url": "https://fccid.io/SS3-TKGS323/Test-Report/Antenna-Gain-Info-SRD-7183251",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Video-link antennas of the DJI Goggles 3, 5.8 GHz band. The lower pair (Ant0/1) is used; Ant2/3 is 3.5 dBi. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-n3-2g4",
+    "name": "DJI Goggles N3 antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-TKGSM24, DJI Antenna Datasheet ZV300 Antenna: ZV300 Ant, Operation Frequency 2.4~2.483GHz, 5.15~5.25GHz, 5.725~5.85GHz, Gain >=1.5dBi, Polarization type Linear",
+      "url": "https://fccid.io/SS3-TKGSM24/Test-Report/DJI-Antenna-Datasheet-ZV300-Antenna-2024-10-21-7755384",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Antennas of the DJI Goggles N3 (PCB and FPC), 2.4 GHz band. The filing gives a minimum (>=1.5 dBi); the minimum is used. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-n3-5g8",
+    "name": "DJI Goggles N3 antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-TKGSM24, DJI Antenna Datasheet ZV300 Antenna: ZV300 Ant, Operation Frequency 2.4~2.483GHz, 5.15~5.25GHz, 5.725~5.85GHz, Gain >=1.5dBi, Polarization type Linear",
+      "url": "https://fccid.io/SS3-TKGSM24/Test-Report/DJI-Antenna-Datasheet-ZV300-Antenna-2024-10-21-7755384",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Antennas of the DJI Goggles N3 (PCB and FPC), 5.8 GHz band. The filing gives a minimum (>=1.5 dBi); the minimum is used. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
   }
 ]

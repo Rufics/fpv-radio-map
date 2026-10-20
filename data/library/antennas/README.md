@@ -20,8 +20,8 @@ Each entry cites the vendor's own product page, with the spec lines it was taken
   says which plane was assumed.
 - **Type.** CP omnis (cloverleaf, pagoda, lollipop and similar), crosshair, T and Moxon antennas
   are `other` unless the vendor calls the antenna a dipole or patch.
-
-Not included, because the vendor publishes no gain figure:
-
-- **DJI** O3 and O4 air-unit antennas and the DJI goggles antennas (DJI gives EIRP for the
-  system, not antenna gain). Add them from your own measurement (`"kind": "measurement"`).
+- **DJI.** DJI's product pages give EIRP for the system, not antenna gain. The DJI entries take the
+  per-antenna gain DJI declared in its FCC filings (antenna datasheets, test reports or RF-exposure
+  exhibits, linked on fccid.io). Where the filing gives a gain per band, there is one entry per band
+  (2.4 and 5.8 GHz); the note gives any 5.15-5.25 GHz figure. Where two antennas differ, the lower gain is
+  used. Where the filing does not state the polarization, linear is assumed and the note says so.

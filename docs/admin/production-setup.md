@@ -242,7 +242,7 @@ the six `fpv.*` ones. Now delete `owner.secret` from the server, as described in
 ## 7. Fill the equipment library
 
 Pilots pick radios, antennas, batteries and drones from the library, and only the admin edits
-it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), 23 antennas,
+it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), 38 antennas,
 21 batteries and 3 DJI drone profiles, all `verified: false` (see `data/library/<kind>/README.md`
 for where each figure comes from). Before the first flight plan:
 

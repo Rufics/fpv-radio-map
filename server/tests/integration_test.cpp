@@ -283,7 +283,7 @@ TEST_F(Integration, HealthAndSeededLibrary) {
     EXPECT_EQ(lib.body.size(), 14u);
     for (const auto& item : lib.body) EXPECT_FALSE(item["verified"].get<bool>()) << item["id"];
     for (const auto& [kind, count] :
-         {std::pair{"antennas", 23u}, std::pair{"batteries", 21u}, std::pair{"drones", 3u}}) {
+         {std::pair{"antennas", 38u}, std::pair{"batteries", 21u}, std::pair{"drones", 3u}}) {
         const auto seeded = call("GET", std::string("/library/") + kind);
         ASSERT_EQ(seeded.status, 200) << seeded.body;
         EXPECT_EQ(seeded.body.size(), count) << kind;
