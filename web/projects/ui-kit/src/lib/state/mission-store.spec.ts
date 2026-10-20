@@ -132,6 +132,54 @@ describe('MissionStore', () => {
       expect(store.dirty()).toBe(false);
     });
 
+    it('drops coverage when the pilot moves and keeps it when a waypoint moves', () => {
+      store.loadFromServer('m1', { mission: mission(), role: 'edit', revision: 2, lastResult: { legs: [] } });
+      store.coverage.set({ control: { link: 'control', cols: 2, rows: 2 } });
+      store.movePoint(0, { lat: 48.52, lon: 35.22 });
+      expect(store.coverage().control).toBeDefined();
+      expect(store.pilotStale()).toBe(false);
+      store.setPilotAgl(3);
+      expect(store.mission()!.pilot.aglM).toBe(3);
+      expect(store.coverage()).toEqual({});
+      expect(store.pilotStale()).toBe(true);
+      expect(store.resultStale()).toBe(true);
+    });
+
+    it('undoes the last move with its result and coverage, without a recalculation', () => {
+      const grid = { link: 'control' as const, cols: 2, rows: 2 };
+      store.loadFromServer('m1', { mission: mission(), role: 'edit', revision: 2, lastResult: { legs: [] } });
+      store.coverage.set({ control: grid });
+      expect(store.canUndoMove()).toBe(false);
+      store.setPilot({ lat: 48.6, lon: 35.3 });
+      expect(store.canUndoMove()).toBe(true);
+      expect(store.dirty()).toBe(true);
+      store.undoMove();
+      expect(store.mission()!.pilot).toEqual({ lat: 48.5, lon: 35.2, aglM: 1.5 });
+      expect(store.coverage()).toEqual({ control: grid });
+      expect(store.result()).toEqual({ legs: [] });
+      expect([store.dirty(), store.resultStale(), store.pilotStale(), store.canUndoMove()]).toEqual([false, false, false, false]);
+      expect(api.calls).toEqual([]);
+    });
+
+    it('forgets the undo after any other edit', () => {
+      store.newMission(mission());
+      store.movePoint(0, { lat: 1, lon: 2 });
+      store.setEvaluate('video');
+      expect(store.canUndoMove()).toBe(false);
+      store.undoMove();
+      expect(store.mission()!.waypoints[0].lat).toBe(1);
+    });
+
+    it('does not move points while a calculation runs', async () => {
+      store.newMission(mission());
+      void store.calculate();
+      await settle();
+      expect(store.busy()).toBe(true);
+      store.movePoint(-1, { lat: 1, lon: 2 });
+      expect(store.mission()!.pilot.lat).toBe(48.5);
+      expect(store.canUndoMove()).toBe(false);
+    });
+
     it('marks an existing result stale on the first edit', () => {
       store.loadFromServer('m1', { mission: mission(), role: 'edit', revision: 2, lastResult: { legs: [] } });
       expect(store.calcState()).toBe('done');

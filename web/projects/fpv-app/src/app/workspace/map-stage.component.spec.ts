@@ -144,6 +144,43 @@ describe('MapStageComponent drawing', () => {
     expect(vm().limitShapes().radioLabel).toMatch(/^Video link limit/);
   });
 
+  it('hides what was drawn from the old pilot position after the pilot moves', () => {
+    const m = exampleMission();
+    show(m, routeResult(m, 'normal'));
+    store.coverage.set({ control: coverageGrid(m, 'control') });
+    store.setPilot({ lat: m.pilot.lat + 0.01, lon: m.pilot.lon });
+    expect(vm().limitShapes()).toMatchObject({ radio: null, battery: null, batteryLabel: '' });
+    expect(drawing().markers).toEqual([]);
+    expect(drawing().pilot?.caption).toBe('Pilot · 2 m AGL');
+    store.undoMove();
+    expect(vm().limitShapes().battery).not.toBeNull();
+    expect(drawing().markers).toHaveLength(1);
+  });
+
+  it('lets points be dragged on the desktop map only while the mission can be edited', () => {
+    const draggable = () => (fixture.componentInstance as unknown as { pointsDraggable: () => boolean }).pointsDraggable();
+    const m = exampleMission();
+    show(m, null);
+    expect(draggable()).toBe(true);
+    fixture.componentRef.setInput('interactiveEdit', false);
+    expect(draggable()).toBe(false);
+    fixture.componentRef.setInput('interactiveEdit', true);
+    store.role.set('view');
+    expect(draggable()).toBe(false);
+  });
+
+  it('moves the pilot of the current mission on a map click and keeps the route', () => {
+    const place = (p: { lat: number; lon: number }) => (fixture.componentInstance as unknown as { placePilot: (p: { lat: number; lon: number }) => void }).placePilot(p);
+    const ws = (fixture.componentInstance as unknown as { ws: { placing: { set: (v: string | null) => void; (): string | null } } }).ws;
+    const m = exampleMission();
+    show(m, null);
+    ws.placing.set('pilot');
+    place({ lat: 48.6, lon: 35.3 });
+    expect(store.mission()!.pilot).toMatchObject({ lat: 48.6, lon: 35.3, aglM: m.pilot.aglM });
+    expect(store.mission()!.waypoints).toEqual(m.waypoints);
+    expect(ws.placing()).toBeNull();
+  });
+
   it('accepts line and polygon limits and ignores other geometry', () => {
     const m = exampleMission();
     show(m, null);
