@@ -97,13 +97,14 @@ TEST_F(ValidationTest, EverySeedFileValidatesWithUniqueIds) {
         const std::filesystem::path file = std::filesystem::path(RFMAP_SEED_DIR) / kind / "seed.json";
         if (!std::filesystem::exists(file)) continue;
         std::ifstream in(file);
-        const json seed = json::parse(in);
-        ASSERT_TRUE(seed.is_array()) << file;
+        const json seed = json::parse(in, nullptr, false);
+        ASSERT_TRUE(seed.is_array()) << file << " is not a JSON array";
         std::set<std::string> ids;
         for (const json& item : seed) {
-            EXPECT_TRUE(schemas.check(kind, item).empty()) << kind << "/" << item.value("id", "?");
-            EXPECT_TRUE(ids.insert(item.at("id").get<std::string>()).second) << kind << " repeats " << item.at("id");
-            EXPECT_FALSE(item.at("verified").get<bool>()) << kind << "/" << item.at("id");
+            const std::string id = item.value("id", std::string());
+            EXPECT_TRUE(schemas.check(kind, item).empty()) << kind << "/" << id;
+            EXPECT_TRUE(ids.insert(id).second) << kind << " repeats '" << id << "'";
+            EXPECT_EQ(item.value("verified", true), false) << kind << "/" << id;
         }
     }
 }

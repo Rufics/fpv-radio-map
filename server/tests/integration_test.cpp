@@ -286,6 +286,7 @@ TEST_F(Integration, HealthAndSeededLibrary) {
         const auto seeded = call("GET", std::string("/library/") + kind);
         ASSERT_EQ(seeded.status, 200) << seeded.body;
         EXPECT_EQ(seeded.body.size(), count) << kind;
+        for (const auto& item : seeded.body) EXPECT_FALSE(item["verified"].get<bool>()) << kind << "/" << item["id"];
     }
 }
 

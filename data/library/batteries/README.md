@@ -11,6 +11,6 @@ taken from in `source.reference`. Conventions:
   does not state the cell count (DJI), the note shows how it follows from the nominal and maximum
   charging voltages.
 - **usableFraction** is `0.8` everywhere. It is a planning default (a 20% reserve), not a vendor
-  figure: set it to the reserve you fly with.
+  figure: set it to the share you plan to use, which is 1 minus your reserve (0.75 for a 25% reserve).
 - **temperatureDerating** is left out: no vendor publishes capacity against temperature as
   numbers. Add it from your own measurement.

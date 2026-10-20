@@ -85,7 +85,7 @@
       "url": "https://truerc.com/63425-x-air-58-mk-ii-rp-sma",
       "retrieved": "2026-10-20"
     },
-    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. Gain is the lower end of the vendor's 9.5-10.5 dBic range. Vendor's 120 deg 'beam-width' is coverage equivalent to an omni; the -3 dB width is stored. Also sold as LHCP. Unverified until an admin checks the source."
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. Gain is the lower end of the vendor's 9.5-10.5 dBic range. Vendor's 120 deg 'beam-width' is coverage equivalent to an omni; the -3 dB width is stored. The vendor does not name a plane for the 68 deg -3 dB width; it is stored for both. Also sold as LHCP. Unverified until an admin checks the source."
   },
   {
     "id": "truerc-x-air-2g4-mk2",
@@ -110,7 +110,7 @@
       "url": "https://truerc.com/51361-x-air-2-4-mk-ii",
       "retrieved": "2026-10-20"
     },
-    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. Gain is the lower end of the vendor's 9.5-10 dBic range. Also sold as LHCP. Unverified until an admin checks the source."
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. Gain is the lower end of the vendor's 9.5-10 dBic range. Vendor's 120 deg 'beam-width' is coverage equivalent to an omni; the -3 dB width is stored. The vendor does not name a plane for the 68 deg -3 dB width; it is stored for both. Also sold as LHCP. Unverified until an admin checks the source."
   },
   {
     "id": "truerc-x-air-900",
@@ -135,7 +135,7 @@
       "url": "https://truerc.com/39463-x-air-900",
       "retrieved": "2026-10-20"
     },
-    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. The vendor names only the 900 MHz ISM band; bandHz is set to 902-928 MHz, the US ISM band edges. Check before using it at 868 MHz. Also sold as LHCP. Unverified until an admin checks the source."
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. The vendor names only the 900 MHz ISM band; bandHz is set to 902-928 MHz, the US ISM band edges. Check before using it at 868 MHz. Vendor's 120 deg 'beam-width' is coverage equivalent to an omni; the -3 dB width is stored. The vendor does not name a plane for the 68 deg -3 dB width; it is stored for both. Also sold as LHCP. Unverified until an admin checks the source."
   },
   {
     "id": "truerc-singularity-2g4-sma",
