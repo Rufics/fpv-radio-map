@@ -11,6 +11,7 @@
 - [Production server, step by step](admin/production-setup.md)
 - [Deployment](admin/deploy.md)
 - [Building map data](admin/tiles-builder.md)
+- [How map layers reach the browser](admin/map-layers.md)
 
 **Extending it**
 

@@ -68,7 +68,7 @@ service, and **no API keys or accounts are needed** for any built-in source.
 | Contour lines | `dem` | `contours.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
 | Land cover (clutter) | `landcover` | `landcover.cog.tif` | ESA WorldCover 10 m (AWS Open Data) | rfmap-server | yes |
 | Satellite imagery | `satellite` | `satellite.pmtiles` | none: you choose a mosaic and check its licence | browser | optional |
-| Style, labels, credits | every step | `style-dark.json`, `fonts/`, `manifest.json` | the builder | both | yes |
+| Labels and credits | every step | `fonts/`, `manifest.json` (and `style-dark.json` for other clients) | the builder | browser, rfmap-server | yes |
 
 `all` runs `basemap`, `dem` and `landcover`, and `satellite` as well when you give it a satellite
 source. Without one it logs `skipping satellite` and goes on. This guide runs satellite as a
@@ -271,20 +271,12 @@ You do not edit compose or nginx for the layers. In step 3 you set one variable 
 RFMAP_TILES_DIR=/home/<you>/rfmap-data/out
 ```
 
-Compose mounts that directory read-only twice:
-
-- into `rfmap-server` as `/data`. The server calculates with `dem.cog.tif` and
-  `landcover.cog.tif`, and reads `manifest.json` for the credits and for which layers exist;
-- into `web` as `/tiles`. nginx serves it at `/tiles/` with HTTP Range requests, which the
-  `.pmtiles` files need, and answers 404 for the `.tif` files, which are not for browsers.
-
-The browser asks `GET /api/v1/config/map` for the layer URLs. The server answers with
-`/tiles/basemap.pmtiles`, `/tiles/satellite.pmtiles`, `/tiles/hillshade.pmtiles`,
-`/tiles/contours.pmtiles` and `/tiles/fonts/...`, drops each layer that `manifest.json` does not
-list, adds the credits from the manifest, and centres the map on the DEM. To change any of
-this, for example to serve the tiles from another host, add a `map` object to the server
-configuration; it is merged over these values (see [Configuration](deploy.md#3-configuration)).
-Tiles on another host also need CORS for `GET` and `HEAD` with the `Range` header.
+Compose mounts that directory into `rfmap-server`, which calculates with the `.tif` files, and
+into `web`, whose nginx serves the `.pmtiles` files at `/tiles/` to browsers. The browser asks
+the server which layers exist (`GET /api/v1/config/map`); the server lists only the layers in
+`manifest.json`. [How map layers reach the browser](map-layers.md) has the details, diagrams,
+the settings you can change (another tiles host, hiding a layer) and checks for a layer that
+does not show.
 
 After you rebuild a layer:
 
