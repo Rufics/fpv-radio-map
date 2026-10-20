@@ -8,12 +8,13 @@ The stack has four parts, described in [`deploy/docker-compose.yml`](../../deplo
 | Service | What it does |
 |---|---|
 | `postgis` | PostgreSQL 16 + PostGIS 3.4. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
-| `open-meteo` + `open-meteo-sync` | Your own Open-Meteo. The sync service downloads model runs; the API answers rfmap-server. No request leaves your network for a forecast. |
+| `open-meteo`, `open-meteo-init`, `open-meteo-sync` | Your own Open-Meteo. `open-meteo-init` downloads a first copy of the model data and exits, `open-meteo-sync` then keeps it fresh, and the API answers rfmap-server. No request leaves your network for a forecast. |
 | `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly. |
 | `web` | nginx with the built client, `/tiles` (PMTiles over HTTP Range) and a reverse proxy for `/api`. The only service with a published port. |
 
 `postgis`, `open-meteo` and `rfmap-server` sit only on internal networks with no route out.
-Only `open-meteo-sync` can reach the internet, and only `web` can be reached from outside.
+Only `open-meteo-init` and `open-meteo-sync` can reach the internet, and only `web` can be reached
+from outside.
 
 ## 1. Before you start
 
@@ -64,8 +65,16 @@ curl -s http://localhost:8088/api/v1/health
 # {"dem":true,"landcover":true,"ok":true,"version":"0.1.0","weather":true}
 ```
 
-The first forecast is ready once `open-meteo-sync` has downloaded a run, which takes a while.
-Until then, results state that no forecast covers the time and use k = 4/3.
+On the first start, `open-meteo-init` downloads about 6 GB of model data (around half an hour
+on a slow link). The `open-meteo` API and `open-meteo-sync` start only after it completes
+successfully (it retries up to three times), because the API keeps a model grid it failed to
+open as failed until it restarts, and `docker compose up -d` does not return until then. Run it in `tmux` or `screen` so a dropped SSH
+session does not cut it short, and follow the download from a second shell with
+`docker compose logs -f open-meteo-init`. postgis, rfmap-server and web are already running
+meanwhile: until the API is up, results note that the forecast is unavailable and use k = 4/3.
+If the host reboots before the first pass has finished, Docker does not resume it; run
+`docker compose up -d` again. Every later `docker compose up -d` runs the pass again, which only
+fetches what changed, and restarts the API after it.
 
 Behind a TLS-intercepting proxy, the image builds need its CA, because CMake fetches
 json-schema-validator from GitHub and npm fetches packages. Pass it as a build secret:
@@ -188,12 +197,15 @@ list differs from the one above:
 - With `models=dwd_icon`, Open-Meteo 1.7.0 also opens the native ICON grids: `dwd_icon_global_native`
   (sync adds it for `dwd_icon` on its own) and `dwd_icon_global_eps_native` (it does not). Without
   `data/dwd_icon_global_eps_native/static/grid.bin` every `dwd_icon` request fails with
-  `{"reason":"Something went wrong.","error":true}`. That is why `OPEN_METEO_SYNC_MODELS` lists it; only its static files (about 38 MB) match
-  the variable list.
+  `{"reason":"Something went wrong.","error":true}`. That is why `OPEN_METEO_SYNC_MODELS` lists
+  it. Sync downloads only its static files (about 38 MB), because the variable list names no
+  variable that this model stores.
 
 If you change the model, check its directory at `https://openmeteo.s3.amazonaws.com/data/<model>/`
 for the variable names it stores. The API hides internal errors behind "Something went wrong.";
-the real cause is in `docker compose logs open-meteo`.
+the real cause is in `docker compose logs open-meteo`. After you add a model to
+`OPEN_METEO_SYNC_MODELS`, run `docker compose up -d`: `open-meteo-init` downloads it, and
+compose restarts the API after that.
 
 **Verify on your instance.** After the first sync, run this from a container on the `backend`
 network, and check that every variable comes back without nulls:
