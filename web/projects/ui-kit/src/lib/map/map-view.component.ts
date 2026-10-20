@@ -8,6 +8,7 @@ import {
   inject,
   input,
   output,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { addProtocol, Map as MlMap } from 'maplibre-gl';
@@ -17,7 +18,7 @@ import { LayerRegistry } from '../layers/layer-registry';
 import { SlotRegistry } from '../slots/slot-registry';
 import { LatLon } from '../tools/geo';
 import { MapContext } from './map-context';
-import { MapControls } from './map-controls';
+import { MapControls, MapControlsOptions } from './map-controls';
 
 let pmtilesRegistered = false;
 
@@ -35,7 +36,7 @@ export function ensurePmtilesProtocol(): void {
  */
 @Component({
   selector: 'rf-map-view',
-  host: { '[class.rf-map-view--controls]': 'controls().any' },
+  host: { '[class.rf-map-view--controls]': 'hasControls()' },
   template: `
     <div #container class="rf-map-canvas" role="region" [attr.aria-label]="label()"></div>
     <ng-content />
@@ -75,9 +76,12 @@ export class MapViewComponent {
   private map?: MlMap;
   private readonly slotLayerCleanups = new Map<string, () => void>();
 
-  protected readonly controls = computed(
-    () => new MapControls({ zoom: this.interactive() && this.zoomButtons(), locate: this.interactive() && this.locateButton() }),
-  );
+  private readonly controls = new MapControls();
+  private readonly controlOptions = computed<MapControlsOptions>(() => ({
+    zoom: this.interactive() && this.zoomButtons(),
+    locate: this.interactive() && this.locateButton(),
+  }));
+  protected readonly hasControls = computed(() => MapControls.any(this.controlOptions()));
 
   protected readonly attributionText = computed(() => {
     const parts = [...(this.config()?.attribution ?? ['© OpenStreetMap contributors', 'Copernicus DEM'])];
@@ -108,6 +112,12 @@ export class MapViewComponent {
         }
       }
     });
+    // corner buttons follow their inputs on a live map
+    effect(() => {
+      const options = this.controlOptions();
+      const map = this.map;
+      if (map) untracked(() => this.controls.apply(map, options));
+    });
     this.destroyRef.onDestroy(() => {
       this.layers.disconnect();
       this.ctx.map.set(null);
@@ -130,7 +140,7 @@ export class MapViewComponent {
       fadeDuration: 0,
     });
     map.touchZoomRotate.disableRotation();
-    this.controls().addTo(map);
+    this.controls.apply(map, this.controlOptions());
     map.on('click', (e) => {
       const p = { lat: e.lngLat.lat, lon: e.lngLat.lng };
       this.ctx.emitClick(p);

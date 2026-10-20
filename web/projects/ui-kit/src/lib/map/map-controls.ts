@@ -9,13 +9,14 @@ export interface MapControlsOptions {
   locate: boolean;
 }
 
-/** The part of a MapLibre map the controls are added to. */
+/** The part of a MapLibre map the controls are added to and removed from. */
 export interface ControlHost {
   addControl(control: IControl, position?: ControlPosition): unknown;
+  removeControl(control: IControl): unknown;
 }
 
 /**
- * The buttons in the bottom-right corner of a map view. They stack upwards from the corner, so
+ * The buttons in the bottom-right corner of one map view. They stack upwards from the corner, so
  * the location button sits above the zoom buttons. Bottom-left overlays (attribution, hints) keep
  * `--rf-map-controls-reserve` free on the right to stay clear of this column.
  */
@@ -24,23 +25,36 @@ export class MapControls {
   /** How close "Find my location" zooms in, so the pilot still sees the area around them. */
   static readonly locateMaxZoom = 14;
 
-  constructor(private readonly options: MapControlsOptions) {}
+  private installed: IControl[] = [];
+  private shown: MapControlsOptions = { zoom: false, locate: false };
 
-  /** True when the corner has at least one button, so overlays need to leave room for it. */
-  get any(): boolean {
-    return this.options.zoom || this.options.locate;
-  }
-
-  addTo(map: ControlHost): void {
-    for (const control of this.create()) map.addControl(control, MapControls.position);
+  /** True when the options put at least one button in the corner. */
+  static any(options: MapControlsOptions): boolean {
+    return options.zoom || options.locate;
   }
 
   /** The controls in the order they are added; MapLibre stacks later bottom controls above. */
-  create(): IControl[] {
+  static create(options: MapControlsOptions): IControl[] {
     const controls: IControl[] = [];
-    if (this.options.zoom) controls.push(new NavigationControl({ showCompass: false }));
-    if (this.options.locate) controls.push(MapControls.createLocate());
+    if (options.zoom) controls.push(new NavigationControl({ showCompass: false }));
+    if (options.locate) controls.push(MapControls.createLocate());
     return controls;
+  }
+
+  /**
+   * Show exactly the buttons the options ask for. Changed options replace the whole column, so
+   * the location button stays above the zoom buttons whichever was turned on last.
+   */
+  apply(map: ControlHost, options: MapControlsOptions): void {
+    if (MapControls.same(options, this.shown)) return;
+    for (const control of this.installed) map.removeControl(control);
+    this.installed = MapControls.create(options);
+    for (const control of this.installed) map.addControl(control, MapControls.position);
+    this.shown = { ...options };
+  }
+
+  private static same(a: MapControlsOptions, b: MapControlsOptions): boolean {
+    return a.zoom === b.zoom && a.locate === b.locate;
   }
 
   private static createLocate(): GeolocateControl {
