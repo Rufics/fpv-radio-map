@@ -7,7 +7,8 @@ have every option and the reasons behind them.
 
 You will:
 
-1. build the map data (tiles) for your area;
+1. build the map data for your area: basemap, terrain, land cover and, optionally, satellite
+   imagery;
 2. create the owner key and the secrets;
 3. start the Docker stack and check it;
 4. sign and install the FPV modules;
@@ -24,7 +25,7 @@ in your home: `~/fpv-radio-map` (the code), `~/rfmap-data` (map data), `~/rfmap-
 |---|---|
 | Machine | Linux (x86-64 or arm64) with Docker Engine and the Compose plugin. 4 cores and 8 GB RAM are enough for a district. A country basemap needs 8–16 GB RAM **(estimate)**. |
 | Disk | About 5 GB for the images, plus the map data: a few hundred MB for a district, tens of GB for a country with satellite imagery **(estimate)**. See [disk, RAM and time](tiles-builder.md#7-disk-ram-and-time--all-estimate). |
-| Network | Outbound HTTPS while you build: Docker Hub, GitHub and its container registry, Ubuntu and npm mirrors, and the map data sources (Geofabrik, AWS Open Data, osmdata.openstreetmap.de, naciscdn.org). At run time only the Open-Meteo sync services go out: `open-meteo-init` during start-up and `open-meteo-sync` afterwards, both to `openmeteo.s3.amazonaws.com`. |
+| Network | Outbound HTTPS while you build: Docker Hub, GitHub and its container registry, Ubuntu and npm mirrors, and the map data sources (Geofabrik, AWS Open Data, osmdata.openstreetmap.de, naciscdn.org, and your satellite mosaic's host, such as tiles.maps.eox.at). At run time only the Open-Meteo sync services go out: `open-meteo-init` during start-up and `open-meteo-sync` afterwards, both to `openmeteo.s3.amazonaws.com`. |
 | Public server | A domain name pointing at the machine, and ports 80 and 443 open. |
 
 Install Docker from <https://docs.docker.com/engine/install/>, then let your user run it and log
@@ -53,59 +54,263 @@ git clone https://github.com/Rufics/fpv-radio-map.git
 
 ## 2. Build the map data
 
+Every map layer is a file that `rfmap/tiles-builder` writes into one output directory. The server
+and the browser read only that directory, so at run time nothing comes from a third-party map
+service, and **no API keys or accounts are needed** for any built-in source.
+
+### 2.1 The layers
+
+| Layer | Builder step | Files in `out/` | Source (default) | Used by | Needed? |
+|---|---|---|---|---|---|
+| Basemap (roads, places, water, buildings) | `basemap` | `basemap.pmtiles` | OpenStreetMap extract from Geofabrik | browser | yes |
+| Terrain for calculations | `dem` | `dem.cog.tif` | Copernicus DEM GLO-30 (AWS Open Data) | rfmap-server | yes |
+| Hillshade | `dem` | `hillshade.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
+| Contour lines | `dem` | `contours.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
+| Land cover (clutter) | `landcover` | `landcover.cog.tif` | ESA WorldCover 10 m (AWS Open Data) | rfmap-server | recommended: without it the server starts, logs a warning and leaves clutter out |
+| Satellite imagery | `satellite` | `satellite.pmtiles` | none: you choose a mosaic and check its licence | browser | optional |
+| Labels and credits | every step | `fonts/`, `manifest.json` (and `style-dark.json` for other clients) | the builder | browser, rfmap-server | yes |
+
+[How the tiles builder generates map data](map-generation.md) shows what each step copies,
+converts or derives, and the formats it reads and writes.
+
+`all` runs `basemap`, `dem` and `landcover`, and `satellite` as well when you give it a satellite
+source. Without one it logs `skipping satellite` and goes on. This guide runs satellite as a
+separate step, because it is the one you choose and time yourself.
+
+### 2.2 Build the image and choose the area
+
 The map data lives outside the repository, in `~/rfmap-data`. Any directory works; use the same
 path in every command.
 
 ```sh
-mkdir -p ~/rfmap-data
+mkdir -p ~/rfmap-data/inputs
 docker build -t rfmap/tiles-builder ~/fpv-radio-map/tools/tiles-builder
 ```
 
-The image build takes a few minutes the first time.
+The image build takes a few minutes the first time. Build it again after every `git pull` that
+changes `tools/tiles-builder`: fixes to the builder only reach you through a new image.
 
-**Choose the area.** You need a bbox (`minLon,minLat,maxLon,maxLat`, draw one at
-<https://boundingbox.klokantech.com> and pick "CSV") and a Geofabrik region for the basemap
-(`europe/ukraine`, `monaco`, ... see <https://download.geofabrik.de>). Before you choose:
+You need two values:
 
-- The bbox decides the DEM, land cover and satellite area. The basemap is cut to the same bbox.
-- **50° N:** Copernicus DEM changes its pixel spacing at 50° latitude, and the build stops when
-  the bbox crosses it. In Ukraine, 50° N runs just south of Kyiv, through Kharkiv and just north
-  of Lviv. The server reads one
-  DEM file, so for an area that crosses 50° N add `--allow-dem-resample`. It duplicates the
-  coarser pixels without inventing heights, and the manifest records it.
-- The basemap step reads the whole Geofabrik extract, even when it keeps only your bbox. Check
-  the extract's size on its Geofabrik page and give Java 2–3× that, at least 2 GB, with
-  `--java-heap` **(estimate)**.
+- **A bbox**, `minLon,minLat,maxLon,maxLat`. Draw one at <https://boundingbox.klokantech.com>
+  and pick "CSV". It sets the area of the DEM, land cover and satellite layers, and the basemap
+  is cut to it. Areas across the 180° meridian are not supported.
+- **A Geofabrik region** for the basemap, as a path from <https://download.geofabrik.de>
+  without `-latest.osm.pbf`: `europe/ukraine`, `europe/poland`, `europe/germany/bayern`.
+  The basemap has OSM data only from this extract. Where the bbox reaches into a neighbouring
+  country, terrain and land cover are there but the basemap is empty. For a border area, use
+  the next larger extract (`europe` is very large; see the RAM note below).
 
-**Build everything except satellite imagery:**
+Look up the extract's size on its Geofabrik page. It decides the memory the basemap step needs:
+give Java 2–3× the `.osm.pbf` size, at least 2 GB, with `--java-heap` **(estimate)**.
+
+Run the builder steps inside `tmux` or `screen`. A country takes hours, and a dropped SSH session
+stops the container. Every command below is safe to repeat: finished files are skipped, and
+downloads resume from `~/rfmap-data/cache`.
+
+The commands use a small shell function (bash and zsh) so you type the Docker options once:
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" -v "$HOME/rfmap-data:/data" rfmap/tiles-builder all \
-    --bbox 34.8,48.3,35.4,48.7 \
-    --region europe/ukraine \
-    --basemap-maxzoom 14 \
-    --java-heap 6g
+tb() { docker run --rm --user "$(id -u):$(id -g)" -v "$HOME/rfmap-data:/data" rfmap/tiles-builder "$@"; }
+BBOX=34.8,48.3,35.4,48.7
 ```
 
-Replace the bbox and region with yours. `--basemap-maxzoom 14` keeps the basemap several times
-smaller with the same look; leave it out for z16. Running the same command again is safe:
-finished files are skipped, and interrupted downloads resume.
+Replace the bbox with yours. Define both again in every new shell. The steps can run one at a
+time, as below, or together with `tb all` and the options of all three. `tb all` builds the
+basemap only from `--region` or `--osm-file`; with `--osm-url`, run `tb basemap` on its own.
 
-**Satellite imagery is optional,** and you must check its licence first. See
-[Satellite](tiles-builder.md#4-run) for the command and the licence notes. Without it, the map
-has no satellite view; everything else works.
-
-**Check the result:**
+### 2.3 Basemap (OpenStreetMap)
 
 ```sh
-docker run --rm --user "$(id -u):$(id -g)" -v "$HOME/rfmap-data:/data" rfmap/tiles-builder verify
+tb basemap --bbox "$BBOX" --region europe/ukraine --basemap-maxzoom 14 --java-heap 6g
+```
+
+- `--basemap-maxzoom 14` gives a file several times smaller that looks the same: MapLibre
+  over-zooms it. Leave it out for z16.
+- The step also downloads water polygons (osmdata.openstreetmap.de) and Natural Earth
+  (naciscdn.org) once, into `cache/`.
+- `--basemap-full-extract` keeps the whole extract instead of cutting it to the bbox.
+- A Geofabrik mirror or another extract: `--osm-url https://.../file.osm.pbf`, or put the file
+  in `~/rfmap-data/inputs/` and pass `--osm-file file.osm.pbf`.
+- Java runs out of memory with `java.lang.OutOfMemoryError` or the container is killed (exit
+  code 137): raise `--java-heap`, and on Docker Desktop the VM's memory too.
+
+Output: `basemap.pmtiles`.
+
+### 2.4 Terrain: DEM, hillshade and contours
+
+```sh
+tb dem --bbox "$BBOX"
+```
+
+- The calculation DEM, `dem.cog.tif`, keeps the source heights bit for bit; the build compares
+  every pixel with the source and stops if one differs. Hillshade and contours are pictures for
+  the map only.
+- `--contour-interval 10` draws 10 m contours instead of 20 m. `--no-hillshade` and
+  `--no-contours` skip those layers.
+- Missing Copernicus tiles (open sea, or areas the provider withholds) are logged as
+  `Copernicus tile ... does not exist` and stay NoData. They are never filled with invented
+  heights, and the manifest lists them under `missing_tiles`.
+- Copernicus not reachable: `--dem-source srtm` uses AWS Terrain Tiles (mostly SRTM). Your own
+  DEM: put the files in `inputs/` and pass `--dem-file name.tif` once per file.
+
+**Areas that cross 50° N (or 60°, 70°, 80°).** North of 50° N, Copernicus DEM tiles have a wider
+longitude spacing (1.5″ instead of 1″), and the two grids are offset by a fraction of a pixel. In
+Ukraine, 50° N runs just south of Kyiv, through Kharkiv and just north of Lviv; in Poland it
+runs just south of Kraków, so almost the whole country lies north of it. Without help the build stops:
+
+```
+the DEM tiles for this bbox have different pixel sizes ... pass --allow-dem-resample
+```
+
+Add `--allow-dem-resample`. The build then logs this warning, which is expected and not an error:
+
+```
+WARNING: mixing pixel sizes: coarser tiles are duplicated nearest-neighbour onto the finest grid
+```
+
+The northern tiles are put once onto the 1″ grid by duplicating pixels; no height is
+interpolated or invented. Tiles already on that grid stay bit for bit, the pixel-by-pixel check
+still runs, and the manifest records the duplication. The alternative is to split the area at
+50° N, but the server reads one `dem.cog.tif`, so you would run two servers. A builder image from
+before 20 October 2026 could fail the pixel check after this warning; build the image again.
+
+Output: `dem.cog.tif`, `hillshade.pmtiles`, `contours.pmtiles`.
+
+### 2.5 Land cover (ESA WorldCover)
+
+```sh
+tb landcover --bbox "$BBOX"
+```
+
+- The builder reads only the part of each 3°×3° WorldCover tile inside the bbox, over HTTP range
+  requests, and keeps it in `cache/` as one file per tile and bbox. A rerun with the same bbox reuses these
+  files; a different bbox downloads new windows. Class values are copied unchanged.
+- `--worldcover-year 2020` uses the older v100 map; the default is 2021 (v200).
+- **Network errors are retried.** Over a large area a single range request to the AWS bucket can
+  fail (GDAL reports response code 0, followed by a decode error such as `ZIPDecode`). GDAL
+  retries each request up to 10 times, and the builder retries the whole tile window 4 times,
+  logging `WorldCover download failed (attempt N of 4); retrying in ... s`. If a tile still fails,
+  the step stops; run the same command (same bbox) again and only the missing windows are downloaded. A
+  builder image from before 20 October 2026 restarted the whole step instead; build the image
+  again.
+
+Output: `landcover.cog.tif`.
+
+### 2.6 Satellite imagery (optional)
+
+Satellite imagery is the only layer without a default source, because each mosaic has its own
+licence and terms of use. Without it the map has no **Map / Satellite** switch; everything else
+works. The builder supports three kinds of source:
+
+| Source | Option | Notes |
+|---|---|---|
+| Sentinel-2 cloudless by EOX, years 2016 and 2018–2023 | `--sat-provider eox-s2cloudless-<year>` | Tiles are copied from `tiles.maps.eox.at`. EOX lists 2016 as CC BY 4.0 and 2018–2023 as CC BY-NC-SA 4.0 (non-commercial). |
+| A listed mosaic you downloaded yourself (GeoTIFF/COG/VRT) | `--sat-file name.tif --sat-mosaic <mosaic>` | `<mosaic>` is one of the EOX names above, or `copernicus-sentinel-2` for any Sentinel-2 imagery, together with `--sat-data-year <year>`. |
+| Any other mosaic: an https XYZ template or a raster | `--sat-source <template or path or URL>`, plus `--sat-name`, `--sat-licence` and `--sat-attribution`. These three are optional, but without the licence and attribution the manifest marks the licence `UNVERIFIED`. | Template example: `https://host/path/{z}/{y}/{x}.jpg` (`{-y}` for TMS rows). |
+
+**Step 1: check the licence.** Read the provider's current licence and terms of service, and
+whether they allow downloading tiles in bulk. Many tile services, including most commercial
+imagery (Google, Bing, Esri, Mapbox), forbid it; do not use them with `--sat-source`. A
+non-commercial licence (EOX 2018–2023) fits a non-commercial site only.
+
+**Step 2: count the tiles.** The XYZ download is one request per tile, rate-limited to
+`--sat-rate` requests per second (default 4), and the builder refuses jobs above
+`--sat-max-tiles` (default 50,000) with `N tiles needed (> --sat-max-tiles 50000)`. Run the
+command once without raising the limit to see N. Some figures for z6 to the given maximum zoom:
+
+| Area | `--sat-maxzoom 13` | `--sat-maxzoom 14` (default) |
+|---|---|---|
+| District, 0.6°×0.4° (the example bbox) | 331 tiles, under 2 min | 1,143 tiles, about 5 min |
+| Poland, `14.07,49.0,24.15,54.84` | 66,735 tiles, about 5 h | 265,915 tiles, about 18 h |
+
+Sentinel-2 has 10 m pixels, so z14 (about 6 m per pixel at 50° N) shows all its detail, and z13
+is only slightly softer. Disk: about 100–200 MB per 1°×1° at z14 **(estimate)**. Raise
+`--sat-max-tiles` only to what the provider's terms allow, and keep `--sat-rate` at its default
+or lower.
+
+**Step 3: build.**
+
+```sh
+tb satellite --bbox "$BBOX" --sat-provider eox-s2cloudless-2016 --sat-licence-checked
+```
+
+`--sat-licence-checked` records that you did step 1. Passing both `--sat-licence` and
+`--sat-attribution` records it too. With neither, the manifest marks the licence `UNVERIFIED`. An
+interrupted download resumes from `cache/satellite-xyz/`. The step prints
+`XYZ: fetched ..., already cached ..., not available ...`; tiles the provider does not have
+stay empty.
+
+A large country at z14, with a higher limit after checking the terms:
+
+```sh
+tb satellite --bbox 14.07,49.0,24.15,54.84 --sat-provider eox-s2cloudless-2016 \
+    --sat-licence-checked --sat-max-tiles 300000
+```
+
+Output: `satellite.pmtiles`. The server reads `manifest.json` each time a browser asks for the map
+settings, so the switch appears on the next page load, without a restart.
+
+### 2.7 Check the result
+
+```sh
+tb verify
 ls ~/rfmap-data/out
 ```
 
-Every file must be reported `OK`. You should see `dem.cog.tif`, `landcover.cog.tif`, `basemap.pmtiles`,
-`hillshade.pmtiles`, `contours.pmtiles`, `style-dark.json`, `manifest.json` and `fonts/`.
+`verify` checks the `.tif` and `.pmtiles` files that exist, and each must be reported `OK`. It
+does not notice a missing file, so also check the listing: you should see `dem.cog.tif`, `landcover.cog.tif`,
+`basemap.pmtiles`, `hillshade.pmtiles`, `contours.pmtiles`, `style-dark.json`, `manifest.json`
+and `fonts/`, plus `satellite.pmtiles` if you built it. `manifest.json` lists each file with its
+source, licence, attribution, bbox and resolution; check that the licence of your satellite
+mosaic is not `UNVERIFIED`.
+
 `~/rfmap-data/out` is the directory the server will use. `cache/` and `work/` next to it are
-only for the builder.
+only for the builder; keep `cache/` while you may rebuild, and delete both when you need the disk
+space (never while a build runs).
+
+### 2.8 How the layers reach the map
+
+You do not edit compose or nginx for the layers. In step 3 you set one variable in `.env`:
+
+```
+RFMAP_TILES_DIR=/home/<you>/rfmap-data/out
+```
+
+Compose mounts that directory into `rfmap-server`, which calculates with the `.tif` files, and
+into `web`, whose nginx serves the `.pmtiles` files at `/tiles/` to browsers. The browser asks
+the server which layers exist (`GET /api/v1/config/map`); the server lists only the layers in
+`manifest.json` (all four if there is no readable manifest), then applies the `map` object of
+its configuration, if any. [How map layers reach the browser](map-layers.md) has the details, diagrams,
+the settings you can change (another tiles host, hiding a layer) and checks for a layer that
+does not show.
+
+After you rebuild a layer:
+
+| You rebuilt | Then |
+|---|---|
+| `basemap`, hillshade, contours or `satellite`, replacing a layer that already existed | nothing. nginx lets browsers cache `/tiles/` for an hour, so open browsers show the new files within an hour, or at once after a hard reload |
+| a layer that did not exist before (for example the first `satellite`), or one you removed | no restart; open browsers need a page reload, because the web app reads the list of layers once when the page loads |
+| `dem` or `landcover` | `cd ~/fpv-radio-map/deploy && docker compose restart rfmap-server`, so the server opens the new files |
+
+### 2.9 Example: Poland with satellite imagery
+
+Poland crosses 50° N, its `.osm.pbf` is about 2 GB, and the bbox below is about 10°×6°. Give
+the machine 16 GB RAM and 60 GB of free disk **(estimate)**:
+
+```sh
+tb() { docker run --rm --user "$(id -u):$(id -g)" -v "$HOME/rfmap-data:/data" rfmap/tiles-builder "$@"; }
+tb all --bbox 14.07,49.0,24.15,54.84 --region europe/poland \
+    --basemap-maxzoom 14 --java-heap 12g --allow-dem-resample
+tb satellite --bbox 14.07,49.0,24.15,54.84 --sat-provider eox-s2cloudless-2016 \
+    --sat-licence-checked --sat-max-tiles 300000
+tb verify
+```
+
+Expect the `mixing pixel sizes` warning in the DEM step and, possibly, a few `WorldCover download
+failed ... retrying` lines in the land cover step. If any step stops on a network error, run the
+same command again. The bbox includes parts of the neighbouring countries: they get terrain, land
+cover and satellite imagery, but no basemap.
 
 ## 3. Secrets
 
@@ -394,10 +599,10 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$HOME/rfmap-data:/data" rfmap/til
 docker run --rm --user "$(id -u):$(id -g)" -v "$HOME/rfmap-data:/data" rfmap/tiles-builder verify
 ```
 
-Browsers pick up the new basemap on their next load.
+Browsers pick up the new basemap within an hour (see [How the layers reach the map](#28-how-the-layers-reach-the-map)).
 
-**A different area:** run the `all` command from step 2 with the new `--bbox`, run `verify`, then
-restart the server so it opens the new DEM and land cover files:
+**A different area:** run the `all` command from step 2 with the new `--bbox` (and `satellite`, if
+you use it), run `verify`, then restart the server so it opens the new DEM and land cover files:
 
 ```sh
 cd ~/fpv-radio-map/deploy && docker compose restart rfmap-server
@@ -411,11 +616,19 @@ After a `git pull` that changes `tools/tiles-builder`, build its image again (st
 |---|---|
 | `permission denied` on `/var/run/docker.sock` | Your user is not in the `docker` group yet. Log out and in after `usermod`. |
 | tiles-builder: `Permission denied: '/data/out'` | `--user "$(id -u):$(id -g)"` is missing, or `~/rfmap-data` belongs to another user (`sudo chown -R "$USER" ~/rfmap-data`). |
-| tiles-builder: `different pixel sizes` | The bbox crosses 50° N. See step 2. |
+| tiles-builder: `different pixel sizes` | The DEM tiles have different pixel sizes: the bbox crosses 50° N (or 60°, 70°, 80°), or the `--dem-file` inputs use different grids. Add `--allow-dem-resample`, see [step 2.4](#24-terrain-dem-hillshade-and-contours). |
+| tiles-builder: `WARNING: mixing pixel sizes` | Expected with `--allow-dem-resample`; not an error. |
+| tiles-builder: DEM pixel check fails after `mixing pixel sizes` | The builder image is older than the fix. `git pull` and build the image again (step 2.2); downloads are reused. |
+| tiles-builder: `WorldCover download failed (attempt N of 4)` | A network error on the WorldCover bucket; it is retried. If the step stops, run it again: only missing tiles are downloaded. An old image restarts the whole step, so build it again. |
+| tiles-builder: `java.lang.OutOfMemoryError`, or the basemap step exits with code 137 | Not enough memory for the OSM extract. Raise `--java-heap` (2–3× the `.osm.pbf` size) and the RAM of the machine or Docker Desktop. |
+| tiles-builder: `tiles needed (> --sat-max-tiles ...)` | The satellite area is larger than the safety limit. Lower `--sat-maxzoom`, or raise `--sat-max-tiles` after checking the provider's terms, see [step 2.6](#26-satellite-imagery-optional). |
+| tiles-builder: satellite `HTTP 403` (or `401`) | The tile service refuses access, often because its terms forbid bulk downloads. Check the provider's access and licence terms, or choose another mosaic; a slower rate does not help. |
+| tiles-builder: satellite `HTTP 429` | The tile service throttles you. Each tile is retried a few times; if the step still stops, lower `--sat-rate` and run it again. Downloaded tiles are kept. |
+| No **Map / Satellite** switch | A readable `manifest.json` does not list `satellite.pmtiles`: build the `satellite` step and run `verify`. Also check that the `map` object of the server configuration does not remove `satellite`. |
 | tiles-builder: `cannot read the Geofabrik index` | Geofabrik is blocked on your network. Download the `.osm.pbf` elsewhere into `~/rfmap-data/inputs/` and pass `--osm-file <name>` instead of `--region`. The same works for the other sources: see [known limitations](tiles-builder.md#10-known-limitations-and-honest-notes). |
 | `docker compose`: `set POSTGRES_PASSWORD in .env` | `.env` is missing or not in `deploy/`. Run compose from `deploy/`. |
 | Image build: `429 Too Many Requests` from Docker Hub | Docker Hub rate limit. Wait, or `docker login` with a free account. |
 | Image build: `certificate verify failed` | A TLS-intercepting proxy. Pass its CA as a build secret, see [Start](deploy.md#2-start). |
-| `health` shows `"dem":false` | `RFMAP_TILES_DIR` does not point at the directory that holds `dem.cog.tif`. Write the full path (`/home/<you>/rfmap-data/out`, not `~/...`) and run `docker compose up -d`. |
-| Map is empty, `/tiles/...` answers 404 | Same as above, for the `web` container. |
+| `health` shows `"dem":false` | `RFMAP_TILES_DIR` does not point at the directory that holds `dem.cog.tif`, or `data.dem` (`RFMAP_DEM`) in the server configuration names another path. Write the full path (`/home/<you>/rfmap-data/out`, not `~/...`) and run `docker compose up -d`. |
+| Map is empty, `/tiles/...` answers 404 | `RFMAP_TILES_DIR` is wrong for the `web` container, or the file was not built: `docker compose exec web ls /tiles` must list it. |
 | Module upload: `signature` check fails | The module was signed with a different key than the one the server was built with. Sign it with your `owner.secret` (step 6). |

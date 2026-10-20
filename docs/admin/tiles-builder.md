@@ -1,6 +1,6 @@
 # Building map data (rfmap/tiles-builder)
 
-This guide is for the person who runs the FPV Radio Map server. It produces the map files the site serves from our own server: basemap, hillshade, contours, satellite, the calculation DEM and the landcover (clutter) raster. Tool details are in [`tools/tiles-builder/README.md`](../../tools/tiles-builder/README.md). To set up a whole server, follow [Production server, step by step](production-setup.md).
+This guide is for the person who runs the FPV Radio Map server. It produces the map files the site serves from our own server: basemap, hillshade, contours, satellite, the calculation DEM and the landcover (clutter) raster. Tool details are in [`tools/tiles-builder/README.md`](../../tools/tiles-builder/README.md). To set up a whole server, follow [Production server, step by step](production-setup.md); its step 2 walks through every map layer, including satellite imagery, with an example for a whole country. What each step does with its sources, and which formats it reads and writes, is in [How the tiles builder generates map data](map-generation.md).
 
 > Estimates in this guide are marked **(estimate)**. They come from small test runs and the tools' general behaviour, not from measuring a full country.
 
@@ -77,7 +77,10 @@ Running the same command again is safe. Finished outputs with unchanged inputs a
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder verify
 ```
 
-Expect `OK` for every file. In `data/out` you get:
+Expect `OK` for each of the six builder outputs that exists (`dem.cog.tif`, `landcover.cog.tif`
+and the four `.pmtiles` files). `verify` does not notice a missing
+file and does not check `style-dark.json`, `manifest.json` or `fonts/`, so compare the listing of
+`data/out` with this one (`satellite.pmtiles` only if you built it):
 
 ```
 basemap.pmtiles  hillshade.pmtiles  contours.pmtiles  satellite.pmtiles
