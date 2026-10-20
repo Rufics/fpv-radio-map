@@ -212,7 +212,8 @@ export class MapStageComponent {
     });
     effect(() => {
       if (!this.ready()) return;
-      const placing = this.ws.placing();
+      // map clicks edit the mission only where editing on the map is on (desktop)
+      const placing = this.interactiveEdit() ? this.ws.placing() : null;
       untracked(() =>
         this.tool?.setAddPointHandler(
           placing
