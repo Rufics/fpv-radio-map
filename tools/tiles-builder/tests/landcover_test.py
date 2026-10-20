@@ -47,7 +47,8 @@ class WindowCacheTest(unittest.TestCase):
         self.values = np.random.default_rng(3).integers(10, 100, (PIXELS, PIXELS), dtype=np.uint8)
         ds.GetRasterBand(1).WriteArray(self.values)
         ds = None
-        self.cache = LocalWindowCache(BBox.parse("18.5,52.25,19,52.5"), self.dir / "cache")
+        self.bbox = BBox.parse("18.5,52.25,19,52.5")
+        self.cache = LocalWindowCache(self.bbox, self.dir / "cache")
 
     def tearDown(self) -> None:
         """Removes the test files."""
@@ -60,11 +61,21 @@ class WindowCacheTest(unittest.TestCase):
         np.testing.assert_array_equal(window.ReadAsArray(), self.values[600:700, 200:400])
 
     def test_cached_window_is_reused(self) -> None:
-        """A second fetch returns the cached file without reading the source again."""
+        """A second fetch returns the cached file without opening the source at all."""
         first = self.cache.fetch(str(self.tile))
-        with mock.patch.object(landcover, "run") as runner:
+        with mock.patch.object(landcover, "run") as runner, \
+                mock.patch.object(landcover.raster, "srcwin_for_bbox") as header:
             self.assertEqual(self.cache.fetch(str(self.tile)), first)
         runner.assert_not_called()
+        header.assert_not_called()
+
+    def test_failed_header_read_is_retried(self) -> None:
+        """A failed read of the tile header is retried like a failed copy."""
+        real = landcover.raster.srcwin_for_bbox
+        with mock.patch.object(landcover.raster, "srcwin_for_bbox",
+                               side_effect=[RuntimeError("HTTP error"), real(self.tile, self.bbox)]):
+            window = self.cache.fetch(str(self.tile))
+        np.testing.assert_array_equal(gdal.Open(str(window)).ReadAsArray(), self.values[600:700, 200:400])
 
     def test_failed_download_is_retried(self) -> None:
         """A failed copy leaves no partial file and the next attempt completes the window."""

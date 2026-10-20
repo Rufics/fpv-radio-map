@@ -46,16 +46,14 @@ class WindowCache:
 
     def fetch(self, url: str) -> Path:
         """The cached window of one tile; downloaded first if a previous run did not finish it."""
-        remote = self._remote(url)
-        with raster.gdal().config_options(HTTP_ENV):
-            srcwin = raster.srcwin_for_bbox(remote, self._bbox)
         stem = url.rsplit("/", 1)[1].removesuffix(".tif")
-        dest = self._cache / f"{stem}_{'_'.join(map(str, srcwin))}.tif"
+        # Named by the bbox, not the pixel window, so a cache hit needs no network access.
+        dest = self._cache / f"{stem}_{str(self._bbox).replace(',', '_')}.tif"
         if dest.exists():
             log(f"cached: {dest.name}")
             return dest
         part = dest.with_suffix(".part.tif")
-        self._copy_with_retries(remote, srcwin, part)
+        self._copy_with_retries(self._remote(url), part)
         part.replace(dest)
         return dest
 
@@ -64,11 +62,10 @@ class WindowCache:
         """The GDAL path that reads url with HTTP range requests."""
         return f"/vsicurl/{url}"
 
-    def _copy_with_retries(self, remote: str, srcwin: tuple[int, int, int, int], part: Path) -> None:
+    def _copy_with_retries(self, remote: str, part: Path) -> None:
         for attempt in range(1, self.ATTEMPTS + 1):
             try:
-                run(["gdal_translate", "-of", "GTiff", *raster.tiff_option_args(),
-                     "-srcwin", *map(str, srcwin), remote, str(part)], env=HTTP_ENV)
+                self._copy(remote, part)
                 return
             except BuildError:
                 part.unlink(missing_ok=True)
@@ -77,6 +74,16 @@ class WindowCache:
                 delay = self.BACKOFF_S * attempt
                 warn(f"WorldCover download failed (attempt {attempt} of {self.ATTEMPTS}); retrying in {delay} s")
                 time.sleep(delay)
+
+    def _copy(self, remote: str, part: Path) -> None:
+        """One attempt: reads the tile header for the pixel window, then copies the window."""
+        try:
+            with raster.gdal().config_options(HTTP_ENV):
+                srcwin = raster.srcwin_for_bbox(remote, self._bbox)
+        except RuntimeError as e:
+            raise BuildError(f"cannot open {remote}: {e}") from e
+        run(["gdal_translate", "-of", "GTiff", *raster.tiff_option_args(),
+             "-srcwin", *map(str, srcwin), remote, str(part)], env=HTTP_ENV)
 
 
 def build(args, dirs: Dirs) -> None:
