@@ -242,16 +242,18 @@ the six `fpv.*` ones. Now delete `owner.secret` from the server, as described in
 ## 7. Fill the equipment library
 
 Pilots pick radios, antennas, batteries and drones from the library, and only the admin edits
-it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), all
-`verified: false`, and nothing else. Before the first flight plan:
+it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), 23 antennas,
+21 batteries and 3 DJI drone profiles, all `verified: false` (see `data/library/<kind>/README.md`
+for where each figure comes from). Before the first flight plan:
 
 1. Open **Admin** in the web app, enter the admin token at the top right and choose **Use token**.
    The token stays in that browser tab only.
-2. Under **Library**, review the seeded radio profiles against their sources and mark the ones
-   you checked as verified.
-3. Add at least one ground antenna and one air antenna. Every link needs both.
-4. Add your video system as a radio profile if you plan video links, and the batteries and
-   drones you fly.
+2. Under **Library**, review the seeded entries against their sources and mark the ones you
+   checked as verified. The drone profiles are derived from DJI's flight-time figures, not
+   measured; replace them with your own flight logs when you have them.
+3. Add the antennas, batteries and drones you fly that are not seeded. Every link needs a
+   ground antenna and an air antenna.
+4. Add your video system as a radio profile if you plan video links.
 
 Entries are edited as JSON and checked against the library schema as you type. A plain
 half-wave dipole, for example:
@@ -265,7 +267,7 @@ half-wave dipole, for example:
 }
 ```
 
-Every entry needs a source (datasheet, standard or measurement). Edits are versioned, and
+Every entry needs a source (datasheet, standard, measurement or derived). Edits are versioned, and
 results name the versions they used. Scripted imports use `POST /api/v1/library/<kind>` with
 the admin token; see the [API reference](../api/openapi.yaml).
 
