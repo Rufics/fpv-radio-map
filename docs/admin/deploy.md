@@ -66,11 +66,14 @@ curl -s http://localhost:8088/api/v1/health
 ```
 
 On the first start, `open-meteo-init` downloads about 6 GB of model data (around half an hour
-on a slow link; follow it with `docker compose logs -f open-meteo-init`). The `open-meteo` API
-and `open-meteo-sync` start only after it has finished, because the API keeps a model grid it
-failed to open as failed until it restarts. rfmap-server does not wait: until the API is up,
-results state that no forecast covers the time and use k = 4/3. On later starts the pass only
-fetches what changed.
+on a slow link). The `open-meteo` API and `open-meteo-sync` start only after it has finished,
+because the API keeps a model grid it failed to open as failed until it restarts, and
+`docker compose up -d` does not return until then. Run it in `tmux` or `screen` so a dropped SSH
+session does not cut it short, and follow the download from a second shell with
+`docker compose logs -f open-meteo-init`. postgis, rfmap-server and web are already running
+meanwhile: until the API is up, results state that no forecast covers the time and use
+k = 4/3. Every later `docker compose up -d` runs the pass again, which only fetches what
+changed, and restarts the API after it.
 
 Behind a TLS-intercepting proxy, the image builds need its CA, because CMake fetches
 json-schema-validator from GitHub and npm fetches packages. Pass it as a build secret:
