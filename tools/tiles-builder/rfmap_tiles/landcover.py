@@ -47,8 +47,9 @@ class WindowCache:
     def fetch(self, url: str) -> Path:
         """The cached window of one tile; downloaded first if a previous run did not finish it."""
         stem = url.rsplit("/", 1)[1].removesuffix(".tif")
-        # Named by the bbox, not the pixel window, so a cache hit needs no network access.
-        dest = self._cache / f"{stem}_{str(self._bbox).replace(',', '_')}.tif"
+        # Named by the exact bbox, not the pixel window, so a cache hit needs no network access.
+        key = "_".join(repr(v) for v in self._bbox.as_list())
+        dest = self._cache / f"{stem}_{key}.tif"
         if dest.exists():
             log(f"cached: {dest.name}")
             return dest
