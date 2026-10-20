@@ -1,0 +1,223 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit configuration. The repository is public, so CodeRabbit's free open-source plan gives
+# it the Pro feature set used below. See docs/maintainers/repository-settings.md.
+
+language: en-US
+tone_instructions: >-
+  Be direct and specific. Point to the exact line, explain the failure it causes and propose a
+  fix. Skip praise and restating the diff.
+early_access: true
+
+reviews:
+  profile: assertive
+  # Approval and merge stay with the code owner (.github/CODEOWNERS); CodeRabbit only comments.
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  review_status: true
+  review_details: true
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  auto_apply_labels: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  in_progress_fortune: false
+  poem: false
+  enable_prompt_for_ai_agents: true
+  abort_on_close: true
+
+  # Pull requests into main are reviewed automatically, drafts included. CodeRabbit can exclude
+  # authors but has no allowlist, so the bots that open pull requests here are excluded by name.
+  # A skipped pull request is still reviewed on an `@coderabbitai review` comment.
+  auto_review:
+    enabled: true
+    drafts: true
+    auto_incremental_review: true
+    # Never pause: every push is reviewed, however many commits were reviewed before.
+    auto_pause_after_reviewed_commits: 0
+    base_branches:
+      - main
+    ignore_usernames:
+      - dependabot[bot]
+      - renovate[bot]
+      - github-actions[bot]
+      - semantic-release-bot
+      - copilot-swe-agent[bot]
+      - claude[bot]
+
+  path_filters:
+    - "!**/package-lock.json"
+    - "!**/node_modules/**"
+    - "!build/**"
+    - "!build-*/**"
+    - "!web/dist/**"
+    - "!web/.angular/**"
+    - "!web/coverage/**"
+    - "!web/screenshots/**"
+    - "!docs/images/**"
+    - "!fuzz/corpus/**"
+    - "!sonar-reports/**"
+
+  path_instructions:
+    - path: "**/*"
+      instructions: >-
+        All repository text (documentation, comments, UI strings, commit and pull request text)
+        must be in English.
+    - path: "**/*.{cpp,hpp,h}"
+      instructions: >-
+        C++20, object-oriented: behaviour lives in classes with one clear responsibility and
+        shared state is class members, not long parameter lists or globals. Flag functions over
+        SonarCloud's limits: cognitive complexity above 25 or more than 3 nested
+        if/for/do/while/switch levels. Look for undefined behaviour, lifetime and ownership bugs,
+        unchecked input from the network or files, integer overflow, and numeric edge cases
+        (NaN, division by zero, unit mix-ups between dB, dBm, metres and kilometres).
+    - path: "{core,modules}/**/*.{cpp,hpp}"
+      instructions: >-
+        RF propagation and flight-planning maths. Check formulas against the cited ITU-R or
+        textbook model, units at every boundary, and that tests cover the edge cases.
+    - path: "platform/rfmod/**"
+      instructions: >-
+        Module platform: package signing, trust, manifest parsing and module isolation. Treat
+        every package, manifest and archive path as hostile input; flag path traversal, signature
+        or trust bypasses, and resource exhaustion.
+    - path: "server/**"
+      instructions: >-
+        HTTP server on PostgreSQL/PostGIS. Flag SQL built from strings instead of parameters,
+        missing authorisation or input validation, secrets in logs, and changes to the HTTP API
+        that are not reflected in docs/api/openapi.yaml.
+    - path: "**/*.py"
+      instructions: >-
+        Python tooling (CI, deploy, tiles builder, wiki). Object-oriented: behaviour in classes,
+        no free-floating procedural code or global state. No bare or generic exception handlers,
+        no shell=True or unvalidated paths and arguments passed to subprocesses. Keep functions
+        within SonarCloud's cognitive complexity limit of 25. Tests use unittest.
+    - path: "web/**/*.{ts,html,scss}"
+      instructions: >-
+        Angular web client. Check change detection and subscription leaks, accessibility, and
+        that UI strings are English. Tests are *.spec.ts next to the code.
+    - path: ".github/**"
+      instructions: >-
+        Supply chain. Actions must be pinned to a full commit SHA. A job that runs pull request
+        code must not get write tokens or secrets, and pull_request_target must not be used.
+        Any CI/CD tooling must be written in Python, not shell or JavaScript scripts.
+    - path: "deploy/**"
+      instructions: >-
+        Containers and deployment. Flag images that are not pinned, containers running as root,
+        secrets baked into images and ports exposed without need.
+    - path: "docs/**/*.md"
+      instructions: >-
+        User and maintainer documentation. Check that it matches the code in the same pull
+        request and that commands and paths are correct.
+
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    title:
+      mode: warning
+      requirements: >-
+        Conventional Commits: type(optional scope): summary, in the imperative and lower case,
+        as described in CONTRIBUTING.md; the scope may be omitted. The title becomes the squashed commit on main.
+    description:
+      mode: warning
+    issue_assessment:
+      mode: warning
+
+  tools:
+    github-checks:
+      enabled: true
+    ast-grep:
+      essential_rules: true
+    clang:
+      enabled: true
+    cppcheck:
+      enabled: true
+    ruff:
+      enabled: true
+    pylint:
+      enabled: true
+    eslint:
+      enabled: true
+    htmlhint:
+      enabled: true
+    stylelint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    languagetool:
+      enabled: true
+      level: default
+    yamllint:
+      enabled: true
+    actionlint:
+      enabled: true
+    zizmor:
+      enabled: true
+    hadolint:
+      enabled: true
+    checkov:
+      enabled: true
+    trivy:
+      enabled: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    osvScanner:
+      enabled: true
+    semgrep:
+      enabled: true
+    sqlfluff:
+      enabled: true
+    squawk:
+      enabled: true
+    oasdiff:
+      enabled: true
+    dotenvLint:
+      enabled: true
+    shellcheck:
+      enabled: true
+
+chat:
+  art: false
+  auto_reply: true
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - CONTRIBUTING.md
+      - SECURITY.md
+      - docs/maintainers/repository-settings.md
+      - docs/modules/developer-guide.md
+  learnings:
+    scope: local
+  issues:
+    scope: local
+  pull_requests:
+    scope: local
+
+code_generation:
+  docstrings:
+    language: en-US
+  unit_tests:
+    path_instructions:
+      - path: "**/*.{cpp,hpp}"
+        instructions: >-
+          Use GoogleTest in the component's tests/ directory, registered through the existing
+          CMake gtest_discover_tests target.
+      - path: "**/*.py"
+        instructions: Use unittest in a sibling *_test.py file.
+      - path: "web/**/*.ts"
+        instructions: Use a *.spec.ts file next to the code, in the style of the existing specs.
