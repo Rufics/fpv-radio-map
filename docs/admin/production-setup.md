@@ -187,7 +187,8 @@ docker compose logs rfmap-server | head -20
 ```
 
 `dem` and `landcover` must be `true`. In the log you should see `applied migration 001_init.sql`,
-`seeded 14 radio-profiles`, `seeded 4 radio-profiles` (DJI video), `seeded 38 antennas`, `seeded 21 batteries`, `seeded 3 drones`,
+`seeded 4 radio-profiles` (DJI video, `seed-video.json`), `seeded 14 radio-profiles`,
+`seeded 38 antennas`, `seeded 21 batteries`, `seeded 3 drones`,
 `terrain: DEM /data/dem.cog.tif` and `listening on 0.0.0.0:8080`. No `seeded` line may end in
 `skipped`: a `seed ... rejected` line before it names the entry and the reason. If
 the log says `built with the PUBLIC development owner key`, the key from step 4 did not reach the
