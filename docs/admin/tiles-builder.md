@@ -77,7 +77,9 @@ Running the same command again is safe. Finished outputs with unchanged inputs a
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder verify
 ```
 
-Expect `OK` for every file. In `data/out` you get:
+Expect `OK` for every `.tif` and `.pmtiles` file that exists. `verify` does not notice a missing
+file and does not check `style-dark.json`, `manifest.json` or `fonts/`, so compare the listing of
+`data/out` with this one (`satellite.pmtiles` only if you built it):
 
 ```
 basemap.pmtiles  hillshade.pmtiles  contours.pmtiles  satellite.pmtiles

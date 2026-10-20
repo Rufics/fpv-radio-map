@@ -196,7 +196,7 @@ flowchart TB
 
 ### style and manifest
 
-These run after every command. `style-dark.json` is written from
+These run after every build command (not after `verify`). `style-dark.json` is written from
 `styles/style-dark.template.json`, with each source's attribution taken from that file's record
 and the sources of unbuilt files removed. `manifest.json` collects the record of every file in
 `out/` and joins the attributions into `attribution_display_text`, which the server shows on the

@@ -66,7 +66,7 @@ service, and **no API keys or accounts are needed** for any built-in source.
 | Terrain for calculations | `dem` | `dem.cog.tif` | Copernicus DEM GLO-30 (AWS Open Data) | rfmap-server | yes |
 | Hillshade | `dem` | `hillshade.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
 | Contour lines | `dem` | `contours.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
-| Land cover (clutter) | `landcover` | `landcover.cog.tif` | ESA WorldCover 10 m (AWS Open Data) | rfmap-server | yes |
+| Land cover (clutter) | `landcover` | `landcover.cog.tif` | ESA WorldCover 10 m (AWS Open Data) | rfmap-server | recommended: without it the server starts, logs a warning and leaves clutter out |
 | Satellite imagery | `satellite` | `satellite.pmtiles` | none: you choose a mosaic and check its licence | browser | optional |
 | Labels and credits | every step | `fonts/`, `manifest.json` (and `style-dark.json` for other clients) | the builder | browser, rfmap-server | yes |
 
@@ -184,13 +184,14 @@ tb landcover --bbox "$BBOX"
 ```
 
 - The builder reads only the part of each 3°×3° WorldCover tile inside the bbox, over HTTP range
-  requests, and keeps it in `cache/` as one file per tile. Class values are copied unchanged.
+  requests, and keeps it in `cache/` as one file per tile and bbox. A rerun with the same bbox reuses these
+  files; a different bbox downloads new windows. Class values are copied unchanged.
 - `--worldcover-year 2020` uses the older v100 map; the default is 2021 (v200).
 - **Network errors are retried.** Over a large area a single range request to the AWS bucket can
   fail (GDAL reports response code 0, followed by a decode error such as `ZIPDecode`). GDAL
   retries each request up to 10 times, and the builder retries the whole tile window 4 times,
   logging `WorldCover download failed (attempt N of 4); retrying in ... s`. If a tile still fails,
-  the step stops; run the same command again and only the missing tiles are downloaded. A
+  the step stops; run the same command (same bbox) again and only the missing windows are downloaded. A
   builder image from before 20 October 2026 restarted the whole step instead; build the image
   again.
 
@@ -206,7 +207,7 @@ works. The builder supports three kinds of source:
 |---|---|---|
 | Sentinel-2 cloudless by EOX, years 2016 and 2018–2023 | `--sat-provider eox-s2cloudless-<year>` | Tiles are copied from `tiles.maps.eox.at`. EOX lists 2016 as CC BY 4.0 and 2018–2023 as CC BY-NC-SA 4.0 (non-commercial). |
 | A listed mosaic you downloaded yourself (GeoTIFF/COG/VRT) | `--sat-file name.tif --sat-mosaic <mosaic>` | `<mosaic>` is one of the EOX names above, or `copernicus-sentinel-2` for any Sentinel-2 imagery, together with `--sat-data-year <year>`. |
-| Any other mosaic: an https XYZ template or a raster | `--sat-source <template or path or URL>` with `--sat-name`, `--sat-licence`, `--sat-attribution` | Template example: `https://host/path/{z}/{y}/{x}.jpg` (`{-y}` for TMS rows). |
+| Any other mosaic: an https XYZ template or a raster | `--sat-source <template or path or URL>`, plus `--sat-name`, `--sat-licence` and `--sat-attribution`. These three are optional, but without the licence and attribution the manifest marks the licence `UNVERIFIED`. | Template example: `https://host/path/{z}/{y}/{x}.jpg` (`{-y}` for TMS rows). |
 
 **Step 1: check the licence.** Read the provider's current licence and terms of service, and
 whether they allow downloading tiles in bulk. Many tile services, including most commercial
@@ -613,7 +614,7 @@ After a `git pull` that changes `tools/tiles-builder`, build its image again (st
 |---|---|
 | `permission denied` on `/var/run/docker.sock` | Your user is not in the `docker` group yet. Log out and in after `usermod`. |
 | tiles-builder: `Permission denied: '/data/out'` | `--user "$(id -u):$(id -g)"` is missing, or `~/rfmap-data` belongs to another user (`sudo chown -R "$USER" ~/rfmap-data`). |
-| tiles-builder: `different pixel sizes` | The bbox crosses 50° N. Add `--allow-dem-resample`, see [step 2.4](#24-terrain-dem-hillshade-and-contours). |
+| tiles-builder: `different pixel sizes` | The DEM tiles have different pixel sizes: the bbox crosses 50° N, or the `--dem-file` inputs use different grids. Add `--allow-dem-resample`, see [step 2.4](#24-terrain-dem-hillshade-and-contours). |
 | tiles-builder: `WARNING: mixing pixel sizes` | Expected with `--allow-dem-resample`; not an error. |
 | tiles-builder: DEM pixel check fails after `mixing pixel sizes` | The builder image is older than the fix. `git pull` and build the image again (step 2.2); downloads are reused. |
 | tiles-builder: `WorldCover download failed (attempt N of 4)` | A network error on the WorldCover bucket; it is retried. If the step stops, run it again: only missing tiles are downloaded. An old image restarts the whole step, so build it again. |
@@ -621,11 +622,11 @@ After a `git pull` that changes `tools/tiles-builder`, build its image again (st
 | tiles-builder: `tiles needed (> --sat-max-tiles ...)` | The satellite area is larger than the safety limit. Lower `--sat-maxzoom`, or raise `--sat-max-tiles` after checking the provider's terms, see [step 2.6](#26-satellite-imagery-optional). |
 | tiles-builder: satellite `HTTP 403` (or `401`) | The tile service refuses access, often because its terms forbid bulk downloads. Check the provider's access and licence terms, or choose another mosaic; a slower rate does not help. |
 | tiles-builder: satellite `HTTP 429` | The tile service throttles you. Each tile is retried a few times; if the step still stops, lower `--sat-rate` and run it again. Downloaded tiles are kept. |
-| No **Map / Satellite** switch | `satellite.pmtiles` is not in `manifest.json`: build the `satellite` step and run `verify`. |
+| No **Map / Satellite** switch | A readable `manifest.json` does not list `satellite.pmtiles`: build the `satellite` step and run `verify`. Also check that the `map` object of the server configuration does not remove `satellite`. |
 | tiles-builder: `cannot read the Geofabrik index` | Geofabrik is blocked on your network. Download the `.osm.pbf` elsewhere into `~/rfmap-data/inputs/` and pass `--osm-file <name>` instead of `--region`. The same works for the other sources: see [known limitations](tiles-builder.md#10-known-limitations-and-honest-notes). |
 | `docker compose`: `set POSTGRES_PASSWORD in .env` | `.env` is missing or not in `deploy/`. Run compose from `deploy/`. |
 | Image build: `429 Too Many Requests` from Docker Hub | Docker Hub rate limit. Wait, or `docker login` with a free account. |
 | Image build: `certificate verify failed` | A TLS-intercepting proxy. Pass its CA as a build secret, see [Start](deploy.md#2-start). |
-| `health` shows `"dem":false` | `RFMAP_TILES_DIR` does not point at the directory that holds `dem.cog.tif`. Write the full path (`/home/<you>/rfmap-data/out`, not `~/...`) and run `docker compose up -d`. |
-| Map is empty, `/tiles/...` answers 404 | Same as above, for the `web` container. |
+| `health` shows `"dem":false` | `RFMAP_TILES_DIR` does not point at the directory that holds `dem.cog.tif`, or `data.dem` (`RFMAP_DEM`) in the server configuration names another path. Write the full path (`/home/<you>/rfmap-data/out`, not `~/...`) and run `docker compose up -d`. |
+| Map is empty, `/tiles/...` answers 404 | `RFMAP_TILES_DIR` is wrong for the `web` container, or the file was not built: `docker compose exec web ls /tiles` must list it. |
 | Module upload: `signature` check fails | The module was signed with a different key than the one the server was built with. Sign it with your `owner.secret` (step 6). |
