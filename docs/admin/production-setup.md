@@ -116,7 +116,8 @@ BBOX=34.8,48.3,35.4,48.7
 ```
 
 Replace the bbox with yours. Define both again in every new shell. The steps can run one at a
-time, as below, or together with `tb all` and the options of all three.
+time, as below, or together with `tb all` and the options of all three. `tb all` builds the
+basemap only from `--region` or `--osm-file`; with `--osm-url`, run `tb basemap` on its own.
 
 ### 2.3 Basemap (OpenStreetMap)
 
@@ -256,7 +257,8 @@ tb verify
 ls ~/rfmap-data/out
 ```
 
-Every file must be reported `OK`. You should see `dem.cog.tif`, `landcover.cog.tif`,
+`verify` checks the `.tif` and `.pmtiles` files that exist, and each must be reported `OK`. It
+does not notice a missing file, so also check the listing: you should see `dem.cog.tif`, `landcover.cog.tif`,
 `basemap.pmtiles`, `hillshade.pmtiles`, `contours.pmtiles`, `style-dark.json`, `manifest.json`
 and `fonts/`, plus `satellite.pmtiles` if you built it. `manifest.json` lists each file with its
 source, licence, attribution, bbox and resolution; check that the licence of your satellite
@@ -277,7 +279,8 @@ RFMAP_TILES_DIR=/home/<you>/rfmap-data/out
 Compose mounts that directory into `rfmap-server`, which calculates with the `.tif` files, and
 into `web`, whose nginx serves the `.pmtiles` files at `/tiles/` to browsers. The browser asks
 the server which layers exist (`GET /api/v1/config/map`); the server lists only the layers in
-`manifest.json`. [How map layers reach the browser](map-layers.md) has the details, diagrams,
+`manifest.json` (all four if there is no readable manifest), then applies the `map` object of
+its configuration, if any. [How map layers reach the browser](map-layers.md) has the details, diagrams,
 the settings you can change (another tiles host, hiding a layer) and checks for a layer that
 does not show.
 

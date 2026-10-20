@@ -221,8 +221,10 @@ flowchart TB
 ```
 
 - **Downloads** go to `cache/` and are reused: OSM extracts, Copernicus and SRTM tiles,
-  WorldCover windows, satellite tiles and downloaded rasters. Interrupted downloads resume.
-  `--refresh-osm` downloads the OSM extract again.
+  WorldCover windows, satellite tiles and downloaded rasters. An interrupted file download
+  (curl) resumes where it stopped, and an interrupted satellite job keeps the tiles it already
+  has. A WorldCover window that did not finish is fetched again from the start; the finished
+  ones are kept. `--refresh-osm` downloads the OSM extract again.
 - **Temporary files** go to `work/` and are deleted after a successful step.
 - **Outputs** are written as `.tmp-<name>` and renamed into place only when finished, so `out/`
   never holds a half-written file. Each output's record is in `out/.meta/`.

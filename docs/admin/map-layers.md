@@ -110,8 +110,8 @@ sequenceDiagram
    `/tiles/hillshade.pmtiles`, `/tiles/contours.pmtiles`, `/tiles/fonts/{fontstack}/{range}.pbf`)
    and then:
    - reads `manifest.json` next to the DEM and drops every layer whose `.pmtiles` file the
-     manifest does not list. A server without `satellite.pmtiles` therefore sends no satellite
-     layer, and the browser shows no **Map / Satellite** switch and never asks for the file;
+     manifest does not list. Without a readable manifest it keeps all four layers. A server
+     whose manifest has no `satellite.pmtiles` therefore sends no satellite layer, and the browser shows no **Map / Satellite** switch and never asks for the file;
    - adds the attribution texts from the manifest, including your satellite mosaic's credit;
    - sets the map centre to the centre of `dem.cog.tif`;
    - merges the `map` object of the server configuration over the result, if there is one.
@@ -122,9 +122,9 @@ sequenceDiagram
 2. **Tiles.** MapLibre opens each archive through the `pmtiles://` protocol. It reads the
    archive's header and directory with one Range request, then fetches only the byte ranges
    of the tiles in view. nginx serves these as plain static files with `206 Partial Content`.
-3. **Lazy layers.** The base map in view is loaded at start. Hillshade, contours and satellite
-   imagery are added to the map only when the user turns them on, so a browser that never
-   shows satellite imagery never downloads it.
+3. **Lazy layers.** The base map and the hillshade are shown by default and load at start.
+   Contours and satellite imagery are off by default and are added to the map only when the
+   user turns them on, so a browser that never shows satellite imagery never downloads it.
 4. **Caching.** nginx sends `Cache-Control: public, max-age=3600` for `/tiles/`. A rebuilt
    `.pmtiles` file reaches open browsers within an hour, or at once after a hard reload.
 
@@ -177,6 +177,6 @@ sequenceDiagram
 | Empty map, `/tiles/...` answers 404 | `RFMAP_TILES_DIR` does not point at the builder's `out/`. `docker compose exec web ls /tiles` must list the files. |
 | No **Map / Satellite** switch | `curl -s http://127.0.0.1:8088/api/v1/config/map` has no `satellite` key: `satellite.pmtiles` is missing from `manifest.json`. Build the `satellite` step and run `verify`. |
 | Map shows, but labels are missing | `fonts/` was not copied with the rest of `out/`. |
-| Tiles load slowly or fail behind a proxy | The proxy drops the `Range` header or compresses `.pmtiles`. A request with `curl -sI -H 'Range: bytes=0-15' https://<your-site>/tiles/basemap.pmtiles` must answer `206`. |
-| `health` shows `"dem":false` | The server could not open `/data/dem.cog.tif`. See its log: `docker compose logs rfmap-server | grep terrain`. |
+| Tiles load slowly or fail behind a proxy | The proxy drops the `Range` header or compresses `.pmtiles`. A `GET` with a `Range` header, as MapLibre sends it, must answer `206`: `curl -s -o /dev/null -D - -H 'Range: bytes=0-15' https://<your-site>/tiles/basemap.pmtiles`. |
+| `health` shows `"dem":false` | The server could not open `/data/dem.cog.tif`. Run `docker compose logs rfmap-server` and look for the lines that start with `terrain`. |
 | New DEM, old results | The server still has the old file open: `docker compose restart rfmap-server`. |
