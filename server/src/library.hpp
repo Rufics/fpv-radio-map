@@ -37,14 +37,20 @@ public:
     /// the stored item gets version + 1.
     json update(const std::string& kind, const std::string& id, json doc, const std::string& by);
 
-    /// Imports <dir>/<kind>/seed.json once per file content. Seed items are always stored
-    /// unverified, whatever the file says. Returns lines for the start-up log.
+    /// Imports each <dir>/<kind>/seed*.json once, tracked by file name, in name order. Seed
+    /// items are always stored unverified, whatever the file says. Returns lines for the
+    /// start-up log.
     std::vector<std::string> seed(const std::filesystem::path& dir);
 
     /// Item or HttpError 422 naming what is missing (used when a mission references it).
     [[nodiscard]] std::pair<json, LibraryRef> require(const std::string& kind, const std::string& id) const;
 
 private:
+    /// The kind's seed files (seed*.json), sorted by name.
+    [[nodiscard]] static std::vector<std::filesystem::path> seedFiles(const std::filesystem::path& kindDir);
+    /// Imports one seed file unless it was imported before, appending to the start-up log.
+    void seedFile(const std::string& kind, const std::filesystem::path& file, std::vector<std::string>& log);
+
     Database& db_;
     const SchemaRegistry& schemas_;
 };
