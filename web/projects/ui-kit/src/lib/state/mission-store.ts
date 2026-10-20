@@ -143,14 +143,14 @@ export class MissionStore {
   }
 
   setPilotAgl(aglM: number): void {
-    if (this.busy()) return;
+    if (this.busy() || this.preview()) return;
     this.update((m) => ({ ...m, pilot: { ...m.pilot, aglM } }));
   }
 
   /** Moves the pilot (index -1) or a waypoint; the move can be undone with `undoMove()`. */
   movePoint(index: number, p: Pick<MissionPoint, 'lat' | 'lon'>): void {
     const before = this.snapshot();
-    if (!before || !this.canEdit() || this.busy()) return;
+    if (!before || !this.canEdit() || this.busy() || this.preview()) return;
     const move = <T extends MissionPoint>(point: T): T => ({ ...point, lat: p.lat, lon: p.lon });
     if (index < 0) this.update((m) => ({ ...m, pilot: move(m.pilot) }));
     else this.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? move(w) : w)) }));

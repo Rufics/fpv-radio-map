@@ -74,7 +74,7 @@ import { CompareService } from '../core/fpv-core';
           <span>A · Pilot</span>
           <span class="info rf-mono" [title]="fmt.full(m.pilot.aglM, 'm') + ' above ground'">{{ fmt.format(m.pilot.aglM, 'm') }} AGL</span>
           @if (canEdit) {
-            <button type="button" class="rf-btn rf-btn--dense rf-btn--text" (click)="movePilot()" [disabled]="busy() || ws.placing() === 'pilot'" aria-label="Move the pilot: click the map at the new position">Move on map</button>
+            <button type="button" class="rf-btn rf-btn--dense rf-btn--text" (click)="movePilot()" [disabled]="busy() || ws.placing() === 'pilot'" title="Click the map at the new pilot position">Move on map</button>
           }
         </div>
         @if (ws.editingRoute()) {

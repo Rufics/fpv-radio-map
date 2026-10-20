@@ -181,6 +181,14 @@ describe('MissionStore', () => {
       expect(store.canUndoMove()).toBe(false);
     });
 
+    it('does not move the pilot while a fix is previewed', () => {
+      store.newMission(mission());
+      store.previewFix({ id: 'f', patch: { name: 'Fixed' } });
+      store.movePoint(-1, { lat: 1, lon: 2 });
+      store.setPilotAgl(9);
+      expect(store.mission()!.pilot).toEqual({ lat: 48.5, lon: 35.2, aglM: 1.5 });
+    });
+
     it('marks an existing result stale on the first edit', () => {
       store.loadFromServer('m1', { mission: mission(), role: 'edit', revision: 2, lastResult: { legs: [] } });
       expect(store.calcState()).toBe('done');
