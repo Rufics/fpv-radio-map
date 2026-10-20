@@ -2,6 +2,7 @@
 
 #include "security.hpp"
 
+#include <algorithm>
 #include <format>
 #include <fstream>
 #include <sstream>
@@ -113,49 +114,64 @@ json Library::update(const std::string& kind, const std::string& id, json doc, c
     });
 }
 
+std::vector<std::filesystem::path> Library::seedFiles(const std::filesystem::path& kindDir) {
+    std::vector<std::filesystem::path> files;
+    if (!std::filesystem::is_directory(kindDir)) return files;
+    for (const auto& entry : std::filesystem::directory_iterator(kindDir)) {
+        const std::string name = entry.path().filename().string();
+        if (entry.is_regular_file() && name.starts_with("seed") && name.ends_with(".json")) files.push_back(entry.path());
+    }
+    std::ranges::sort(files);
+    return files;
+}
+
 std::vector<std::string> Library::seed(const std::filesystem::path& dir) {
     std::vector<std::string> log;
     if (!std::filesystem::is_directory(dir)) return {"library seed directory " + dir.string() + " not found; nothing seeded"};
     for (const std::string& kind : SchemaRegistry::libraryKinds()) {
-        const auto file = dir / kind / "seed.json";
-        if (!std::filesystem::exists(file)) continue;
-        std::ifstream in(file);
-        std::ostringstream content;
-        content << in.rdbuf();
-        const std::string name = kind + "/seed.json";
-        const std::string sha = Secrets::hex(Secrets::sha256(content.str()));
-        // Only the first start imports: later edits or deletions by the admin must stick.
-        if (const bool done = db_.tx([&name](pqxx::work& w) {
-                return !w.exec_params("select 1 from seeds_applied where name = $1", name).empty();
-            });
-            done) {
-            continue;
-        }
-        std::size_t added = 0;
-        std::size_t skipped = 0;
-        for (json item : json::parse(content.str())) {
-            item["verified"] = false;
-            item["version"] = 1;
-            if (const auto problems = schemas_.check(kind, item); !problems.empty()) {
-                log.push_back(std::format("seed {}: {} rejected: {} {}", name, item.value("id", "?"),
-                                          problems.front().pointer, problems.front().message));
-                ++skipped;
-                continue;
-            }
-            try {
-                add(kind, item, "seed:" + name);
-                ++added;
-            } catch (const HttpError&) {
-                ++skipped;  // already present
-            }
-        }
-        db_.tx([&name, &sha](pqxx::work& w) {
-            w.exec_params("insert into seeds_applied(name, sha256) values ($1, $2) on conflict do nothing", name, sha);
-        });
-        const std::string skippedNote = skipped > 0 ? std::format(", {} skipped", skipped) : "";
-        log.push_back(std::format("seeded {} {} from {} (unverified){}", added, kind, file.string(), skippedNote));
+        for (const auto& file : seedFiles(dir / kind)) seedFile(kind, file, log);
     }
     return log;
+}
+
+void Library::seedFile(const std::string& kind, const std::filesystem::path& file, std::vector<std::string>& log) {
+    std::ifstream in(file);
+    std::ostringstream content;
+    content << in.rdbuf();
+    // Each file is tracked by its own name, so a seed file added in a later release still
+    // reaches servers that imported the kind's earlier files.
+    const std::string name = kind + "/" + file.filename().string();
+    const std::string sha = Secrets::hex(Secrets::sha256(content.str()));
+    // Only the first start imports a file: later edits or deletions by the admin must stick.
+    if (const bool done = db_.tx([&name](pqxx::work& w) {
+            return !w.exec_params("select 1 from seeds_applied where name = $1", name).empty();
+        });
+        done) {
+        return;
+    }
+    std::size_t added = 0;
+    std::size_t skipped = 0;
+    for (json item : json::parse(content.str())) {
+        item["verified"] = false;
+        item["version"] = 1;
+        if (const auto problems = schemas_.check(kind, item); !problems.empty()) {
+            log.push_back(std::format("seed {}: {} rejected: {} {}", name, item.value("id", "?"),
+                                      problems.front().pointer, problems.front().message));
+            ++skipped;
+            continue;
+        }
+        try {
+            add(kind, item, "seed:" + name);
+            ++added;
+        } catch (const HttpError&) {
+            ++skipped;  // already present
+        }
+    }
+    db_.tx([&name, &sha](pqxx::work& w) {
+        w.exec_params("insert into seeds_applied(name, sha256) values ($1, $2) on conflict do nothing", name, sha);
+    });
+    const std::string skippedNote = skipped > 0 ? std::format(", {} skipped", skipped) : "";
+    log.push_back(std::format("seeded {} {} from {} (unverified){}", added, kind, file.string(), skippedNote));
 }
 
 std::pair<json, LibraryRef> Library::require(const std::string& kind, const std::string& id) const {
