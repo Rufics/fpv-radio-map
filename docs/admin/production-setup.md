@@ -233,8 +233,8 @@ or lower.
 tb satellite --bbox "$BBOX" --sat-provider eox-s2cloudless-2016 --sat-licence-checked
 ```
 
-`--sat-licence-checked` records that you did step 1. Without it, or without both
-`--sat-licence` and `--sat-attribution`, the manifest marks the licence `UNVERIFIED`. An
+`--sat-licence-checked` records that you did step 1. Passing both `--sat-licence` and
+`--sat-attribution` records it too. With neither, the manifest marks the licence `UNVERIFIED`. An
 interrupted download resumes from `cache/satellite-xyz/`. The step prints
 `XYZ: fetched ..., already cached ..., not available ...`; tiles the provider does not have
 stay empty.
@@ -285,7 +285,8 @@ After you rebuild a layer:
 
 | You rebuilt | Then |
 |---|---|
-| `basemap`, hillshade, contours or `satellite` | nothing. nginx lets browsers cache `/tiles/` for an hour, so open browsers show the new files within an hour, or at once after a hard reload |
+| `basemap`, hillshade, contours or `satellite`, replacing a layer that already existed | nothing. nginx lets browsers cache `/tiles/` for an hour, so open browsers show the new files within an hour, or at once after a hard reload |
+| a layer that did not exist before (for example the first `satellite`), or one you removed | no restart; open browsers need a page reload, because the web app reads the list of layers once when the page loads |
 | `dem` or `landcover` | `cd ~/fpv-radio-map/deploy && docker compose restart rfmap-server`, so the server opens the new files |
 
 ### 2.9 Example: Poland with satellite imagery
@@ -615,7 +616,8 @@ After a `git pull` that changes `tools/tiles-builder`, build its image again (st
 | tiles-builder: `WorldCover download failed (attempt N of 4)` | A network error on the WorldCover bucket; it is retried. If the step stops, run it again: only missing tiles are downloaded. An old image restarts the whole step, so build it again. |
 | tiles-builder: `java.lang.OutOfMemoryError`, or the basemap step exits with code 137 | Not enough memory for the OSM extract. Raise `--java-heap` (2–3× the `.osm.pbf` size) and the RAM of the machine or Docker Desktop. |
 | tiles-builder: `tiles needed (> --sat-max-tiles ...)` | The satellite area is larger than the safety limit. Lower `--sat-maxzoom`, or raise `--sat-max-tiles` after checking the provider's terms, see [step 2.6](#26-satellite-imagery-optional). |
-| tiles-builder: satellite `HTTP 403` or `429` | The tile service refuses bulk access or throttles you. Lower `--sat-rate`, or choose another mosaic. |
+| tiles-builder: satellite `HTTP 403` (or `401`) | The tile service refuses access, often because its terms forbid bulk downloads. Check the provider's access and licence terms, or choose another mosaic; a slower rate does not help. |
+| tiles-builder: satellite `HTTP 429` | The tile service throttles you. Each tile is retried a few times; if the step still stops, lower `--sat-rate` and run it again. Downloaded tiles are kept. |
 | No **Map / Satellite** switch | `satellite.pmtiles` is not in `manifest.json`: build the `satellite` step and run `verify`. |
 | tiles-builder: `cannot read the Geofabrik index` | Geofabrik is blocked on your network. Download the `.osm.pbf` elsewhere into `~/rfmap-data/inputs/` and pass `--osm-file <name>` instead of `--region`. The same works for the other sources: see [known limitations](tiles-builder.md#10-known-limitations-and-honest-notes). |
 | `docker compose`: `set POSTGRES_PASSWORD in .env` | `.env` is missing or not in `deploy/`. Run compose from `deploy/`. |
