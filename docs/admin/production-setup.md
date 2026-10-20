@@ -25,8 +25,7 @@ in your home: `~/fpv-radio-map` (the code), `~/rfmap-data` (map data), `~/rfmap-
 |---|---|
 | Machine | Linux (x86-64 or arm64) with Docker Engine and the Compose plugin. 4 cores and 8 GB RAM are enough for a district. A country basemap needs 8–16 GB RAM **(estimate)**. |
 | Disk | About 5 GB for the images, plus the map data: a few hundred MB for a district, tens of GB for a country with satellite imagery **(estimate)**. See [disk, RAM and time](tiles-builder.md#7-disk-ram-and-time--all-estimate). |
-| Network | Outbound HTTPS while you build: Docker Hub, GitHub and its container registry, Ubuntu and npm mirrors, and the map data sources (Geofabrik, AWS Open Data, osmdata.openstreetmap.de, naciscdn.org, and
-your satellite mosaic's host, such as tiles.maps.eox.at). At run time only the Open-Meteo sync services go out: `open-meteo-init` during start-up and `open-meteo-sync` afterwards, both to `openmeteo.s3.amazonaws.com`. |
+| Network | Outbound HTTPS while you build: Docker Hub, GitHub and its container registry, Ubuntu and npm mirrors, and the map data sources (Geofabrik, AWS Open Data, osmdata.openstreetmap.de, naciscdn.org, and your satellite mosaic's host, such as tiles.maps.eox.at). At run time only the Open-Meteo sync services go out: `open-meteo-init` during start-up and `open-meteo-sync` afterwards, both to `openmeteo.s3.amazonaws.com`. |
 | Public server | A domain name pointing at the machine, and ports 80 and 443 open. |
 
 Install Docker from <https://docs.docker.com/engine/install/>, then let your user run it and log
