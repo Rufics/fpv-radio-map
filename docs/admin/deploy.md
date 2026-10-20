@@ -74,7 +74,8 @@ docker build --secret id=build_ca,src=/path/to/proxy-ca.crt -f deploy/server.Doc
 ```
 
 Put TLS in front of `web` (your reverse proxy or load balancer). Share links and the admin
-token must not travel over plain HTTP.
+token must not travel over plain HTTP. Browsers also enable the map's "Find my location" button only
+over HTTPS (or on `localhost`).
 
 ### Behind a reverse proxy
 

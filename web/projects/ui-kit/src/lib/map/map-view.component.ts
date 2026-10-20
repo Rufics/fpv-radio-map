@@ -10,13 +10,14 @@ import {
   output,
   viewChild,
 } from '@angular/core';
-import { addProtocol, Map as MlMap, NavigationControl } from 'maplibre-gl';
+import { addProtocol, Map as MlMap } from 'maplibre-gl';
 import { Protocol } from 'pmtiles';
 import { MapSourcesConfig } from '../models/api.models';
 import { LayerRegistry } from '../layers/layer-registry';
 import { SlotRegistry } from '../slots/slot-registry';
 import { LatLon } from '../tools/geo';
 import { MapContext } from './map-context';
+import { MapControls } from './map-controls';
 
 let pmtilesRegistered = false;
 
@@ -34,6 +35,7 @@ export function ensurePmtilesProtocol(): void {
  */
 @Component({
   selector: 'rf-map-view',
+  host: { '[class.rf-map-view--controls]': 'controls().any' },
   template: `
     <div #container class="rf-map-canvas" role="region" [attr.aria-label]="label()"></div>
     <ng-content />
@@ -42,10 +44,12 @@ export function ensurePmtilesProtocol(): void {
     }
   `,
   styles: `
-    :host { position: relative; display: block; overflow: hidden; background: var(--rf-map-land, #0E1319); }
+    :host { position: relative; display: block; overflow: hidden; background: var(--rf-map-land, #0E1319); --rf-map-controls-reserve: 12px; }
+    /* the corner buttons are 38 px wide with a 10 px margin; keep a 12 px gap to them */
+    :host(.rf-map-view--controls) { --rf-map-controls-reserve: 60px; }
     .rf-map-canvas { position: absolute; inset: 0; }
     .rf-map-attribution {
-      position: absolute; left: 12px; bottom: 10px; z-index: 2; max-width: calc(100% - 24px);
+      position: absolute; left: 12px; bottom: 10px; z-index: 2; max-width: calc(100% - 12px - var(--rf-map-controls-reserve));
       font-size: 11px; color: var(--rf-text-2); background: rgba(16, 22, 29, 0.85);
       padding: 4px 8px; border-radius: var(--rf-radius-sm); pointer-events: auto;
     }
@@ -56,6 +60,10 @@ export class MapViewComponent {
   readonly label = input('Map');
   readonly showAttribution = input(true);
   readonly interactive = input(true);
+  /** Zoom buttons in the corner (off on phones, which zoom with two fingers). */
+  readonly zoomButtons = input(true);
+  /** A "Find my location" button in the corner. */
+  readonly locateButton = input(true);
   readonly mapClick = output<LatLon>();
   readonly mapReady = output<MlMap>();
 
@@ -66,6 +74,10 @@ export class MapViewComponent {
   private readonly destroyRef = inject(DestroyRef);
   private map?: MlMap;
   private readonly slotLayerCleanups = new Map<string, () => void>();
+
+  protected readonly controls = computed(
+    () => new MapControls({ zoom: this.interactive() && this.zoomButtons(), locate: this.interactive() && this.locateButton() }),
+  );
 
   protected readonly attributionText = computed(() => {
     const parts = [...(this.config()?.attribution ?? ['© OpenStreetMap contributors', 'Copernicus DEM'])];
@@ -118,7 +130,7 @@ export class MapViewComponent {
       fadeDuration: 0,
     });
     map.touchZoomRotate.disableRotation();
-    if (this.interactive()) map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
+    this.controls().addTo(map);
     map.on('click', (e) => {
       const p = { lat: e.lngLat.lat, lon: e.lngLat.lng };
       this.ctx.emitClick(p);

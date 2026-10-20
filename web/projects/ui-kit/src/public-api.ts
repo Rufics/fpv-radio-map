@@ -18,6 +18,7 @@ export * from './lib/layers/standard-layers';
 export * from './lib/layers/layer-panel.component';
 export * from './lib/layers/base-switcher.component';
 export * from './lib/map/map-context';
+export * from './lib/map/map-controls';
 export * from './lib/map/map-view.component';
 // coverage
 export * from './lib/coverage/heat-scale';
