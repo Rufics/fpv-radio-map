@@ -56,6 +56,83 @@ def srcwin_for_bbox(path: str | Path, bbox: BBox) -> tuple[int, int, int, int]:
     return c0, r0, c1 - c0, r1 - r0
 
 
+class FinestGridAligner:
+    """Puts tiles of different pixel size onto the grid of the finest tile.
+
+    A VRT that mixes pixel sizes resamples on every read, and its nearest-neighbour
+    result depends on the read window, so the written COG cannot be verified against
+    it. Coarser tiles are therefore warped once, nearest-neighbour, onto the finest
+    tile's grid (origin included); tiles already on that grid are used unchanged.
+    """
+
+    def __init__(self, files: list[Path], work: Path) -> None:
+        """Reads the grid of every file; warped copies are written into work."""
+        if not files:
+            raise BuildError("no rasters to align")
+        self._files = files
+        self._work = work
+        self._grids = {f: self._grid(f) for f in files}
+        self._ref = self._finest_grid()
+
+    def _finest_grid(self) -> tuple[float, float, float, float, float, float]:
+        """The finest spacing on each axis, anchored on a tile that has it.
+
+        Usually one tile is finest on both axes and this is its grid. When one input is
+        finer in longitude and another in latitude, the two axes come from different
+        tiles, so every input is duplicated onto the combined grid and none loses detail.
+        """
+        grids = list(self._grids.values())
+        x_ref = min(grids, key=lambda g: abs(g[1]))
+        y_ref = min(grids, key=lambda g: abs(g[4]))
+        return x_ref[0], x_ref[1], x_ref[2], y_ref[3], y_ref[4], y_ref[5]
+
+    @staticmethod
+    def _grid(path: Path) -> tuple[float, float, float, float, float, float]:
+        """(x0, dx, columns, y0, dy, rows) of a north-up raster."""
+        ds = gdal().Open(str(path))
+        gt = ds.GetGeoTransform()
+        if gt[2] or gt[4]:
+            raise BuildError(f"{path.name}: rotated rasters are not supported")
+        return gt[0], gt[1], ds.RasterXSize, gt[3], gt[5], ds.RasterYSize
+
+    def align(self) -> list[Path]:
+        """The inputs in order, each either unchanged or replaced by its copy on the finest grid."""
+        return [f if self._on_reference_grid(f) else self._warp(f, i) for i, f in enumerate(self._files)]
+
+    def _on_reference_grid(self, path: Path) -> bool:
+        """True if the file has the reference pixel size and its origin lies on a reference grid line."""
+        x0, dx, _, y0, dy, _ = self._grids[path]
+        rx0, rdx, _, ry0, rdy, _ = self._ref
+        same_size = math.isclose(dx, rdx, rel_tol=1e-9) and math.isclose(dy, rdy, rel_tol=1e-9)
+        return same_size and self._is_whole(x0, rx0, rdx) and self._is_whole(y0, ry0, rdy)
+
+    @staticmethod
+    def _is_whole(value: float, origin: float, step: float) -> bool:
+        """True if value lies a whole number of steps from origin."""
+        offset = (value - origin) / step
+        return abs(offset - round(offset)) < 1e-6
+
+    @staticmethod
+    def _snap(value: float, origin: float, step: float) -> tuple[int, float]:
+        """Nearest reference grid line: (index, coordinate). Shared tile edges snap alike."""
+        index = round((value - origin) / step)
+        return index, origin + index * step
+
+    def _warp(self, path: Path, index: int) -> Path:
+        """Copies one tile, nearest-neighbour, onto the reference grid over its own snapped extent."""
+        x0, dx, nx, y0, dy, ny = self._grids[path]
+        rx0, rdx, _, ry0, rdy, _ = self._ref
+        c0, west = self._snap(x0, rx0, rdx)
+        c1, east = self._snap(x0 + dx * nx, rx0, rdx)
+        r0, north = self._snap(y0, ry0, rdy)
+        r1, south = self._snap(y0 + dy * ny, ry0, rdy)
+        out = self._work / f"aligned-{index:04d}-{path.stem}.tif"  # --dem-file names may repeat
+        run(["gdalwarp", "-overwrite", "-r", "near", "-et", "0", *tiff_option_args(),
+             "-te", repr(west), repr(south), repr(east), repr(north),
+             "-ts", str(c1 - c0), str(r1 - r0), str(path), str(out)])
+        return out
+
+
 def write_cog(src: str | Path, dst: Path, *, srcwin: tuple[int, int, int, int] | None,
               predictor: str, overview_resampling: str, nodata: float | None = None,
               out_type: str | None = None, metadata: dict | None = None, threads: str = "ALL_CPUS") -> None:
