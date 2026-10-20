@@ -66,6 +66,7 @@ class FinestGridAligner:
     """
 
     def __init__(self, files: list[Path], work: Path) -> None:
+        """Reads the grid of every file; warped copies are written into work."""
         if not files:
             raise BuildError("no rasters to align")
         self._files = files
@@ -85,6 +86,7 @@ class FinestGridAligner:
 
     @staticmethod
     def _grid(path: Path) -> tuple[float, float, float, float, float, float]:
+        """(x0, dx, columns, y0, dy, rows) of a north-up raster."""
         ds = gdal().Open(str(path))
         gt = ds.GetGeoTransform()
         if gt[2] or gt[4]:
@@ -92,9 +94,11 @@ class FinestGridAligner:
         return gt[0], gt[1], ds.RasterXSize, gt[3], gt[5], ds.RasterYSize
 
     def align(self) -> list[Path]:
+        """The inputs in order, each either unchanged or replaced by its copy on the finest grid."""
         return [f if self._on_reference_grid(f) else self._warp(f, i) for i, f in enumerate(self._files)]
 
     def _on_reference_grid(self, path: Path) -> bool:
+        """True if the file has the reference pixel size and its origin lies on a reference grid line."""
         x0, dx, _, y0, dy, _ = self._grids[path]
         rx0, rdx, _, ry0, rdy, _ = self._ref
         same_size = math.isclose(dx, rdx, rel_tol=1e-9) and math.isclose(dy, rdy, rel_tol=1e-9)
@@ -102,6 +106,7 @@ class FinestGridAligner:
 
     @staticmethod
     def _is_whole(value: float, origin: float, step: float) -> bool:
+        """True if value lies a whole number of steps from origin."""
         offset = (value - origin) / step
         return abs(offset - round(offset)) < 1e-6
 
@@ -112,6 +117,7 @@ class FinestGridAligner:
         return index, origin + index * step
 
     def _warp(self, path: Path, index: int) -> Path:
+        """Copies one tile, nearest-neighbour, onto the reference grid over its own snapped extent."""
         x0, dx, nx, y0, dy, ny = self._grids[path]
         rx0, rdx, _, ry0, rdy, _ = self._ref
         c0, west = self._snap(x0, rx0, rdx)

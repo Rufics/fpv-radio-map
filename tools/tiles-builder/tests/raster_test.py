@@ -30,6 +30,7 @@ class FinestGridAlignerTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        """Writes the four test tiles once for all tests."""
         cls._tmp = tempfile.TemporaryDirectory()
         cls.dir = Path(cls._tmp.name)
         cls.rng = np.random.default_rng(7)
@@ -37,10 +38,12 @@ class FinestGridAlignerTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls) -> None:
+        """Removes the test tiles."""
         cls._tmp.cleanup()
 
     @classmethod
     def _tile(cls, lat: int, lon: int) -> Path:
+        """One random tile whose north-west corner is at lat + 1, lon, with Copernicus' half-pixel origin."""
         cols = ROWS if lat < 50 else ROWS * 2 // 3
         path = cls.dir / f"t_{lat}_{lon}.tif"
         ds = gdal.GetDriverByName("GTiff").Create(str(path), cols, ROWS, 1, gdal.GDT_Float32)
@@ -51,17 +54,20 @@ class FinestGridAlignerTest(unittest.TestCase):
         return path
 
     def _mosaic(self) -> Path:
+        """The aligned tiles as one VRT, built the way the DEM step builds it."""
         files = raster.FinestGridAligner(list(self.tiles.values()), self.dir).align()
         vrt = self.dir / "mosaic.vrt"
         run(["gdalbuildvrt", "-q", str(vrt), *map(str, files)])
         return vrt
 
     def test_fine_tiles_are_used_unchanged(self) -> None:
+        """Tiles already on the finest grid are passed through, coarse ones are replaced."""
         files = raster.FinestGridAligner(list(self.tiles.values()), self.dir).align()
         self.assertIn(self.tiles[(49, 14)], files)
         self.assertNotIn(self.tiles[(50, 14)], files)
 
     def test_inputs_without_a_finest_grid_are_refused(self) -> None:
+        """Inputs where one file is finer in longitude and another in latitude are refused."""
         wide = self.dir / "wide.tif"
         tall = self.dir / "tall.tif"
         for path, (cols, rows) in ((wide, (4, 2)), (tall, (2, 4))):
@@ -72,6 +78,7 @@ class FinestGridAlignerTest(unittest.TestCase):
             raster.FinestGridAligner([wide, tall], self.dir)
 
     def test_mosaic_keeps_fine_pixels_and_duplicates_coarse_ones(self) -> None:
+        """Fine pixels are copied as they are; coarse pixels are duplicated nearest-neighbour."""
         mosaic = gdal.Open(str(self._mosaic())).ReadAsArray()
         fine = gdal.Open(str(self.tiles[(49, 15)])).ReadAsArray()
         coarse = gdal.Open(str(self.tiles[(50, 14)])).ReadAsArray()
@@ -81,6 +88,7 @@ class FinestGridAlignerTest(unittest.TestCase):
         np.testing.assert_array_equal(mosaic[:ROWS, :ROWS], coarse[:, nearest.astype(int)])
 
     def test_cog_of_mixed_mosaic_verifies(self) -> None:
+        """A COG written from the mixed mosaic matches it pixel for pixel (failed before the fix)."""
         vrt = self._mosaic()
         srcwin = raster.srcwin_for_bbox(vrt, BBox(14.07, 49.0, 15.9, 50.9))
         cog = self.dir / "dem.cog.tif"
