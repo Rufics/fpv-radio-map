@@ -1,0 +1,27 @@
+# Antenna seeds (rf.antennas)
+
+`seed.json` is loaded into the reference library on first start. Every entry is
+`"verified": false`: the admin checks each source and marks it verified in the library editor.
+
+Each entry cites the vendor's own product page, with the spec lines it was taken from in
+`source.reference`. Conventions:
+
+- **Circular polarization.** Vendors give CP gain in dBic; it is stored as `gainDbi` as stated,
+  with no conversion. Between two CP antennas the dBic figures apply directly. A CP-to-linear link
+  loses about 3 dB to polarization mismatch; the link result does not model that loss and adds a
+  note saying so. Converting to dBi here (-3 dB each) would understate a CP-to-CP link by 6 dB.
+  Antennas sold in both RHCP and LHCP have one entry (usually RHCP); the note says so. Copy the
+  entry and change `polarization` for the other hand.
+- **Gain ranges.** Where the vendor gives a range (for example 9.5-10.5 dBic), the lower end is used.
+- **Linear antennas.** Vendors say only "linear"; entries use `linear-vertical`, the usual mounting.
+- **Band.** Where the vendor names only an ISM band (2.4 GHz, 900 MHz), `bandHz` uses the band
+  edges and the note says so.
+- **Beam width.** Only the -3 dB width is stored. When the vendor does not name a plane, the note
+  says which plane was assumed.
+- **Type.** CP omnis (cloverleaf, pagoda, lollipop and similar), crosshair, T and Moxon antennas
+  are `other` unless the vendor calls the antenna a dipole or patch.
+- **DJI.** DJI's product pages give EIRP for the system, not antenna gain. The DJI entries take the
+  per-antenna gain DJI declared in its FCC filings (antenna datasheets, test reports or RF-exposure
+  exhibits, linked on fccid.io). Where the filing gives a gain per band, there is one entry per band
+  (2.4 and 5.8 GHz); the note gives any 5.15-5.25 GHz figure. Where two antennas differ, the lower gain is
+  used. Where the filing does not state the polarization, linear is assumed and the note says so.

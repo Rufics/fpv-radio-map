@@ -1,0 +1,831 @@
+[
+  {
+    "id": "truerc-singularity-5g8-sma",
+    "name": "TrueRC Singularity 5.8 SMA",
+    "vendor": "TrueRC",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.9,
+    "polarization": "rhcp",
+    "bandHz": [
+      5600000000.0,
+      6000000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "TrueRC product page, Singularity 5.8 SMA: Gain 1.9dBic, Bandwidth 5.6GHz-6.0GHz, Polarization RHCP or LHCP",
+      "url": "https://truerc.com/71964-singularity-58-sma",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Omnidirectional CP antenna. Also sold as LHCP with the same figures. Unverified until an admin checks the source."
+  },
+  {
+    "id": "truerc-singularity-5g8-ufl",
+    "name": "TrueRC Singularity 5.8 U.FL",
+    "vendor": "TrueRC",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.9,
+    "polarization": "rhcp",
+    "bandHz": [
+      5600000000.0,
+      6000000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "TrueRC product page, Singularity 5.8 U.FL: Gain 1.9 dBic, Bandwidth 5.6GHz-6.0GHz, Polarization RHCP or LHCP",
+      "url": "https://truerc.com/71966-singularity-58-ufl",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Omnidirectional CP antenna for VTX/air units. Also sold as LHCP with the same figures. Unverified until an admin checks the source."
+  },
+  {
+    "id": "truerc-matchstick-5g8",
+    "name": "TrueRC Matchstick 5.8 SMA",
+    "vendor": "TrueRC",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.9,
+    "polarization": "rhcp",
+    "bandHz": [
+      5600000000.0,
+      6000000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "TrueRC product page, Matchstick 5.8 SMA: Gain 1.9dBic, Bandwidth 5.6-6.0GHz, available in RHCP and LHCP",
+      "url": "https://truerc.com/23679-matchstick-5-8",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Omnidirectional CP antenna. Also sold as LHCP with the same figures. Unverified until an admin checks the source."
+  },
+  {
+    "id": "truerc-x-air-5g8-mk2",
+    "name": "TrueRC X-AIR 5.8 MK II",
+    "vendor": "TrueRC",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 9.5,
+    "polarization": "rhcp",
+    "bandHz": [
+      5100000000.0,
+      6700000000.0
+    ],
+    "beamwidthDeg": {
+      "horizontal": 68,
+      "vertical": 68
+    },
+    "source": {
+      "kind": "datasheet",
+      "reference": "TrueRC product page, X-AIR 5.8 MK II RP-SMA: Gain 9.5-10.5 dBic, Bandwidth 5.1GHz-6.7GHz, Beam-width 120deg, Beam-width @-3dB (H and V) 68deg",
+      "url": "https://truerc.com/63425-x-air-58-mk-ii-rp-sma",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. Gain is the lower end of the vendor's 9.5-10.5 dBic range. Vendor's 120 deg 'beam-width' is coverage equivalent to an omni; the 68 deg -3 dB width the vendor gives for both planes (H and V) is stored. Also sold as LHCP. Unverified until an admin checks the source."
+  },
+  {
+    "id": "truerc-x-air-2g4-mk2",
+    "name": "TrueRC X-AIR 2.4 MK II",
+    "vendor": "TrueRC",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 9.5,
+    "polarization": "rhcp",
+    "bandHz": [
+      2300000000.0,
+      2600000000.0
+    ],
+    "beamwidthDeg": {
+      "horizontal": 68,
+      "vertical": 68
+    },
+    "source": {
+      "kind": "datasheet",
+      "reference": "TrueRC product page, X-AIR 2.4 MK II: Gain 9.5-10 dBic, Bandwidth 2.3GHz-2.6GHz, Beam-width 120deg, Beam-width @-3dB 68deg",
+      "url": "https://truerc.com/51361-x-air-2-4-mk-ii",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. Gain is the lower end of the vendor's 9.5-10 dBic range. Vendor's 120 deg 'beam-width' is coverage equivalent to an omni; the -3 dB width is stored. The vendor does not name a plane for the 68 deg -3 dB width; it is stored for both. Also sold as LHCP. Unverified until an admin checks the source."
+  },
+  {
+    "id": "truerc-x-air-900",
+    "name": "TrueRC X-AIR 900",
+    "vendor": "TrueRC",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 10.0,
+    "polarization": "rhcp",
+    "bandHz": [
+      902000000.0,
+      928000000.0
+    ],
+    "beamwidthDeg": {
+      "horizontal": 68,
+      "vertical": 68
+    },
+    "source": {
+      "kind": "datasheet",
+      "reference": "TrueRC product page, X-AIR 900: Gain 10dBic, Frequency 900MHz ISM band, Beam-width 120deg, Beam-width @-3dB 68deg",
+      "url": "https://truerc.com/39463-x-air-900",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. The vendor names only the 900 MHz ISM band; bandHz is set to 902-928 MHz, the US ISM band edges. Check before using it at 868 MHz. Vendor's 120 deg 'beam-width' is coverage equivalent to an omni; the -3 dB width is stored. The vendor does not name a plane for the 68 deg -3 dB width; it is stored for both. Also sold as LHCP. Unverified until an admin checks the source."
+  },
+  {
+    "id": "truerc-singularity-2g4-sma",
+    "name": "TrueRC Singularity 2.4 SMA",
+    "vendor": "TrueRC",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.9,
+    "polarization": "rhcp",
+    "bandHz": [
+      2400000000.0,
+      2460000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "TrueRC product page, Singularity 2.4 SMA: Gain 1.9 dBic, Bandwidth 2.4GHz-2.46GHz, Polarization RHCP or LHCP",
+      "url": "https://truerc.com/71973-singularity-24-sma",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Omnidirectional CP antenna. Also sold as LHCP with the same figures. Unverified until an admin checks the source."
+  },
+  {
+    "id": "lumenier-axii-2-lr-lhcp",
+    "name": "Lumenier AXII 2 Long Range 5.8GHz (LHCP)",
+    "vendor": "Lumenier",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.2,
+    "polarization": "lhcp",
+    "bandHz": [
+      5300000000.0,
+      6200000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "Lumenier product page, AXII 2 Long Range 5.8GHz (LHCP): Gain 2.2dbic, Bandwidth 5.3GHz-6.2GHz, Polarization Left Hand Circular (LHCP)",
+      "url": "https://www.lumenier.com/products/lumenier-axii-2-long-range-5-8ghz-antenna-lhcp",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Omnidirectional CP antenna; an RHCP version is also sold. Unverified until an admin checks the source."
+  },
+  {
+    "id": "lumenier-axii-hd-stubby",
+    "name": "Lumenier AXII HD Stubby 5.8GHz (DJI goggles)",
+    "vendor": "Lumenier",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.2,
+    "polarization": "lhcp",
+    "bandHz": [
+      5300000000.0,
+      6200000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "Lumenier product page, AXII HD Stubby 5.8GHz for DJI Digital HD FPV Goggles: Gain 2.2dbic, Bandwidth 5.3GHz-6.2GHz, Beam Width 360 degrees (omni-directional), Polarization LHCP",
+      "url": "https://www.lumenier.com/products/lumenier-axii-hd-stubby-5-8ghz-antenna-for-dji-digital-hd-fpv-goggles",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Replacement antenna for DJI digital FPV goggles. Unverified until an admin checks the source."
+  },
+  {
+    "id": "lumenier-micro-axii-2-ufl",
+    "name": "Lumenier Micro AXII 2 5.8GHz U.FL",
+    "vendor": "Lumenier",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.9,
+    "polarization": "rhcp",
+    "bandHz": [
+      5600000000.0,
+      6000000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "Lumenier product page, Micro AXII 2 5.8GHz U.FL: Gain 1.9dBic, Bandwidth 5.6GHz-6.0GHz, Polarization RHCP or LHCP versions",
+      "url": "https://www.lumenier.com/products/lumenier-micro-axii-2-antenna-5-8ghz-u-fl",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Omnidirectional CP antenna for VTX/air units. Also sold as LHCP with the same figures. Unverified until an admin checks the source."
+  },
+  {
+    "id": "lumenier-axii-patch-hd-rhcp",
+    "name": "Lumenier AXII Patch HD 5.8GHz (RHCP)",
+    "vendor": "Lumenier",
+    "version": 1,
+    "verified": false,
+    "type": "patch",
+    "gainDbi": 8.4,
+    "polarization": "rhcp",
+    "bandHz": [
+      5690000000.0,
+      5910000000.0
+    ],
+    "beamwidthDeg": {
+      "horizontal": 76,
+      "vertical": 76
+    },
+    "source": {
+      "kind": "datasheet",
+      "reference": "Lumenier product page, AXII Patch HD 5.8GHz (RHCP): Gain 8.4 dBiC, Frequency 5.8GHz, Bandwidth 220 Mhz, Beam Width 76 deg",
+      "url": "https://www.lumenier.com/products/lumenier-axii-patch-hd-5-8ghz-antenna-rhcp",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. The vendor gives a 5.8 GHz centre and a 220 MHz bandwidth; bandHz is that centre +/- 110 MHz. The vendor does not say which plane the 76 deg beam width is in; it is stored for both. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tbs-triumph-pro-sma-rhcp",
+    "name": "TBS Triumph Pro SMA (RHCP)",
+    "vendor": "Team BlackSheep",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.6,
+    "polarization": "rhcp",
+    "bandHz": [
+      5500000000.0,
+      6000000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "TBS product page, Triumph Pro SMA: Frequency range 5500-6000MHz, Polarization RHCP, Gain 1.6dbic, Axial Ratio 0.99",
+      "url": "https://www.team-blacksheep.com/products/prod:triumph_pro_sma",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Omnidirectional CP antenna. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tbs-crossfire-immortal-t-v2",
+    "name": "TBS Crossfire Immortal T V2",
+    "vendor": "Team BlackSheep",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      860000000.0,
+      930000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "TBS product page, Crossfire Immortal T V2: Frequency Min 860MHz, Frequency Max 930MHz, Gain 2dBi, Radiation pattern Omnidirectional, Polarization Linear",
+      "url": "https://www.team-blacksheep.com/products/prod:xf_immortal_t_v2_s",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Receiver T-antenna. The vendor says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tbs-tracer-immortal-t",
+    "name": "TBS Tracer Immortal T",
+    "vendor": "Team BlackSheep",
+    "version": 1,
+    "verified": false,
+    "type": "dipole",
+    "gainDbi": 2.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2350000000.0,
+      2550000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "TBS product page, Tracer Immortal T: T-shaped dipole antenna, Frequency Min 2350MHz, Frequency Max 2550MHz, Gain 2dBi, Polarization Linear",
+      "url": "https://www.team-blacksheep.com/products/prod:tracer_immtant",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Receiver T-antenna. The vendor says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tbs-crossfire-diamond",
+    "name": "TBS Crossfire Diamond Antenna",
+    "vendor": "Team BlackSheep",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      850000000.0,
+      950000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "TBS product page, Diamond Antenna: Frequency Min 850MHz, Frequency Max 950MHz, Gain 2dBi, Radiation pattern Omnidirectional, Polarization Linear",
+      "url": "https://www.team-blacksheep.com/products/prod:diamond_antenna",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Transmitter antenna for Crossfire modules. The vendor says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "radiomaster-bandit-t-900",
+    "name": "RadioMaster Bandit 915/868MHz T Antenna",
+    "vendor": "RadioMaster",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.7,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      860000000.0,
+      930000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "RadioMaster product page, Bandit 915/868MHz T Antenna: Bandwidth 860-930MHz, Polarisation Linear, Radiation Direction Omni-directional, Gain 2.7dBi",
+      "url": "https://radiomasterrc.com/products/bandit-t-antenna",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Transmitter T-antenna for ExpressLRS 900 MHz modules. The vendor says only 'linear'; linear-vertical assumes the usual vertical mounting. Unverified until an admin checks the source."
+  },
+  {
+    "id": "radiomaster-bandit-moxon-900",
+    "name": "RadioMaster Bandit 915/868MHz Moxon Antenna",
+    "vendor": "RadioMaster",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 4.6,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      860000000.0,
+      930000000.0
+    ],
+    "beamwidthDeg": {
+      "horizontal": 145
+    },
+    "source": {
+      "kind": "datasheet",
+      "reference": "RadioMaster product page, Bandit 915/868MHz Moxon Antenna: Bandwidth 860-930MHz, Polarisation Linear, Radiation Direction Directional, Beam Width @-3dB 145 deg, Gain 4.6dBi",
+      "url": "https://radiomasterrc.com/products/bandit-moxon-antenna",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Directional Moxon antenna for ExpressLRS 900 MHz modules. The vendor does not say which plane the 145 deg beam width is in; it is stored as horizontal. Linear-vertical assumes the usual mounting. Unverified until an admin checks the source."
+  },
+  {
+    "id": "radiomaster-t-2g4",
+    "name": "RadioMaster 2.4GHz T Antenna",
+    "vendor": "RadioMaster",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 3.43,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "RadioMaster product page, 2.4GHz T Antenna: Type T-type Omnidirectional Antenna, polarization vertical/horizontal, Frequency 2.4GHz, Gain 3.43dB",
+      "url": "https://radiomasterrc.com/products/2-4ghz-t-antenna",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Transmitter T-antenna for ExpressLRS 2.4 GHz modules. The vendor writes the gain as 'dB' and names only '2.4GHz'; bandHz is set to the 2.4 GHz ISM band edges. Linear-vertical assumes the usual mounting. Unverified until an admin checks the source."
+  },
+  {
+    "id": "radiomaster-moxon-2g4",
+    "name": "RadioMaster 2.4GHz Moxon Antenna",
+    "vendor": "RadioMaster",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 5.98,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "RadioMaster product page, 2.4GHz Moxon Directional Antenna: polarization vertical/horizontal, Frequency 2.4GHz, Gain 5.98dB",
+      "url": "https://radiomasterrc.com/products/2-4ghz-moxon-directional-antenna",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Directional Moxon antenna for ExpressLRS 2.4 GHz modules. The vendor writes the gain as 'dB', gives no beam width and names only '2.4GHz'; bandHz is set to the 2.4 GHz ISM band edges. Linear-vertical assumes the usual mounting. Unverified until an admin checks the source."
+  },
+  {
+    "id": "vas-crosshair-xtreme-5g8",
+    "name": "VAS 5.8GHz Crosshair Xtreme",
+    "vendor": "Video Aerial Systems",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 10.25,
+    "polarization": "rhcp",
+    "bandHz": [
+      5300000000.0,
+      6400000000.0
+    ],
+    "beamwidthDeg": {
+      "horizontal": 60,
+      "vertical": 60
+    },
+    "source": {
+      "kind": "datasheet",
+      "reference": "Video Aerial Systems product page, 5.8GHz Crosshair Xtreme: Gain 10.25dbic, Axial ratio 0.99 (measured), Bandwidth 5300Mhz-6400MHz, Flight beam 120 degrees, -3db point +/- 30 degrees",
+      "url": "https://www.videoaerialsystems.com/products/5-8ghz-crosshair%E2%84%A2-xtreme",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. The -3 dB width (+/- 30 deg) is stored for both planes; the vendor does not name a plane. Also sold as LHCP. Unverified until an admin checks the source."
+  },
+  {
+    "id": "vas-crosshair-xtreme-mini-5g8",
+    "name": "VAS 5.8GHz Crosshair Xtreme Mini",
+    "vendor": "Video Aerial Systems",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 10.0,
+    "polarization": "rhcp",
+    "bandHz": [
+      5300000000.0,
+      6400000000.0
+    ],
+    "beamwidthDeg": {
+      "horizontal": 60,
+      "vertical": 60
+    },
+    "source": {
+      "kind": "datasheet",
+      "reference": "Video Aerial Systems product page, 5.8GHz Crosshair Xtreme Mini: Gain 10dbic, Axial ratio 0.99 (measured), Bandwidth 5300Mhz-6400MHz, Flight beam 120 degrees, -3db point +/- 30 degrees",
+      "url": "https://www.videoaerialsystems.com/products/5-8ghz-crosshair%E2%84%A2-xtreme-mini",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Vendor states circular-polarization gain in dBic; stored as gainDbi. Directional crosshair antenna for the ground station. The -3 dB width (+/- 30 deg) is stored for both planes; the vendor does not name a plane. Also sold as LHCP. Unverified until an admin checks the source."
+  },
+  {
+    "id": "walksnail-patch-v2",
+    "name": "Walksnail Patch Antenna V2 (Avatar Goggles X)",
+    "vendor": "Walksnail (Caddx)",
+    "version": 1,
+    "verified": false,
+    "type": "patch",
+    "gainDbi": 6.7,
+    "polarization": "lhcp",
+    "bandHz": [
+      5600000000.0,
+      6000000000.0
+    ],
+    "beamwidthDeg": {
+      "horizontal": 127,
+      "vertical": 127
+    },
+    "source": {
+      "kind": "datasheet",
+      "reference": "Caddx product page, Walksnail Patch Antenna V2: bandwidth 5600-6000MHz, Polarization LHCP, Gain 6.7dBi, Efficiency 97%, Beam-width 127 deg",
+      "url": "https://www.caddxfpv.com/products/walksnail-patch-antenna-v2-for-avatar-goggles-x",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Goggle patch antenna. The vendor does not say which plane the 127 deg beam width is in; it is stored for both. Unverified until an admin checks the source."
+  },
+  {
+    "id": "walksnail-vtx-v2-antenna",
+    "name": "Walksnail VTX V2 Antenna",
+    "vendor": "Walksnail (Caddx)",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.9,
+    "polarization": "lhcp",
+    "bandHz": [
+      5600000000.0,
+      6000000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "Caddx product page, Walksnail VTX V2 Antenna: Polarization LHCP, Frequency range 5600MHz-6000MHz, Gain 1.9dBi",
+      "url": "https://www.caddxfpv.com/products/walksnail-vtx-v2-antenna",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Omnidirectional CP antenna for Walksnail Avatar VTX units. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-avata-2-air-2g4",
+    "name": "DJI Avata 2 aircraft antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-QF3W4K23, Antenna Gain Info: WA520 UAV SDR LF/LB/RB/RF ANT1, Gain 1.5 dBi@2.4~2.483GHz, 2 dBi@5.15~5.25GHz, 2 dBi@5.725~5.85GHz, Polarization type Linear",
+      "url": "https://fccid.io/SS3-QF3W4K23/Test-Report/Antenna-Gain-Info-7181229",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "One of the four built-in aircraft antennas (WA520), 2.4 GHz band. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-avata-2-air-5g8",
+    "name": "DJI Avata 2 aircraft antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-QF3W4K23, Antenna Gain Info: WA520 UAV SDR LF/LB/RB/RF ANT1, Gain 1.5 dBi@2.4~2.483GHz, 2 dBi@5.15~5.25GHz, 2 dBi@5.725~5.85GHz, Polarization type Linear",
+      "url": "https://fccid.io/SS3-QF3W4K23/Test-Report/Antenna-Gain-Info-7181229",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "One of the four built-in aircraft antennas (WA520), 5.8 GHz band. The filing gives the same 2 dBi at 5.15-5.25 GHz. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-o4-air-unit-5g8",
+    "name": "DJI O4 Air Unit antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "monopole",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5875000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-DF3L290424, Antenna Spec: ZA530 lite SDR Ant, Gain 1.5dBi@5.15~5.25GHz, 1.5dBi@5.725~5.875GHz, Polarization type Linear, Antenna type Monopole",
+      "url": "https://fccid.io/SS3-DF3L290424/Test-Report/Antenna-Spec-7863842",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Stock antenna of the O4 Air Unit (lite). The filing gives the same 1.5 dBi at 5.15-5.25 GHz. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-o4-air-unit-pro-5g8",
+    "name": "DJI O4 Air Unit Pro antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "dipole",
+    "gainDbi": 0.5,
+    "polarization": "lhcp",
+    "bandHz": [
+      5725000000.0,
+      5875000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-DF3P290424, Antenna Spec: ZA530 PRO antenna, Ant0/Ant1 Gain -0.5dBi@5.15~5.25GHz, 0.5dBi@5.725~5.875GHz, Polarization type Circulization, Antenna type Dipole",
+      "url": "https://fccid.io/SS3-DF3P290424/Test-Report/Antenna-Spec-7880301",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Stock antenna of the O4 Air Unit Pro. The filing says only 'Circulization'; DJI's product page for the O4 Air Unit Pro antenna calls it left-hand circularly polarized, so lhcp is used. The filing states the gain in dBi; it is stored as stated. The filing gives -0.5 dBi at 5.15-5.25 GHz. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-o3-air-unit-5g8",
+    "name": "DJI O3 Air Unit antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-QFP2AS22, Test Report FCC NII 1 of 3: Antenna Gain 1.5dBi for ANT0, 1.5dBi for ANT1; Max. Antenna gain(G) of 5.8GHz SDR: 1.5dBi (uncorrelated antenna gain)",
+      "url": "https://fccid.io/SS3-QFP2AS22/Test-Report/Test-Report-FCC-NII-1-of-3-6019130",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Stock antennas of the O3 Air Unit. The filing does not name the antenna type or polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-avata-air-5g8",
+    "name": "DJI Avata aircraft antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-QF2W4K22, Test Report FCC NII 1 of 2: Antenna Gain 2.5dBi for ANT0, 2.5dBi for ANT1; Max. Antenna gain(G) of 5.8GHz SDR: 2.5dBi (uncorrelated antenna gain)",
+      "url": "https://fccid.io/SS3-QF2W4K22/Test-Report/Test-Report-FCC-NII-1-of-2-6019248",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Built-in antennas of the first-generation Avata. The filing does not name the antenna type or polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-fpv-air-2g4",
+    "name": "DJI FPV aircraft antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-FD1W4K2006, RF Exposure Info: 2.4 G SDR 2403.5-2471.12 MHz Antenna Gain 2.5 dBi; 5.8 G SDR 5728.5-5848.12 MHz Antenna Gain 3 dBi",
+      "url": "https://fccid.io/SS3-FD1W4K2006/RF-Exposure-Info/RF-Exposure-5031606",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Antennas in the DJI FPV landing gear, 2.4 GHz band. The filing does not name the polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-fpv-air-5g8",
+    "name": "DJI FPV aircraft antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 3.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-FD1W4K2006, RF Exposure Info: 2.4 G SDR 2403.5-2471.12 MHz Antenna Gain 2.5 dBi; 5.8 G SDR 5728.5-5848.12 MHz Antenna Gain 3 dBi",
+      "url": "https://fccid.io/SS3-FD1W4K2006/RF-Exposure-Info/RF-Exposure-5031606",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Antennas in the DJI FPV landing gear, 5.8 GHz band. The filing does not name the polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-neo-air-2g4",
+    "name": "DJI Neo aircraft antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.48,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-DN1A062624, Antenna Spec: two antennas, Gain 1.48 / 1.87 dBi@2.4~2.483GHz, 1.2 / 1.03 dBi@5.15~5.25GHz, 2.63 / 3.24 dBi@5.725~5.85GHz, Polarization type Linear",
+      "url": "https://fccid.io/SS3-DN1A062624/Test-Report/Antenna-Spec-7505307",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Built-in antennas of the Neo, 2.4 GHz band. The lower of the two antennas' gains is used. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-neo-air-5g8",
+    "name": "DJI Neo aircraft antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 2.63,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-DN1A062624, Antenna Spec: two antennas, Gain 1.48 / 1.87 dBi@2.4~2.483GHz, 1.2 / 1.03 dBi@5.15~5.25GHz, 2.63 / 3.24 dBi@5.725~5.85GHz, Polarization type Linear",
+      "url": "https://fccid.io/SS3-DN1A062624/Test-Report/Antenna-Spec-7505307",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Built-in antennas of the Neo, 5.8 GHz band. The lower of the two antennas' gains is used. The filing gives 1.2 / 1.03 dBi at 5.15-5.25 GHz (lower: 1.03 dBi). Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-2-5g8",
+    "name": "DJI Goggles 2 antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 3.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-RCDS1821, Test Report NII 1 of 5: two external antennas and two internal antennas (receiving only) for 5.8GHz SDR; Antenna gain(G) of 5.8GHz SDR: 3dBi (uncorrelated antenna gain)",
+      "url": "https://fccid.io/SS3-RCDS1821/Test-Report/Test-Report-NII-1-of-5-6019073",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "External antennas of the DJI Goggles 2. The filing does not name the polarization; linear is assumed. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-3-2g4",
+    "name": "DJI Goggles 3 antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "dipole",
+    "gainDbi": 2.0,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-TKGS323, Antenna Gain Info_SRD: ZV902 Ant0/1 Gain 2dBi@2.4~2.483GHz, 1.5dBi@5.15~5.25GHz, 2.5dBi@5.725~5.875GHz; ZV902 Ant2/3 Gain 3.5dBi on all three bands; Polarization type Linear, Antenna type Dipole",
+      "url": "https://fccid.io/SS3-TKGS323/Test-Report/Antenna-Gain-Info-SRD-7183251",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Video-link antennas of the DJI Goggles 3, 2.4 GHz band. The lower pair (Ant0/1) is used; Ant2/3 is 3.5 dBi. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-3-5g8",
+    "name": "DJI Goggles 3 antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "dipole",
+    "gainDbi": 2.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5875000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-TKGS323, Antenna Gain Info_SRD: ZV902 Ant0/1 Gain 2dBi@2.4~2.483GHz, 1.5dBi@5.15~5.25GHz, 2.5dBi@5.725~5.875GHz; ZV902 Ant2/3 Gain 3.5dBi on all three bands; Polarization type Linear, Antenna type Dipole",
+      "url": "https://fccid.io/SS3-TKGS323/Test-Report/Antenna-Gain-Info-SRD-7183251",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Video-link antennas of the DJI Goggles 3, 5.8 GHz band. The lower pair (Ant0/1) is used; Ant2/3 is 3.5 dBi. The filing gives 1.5 dBi for Ant0/1 at 5.15-5.25 GHz. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-n3-2g4",
+    "name": "DJI Goggles N3 antenna 2.4 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      2400000000.0,
+      2483500000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-TKGSM24, DJI Antenna Datasheet ZV300 Antenna: ZV300 Ant, Operation Frequency 2.4~2.483GHz, 5.15~5.25GHz, 5.725~5.85GHz, Gain >=1.5dBi, Polarization type Linear",
+      "url": "https://fccid.io/SS3-TKGSM24/Test-Report/DJI-Antenna-Datasheet-ZV300-Antenna-2024-10-21-7755384",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Antennas of the DJI Goggles N3 (PCB and FPC), 2.4 GHz band. The filing gives a minimum (>=1.5 dBi); the minimum is used. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-goggles-n3-5g8",
+    "name": "DJI Goggles N3 antenna 5.8 GHz",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "type": "other",
+    "gainDbi": 1.5,
+    "polarization": "linear-vertical",
+    "bandHz": [
+      5725000000.0,
+      5850000000.0
+    ],
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FCC filing SS3-TKGSM24, DJI Antenna Datasheet ZV300 Antenna: ZV300 Ant, Operation Frequency 2.4~2.483GHz, 5.15~5.25GHz, 5.725~5.85GHz, Gain >=1.5dBi, Polarization type Linear",
+      "url": "https://fccid.io/SS3-TKGSM24/Test-Report/DJI-Antenna-Datasheet-ZV300-Antenna-2024-10-21-7755384",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Antennas of the DJI Goggles N3 (PCB and FPC), 5.8 GHz band. The filing gives a minimum (>=1.5 dBi); the minimum is used. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+  }
+]

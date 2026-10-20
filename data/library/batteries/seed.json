@@ -1,0 +1,401 @@
+[
+  {
+    "id": "dji-avata-2-battery",
+    "name": "DJI Avata 2 Intelligent Flight Battery",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 4,
+    "capacityAh": 2.15,
+    "nominalCellVoltage": 3.69,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI Avata 2 specs, Intelligent Flight Battery: Capacity 2150 mAh, Standard Voltage 14.76 V, Max Charging Voltage 17 V, Battery Type Li-ion, Energy 31.7 Wh@0.5C",
+      "url": "https://www.dji.com/avata-2/specs",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "DJI does not state the cell count; 4S and 3.69 V per cell follow from 14.76 V standard and 17 V max charging voltage. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-avata-battery",
+    "name": "DJI Avata Intelligent Flight Battery",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 4,
+    "capacityAh": 2.42,
+    "nominalCellVoltage": 3.69,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI Avata specs, Intelligent Flight Battery: Battery Capacity 2420 mAh, Voltage 14.76 V, Charging Voltage Limit 17 V, Type Li-ion, Energy 35.71 Wh@0.5C",
+      "url": "https://www.dji.com/support/product/avata",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "DJI does not state the cell count; 4S and 3.69 V per cell follow from 14.76 V and the 17 V charging limit. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-fpv-battery",
+    "name": "DJI FPV Intelligent Flight Battery",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 2.0,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI FPV specs, Intelligent Flight Battery: Battery Capacity 2000 mAh, Nominal Voltage 22.2 V, Max Charging Voltage 25.2 V, Type LiPo 6S, Energy 44.4 Wh@0.5C",
+      "url": "https://www.dji.com/support/product/dji-fpv",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-neo-battery",
+    "name": "DJI Neo Intelligent Flight Battery",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 2,
+    "capacityAh": 1.435,
+    "nominalCellVoltage": 3.65,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "DJI Store, DJI Neo Intelligent Flight Battery specifications: Capacity 1435 mAh, Nominal Voltage 7.3 V, Max Charging Voltage 8.6 V, Battery Type Li-ion, Energy 10.5 Wh",
+      "url": "https://store.dji.com/product/dji-neo-intelligent-flight-battery",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "DJI does not state the cell count; 2S and 3.65 V per cell follow from 7.3 V nominal and 8.6 V max charging voltage. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tattu-r-line-v5-6s-1400",
+    "name": "Tattu R-Line V5.0 6S 1400mAh 150C",
+    "vendor": "Tattu",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 1.4,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "Tattu product page, R-Line V5.0 1400mAh 6S: Minimum Capacity 1400mAh, Configuration 6S / 22.2V / 6 Cells, Net Weight 222g",
+      "url": "https://genstattu.com/tattu-r-line-version-5-0-1400mah-6s-150c-22-2v-lipo-battery-pack-with-xt60-plug/",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tattu-r-line-v5-6s-1550",
+    "name": "Tattu R-Line V5.0 6S 1550mAh 150C",
+    "vendor": "Tattu",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 1.55,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "Tattu product page, R-Line V5.0 1550mAh 6S: Minimum Capacity 1550mAh, Configuration 6S / 22.2V / 6 Cells, Net Weight 254g",
+      "url": "https://genstattu.com/tattu-r-line-version-5-0-1550mah-6s-150c-22-2v-lipo-battery-pack-with-xt60-plug/",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tattu-r-line-v5-4s-1550",
+    "name": "Tattu R-Line V5.0 4S 1550mAh 150C",
+    "vendor": "Tattu",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 4,
+    "capacityAh": 1.55,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "Tattu product page, R-Line V5.0 1550mAh 4S: Minimum Capacity 1550mAh, Configuration 4S / 14.8V, attribute table Configuration 4S1P, Voltage 14.8",
+      "url": "https://genstattu.com/tattu-r-line-version-5-0-1550mah-4s-150c-14-8v-lipo-battery-pack-with-xt60-plug/",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tattu-r-line-v5-6s-2200",
+    "name": "Tattu R-Line V5.0 6S 2200mAh 150C",
+    "vendor": "Tattu",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 2.2,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "Tattu product page, R-Line V5.0 2200mAh 6S: Minimum Capacity 2200mAh, Configuration 6S / 22.2V / 6 Cells, Net Weight 346g",
+      "url": "https://genstattu.com/tattu-r-line-version-5-0-2200mah-6s-150c-22-2v-lipo-battery-pack-with-xt60-plug/",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tattu-r-line-v6-6s-1300",
+    "name": "Tattu R-Line V6.0 6S 1300mAh 160C",
+    "vendor": "Tattu",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 1.3,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "Tattu product page, R-Line V6 1300mAh 6S: Minimum Capacity 1300mAh, Configuration 6S1P / 22.2V / 6 Cells, Net Weight 203g",
+      "url": "https://genstattu.com/tattu-r-line-v6-1300mah-6s-160c-22-2v-st-lipo-battery-with-xt60-plug/",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tattu-r-line-v6-6s-1480",
+    "name": "Tattu R-Line V6.0 6S 1480mAh 160C",
+    "vendor": "Tattu",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 1.48,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "Tattu product page, R-Line V6.0 1480mAh 6S: Minimum Capacity 1480mAh, Configuration 6S / 22.2V / 6 Cells, Net Weight 220g",
+      "url": "https://genstattu.com/tattu-r-line-version-6-0-1480mah-6s-160c-22-2v-lipo-battery-pack-with-xt60-plug/",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "tattu-r-line-v6-4s-1000",
+    "name": "Tattu R-Line V6.0 4S 1000mAh 160C",
+    "vendor": "Tattu",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 4,
+    "capacityAh": 1.0,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "Tattu product page, R-Line V6.0 1000mAh 4S: Minimum Capacity 1000mAh, Configuration 4S / 14.8V / 4 Cells, Net Weight 98g",
+      "url": "https://genstattu.com/tattu-1000mah-4s-160c-14-8v-lipo-battery-xt30-plug-r-line-6-0/",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "The page's attribute table says 1050 mAh; the 1000 mAh minimum capacity from the specification list is used. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-6s-1050",
+    "name": "iFlight Fullsend 6S 1050mAh 150C",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 1.05,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 6S 1050mAh 150C: Capacity 1050mAh, Voltage 22.2V, Cell combination 6S1P, Battery Capacity 23.31Wh",
+      "url": "https://shop.iflight.com/Fullsend-6S-1050mAh-150C-Battery-Pro2138",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-6s-1550",
+    "name": "iFlight Fullsend 6S 1550mAh 150C",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 1.55,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 6S 1550mAh 150C: Battery type LIPO, Capacity 1550mAh, Voltage 22.2V, Max Voltage 25.2V (4.2V per cell), Cell combination 6S1P, Battery Capacity 34.41Wh",
+      "url": "https://shop.iflight.com/iFlight-Fullsend-6S-1550mAh-150C-Battery-Pro2411",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-6s-2200",
+    "name": "iFlight Fullsend 6S 2200mAh 95C",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 2.2,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 6S 2200mAh 95C: Battery type LI-PO, Capacity 2200mAh, Battery Capacity 48.84Wh",
+      "url": "https://shop.iflight.com/Fullsend-6S-2200mAh-95C-Battery-Pro1980",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "The page gives no voltage line; 6S at 3.7 V per cell is from the product name and matches 48.84 Wh / 2.2 Ah = 22.2 V. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-6s-4000-li-ion",
+    "name": "iFlight Fullsend 6S 4000mAh Li-Ion (EVE 40PL)",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 6,
+    "capacityAh": 4.0,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 6S 4000mAh Li-Ion: Capacity 4000mAh, Voltage 22.2V, Max Voltage 25.2V (4.2V per cell), Cell Type EVE INR21700-40PL, Cell combination 6S1P, Battery Capacity 88.8Wh",
+      "url": "https://shop.iflight.com/Fullsend-6S-4000mAh-Li-Ion-Battery-EVE-Pro2242",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Per-cell voltage is the vendor's 22.2 V pack figure divided by 6. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-6s-5000-li-ion",
+    "name": "iFlight Fullsend 6S 5000mAh Li-Ion (EVE 50PL)",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 6,
+    "capacityAh": 5.0,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 6S 5000mAh Li-Ion: Battery type Lithium-ion, Capacity 5000mAh, Voltage 22.2V, Max Voltage 25.2V (4.2V per cell), Cell Type EVE INR21700-50PL, Cell combination 6S1P, Battery Capacity 111Wh",
+      "url": "https://shop.iflight.com/Fullsend-6S-5000mAh-Li-Ion-Battery-Pro2362",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Per-cell voltage is the vendor's 22.2 V pack figure divided by 6. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-6s2p-6000-li-ion",
+    "name": "iFlight Fullsend 6S2P 6000mAh Li-Ion",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 6,
+    "capacityAh": 6.0,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 6S2P 6000mAh Li-Ion: Voltage 22.2V, Cell combination 6S2P, Battery Capacity 133.2Wh",
+      "url": "https://shop.iflight.com/Fullsend-6S2P-6000mAh-Li-Ion-Battery-Pro2003",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Capacity is from the product name and matches 133.2 Wh / 22.2 V = 6.0 Ah. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-6s-8000-li-ion",
+    "name": "iFlight Fullsend 6S 8000mAh Li-Ion",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 6,
+    "capacityAh": 8.0,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 6S 8000mAh Li-Ion: Capacity 8000mAh, Voltage 22.2V, Cell combination 6S2P, Battery Capacity 177.6Wh",
+      "url": "https://shop.iflight.com/Fullsend-6S-8000mAh-Li-Ion-Battery-Pro1914",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Per-cell voltage is the vendor's 22.2 V pack figure divided by 6. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-6s-10000-li-ion",
+    "name": "iFlight Fullsend 6S 10000mAh Li-Ion (EVE 50PL)",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 6,
+    "capacityAh": 10.0,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 6S 10000mAh Li-Ion: Capacity 10000mAh, Voltage 22.2V, Max Voltage 25.2V (4.2V per cell), Cell Type EVE INR21700-50PL, Cell combination 6S2P, Battery Capacity 222Wh",
+      "url": "https://shop.iflight.com/Fullsend-6S-10000mAh-Li-Ion-Battery-Pro2363",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Per-cell voltage is the vendor's 22.2 V pack figure divided by 6. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-8s-10000-li-ion",
+    "name": "iFlight Fullsend 8S 10000mAh Li-Ion (EVE 50PL)",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "li-ion",
+    "cellsSeries": 8,
+    "capacityAh": 10.0,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend 8S 10000mAh: Battery type Lithium-ion, Capacity 10000mAh, Voltage 29.6V, Cell Type EVE INR21700-50PL, Cell combination 8S2P, Battery Capacity 296Wh",
+      "url": "https://shop.iflight.com/Fullsend-8S-10000mAh-Battery-Pro3822",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Per-cell voltage is the vendor's 29.6 V pack figure divided by 8. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  },
+  {
+    "id": "iflight-fullsend-x-6s-5600",
+    "name": "iFlight Fullsend X 6S 5600mAh 95C",
+    "vendor": "iFlight",
+    "version": 1,
+    "verified": false,
+    "chemistry": "lipo",
+    "cellsSeries": 6,
+    "capacityAh": 5.6,
+    "nominalCellVoltage": 3.7,
+    "usableFraction": 0.8,
+    "source": {
+      "kind": "datasheet",
+      "reference": "iFlight store, Fullsend X 6S 5600mAh 95C: Battery type LI-PO, Voltage 22.2V, Cell combination 6S1P, Battery Capacity 124.32Wh",
+      "url": "https://shop.iflight.com/Fullsend-X-6S-5600mAh-95C-Pro1994",
+      "retrieved": "2026-10-20"
+    },
+    "notes": "Capacity is from the product name and matches 124.32 Wh / 22.2 V = 5.6 Ah. usableFraction 0.8 is a planning default (20% reserve), not a vendor figure; set your own. Unverified until an admin checks the source."
+  }
+]
