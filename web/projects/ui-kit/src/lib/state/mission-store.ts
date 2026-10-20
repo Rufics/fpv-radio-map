@@ -360,8 +360,9 @@ export class MissionStore {
 
   /** Coverage is computed around the pilot, so it is dropped; the route result stays, marked stale. */
   private dropPilotResults(): void {
+    const hadCoverage = Object.keys(this.coverage()).length > 0;
     this.coverage.set({});
-    if (this.result()) this.pilotStale.set(true);
+    if (this.result() || hadCoverage) this.pilotStale.set(true);
   }
 
   private reset(): void {

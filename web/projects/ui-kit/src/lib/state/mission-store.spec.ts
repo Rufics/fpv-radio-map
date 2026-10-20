@@ -145,6 +145,14 @@ describe('MissionStore', () => {
       expect(store.resultStale()).toBe(true);
     });
 
+    it('marks the pilot stale when only coverage was there', () => {
+      store.newMission(mission());
+      store.coverage.set({ control: { link: 'control', cols: 2, rows: 2 } });
+      store.setPilot({ lat: 48.6, lon: 35.3 });
+      expect(store.coverage()).toEqual({});
+      expect(store.pilotStale()).toBe(true);
+    });
+
     it('undoes the last move with its result and coverage, without a recalculation', () => {
       const grid = { link: 'control' as const, cols: 2, rows: 2 };
       store.loadFromServer('m1', { mission: mission(), role: 'edit', revision: 2, lastResult: { legs: [] } });
