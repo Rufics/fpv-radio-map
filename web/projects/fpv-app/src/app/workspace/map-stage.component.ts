@@ -25,6 +25,7 @@ import {
   SlotHostComponent,
   WeatherLayer,
   HeatLegendComponent,
+  LatLon,
   createStandardLayers,
   destinationPoint,
   distanceM,
@@ -35,6 +36,7 @@ import { CompareService } from '../core/fpv-core';
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
   selector: 'fpv-map-stage',
+  host: { '(document:keydown.escape)': 'cancelPlacing()' },
   imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
@@ -82,10 +84,13 @@ import { CompareService } from '../core/fpv-core';
             {{ p === 'pilot' ? 'Click the map to place the pilot' : 'Click the map to add a point · the last point is the target' }}
             @if (p === 'waypoints') {
               <button type="button" class="rf-btn rf-btn--sm rf-btn--primary" (click)="ws.placing.set(null)" [disabled]="(ws.mission()?.waypoints?.length ?? 0) === 0">Done</button>
+            } @else if (ws.mission()) {
+              <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="ws.placing.set(null)">Cancel</button>
             }
           </div>
-        }
-        @if (ws.editingRoute() && !ws.placing()) {
+        } @else if (ws.store.pilotStale()) {
+          <div class="overlay hint" role="status">The pilot moved · recalculate to see coverage from the new position</div>
+        } @else if (ws.editingRoute()) {
           <div class="overlay hint" role="status">Drag a point to move it · coverage is from before the edit</div>
         }
         <rf-slot-host class="overlay slot" name="map.overlays" />
@@ -147,6 +152,10 @@ export class MapStageComponent {
   private readonly ready = signal(false);
   private fittedFor: string | null = null;
 
+  /** Desktop: points are dragged with the mouse whenever the mission can be edited. */
+  private readonly pointsDraggable = computed(
+    () => this.interactiveEdit() && this.ws.store.canEdit() && !this.ws.store.preview() && !this.ws.store.busy(),
+  );
   protected readonly dim = computed(() => !this.ws.mission() && !this.ws.placing());
   protected readonly routeDeltaShown = computed(() => !!this.cmp.result()?.links?.[this.cmp.link()]?.points?.length && !this.ws.store.preview());
   protected readonly droneAgl = computed(() => this.ws.mission()?.coverage?.droneAglM ?? 120);
@@ -165,7 +174,7 @@ export class MapStageComponent {
     });
     effect(() => {
       if (!this.ready()) return;
-      const editable = this.ws.editingRoute() && this.ws.store.canEdit() && !this.ws.store.preview();
+      const editable = this.pointsDraggable();
       untracked(() => this.tool?.setEditable(editable));
     });
     effect(() => {
@@ -203,22 +212,12 @@ export class MapStageComponent {
     });
     effect(() => {
       if (!this.ready()) return;
-      const placing = this.ws.placing();
+      // map clicks edit the mission only where editing on the map is on (desktop)
+      const placing = this.interactiveEdit() ? this.ws.placing() : null;
       untracked(() =>
         this.tool?.setAddPointHandler(
           placing
-            ? (p) => {
-                if (placing === 'pilot') {
-                  const pending = this.ws.pendingMission();
-                  if (!this.ws.mission() && pending) {
-                    this.ws.store.newMission({ ...pending, pilot: { ...pending.pilot, lat: p.lat, lon: p.lon } });
-                    this.ws.pendingMission.set(null);
-                  } else this.ws.store.setPilot(p);
-                  this.ws.placing.set('waypoints');
-                } else {
-                  this.ws.store.addWaypoint({ lat: p.lat, lon: p.lon, aglM: 120 });
-                }
-              }
+            ? (p) => (placing === 'pilot' ? this.placePilot(p) : this.ws.store.addWaypoint({ lat: p.lat, lon: p.lon, aglM: 120 }))
             : null,
         ),
       );
@@ -272,6 +271,24 @@ export class MapStageComponent {
     this.ready.set(true);
   }
 
+  /** A map click while placing the pilot: starts a new mission, or moves the pilot of the current one. */
+  private placePilot(p: LatLon): void {
+    const pending = this.ws.pendingMission();
+    if (this.ws.mission() || !pending) {
+      this.ws.store.setPilot(p);
+      this.ws.placing.set(null);
+      return;
+    }
+    this.ws.store.newMission({ ...pending, pilot: { ...pending.pilot, lat: p.lat, lon: p.lon } });
+    this.ws.pendingMission.set(null);
+    this.ws.placing.set('waypoints');
+  }
+
+  /** Escape stops moving the pilot of an existing mission. */
+  protected cancelPlacing(): void {
+    if (this.ws.placing() === 'pilot' && this.ws.mission()) this.ws.placing.set(null);
+  }
+
   /** Route drawing for the shown mission (the preview mission while previewing). */
   private readonly drawing = computed<RouteDrawing>(() => {
     const m = this.ws.shown();
@@ -322,7 +339,7 @@ export class MapStageComponent {
   private obstructionMarkers(preview: FixPreview | null): DrawMarker[] {
     const markers: DrawMarker[] = [];
     const v = this.ws.verdict();
-    if (!preview && v) {
+    if (!preview && v && !this.ws.store.pilotStale()) {
       const dom = this.ws.store.result()?.legs?.[v.legIndex - 1]?.worst?.[v.link]?.diffraction;
       const d = dom?.dominant;
       if (d?.lat !== undefined && d.lon !== undefined) {
@@ -368,7 +385,7 @@ export class MapStageComponent {
     const radio = (grid?.limitPolygon as Geometry | undefined) ?? null;
     const { radioKm, radioAnchor } = radio && m ? radioLimitExtent(radio, m.pilot) : { radioKm: null, radioAnchor: null };
     const b = r?.battery;
-    const battery = m && b?.rangeM && !turnPreview && !endsAtTurnBack(m) ? { lat: m.pilot.lat, lon: m.pilot.lon, radiusM: b.rangeM / 2 } : null;
+    const battery = m && b?.rangeM && !turnPreview && !endsAtTurnBack(m) && !this.ws.store.pilotStale() ? { lat: m.pilot.lat, lon: m.pilot.lon, radiusM: b.rangeM / 2 } : null;
     const linkName = this.ws.heatLink() === 'control' ? 'Control' : 'Video';
     return {
       radio,

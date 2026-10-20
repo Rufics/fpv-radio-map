@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { ApiError, CoverageDelta, Job, LinkKind, Mission, MissionStore, RfmapApiClient, RouteResult, applyMergePatch, subtractGrids } from '@rfmap/ui-kit';
 import { FpvDataService } from './fpv-data.service';
 
@@ -75,6 +75,13 @@ export class CompareService {
   readonly diffError = signal<string | null>(null);
   readonly delta = signal<CoverageDelta | null>(null);
   private run = 0;
+
+  constructor() {
+    // A difference map is drawn on grids around the pilot; once the pilot moves it no longer applies.
+    effect(() => {
+      if (this.store.pilotStale()) untracked(() => this.clearDiff());
+    });
+  }
 
   /** fpv.core is installed and active on this server */
   readonly available = computed(() => this.data.modules().some((m) => m.id === FPV_CORE && (m.state ?? 'active') === 'active'));

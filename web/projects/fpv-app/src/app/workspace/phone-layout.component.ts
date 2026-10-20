@@ -28,7 +28,7 @@ import { MapStageComponent } from './map-stage.component';
       </section>
     } @else {
       <div class="map">
-        <fpv-map-stage class="stage" [fitPadding]="padding" [compact]="true" />
+        <fpv-map-stage class="stage" [fitPadding]="padding" [compact]="true" [interactiveEdit]="false" />
         <div class="chips">
           <span class="chip name">{{ ws.mission()?.name ?? 'FPV Radio Map' }}</span>
           @if (ws.mission()) {

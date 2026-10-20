@@ -28,6 +28,7 @@ class FakeApi {
   jobs: Job[] = [];
   route = new Subject<RouteResult>();
   coverageFails = new Set<LinkKind>();
+  gridsReady: Promise<void> = Promise.resolve();
 
   createMission(m: Mission): Promise<CreateMissionResponse> {
     this.calls.push(`create ${m.name}`);
@@ -58,9 +59,11 @@ class FakeApi {
     this.calls.push(`cancel ${jobId}`);
     return Promise.reject(new ApiError(404, 'already finished'));
   }
-  getCoverage(_id: string | null, jobId: string, link: LinkKind): Promise<CoverageGrid> {
+  async getCoverage(_id: string | null, jobId: string, link: LinkKind): Promise<CoverageGrid> {
     this.calls.push(`grid ${jobId} ${link}`);
-    return this.coverageFails.has(link) ? Promise.reject(new ApiError(500, 'no grid')) : Promise.resolve({ link, cols: 2, rows: 2 });
+    await this.gridsReady;
+    if (this.coverageFails.has(link)) throw new ApiError(500, 'no grid');
+    return { link, cols: 2, rows: 2 };
   }
 }
 
@@ -130,6 +133,116 @@ describe('MissionStore', () => {
       store.setPilot({ lat: 1, lon: 1 });
       expect(store.mission()!.pilot.lat).toBe(48.5);
       expect(store.dirty()).toBe(false);
+    });
+
+    it('drops coverage when the pilot moves and keeps it when a waypoint moves', () => {
+      store.loadFromServer('m1', { mission: mission(), role: 'edit', revision: 2, lastResult: { legs: [] } });
+      store.coverage.set({ control: { link: 'control', cols: 2, rows: 2 } });
+      store.movePoint(0, { lat: 48.52, lon: 35.22 });
+      expect(store.coverage().control).toBeDefined();
+      expect(store.pilotStale()).toBe(false);
+      store.setPilotAgl(3);
+      expect(store.mission()!.pilot.aglM).toBe(3);
+      expect(store.coverage()).toEqual({});
+      expect(store.pilotStale()).toBe(true);
+      expect(store.resultStale()).toBe(true);
+    });
+
+    it('marks the pilot stale when only coverage was there', () => {
+      store.newMission(mission());
+      store.coverage.set({ control: { link: 'control', cols: 2, rows: 2 } });
+      store.setPilot({ lat: 48.6, lon: 35.3 });
+      expect(store.coverage()).toEqual({});
+      expect(store.pilotStale()).toBe(true);
+    });
+
+    it('undoes the last move with its result and coverage, without a recalculation', () => {
+      const grid = { link: 'control' as const, cols: 2, rows: 2 };
+      store.loadFromServer('m1', { mission: mission(), role: 'edit', revision: 2, lastResult: { legs: [] } });
+      store.coverage.set({ control: grid });
+      expect(store.canUndoMove()).toBe(false);
+      store.setPilot({ lat: 48.6, lon: 35.3 });
+      expect(store.canUndoMove()).toBe(true);
+      expect(store.dirty()).toBe(true);
+      store.undoMove();
+      expect(store.mission()!.pilot).toEqual({ lat: 48.5, lon: 35.2, aglM: 1.5 });
+      expect(store.coverage()).toEqual({ control: grid });
+      expect(store.result()).toEqual({ legs: [] });
+      expect([store.dirty(), store.resultStale(), store.pilotStale(), store.canUndoMove()]).toEqual([false, false, false, false]);
+      expect(api.calls).toEqual([]);
+    });
+
+    it('forgets the undo after any other edit', () => {
+      store.newMission(mission());
+      store.movePoint(0, { lat: 1, lon: 2 });
+      store.setEvaluate('video');
+      expect(store.canUndoMove()).toBe(false);
+      store.undoMove();
+      expect(store.mission()!.waypoints[0].lat).toBe(1);
+    });
+
+    it('does not move points while a calculation runs', async () => {
+      store.newMission(mission());
+      void store.calculate();
+      await settle();
+      expect(store.busy()).toBe(true);
+      store.movePoint(-1, { lat: 1, lon: 2 });
+      store.setPilotAgl(9);
+      expect(store.mission()!.pilot).toEqual({ lat: 48.5, lon: 35.2, aglM: 1.5 });
+      expect(store.canUndoMove()).toBe(false);
+    });
+
+    it('does not move the pilot while a fix is previewed', () => {
+      store.newMission(mission());
+      store.previewFix({ id: 'f', patch: { name: 'Fixed' } });
+      store.movePoint(-1, { lat: 1, lon: 2 });
+      store.setPilotAgl(9);
+      expect(store.mission()!.pilot).toEqual({ lat: 48.5, lon: 35.2, aglM: 1.5 });
+    });
+
+    it('undo drops a fix preview built on the moved mission', () => {
+      store.newMission(mission());
+      store.setPilot({ lat: 48.6, lon: 35.3 });
+      store.previewFix({ id: 'f', patch: { name: 'Fixed' } });
+      store.undoMove();
+      expect(store.preview()).toBeNull();
+      expect(store.mission()!.pilot.lat).toBe(48.5);
+    });
+
+    it('does not let a grid that arrives after a pilot move bring the old coverage back', async () => {
+      let release!: () => void;
+      api.gridsReady = new Promise((r) => (release = r));
+      api.coverageStart = () => Promise.resolve({ jobId: 'j1', state: 'done', parts: [{ link: 'control', state: 'done' }] });
+      store.newMission(mission());
+      await store.calculate();
+      api.route.next({ legs: [] });
+      await settle();
+      expect(store.busy()).toBe(false);
+      store.setPilot({ lat: 48.6, lon: 35.3 });
+      release();
+      await settle();
+      expect(store.coverage()).toEqual({});
+      expect(store.pilotStale()).toBe(true);
+      // the grid fits the position before the move, so undo brings it back
+      store.undoMove();
+      expect(Object.keys(store.coverage())).toEqual(['control']);
+      expect(store.pilotStale()).toBe(false);
+    });
+
+    it('keeps a grid that arrives after a waypoint move through an undo', async () => {
+      let release!: () => void;
+      api.gridsReady = new Promise((r) => (release = r));
+      api.coverageStart = () => Promise.resolve({ jobId: 'j1', state: 'done', parts: [{ link: 'control', state: 'done' }] });
+      store.newMission(mission());
+      await store.calculate();
+      api.route.next({ legs: [] });
+      await settle();
+      store.movePoint(0, { lat: 48.52, lon: 35.22 });
+      release();
+      await settle();
+      expect(Object.keys(store.coverage())).toEqual(['control']);
+      store.undoMove();
+      expect(Object.keys(store.coverage())).toEqual(['control']);
     });
 
     it('marks an existing result stale on the first edit', () => {

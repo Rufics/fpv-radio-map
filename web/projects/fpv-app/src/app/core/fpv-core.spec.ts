@@ -76,6 +76,12 @@ describe('CompareService', () => {
     expect(cmp.diffState()).toBe('done');
     expect(cmp.delta()?.alignment).not.toBe('none');
     expect(cmp.link()).toBe('video');
+
+    // the difference map was drawn around the old pilot position
+    store.setPilot({ lat: store.mission()!.pilot.lat + 0.01, lon: store.mission()!.pilot.lon });
+    TestBed.tick();
+    expect(cmp.delta()).toBeNull();
+    expect(cmp.diffState()).toBe('idle');
   });
 
   it('stops a difference run that was cleared meanwhile', async () => {

@@ -70,6 +70,18 @@ import { CompareService } from '../core/fpv-core';
         }
       </div>
       <div class="list">
+        <div class="row pilot">
+          <span>A · Pilot</span>
+          <span class="info rf-mono" [title]="fmt.full(m.pilot.aglM, 'm') + ' above ground'">{{ fmt.format(m.pilot.aglM, 'm') }} AGL</span>
+          @if (canEdit) {
+            <button type="button" class="rf-btn rf-btn--dense rf-btn--text" (click)="movePilot()" [disabled]="busy() || ws.placing() === 'pilot'" title="Click the map at the new pilot position">Move on map</button>
+          }
+        </div>
+        @if (ws.editingRoute()) {
+          <div class="edit">
+            <rf-stepper label="Height above ground, pilot" [value]="m.pilot.aglM" unit="m AGL" [step]="1" [max]="1500" [dense]="true" (valueChange)="ws.store.setPilotAgl($event)" />
+          </div>
+        }
         @for (r of ws.legRows(); track r.index) {
           @if (ws.store.result() && r.mark && !ws.editingRoute()) {
             <button type="button" class="row leg" [class]="'row leg tone-' + r.tone" (click)="ws.openWhy(r.index)" [attr.aria-label]="r.name + ', ' + r.info + (r.markLabel ? ', ' + r.markLabel : '') + '. Show details'">
@@ -107,6 +119,9 @@ import { CompareService } from '../core/fpv-core';
         @if (ws.store.resultStale()) {
           <div class="rf-caption">The mission changed since the last calculation; results below are from before.</div>
         }
+      }
+      @if (canEdit && ws.store.canUndoMove()) {
+        <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="ws.store.undoMove()">Undo move</button>
       }
       @if (busy()) {
         <rf-job-progress [job]="ws.store.job()" [extraParts]="routePart()" (cancelRequested)="ws.store.cancel()" />
@@ -184,6 +199,7 @@ import { CompareService } from '../core/fpv-core';
     .leg.tone-warn .mark { color: var(--rf-warn-text); }
     .edit { display: flex; gap: 8px; align-items: flex-end; padding: 0 0 6px 10px; }
     .edit rf-stepper { flex: 1; }
+    .pilot .info { margin-left: auto; }
     .add { border: 1px dashed var(--rf-border-strong); color: var(--rf-text-2); }
     .section-head { display: flex; justify-content: space-between; align-items: center; min-height: 32px; }
     .battery-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -209,7 +225,7 @@ export class PlanPanelComponent {
     { value: 'video', label: 'Video' },
   ];
 
-  protected readonly busy = computed(() => ['saving', 'running'].includes(this.ws.store.calcState()));
+  protected readonly busy = this.ws.store.busy;
   protected readonly showCalculate = computed(() => this.ws.store.canEdit() && !this.busy() && (!this.ws.store.result() || this.ws.store.resultStale()));
 
   protected readonly routePart = computed<JobPart[]>(() => {
@@ -239,6 +255,11 @@ export class PlanPanelComponent {
   protected toggleEdit(): void {
     this.ws.editingRoute.update((v) => !v);
     if (!this.ws.editingRoute()) this.ws.placing.set(null);
+  }
+
+  protected movePilot(): void {
+    this.ws.why.set(null);
+    this.ws.placing.set('pilot');
   }
 
   protected useExample(): void {

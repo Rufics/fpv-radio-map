@@ -87,6 +87,13 @@ describe('side panels', () => {
     ]);
   });
 
+  it('plan panel: "Move on map" puts the map into pilot placing mode', () => {
+    const plan = vmOf<{ movePilot: () => void; ws: { placing: () => string | null; why: () => unknown } }>(PlanPanelComponent);
+    plan.movePilot();
+    expect(plan.ws.placing()).toBe('pilot');
+    expect(plan.ws.why()).toBeNull();
+  });
+
   describe('state cards', () => {
     let written: string[];
 

@@ -14,6 +14,20 @@ export interface FixPreview {
   after: Mission;
 }
 
+/** State before the last point move, so the move can be undone without a recalculation. */
+interface MoveSnapshot {
+  mission: Mission;
+  dirty: boolean;
+  result: RouteResult | null;
+  resultStale: boolean;
+  coverage: Partial<Record<LinkKind, CoverageGrid>>;
+  pilotStale: boolean;
+}
+
+function samePilot(a: MissionPoint, b: MissionPoint): boolean {
+  return a.lat === b.lat && a.lon === b.lon && a.aglM === b.aglM;
+}
+
 /** Fallback only: the link named in a part's display name ("Coverage grid, control link"). */
 export function coverageLinkOfPart(name: string | undefined): LinkKind | null {
   const n = (name ?? '').toLowerCase();
@@ -47,6 +61,11 @@ export class MissionStore {
   readonly result = signal<RouteResult | null>(null);
   /** The result belongs to an older version of the mission. */
   readonly resultStale = signal(false);
+  /**
+   * The pilot moved since the last calculation: everything drawn from the pilot's position
+   * (coverage, radio and battery limits, paths without terrain data) belongs to the old position.
+   */
+  readonly pilotStale = signal(false);
   readonly job = signal<Job | null>(null);
   readonly coverage = signal<Partial<Record<LinkKind, CoverageGrid>>>({});
   readonly calcState = signal<CalcState>('idle');
@@ -54,10 +73,15 @@ export class MissionStore {
   readonly preview = signal<FixPreview | null>(null);
 
   readonly canEdit = computed(() => this.role() === 'edit');
+  /** A calculation is being saved or running. */
+  readonly busy = computed(() => this.calcState() === 'saving' || this.calcState() === 'running');
+  /** The last point move can be undone. */
+  readonly canUndoMove = computed(() => this.lastMove() !== null);
   readonly evaluated = computed(() => linksEvaluated(this.mission()?.evaluate ?? 'both'));
   /** What the map and lists show: the preview mission while previewing. */
   readonly shownMission = computed(() => this.preview()?.after ?? this.mission());
 
+  private readonly lastMove = signal<MoveSnapshot | null>(null);
   private routeSub?: Subscription;
   private pollTimer?: ReturnType<typeof setTimeout>;
   private runId = 0;
@@ -102,9 +126,12 @@ export class MissionStore {
   update(mutator: (m: Mission) => Mission): void {
     const m = this.mission();
     if (!m || !this.canEdit()) return;
-    this.mission.set(mutator(structuredClone(m)));
+    const next = mutator(structuredClone(m));
+    this.lastMove.set(null);
+    this.mission.set(next);
     this.dirty.set(true);
     if (this.result()) this.resultStale.set(true);
+    if (!samePilot(m.pilot, next.pilot)) this.dropPilotResults();
   }
 
   setEvaluate(mode: EvaluateMode): void {
@@ -112,12 +139,37 @@ export class MissionStore {
   }
 
   setPilot(p: Pick<MissionPoint, 'lat' | 'lon'>): void {
-    this.update((m) => ({ ...m, pilot: { ...m.pilot, lat: p.lat, lon: p.lon } }));
+    this.movePoint(-1, p);
   }
 
+  setPilotAgl(aglM: number): void {
+    if (this.busy() || this.preview()) return;
+    this.update((m) => ({ ...m, pilot: { ...m.pilot, aglM } }));
+  }
+
+  /** Moves the pilot (index -1) or a waypoint; the move can be undone with `undoMove()`. */
   movePoint(index: number, p: Pick<MissionPoint, 'lat' | 'lon'>): void {
-    if (index < 0) return this.setPilot(p);
-    this.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? { ...w, lat: p.lat, lon: p.lon } : w)) }));
+    const before = this.snapshot();
+    if (!before || !this.canEdit() || this.busy() || this.preview()) return;
+    const move = <T extends MissionPoint>(point: T): T => ({ ...point, lat: p.lat, lon: p.lon });
+    if (index < 0) this.update((m) => ({ ...m, pilot: move(m.pilot) }));
+    else this.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? move(w) : w)) }));
+    this.lastMove.set(before);
+  }
+
+  /** Puts the mission, its results and coverage back as they were before the last move. */
+  undoMove(): void {
+    const s = this.lastMove();
+    if (!s || !this.canEdit()) return;
+    // A previewed fix was built on the moved mission; applying it would bring the move back.
+    this.preview.set(null);
+    this.lastMove.set(null);
+    this.mission.set(s.mission);
+    this.dirty.set(s.dirty);
+    this.result.set(s.result);
+    this.resultStale.set(s.resultStale);
+    this.coverage.set(s.coverage);
+    this.pilotStale.set(s.pilotStale);
   }
 
   addWaypoint(p: MissionPoint): void {
@@ -143,6 +195,7 @@ export class MissionStore {
   async applyPreview(): Promise<void> {
     const p = this.preview();
     if (!p || !this.canEdit()) return;
+    this.lastMove.set(null);
     this.mission.set(p.after);
     this.preview.set(null);
     this.dirty.set(true);
@@ -155,9 +208,11 @@ export class MissionStore {
     if (!mission) return;
     this.cancelRunning(false);
     const run = ++this.runId;
+    this.lastMove.set(null);
     this.error.set(null);
     this.result.set(null);
     this.resultStale.set(false);
+    this.pilotStale.set(false);
     this.coverage.set({});
     this.job.set(null);
     this.calcState.set('saving');
@@ -195,7 +250,7 @@ export class MissionStore {
       const job = await this.api.startCoverage(id, mission);
       if (run !== this.runId) return;
       this.job.set(job);
-      this.poll(run, job, () => {
+      this.poll(run, job, mission.pilot, () => {
         jobDone = true;
         finish();
       });
@@ -208,7 +263,7 @@ export class MissionStore {
     }
   }
 
-  private poll(run: number, job: Job, onDone: () => void): void {
+  private poll(run: number, job: Job, pilot: MissionPoint, onDone: () => void): void {
     const fetched = new Set<LinkKind>();
     const step = (j: Job): void => {
       if (run !== this.runId) return;
@@ -219,9 +274,7 @@ export class MissionStore {
           fetched.add(link);
           this.api
             .getCoverage(this.missionId(), j.jobId, link)
-            .then((grid) => {
-              if (run === this.runId) this.coverage.update((c) => ({ ...c, [link]: grid }));
-            })
+            .then((grid) => this.keepGrid(run, pilot, link, grid))
             .catch(() => fetched.delete(link));
         }
       }
@@ -243,6 +296,18 @@ export class MissionStore {
       }, this.pollIntervalMs);
     };
     step(job);
+  }
+
+  /**
+   * A grid fetched late belongs to this run and to the pilot position it was computed around.
+   * It goes into the live coverage and into the undo snapshot, each only while its pilot matches.
+   */
+  private keepGrid(run: number, pilot: MissionPoint, link: LinkKind, grid: CoverageGrid): void {
+    if (run !== this.runId) return;
+    const now = this.mission()?.pilot;
+    if (now && samePilot(now, pilot)) this.coverage.update((c) => ({ ...c, [link]: grid }));
+    const s = this.lastMove();
+    if (s && samePilot(s.mission.pilot, pilot)) this.lastMove.set({ ...s, coverage: { ...s.coverage, [link]: grid } });
   }
 
   /** Cancel the running calculation (route request and coverage job). */
@@ -292,10 +357,32 @@ export class MissionStore {
     this.cancelRunning(true);
   }
 
+  private snapshot(): MoveSnapshot | null {
+    const mission = this.mission();
+    if (!mission) return null;
+    return {
+      mission,
+      dirty: this.dirty(),
+      result: this.result(),
+      resultStale: this.resultStale(),
+      coverage: this.coverage(),
+      pilotStale: this.pilotStale(),
+    };
+  }
+
+  /** Coverage is computed around the pilot, so it is dropped; the route result stays, marked stale. */
+  private dropPilotResults(): void {
+    const hadCoverage = Object.keys(this.coverage()).length > 0;
+    this.coverage.set({});
+    if (this.result() || hadCoverage) this.pilotStale.set(true);
+  }
+
   private reset(): void {
     this.cancelRunning(true);
+    this.lastMove.set(null);
     this.result.set(null);
     this.resultStale.set(false);
+    this.pilotStale.set(false);
     this.job.set(null);
     this.coverage.set({});
     this.preview.set(null);

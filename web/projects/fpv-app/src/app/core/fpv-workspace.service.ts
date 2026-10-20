@@ -291,8 +291,9 @@ export class FpvWorkspace {
   });
 
   /** Missing-data areas and drone positions of every leg, for the map outline. */
+  /** Paths without terrain data run from the pilot, so they are hidden once the pilot has moved. */
   readonly missingAreas = computed(() =>
-    (this.store.result()?.legs ?? []).filter((l) => l.missingData || l.missing?.length).map((l) => ({ area: l.missingData ?? null, positions: l.missing ?? [] })),
+    (this.store.pilotStale() ? [] : (this.store.result()?.legs ?? [])).filter((l) => l.missingData || l.missing?.length).map((l) => ({ area: l.missingData ?? null, positions: l.missing ?? [] })),
   );
 
   readonly allClearText = computed(() => {
@@ -393,6 +394,7 @@ export class FpvWorkspace {
     const legs = r?.legs ?? [];
     const out: { pilot?: number; target?: number } = {};
     const m = this.mission();
+    if (this.store.pilotStale()) return out;
     const targetLeg = m ? legs[m.waypoints.length - 1] : undefined;
     for (const leg of legs) {
       const lr = leg.worst?.video ?? leg.worst?.control;
