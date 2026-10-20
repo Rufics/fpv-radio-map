@@ -4,7 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <fstream>
+#include <set>
 
 using namespace rfmap;
 
@@ -88,6 +90,22 @@ TEST_F(ValidationTest, SeedRadioProfilesValidateWithCrossFileRefs) {
     const auto p = pointers("radio-profiles", bad);
     EXPECT_NE(std::find(p.begin(), p.end(), "/id"), p.end());
     EXPECT_NE(std::find(p.begin(), p.end(), "/sensitivity"), p.end());
+}
+
+TEST_F(ValidationTest, EverySeedFileValidatesWithUniqueIds) {
+    for (const std::string& kind : SchemaRegistry::libraryKinds()) {
+        const std::filesystem::path file = std::filesystem::path(RFMAP_SEED_DIR) / kind / "seed.json";
+        if (!std::filesystem::exists(file)) continue;
+        std::ifstream in(file);
+        const json seed = json::parse(in);
+        ASSERT_TRUE(seed.is_array()) << file;
+        std::set<std::string> ids;
+        for (const json& item : seed) {
+            EXPECT_TRUE(schemas.check(kind, item).empty()) << kind << "/" << item.value("id", "?");
+            EXPECT_TRUE(ids.insert(item.at("id").get<std::string>()).second) << kind << " repeats " << item.at("id");
+            EXPECT_FALSE(item.at("verified").get<bool>()) << kind << "/" << item.at("id");
+        }
+    }
 }
 
 TEST_F(ValidationTest, AntennaSchema) {
