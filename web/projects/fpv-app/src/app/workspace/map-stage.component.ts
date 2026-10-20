@@ -38,7 +38,7 @@ import { CompareService } from '../core/fpv-core';
   imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
-      <rf-map-view class="map" [config]="cfg" label="Mission map" (mapReady)="onReady($event)">
+      <rf-map-view class="map" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
         <div class="overlay top-right">
           <div class="map-actions">
             <rf-base-switcher />
@@ -109,7 +109,7 @@ import { CompareService } from '../core/fpv-core';
     .legend rf-segmented { width: 84px; }
     .legend ::ng-deep .rf-segmented > button { height: 26px; font-size: 12px; }
     .banner { top: 16px; left: 50%; transform: translateX(-50%); padding: 6px 14px; border-radius: 999px; background: var(--rf-video-bg); color: var(--rf-video-text); font-weight: 600; font-size: 13px; white-space: nowrap; }
-    .hint { bottom: 44px; left: 14px; padding: 8px 12px; border-radius: 8px; background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); font-size: 13px; color: var(--rf-text-2); display: flex; gap: 10px; align-items: center; }
+    .hint { bottom: 52px; left: 14px; max-width: calc(100% - 14px - var(--rf-map-controls-reserve, 14px)); padding: 8px 12px; border-radius: 8px; background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); font-size: 13px; color: var(--rf-text-2); display: flex; gap: 10px; align-items: center; }
     .slot { left: 14px; top: 16px; }
     .dim { position: absolute; inset: 0; background: rgba(11, 15, 20, 0.72); z-index: 4; pointer-events: none; }
     :host-context(.phone) .top-right { top: 64px; right: 12px; }

@@ -11,8 +11,3 @@ app-root {
   display: block;
   height: 100%;
 }
-
-/* Phones zoom with two fingers; the zoom buttons would sit under the bottom sheet. */
-@media (max-width: 767px) {
-  .maplibregl-ctrl-bottom-right { display: none; }
-}
