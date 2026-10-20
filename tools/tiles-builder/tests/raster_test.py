@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover - depends on the environment
     gdal = None
 
 from rfmap_tiles import raster  # noqa: E402
-from rfmap_tiles.common import BBox, BuildError, run  # noqa: E402
+from rfmap_tiles.common import BBox, run  # noqa: E402
 
 ROWS = 3600  # one degree of Copernicus GLO-30 rows; smaller tiles hide the window-dependent VRT reads
 
@@ -66,16 +66,22 @@ class FinestGridAlignerTest(unittest.TestCase):
         self.assertIn(self.tiles[(49, 14)], files)
         self.assertNotIn(self.tiles[(50, 14)], files)
 
-    def test_inputs_without_a_finest_grid_are_refused(self) -> None:
-        """Inputs where one file is finer in longitude and another in latitude are refused."""
+    def test_inputs_finest_on_different_axes_share_the_finest_grid(self) -> None:
+        """One input finer in longitude and another finer in latitude both land on the combined grid."""
         wide = self.dir / "wide.tif"
         tall = self.dir / "tall.tif"
-        for path, (cols, rows) in ((wide, (4, 2)), (tall, (2, 4))):
+        for path, (cols, rows, lon) in ((wide, (4, 2, 14)), (tall, (2, 4, 15))):
             ds = gdal.GetDriverByName("GTiff").Create(str(path), cols, rows, 1, gdal.GDT_Float32)
-            ds.SetGeoTransform((14, 1 / cols, 0, 50, 0, -1 / rows))
+            ds.SetGeoTransform((lon, 1 / cols, 0, 50, 0, -1 / rows))
+            ds.GetRasterBand(1).WriteArray(np.arange(cols * rows, dtype=np.float32).reshape(rows, cols))
             ds = None
-        with self.assertRaises(BuildError):
-            raster.FinestGridAligner([wide, tall], self.dir)
+        aligned = raster.FinestGridAligner([wide, tall], self.dir).align()
+        for path, source in zip(aligned, (wide, tall), strict=True):
+            ds = gdal.Open(str(path))
+            self.assertEqual((ds.RasterXSize, ds.RasterYSize), (4, 4))
+            original = gdal.Open(str(source)).ReadAsArray()
+            reps = (4 // original.shape[0], 4 // original.shape[1])
+            np.testing.assert_array_equal(ds.ReadAsArray(), np.kron(original, np.ones(reps, dtype=np.float32)))
 
     def test_mosaic_keeps_fine_pixels_and_duplicates_coarse_ones(self) -> None:
         """Fine pixels are copied as they are; coarse pixels are duplicated nearest-neighbour."""

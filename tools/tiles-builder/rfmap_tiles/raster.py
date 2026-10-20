@@ -75,14 +75,16 @@ class FinestGridAligner:
         self._ref = self._finest_grid()
 
     def _finest_grid(self) -> tuple[float, float, float, float, float, float]:
-        """The grid that is finest on both axes; warping onto any other would drop detail."""
-        dx = min(abs(g[1]) for g in self._grids.values())
-        dy = min(abs(g[4]) for g in self._grids.values())
-        for grid in self._grids.values():
-            if math.isclose(abs(grid[1]), dx, rel_tol=1e-9) and math.isclose(abs(grid[4]), dy, rel_tol=1e-9):
-                return grid
-        raise BuildError("the DEM inputs have no single finest grid (one is finer in longitude, another in "
-                         "latitude); resample them to one grid first")
+        """The finest spacing on each axis, anchored on a tile that has it.
+
+        Usually one tile is finest on both axes and this is its grid. When one input is
+        finer in longitude and another in latitude, the two axes come from different
+        tiles, so every input is duplicated onto the combined grid and none loses detail.
+        """
+        grids = list(self._grids.values())
+        x_ref = min(grids, key=lambda g: abs(g[1]))
+        y_ref = min(grids, key=lambda g: abs(g[4]))
+        return x_ref[0], x_ref[1], x_ref[2], y_ref[3], y_ref[4], y_ref[5]
 
     @staticmethod
     def _grid(path: Path) -> tuple[float, float, float, float, float, float]:
