@@ -1,10 +1,11 @@
 import { Routes } from '@angular/router';
 import { WorkspacePage } from './workspace/workspace.page';
 
+/** Route titles name the page only; AppTitleStrategy appends the app name. */
 export const routes: Routes = [
-  { path: '', component: WorkspacePage, title: 'FPV Radio Map' },
-  { path: 'mission/:id', component: WorkspacePage, title: 'Mission · FPV Radio Map' },
-  { path: 'm/:role/:token', loadComponent: () => import('./shared/pin-entry.page').then((m) => m.PinEntryPage), title: 'Shared mission · FPV Radio Map' },
+  { path: '', component: WorkspacePage },
+  { path: 'mission/:id', component: WorkspacePage, title: 'Mission' },
+  { path: 'm/:role/:token', loadComponent: () => import('./shared/pin-entry.page').then((m) => m.PinEntryPage), title: 'Shared mission' },
   {
     path: 'admin',
     loadComponent: () => import('./admin/admin-shell.component').then((m) => m.AdminShellComponent),

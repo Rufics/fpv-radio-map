@@ -48,7 +48,7 @@ jobs:
           for f in $(git diff --name-only "$BASE...$HEAD"); do
             case "$f" in
               docs/*|*.md|LICENSE|.github/ISSUE_TEMPLATE/*|.github/DISCUSSION_TEMPLATE/*|.github/dependabot.yml) ;;
-              .github/workflows/pr-title.yml|.github/workflows/wiki.yml|tools/wiki/*|.githooks/*) ;;
+              .github/workflows/pr-title.yml|.github/workflows/wiki.yml|tools/wiki/*|tools/app-icons/*|.githooks/*) ;;
               .github/workflows/ci-report.yml|.github/CODEOWNERS|.github/pull_request_template.md) ;;
               tools/ci/clang_tidy.py|.clang-tidy) cpp=true ;;
               .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*) ;;

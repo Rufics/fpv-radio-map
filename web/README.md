@@ -116,3 +116,11 @@ export function register(api) {
 | `/mission/:id` | Workspace for a saved mission |
 | `/m/:role/:token` | PIN entry (`e` = edit, `v` = view) |
 | `/admin/modules`, `/admin/library`, `/admin/sources` | Admin pages |
+
+Route `title`s name the page only (`Mission`, `Modules · Admin`); `AppTitleStrategy` appends ` · FPV Radio Map`, and a route without a title shows the app name alone.
+
+## Browser profile
+
+`src/index.html` sets the language (`en`), the description, the dark `theme-color` and `color-scheme`, `noindex` (missions and share links are private), and the icons. `public/manifest.webmanifest` makes the app installable as a standalone app with the same name, colours and icons.
+
+The icons in `public/` (`favicon.svg`, `favicon.ico`, `icons/*.png`) are drawn by `tools/app-icons/build_icons.py` from one description of the mark: a pilot on a ridge under three signal arcs in the signal scale colours. They are committed; after changing the drawing, run `python3 tools/app-icons/build_icons.py` (needs Pillow) from the repository root.
