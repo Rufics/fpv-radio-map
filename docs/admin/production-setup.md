@@ -24,7 +24,7 @@ in your home: `~/fpv-radio-map` (the code), `~/rfmap-data` (map data), `~/rfmap-
 |---|---|
 | Machine | Linux (x86-64 or arm64) with Docker Engine and the Compose plugin. 4 cores and 8 GB RAM are enough for a district. A country basemap needs 8–16 GB RAM **(estimate)**. |
 | Disk | About 5 GB for the images, plus the map data: a few hundred MB for a district, tens of GB for a country with satellite imagery **(estimate)**. See [disk, RAM and time](tiles-builder.md#7-disk-ram-and-time--all-estimate). |
-| Network | Outbound HTTPS while you build: Docker Hub, GitHub and its container registry, Ubuntu and npm mirrors, and the map data sources (Geofabrik, AWS Open Data, osmdata.openstreetmap.de, naciscdn.org). At run time only the Open-Meteo sync service goes out. |
+| Network | Outbound HTTPS while you build: Docker Hub, GitHub and its container registry, Ubuntu and npm mirrors, and the map data sources (Geofabrik, AWS Open Data, osmdata.openstreetmap.de, naciscdn.org). At run time only the Open-Meteo sync services go out: `open-meteo-init` during start-up and `open-meteo-sync` afterwards, both to `openmeteo.s3.amazonaws.com`. |
 | Public server | A domain name pointing at the machine, and ports 80 and 443 open. |
 
 Install Docker from <https://docs.docker.com/engine/install/>, then let your user run it and log
@@ -38,7 +38,7 @@ Check both parts:
 
 ```sh
 docker info --format '{{.ServerVersion}}'   # prints a version, not an error
-docker compose version                      # Docker Compose version v2.x or later
+docker compose version                      # Docker Compose version v2.17.0 or later
 ```
 
 Docker Desktop on Windows or macOS is fine for trying it out (Settings → Resources: 8 GB RAM or
@@ -165,6 +165,10 @@ shred -u ~/rfmap-keys/owner.secret
 
 ## 5. Start the stack
 
+Run the first start inside `tmux` or `screen`: `docker compose up -d` does not return until
+`open-meteo-init` has downloaded the first copy of the forecast model (about 6 GB, see
+[Weather](#9-weather)), and a dropped SSH session would cut that short.
+
 ```sh
 cd ~/fpv-radio-map/deploy
 docker compose up -d --build
@@ -172,8 +176,9 @@ docker compose ps
 ```
 
 The first build takes a few minutes **(estimate)**. `postgis`, `rfmap-server` and `web` should be
-`healthy` or `running` after about a minute; `open-meteo` and `open-meteo-sync` run without a
-health check.
+`healthy` or `running` after about a minute, while `up` is still waiting for `open-meteo-init`;
+check them from a second shell. `open-meteo` and `open-meteo-sync` start once `open-meteo-init`
+has completed successfully, and run without a health check.
 
 ```sh
 curl -s http://127.0.0.1:8088/api/v1/health
@@ -182,7 +187,9 @@ docker compose logs rfmap-server | head -20
 ```
 
 `dem` and `landcover` must be `true`. In the log you should see `applied migration 001_init.sql`,
-`seeded 14 radio-profiles`, `terrain: DEM /data/dem.cog.tif` and `listening on 0.0.0.0:8080`. If
+`seeded 14 radio-profiles`, `seeded 38 antennas`, `seeded 21 batteries`, `seeded 3 drones`,
+`terrain: DEM /data/dem.cog.tif` and `listening on 0.0.0.0:8080`. No `seeded` line may end in
+`skipped`: a `seed ... rejected` line before it names the entry and the reason. If
 the log says `built with the PUBLIC development owner key`, the key from step 4 did not reach the
 build: check `.env` and run `docker compose up -d --build` again.
 
@@ -242,16 +249,22 @@ the six `fpv.*` ones. Now delete `owner.secret` from the server, as described in
 ## 7. Fill the equipment library
 
 Pilots pick radios, antennas, batteries and drones from the library, and only the admin edits
-it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), all
-`verified: false`, and nothing else. Before the first flight plan:
+it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), 38 antennas,
+21 batteries and 3 DJI drone profiles, all `verified: false`. The README next to each seed file
+says where each figure comes from:
+[radio profiles](../../data/library/radio-profiles/README.md),
+[antennas](../../data/library/antennas/README.md),
+[batteries](../../data/library/batteries/README.md) and
+[drones](../../data/library/drones/README.md). Before the first flight plan:
 
 1. Open **Admin** in the web app, enter the admin token at the top right and choose **Use token**.
    The token stays in that browser tab only.
-2. Under **Library**, review the seeded radio profiles against their sources and mark the ones
-   you checked as verified.
-3. Add at least one ground antenna and one air antenna. Every link needs both.
-4. Add your video system as a radio profile if you plan video links, and the batteries and
-   drones you fly.
+2. Under **Library**, review the seeded entries against their sources and mark the ones you
+   checked as verified. The drone profiles are derived from DJI's flight-time figures, not
+   measured; replace them with your own flight logs when you have them.
+3. Add the antennas, batteries and drones you fly that are not seeded. Every link needs a
+   ground antenna and an air antenna.
+4. Add your video system as a radio profile if you plan video links.
 
 Entries are edited as JSON and checked against the library schema as you type. A plain
 half-wave dipole, for example:
@@ -265,7 +278,7 @@ half-wave dipole, for example:
 }
 ```
 
-Every entry needs a source (datasheet, standard or measurement). Edits are versioned, and
+Every entry needs a source (datasheet, standard, measurement or derived). Edits are versioned, and
 results name the versions they used. Scripted imports use `POST /api/v1/library/<kind>` with
 the admin token; see the [API reference](../api/openapi.yaml).
 
@@ -327,13 +340,15 @@ address range to use when the gateway is not in `172.16.0.0/12`, are covered und
 
 ## 9. Weather
 
-`open-meteo-sync` downloads the forecast model in the background, and the first run takes a
-while. Until then, results say that no forecast covers the time and use k = 4/3. Check the
-instance once the first run is in:
+`open-meteo-init` downloads the forecast model once (about 6 GB; follow it with
+`docker compose logs -f open-meteo-init`), then the `open-meteo` API and `open-meteo-sync`, which
+keeps the data fresh, start. Until then, results note that the forecast is unavailable and use
+k = 4/3. If the server reboots before that first download has finished, run
+`docker compose up -d` again. Check the instance once the API is up:
 
 ```sh
 docker run --rm --network rfmap_backend curlimages/curl -s \
-  "http://open-meteo:8080/v1/forecast?latitude=48.5&longitude=35.2&hourly=temperature_850hPa,geopotential_height_850hPa,surface_pressure&models=dwd_icon"
+  "http://open-meteo:8080/v1/forecast?latitude=48.5&longitude=35.2&hourly=temperature_850hPa,geopotential_height_850hPa,surface_pressure,wind_speed_10m&models=dwd_icon"
 ```
 
 Every variable should come back with numbers, not `null`. Use your area's coordinates. See

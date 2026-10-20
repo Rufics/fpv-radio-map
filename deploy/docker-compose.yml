@@ -24,31 +24,56 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # Open-Meteo API, answering from the data the sync service keeps fresh.
+  # Open-Meteo API, answering from the data the sync service keeps fresh. It starts only after
+  # open-meteo-init has downloaded a first copy: the API keeps a model grid it failed to open
+  # (because the files were not there yet) failed until it restarts.
   open-meteo:
     image: ghcr.io/open-meteo/open-meteo:1.7.0@sha256:64039ca2e6a18e6917cdc0cb1bf8cff5f2fbd8d67b7ca29b5364fab486e1f154
     command: ["serve", "--env", "production", "--hostname", "0.0.0.0", "--port", "8080"]
+    depends_on:
+      open-meteo-init:
+        condition: service_completed_successfully
+        # Restart the API whenever open-meteo-init runs again, e.g. after OPEN_METEO_SYNC_MODELS changes.
+        restart: true
     volumes:
       - open-meteo-data:/app/data
     networks: [backend]
     restart: unless-stopped
 
-  # Downloads model runs. The variables are the ones Open-Meteo stores; the API derives
+  # One sync pass before the API starts; it exits when done. With data already in the volume
+  # it only fetches what changed. The variables are the ones Open-Meteo stores; the API derives
   # surface_pressure (from pressure_msl, temperature_2m and the model elevation) and the 10 m
   # wind speed and direction (from the u/v components) when rfmap-server asks for them.
   # dwd_icon_global_eps_native is synced for its static grid only: the API opens that grid for
   # every dwd_icon request and answers "Something went wrong." while it is missing.
   # See docs/admin/deploy.md, section 4.
+  open-meteo-init:
+    image: ghcr.io/open-meteo/open-meteo:1.7.0@sha256:64039ca2e6a18e6917cdc0cb1bf8cff5f2fbd8d67b7ca29b5364fab486e1f154
+    command:
+      - sync
+      - &sync-models ${OPEN_METEO_SYNC_MODELS:-dwd_icon,dwd_icon_global_eps_native}
+      - &sync-variables ${OPEN_METEO_VARIABLES:-temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_u_component_10m,wind_v_component_10m,temperature_1000hPa,relative_humidity_1000hPa,geopotential_height_1000hPa,temperature_950hPa,relative_humidity_950hPa,geopotential_height_950hPa,temperature_925hPa,relative_humidity_925hPa,geopotential_height_925hPa,temperature_900hPa,relative_humidity_900hPa,geopotential_height_900hPa,temperature_850hPa,relative_humidity_850hPa,geopotential_height_850hPa}
+      - --past-days
+      - "1"
+    volumes:
+      - open-meteo-data:/app/data
+    networks: [backend, egress]
+    restart: on-failure:3
+
+  # Keeps the data fresh after the first pass: checks for new model runs every 5 minutes.
   open-meteo-sync:
     image: ghcr.io/open-meteo/open-meteo:1.7.0@sha256:64039ca2e6a18e6917cdc0cb1bf8cff5f2fbd8d67b7ca29b5364fab486e1f154
     command:
       - sync
-      - ${OPEN_METEO_SYNC_MODELS:-dwd_icon,dwd_icon_global_eps_native}
-      - ${OPEN_METEO_VARIABLES:-temperature_2m,relative_humidity_2m,pressure_msl,precipitation,wind_u_component_10m,wind_v_component_10m,temperature_1000hPa,relative_humidity_1000hPa,geopotential_height_1000hPa,temperature_950hPa,relative_humidity_950hPa,geopotential_height_950hPa,temperature_925hPa,relative_humidity_925hPa,geopotential_height_925hPa,temperature_900hPa,relative_humidity_900hPa,geopotential_height_900hPa,temperature_850hPa,relative_humidity_850hPa,geopotential_height_850hPa}
+      - *sync-models
+      - *sync-variables
       - --past-days
       - "1"
       - --repeat-interval
       - "5"
+    depends_on:
+      open-meteo-init:
+        condition: service_completed_successfully
     volumes:
       - open-meteo-data:/app/data
     networks: [backend, egress]
@@ -65,8 +90,6 @@ services:
     depends_on:
       postgis:
         condition: service_healthy
-      open-meteo:
-        condition: service_started
     environment:
       RFMAP_DATABASE_URL: postgresql://rfmap:${POSTGRES_PASSWORD}@postgis:5432/rfmap
       RFMAP_ADMIN_TOKEN: ${RFMAP_ADMIN_TOKEN:?set RFMAP_ADMIN_TOKEN in .env}
