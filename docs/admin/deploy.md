@@ -44,7 +44,8 @@ Only `open-meteo-sync` can reach the internet, and only `web` can be reached fro
    | `RFMAP_TILES_DIR` | Absolute path of the tiles-builder output. |
    | `RFMAP_DEM_STATED_ERROR_M`, `RFMAP_DEM_STATED_ERROR_SOURCE` | From step 2. |
    | `RFMAP_HTTP_PORT` | Port `web` listens on (default 8088). |
-   | `OPEN_METEO_MODELS` | The Open-Meteo model to sync and to ask for (default `dwd_icon`). |
+   | `OPEN_METEO_MODELS` | The Open-Meteo model rfmap-server asks for (default `dwd_icon`). |
+   | `OPEN_METEO_SYNC_MODELS` | The model directories `open-meteo-sync` downloads (default `dwd_icon,dwd_icon_global_eps_native`). See section 4. |
 
 ## 2. Start
 
@@ -171,18 +172,34 @@ Settings you will most likely touch:
 rfmap-server asks for these hourly variables at the pilot's location: `temperature_2m`,
 `relative_humidity_2m`, `surface_pressure`, `precipitation`, `wind_speed_10m`,
 `wind_direction_10m`, and `temperature`, `relative_humidity` and `geopotential_height` at
-1000, 975, 950, 925, 900 and 850 hPa. The sync service in compose downloads exactly these for
-`OPEN_METEO_MODELS`. The server builds a refractivity profile from them for the effective
-earth radius (`rfext::refractionForPath`), and uses `precipitation` for rain attenuation
-(ITU-R P.838-3, 1–1000 GHz only).
+1000, 975, 950, 925, 900 and 850 hPa. The server builds a refractivity profile from them for the
+effective earth radius (`rfext::refractionForPath`), and uses `precipitation` for rain
+attenuation (ITU-R P.838-3, 1–1000 GHz only).
 
-**Verify on your instance.** The model name (`dwd_icon`), the sync command line and the
-pressure-level variable names follow the Open-Meteo documentation but have not been run
-against a real instance here. After the first sync, run this from a container on the
-`backend` network, and check that every variable comes back without nulls:
+The sync service downloads what Open-Meteo stores, not what the API returns, so its variable
+list differs from the one above:
+
+- `surface_pressure` is derived by the API from `pressure_msl`, `temperature_2m` and the model
+  elevation, and `wind_speed_10m` / `wind_direction_10m` from `wind_u_component_10m` and
+  `wind_v_component_10m`. Sync the stored variables.
+- ICON global has no 975 hPa level. The API returns nulls for it and the server uses the other
+  five levels.
+- With `models=dwd_icon`, Open-Meteo 1.7.0 also opens the native ICON grids: `dwd_icon_global_native`
+  (sync adds it for `dwd_icon` on its own) and `dwd_icon_global_eps_native` (it does not). Without
+  `data/dwd_icon_global_eps_native/static/grid.bin` every `dwd_icon` request fails with
+  `{"reason":"Something went wrong.","error":true}`. That is why `OPEN_METEO_SYNC_MODELS` lists it; only its static files (about 38 MB) match
+  the variable list.
+
+If you change the model, check its directory at `https://openmeteo.s3.amazonaws.com/data/<model>/`
+for the variable names it stores. The API hides internal errors behind "Something went wrong.";
+the real cause is in `docker compose logs open-meteo`.
+
+**Verify on your instance.** After the first sync, run this from a container on the `backend`
+network, and check that every variable comes back without nulls:
 
 ```sh
-curl "http://open-meteo:8080/v1/forecast?latitude=48.5&longitude=35.2&hourly=temperature_850hPa,geopotential_height_850hPa,surface_pressure&models=dwd_icon"
+docker run --rm --network rfmap_backend curlimages/curl -s \
+  "http://open-meteo:8080/v1/forecast?latitude=48.5&longitude=35.2&hourly=temperature_850hPa,geopotential_height_850hPa,surface_pressure,wind_speed_10m&models=dwd_icon"
 ```
 
 When a variable is missing, the server uses the levels it has. When the forecast does not
