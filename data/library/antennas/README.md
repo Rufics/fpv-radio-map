@@ -6,7 +6,10 @@
 Each entry cites the vendor's own product page, with the spec lines it was taken from in
 `source.reference`. Conventions:
 
-- **Circular polarization.** Vendors give CP gain in dBic; it is stored as `gainDbi` as stated.
+- **Circular polarization.** Vendors give CP gain in dBic; it is stored as `gainDbi` as stated,
+  with no conversion. Between two CP antennas the dBic figures apply directly. A CP-to-linear link
+  loses about 3 dB to polarization mismatch; the link result does not model that loss and adds a
+  note saying so, so a -3 dB conversion here would count the loss twice on CP-to-CP links.
   Antennas sold in both RHCP and LHCP have one entry (usually RHCP); the note says so. Copy the
   entry and change `polarization` for the other hand.
 - **Gain ranges.** Where the vendor gives a range (for example 9.5-10.5 dBic), the lower end is used.
