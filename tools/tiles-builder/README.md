@@ -84,10 +84,10 @@ Behind a TLS-intercepting proxy, build with `--secret id=extra_ca,src=/path/ca.c
 
 It then re-runs `all` (every step must report "up to date") and runs `verify`.
 
-`tests/raster_test.py` checks the DEM mosaic across 50° N with synthetic Copernicus-like tiles, which the smoke box does not reach. It needs the GDAL Python bindings, so run it in the image:
+`tests/raster_test.py` checks the DEM mosaic across 50° N with synthetic Copernicus-like tiles, which the smoke box does not reach. It needs the GDAL Python bindings, so run it in the image from the repository root:
 
 ```bash
-docker run --rm -v "$PWD/tests:/tests:ro" --entrypoint python3 rfmap/tiles-builder -m unittest discover -s /tests -p '*_test.py'
+docker run --rm -v "$PWD/tools/tiles-builder/tests:/tests:ro" --entrypoint python3 rfmap/tiles-builder -m unittest discover -s /tests -p '*_test.py'
 ```
 
 ## Source attribution (show on the map)

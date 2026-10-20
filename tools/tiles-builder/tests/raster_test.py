@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover - depends on the environment
     gdal = None
 
 from rfmap_tiles import raster  # noqa: E402
-from rfmap_tiles.common import BBox, run  # noqa: E402
+from rfmap_tiles.common import BBox, BuildError, run  # noqa: E402
 
 ROWS = 3600  # one degree of Copernicus GLO-30 rows; smaller tiles hide the window-dependent VRT reads
 
@@ -60,6 +60,16 @@ class FinestGridAlignerTest(unittest.TestCase):
         files = raster.FinestGridAligner(list(self.tiles.values()), self.dir).align()
         self.assertIn(self.tiles[(49, 14)], files)
         self.assertNotIn(self.tiles[(50, 14)], files)
+
+    def test_inputs_without_a_finest_grid_are_refused(self) -> None:
+        wide = self.dir / "wide.tif"
+        tall = self.dir / "tall.tif"
+        for path, (cols, rows) in ((wide, (4, 2)), (tall, (2, 4))):
+            ds = gdal.GetDriverByName("GTiff").Create(str(path), cols, rows, 1, gdal.GDT_Float32)
+            ds.SetGeoTransform((14, 1 / cols, 0, 50, 0, -1 / rows))
+            ds = None
+        with self.assertRaises(BuildError):
+            raster.FinestGridAligner([wide, tall], self.dir)
 
     def test_mosaic_keeps_fine_pixels_and_duplicates_coarse_ones(self) -> None:
         mosaic = gdal.Open(str(self._mosaic())).ReadAsArray()

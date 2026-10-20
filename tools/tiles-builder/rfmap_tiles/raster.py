@@ -71,7 +71,17 @@ class FinestGridAligner:
         self._files = files
         self._work = work
         self._grids = {f: self._grid(f) for f in files}
-        self._ref = min(self._grids.values(), key=lambda g: abs(g[1] * g[5]))
+        self._ref = self._finest_grid()
+
+    def _finest_grid(self) -> tuple[float, float, float, float, float, float]:
+        """The grid that is finest on both axes; warping onto any other would drop detail."""
+        dx = min(abs(g[1]) for g in self._grids.values())
+        dy = min(abs(g[4]) for g in self._grids.values())
+        for grid in self._grids.values():
+            if math.isclose(abs(grid[1]), dx, rel_tol=1e-9) and math.isclose(abs(grid[4]), dy, rel_tol=1e-9):
+                return grid
+        raise BuildError("the DEM inputs have no single finest grid (one is finer in longitude, another in "
+                         "latitude); resample them to one grid first")
 
     @staticmethod
     def _grid(path: Path) -> tuple[float, float, float, float, float, float]:
