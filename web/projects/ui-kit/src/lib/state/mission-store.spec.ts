@@ -229,6 +229,22 @@ describe('MissionStore', () => {
       expect(store.pilotStale()).toBe(false);
     });
 
+    it('keeps a grid that arrives after a waypoint move through an undo', async () => {
+      let release!: () => void;
+      api.gridsReady = new Promise((r) => (release = r));
+      api.coverageStart = () => Promise.resolve({ jobId: 'j1', state: 'done', parts: [{ link: 'control', state: 'done' }] });
+      store.newMission(mission());
+      await store.calculate();
+      api.route.next({ legs: [] });
+      await settle();
+      store.movePoint(0, { lat: 48.52, lon: 35.22 });
+      release();
+      await settle();
+      expect(Object.keys(store.coverage())).toEqual(['control']);
+      store.undoMove();
+      expect(Object.keys(store.coverage())).toEqual(['control']);
+    });
+
     it('marks an existing result stale on the first edit', () => {
       store.loadFromServer('m1', { mission: mission(), role: 'edit', revision: 2, lastResult: { legs: [] } });
       expect(store.calcState()).toBe('done');
