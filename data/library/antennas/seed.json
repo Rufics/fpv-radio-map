@@ -566,7 +566,7 @@
     "polarization": "linear-vertical",
     "bandHz": [
       5725000000.0,
-      5850000000.0
+      5875000000.0
     ],
     "source": {
       "kind": "datasheet",
@@ -587,7 +587,7 @@
     "polarization": "lhcp",
     "bandHz": [
       5725000000.0,
-      5850000000.0
+      5875000000.0
     ],
     "source": {
       "kind": "datasheet",
@@ -776,7 +776,7 @@
     "polarization": "linear-vertical",
     "bandHz": [
       5725000000.0,
-      5850000000.0
+      5875000000.0
     ],
     "source": {
       "kind": "datasheet",
