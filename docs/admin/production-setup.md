@@ -165,6 +165,10 @@ shred -u ~/rfmap-keys/owner.secret
 
 ## 5. Start the stack
 
+Run the first start inside `tmux` or `screen`: `docker compose up -d` does not return until
+`open-meteo-init` has downloaded the first copy of the forecast model (about 6 GB, see
+[Weather](#9-weather)), and a dropped SSH session would cut that short.
+
 ```sh
 cd ~/fpv-radio-map/deploy
 docker compose up -d --build
@@ -172,8 +176,9 @@ docker compose ps
 ```
 
 The first build takes a few minutes **(estimate)**. `postgis`, `rfmap-server` and `web` should be
-`healthy` or `running` after about a minute; `open-meteo` and `open-meteo-sync` run without a
-health check.
+`healthy` or `running` after about a minute, while `up` is still waiting for `open-meteo-init`;
+check them from a second shell. `open-meteo` and `open-meteo-sync` start once `open-meteo-init`
+has exited, and run without a health check.
 
 ```sh
 curl -s http://127.0.0.1:8088/api/v1/health
@@ -327,13 +332,14 @@ address range to use when the gateway is not in `172.16.0.0/12`, are covered und
 
 ## 9. Weather
 
-`open-meteo-sync` downloads the forecast model in the background, and the first run takes a
-while. Until then, results say that no forecast covers the time and use k = 4/3. Check the
-instance once the first run is in:
+`open-meteo-init` downloads the forecast model once (about 6 GB; follow it with
+`docker compose logs -f open-meteo-init`), then the `open-meteo` API and `open-meteo-sync`, which
+keeps the data fresh, start. Until then, results say that no forecast covers the time and use
+k = 4/3. Check the instance once the API is up:
 
 ```sh
 docker run --rm --network rfmap_backend curlimages/curl -s \
-  "http://open-meteo:8080/v1/forecast?latitude=48.5&longitude=35.2&hourly=temperature_850hPa,geopotential_height_850hPa,surface_pressure&models=dwd_icon"
+  "http://open-meteo:8080/v1/forecast?latitude=48.5&longitude=35.2&hourly=temperature_850hPa,geopotential_height_850hPa,surface_pressure,wind_speed_10m&models=dwd_icon"
 ```
 
 Every variable should come back with numbers, not `null`. Use your area's coordinates. See
