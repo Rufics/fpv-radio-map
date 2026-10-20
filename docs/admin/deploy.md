@@ -66,9 +66,9 @@ curl -s http://localhost:8088/api/v1/health
 ```
 
 On the first start, `open-meteo-init` downloads about 6 GB of model data (around half an hour
-on a slow link). The `open-meteo` API and `open-meteo-sync` start only after it has finished,
-because the API keeps a model grid it failed to open as failed until it restarts, and
-`docker compose up -d` does not return until then. Run it in `tmux` or `screen` so a dropped SSH
+on a slow link). The `open-meteo` API and `open-meteo-sync` start only after it completes
+successfully (it retries up to three times), because the API keeps a model grid it failed to
+open as failed until it restarts, and `docker compose up -d` does not return until then. Run it in `tmux` or `screen` so a dropped SSH
 session does not cut it short, and follow the download from a second shell with
 `docker compose logs -f open-meteo-init`. postgis, rfmap-server and web are already running
 meanwhile: until the API is up, results note that the forecast is unavailable and use k = 4/3.
