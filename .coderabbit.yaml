@@ -42,6 +42,8 @@ reviews:
     enabled: true
     drafts: true
     auto_incremental_review: true
+    # Never pause: every push is reviewed, however many commits were reviewed before.
+    auto_pause_after_reviewed_commits: 0
     base_branches:
       - main
     ignore_usernames:
@@ -116,20 +118,14 @@ reviews:
         User and maintainer documentation. Check that it matches the code in the same pull
         request and that commands and paths are correct.
 
-  finishing_touches:
-    docstrings:
-      enabled: true
-    unit_tests:
-      enabled: true
-
   pre_merge_checks:
     docstrings:
       mode: "off"
     title:
       mode: warning
       requirements: >-
-        Conventional Commits: type(scope): summary, in the imperative and lower case, as
-        described in CONTRIBUTING.md. The title becomes the squashed commit on main.
+        Conventional Commits: type(optional scope): summary, in the imperative and lower case,
+        as described in CONTRIBUTING.md; the scope may be omitted. The title becomes the squashed commit on main.
     description:
       mode: warning
     issue_assessment:

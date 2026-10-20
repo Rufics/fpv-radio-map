@@ -77,7 +77,8 @@ workflow creates new tags; nobody can move or delete a released one.
 ## CodeRabbit
 
 CodeRabbit is installed as a GitHub app and configured by `.coderabbit.yaml` in the repository
-root; the repository is public, so the free open-source plan covers every feature it uses. It
+root. The repository is public, so the free open-source plan covers its reviews, linters and
+chat. Some extras, such as generating unit tests for a pull request, need a paid plan. It
 reviews pull requests into `main` automatically, drafts included, and every later push
 incrementally. CodeRabbit can exclude authors but has no allowlist, so the bots that open pull
 requests here are listed under `reviews.auto_review.ignore_usernames` and skipped; a pull request
