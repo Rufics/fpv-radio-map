@@ -1,15 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" dir="ltr">
   <head>
     <meta charset="utf-8" />
     <title>FPV Radio Map</title>
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Plan an FPV route on the map and see each control and video link the way the terrain sees it." />
+    <meta name="application-name" content="FPV Radio Map" />
     <meta name="theme-color" content="#0B0F14" />
     <meta name="color-scheme" content="dark" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <!-- Missions and share links are private: keep every page out of search engines. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- Coordinates and frequencies are not phone numbers. -->
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="FPV Map" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <!-- Icons and the manifest come from public/; tools/app-icons/build_icons.py draws them. -->
+    <link rel="icon" href="favicon.ico" sizes="48x48" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
   </head>
   <body>
     <app-root></app-root>
+    <noscript>FPV Radio Map needs JavaScript. Turn it on in your browser and reload the page.</noscript>
   </body>
 </html>
