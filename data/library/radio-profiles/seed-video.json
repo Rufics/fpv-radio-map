@@ -1,0 +1,134 @@
+[
+  {
+    "id": "dji-o3-video",
+    "name": "DJI O3 video (with Goggles 2)",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "kind": "video-digital",
+    "frequencyHz": 5787500000.0,
+    "txPowerDbm": [
+      12.5,
+      31.5
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -91.7,
+      "source": {
+        "kind": "derived",
+        "reference": "DJI states 10 km (FCC) at < 33 dBm EIRP for the O3 Air Unit with DJI Goggles 2. Free-space loss over 10 km at 5.7875 GHz is 127.7 dB; 33 - 127.7 + 3 dBi (dji-goggles-2-5g8 antenna) = -91.7 dBm. Source: DJI O3 Air Unit User Manual v1.0, specifications: 'Transmitter Power (EIRP) FCC: <33 dBm; SRRC: <30 dBm; CE: <14 dBm', 'Max. Transmission Distance FCC: <10 km'",
+        "url": "https://dl.djicdn.com/downloads/DJI_O3_Air_Unit/20230329/DJI_O3_Air_Unit_User_Manual_v1.0_EN.pdf",
+        "retrieved": "2026-10-20"
+      }
+    },
+    "latencyMs": {
+      "typical": 30.0,
+      "source": {
+        "kind": "datasheet",
+        "reference": "DJI O3 Air Unit User Manual v1.0: 'Min. Latency (end-to-end) Used with DJI Goggles 2: 1080p/100fps: 30 ms'",
+        "url": "https://dl.djicdn.com/downloads/DJI_O3_Air_Unit/20230329/DJI_O3_Air_Unit_User_Manual_v1.0_EN.pdf",
+        "retrieved": "2026-10-20"
+      }
+    },
+    "notes": "DJI does not publish receiver sensitivity. The threshold is derived so that this profile, with the dji-o3-air-unit-5g8 antenna (1.5 dBi) and the dji-goggles-2-5g8 antenna (3 dBi) from the library, reaches DJI's stated FCC range in free space: it is DJI's range claim, not a measured sensitivity. txPowerDbm is DJI's EIRP limit minus the air antenna gain: 14 dBm EIRP (CE) and 33 dBm EIRP (FCC). DJI drops bandwidth and bitrate as the signal weakens, so the threshold is for its narrowest mode near the range limit. Replace it with your own measurement when you have one. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-o4-video",
+    "name": "DJI O4 Air Unit video (with Goggles 3)",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "kind": "video-digital",
+    "frequencyHz": 5787500000.0,
+    "txPowerDbm": [
+      12.5,
+      28.5
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -95.2,
+      "source": {
+        "kind": "derived",
+        "reference": "DJI states 10 km (FCC) at < 30 dBm EIRP for the O4 Air Unit. Free-space loss over 10 km at 5.7875 GHz is 127.7 dB; 30 - 127.7 + 2.5 dBi (dji-goggles-3-5g8 antenna) = -95.2 dBm. Source: DJI O4 Air Unit Series specs, O4 Air Unit: 'Transmitter Power (EIRP) 5.8 GHz: <30 dBm (FCC) <14 dBm (CE)', '10 km (FCC), 6 km (CE)'",
+        "url": "https://www.dji.com/o4-air-unit/specs",
+        "retrieved": "2026-10-20"
+      }
+    },
+    "latencyMs": {
+      "typical": 20.0,
+      "source": {
+        "kind": "datasheet",
+        "reference": "DJI O4 Air Unit Series specs, O4 Air Unit: latency with DJI Goggles 3 'as low as 20 ms'",
+        "url": "https://www.dji.com/o4-air-unit/specs",
+        "retrieved": "2026-10-20"
+      }
+    },
+    "notes": "DJI does not publish receiver sensitivity. The threshold is derived so that this profile, with the dji-o4-air-unit-5g8 antenna (1.5 dBi) and the dji-goggles-3-5g8 antenna (2.5 dBi) from the library, reaches DJI's stated FCC range in free space: it is DJI's range claim, not a measured sensitivity. txPowerDbm is DJI's EIRP limit minus the air antenna gain: 14 dBm EIRP (CE) and 30 dBm EIRP (FCC). DJI drops bandwidth and bitrate as the signal weakens, so the threshold is for its narrowest mode near the range limit. Replace it with your own measurement when you have one. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-o4-pro-video",
+    "name": "DJI O4 Air Unit Pro video (with Goggles 3)",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "kind": "video-digital",
+    "frequencyHz": 5787500000.0,
+    "txPowerDbm": [
+      13.5,
+      32.5
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -95.7,
+      "source": {
+        "kind": "derived",
+        "reference": "DJI states 15 km (FCC) at < 33 dBm EIRP for the O4 Air Unit Pro. Free-space loss over 15 km at 5.7875 GHz is 131.2 dB; 33 - 131.2 + 2.5 dBi (dji-goggles-3-5g8 antenna) = -95.7 dBm. Source: DJI O4 Air Unit Series specs, O4 Air Unit Pro: 'Transmitter Power (EIRP) 5.8 GHz: <33 dBm (FCC) <14 dBm (CE)', '15 km (FCC), 8 km (CE)'",
+        "url": "https://www.dji.com/o4-air-unit/specs",
+        "retrieved": "2026-10-20"
+      }
+    },
+    "latencyMs": {
+      "typical": 15.0,
+      "source": {
+        "kind": "datasheet",
+        "reference": "DJI O4 Air Unit Series specs, O4 Air Unit Pro: latency with DJI Goggles 3 in racing mode 'as low as 15 ms'",
+        "url": "https://www.dji.com/o4-air-unit/specs",
+        "retrieved": "2026-10-20"
+      }
+    },
+    "notes": "DJI does not publish receiver sensitivity. The threshold is derived so that this profile, with the dji-o4-air-unit-pro-5g8 antenna (0.5 dBi) and the dji-goggles-3-5g8 antenna (2.5 dBi) from the library, reaches DJI's stated FCC range in free space: it is DJI's range claim, not a measured sensitivity. txPowerDbm is DJI's EIRP limit minus the air antenna gain: 14 dBm EIRP (CE) and 33 dBm EIRP (FCC). DJI drops bandwidth and bitrate as the signal weakens, so the threshold is for its narrowest mode near the range limit. Replace it with your own measurement when you have one. Unverified until an admin checks the source."
+  },
+  {
+    "id": "dji-avata-2-video",
+    "name": "DJI Avata 2 video, O4 (with Goggles 3)",
+    "vendor": "DJI",
+    "version": 1,
+    "verified": false,
+    "kind": "video-digital",
+    "frequencyHz": 5787500000.0,
+    "txPowerDbm": [
+      12.0,
+      31.0
+    ],
+    "sensitivity": {
+      "method": "datasheet",
+      "dBm": -94.5,
+      "source": {
+        "kind": "derived",
+        "reference": "DJI states 13 km (FCC) at < 33 dBm EIRP for the Avata 2 with DJI Goggles 3. Free-space loss over 13 km at 5.7875 GHz is 130.0 dB; 33 - 130.0 + 2.5 dBi (dji-goggles-3-5g8 antenna) = -94.5 dBm. Source: DJI Avata 2 specs: '5.8 GHz: <33 dBm (FCC) ... < 14 dBm (CE)', max transmission distance 'FCC: 13 km'",
+        "url": "https://www.dji.com/avata-2/specs",
+        "retrieved": "2026-10-20"
+      }
+    },
+    "latencyMs": {
+      "typical": 24.0,
+      "source": {
+        "kind": "datasheet",
+        "reference": "DJI Avata 2 specs: 'With DJI Goggles 3: 1080p/100fps: 24 ms'",
+        "url": "https://www.dji.com/avata-2/specs",
+        "retrieved": "2026-10-20"
+      }
+    },
+    "notes": "DJI does not publish receiver sensitivity. The threshold is derived so that this profile, with the dji-avata-2-air-5g8 antenna (2 dBi) and the dji-goggles-3-5g8 antenna (2.5 dBi) from the library, reaches DJI's stated FCC range in free space: it is DJI's range claim, not a measured sensitivity. txPowerDbm is DJI's EIRP limit minus the air antenna gain: 14 dBm EIRP (CE) and 33 dBm EIRP (FCC). DJI drops bandwidth and bitrate as the signal weakens, so the threshold is for its narrowest mode near the range limit. Replace it with your own measurement when you have one. Unverified until an admin checks the source."
+  }
+]

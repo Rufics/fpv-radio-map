@@ -57,13 +57,15 @@ docker compose logs -f rfmap-server
 ```
 
 At start the server applies the SQL migrations in `/usr/share/rfmap/sql` (once, under an
-advisory lock) and seeds the reference library once from `data/library/<kind>/seed.json` (radio
+advisory lock) and seeds the reference library from `data/library/<kind>/seed*.json` (radio
 profiles, antennas, batteries and drones; see the README next to each file:
 [radio profiles](../../data/library/radio-profiles/README.md),
 [antennas](../../data/library/antennas/README.md),
 [batteries](../../data/library/batteries/README.md),
 [drones](../../data/library/drones/README.md)).
-Seeded entries stay `verified: false` until the admin reviews them. Check that it is up:
+Each seed file is imported once, so later edits by the admin stick; a seed file that a new release
+adds is imported at the next start. Seeded entries stay `verified: false` until the admin reviews
+them. Check that it is up:
 
 ```sh
 curl -s http://localhost:8088/api/v1/health

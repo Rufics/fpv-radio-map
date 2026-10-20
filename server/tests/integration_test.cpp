@@ -280,7 +280,7 @@ TEST_F(Integration, HealthAndSeededLibrary) {
     EXPECT_GT(map.body["center"][1].get<double>(), 48.0);
     const auto lib = call("GET", "/library/radio-profiles");
     ASSERT_EQ(lib.status, 200) << lib.body;
-    EXPECT_EQ(lib.body.size(), 14u);
+    EXPECT_EQ(lib.body.size(), 18u);  // 14 control + 4 DJI video
     for (const auto& item : lib.body) EXPECT_FALSE(item["verified"].get<bool>()) << item["id"];
     for (const auto& [kind, count] :
          {std::pair{"antennas", 38u}, std::pair{"batteries", 21u}, std::pair{"drones", 3u}}) {
