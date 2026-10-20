@@ -82,7 +82,7 @@ class FinestGridAligner:
         return gt[0], gt[1], ds.RasterXSize, gt[3], gt[5], ds.RasterYSize
 
     def align(self) -> list[Path]:
-        return [f if self._on_reference_grid(f) else self._warp(f) for f in self._files]
+        return [f if self._on_reference_grid(f) else self._warp(f, i) for i, f in enumerate(self._files)]
 
     def _on_reference_grid(self, path: Path) -> bool:
         x0, dx, _, y0, dy, _ = self._grids[path]
@@ -101,14 +101,14 @@ class FinestGridAligner:
         index = round((value - origin) / step)
         return index, origin + index * step
 
-    def _warp(self, path: Path) -> Path:
+    def _warp(self, path: Path, index: int) -> Path:
         x0, dx, nx, y0, dy, ny = self._grids[path]
         rx0, rdx, _, ry0, rdy, _ = self._ref
         c0, west = self._snap(x0, rx0, rdx)
         c1, east = self._snap(x0 + dx * nx, rx0, rdx)
         r0, north = self._snap(y0, ry0, rdy)
         r1, south = self._snap(y0 + dy * ny, ry0, rdy)
-        out = self._work / f"aligned-{path.stem}.tif"
+        out = self._work / f"aligned-{index:04d}-{path.stem}.tif"  # --dem-file names may repeat
         run(["gdalwarp", "-overwrite", "-r", "near", "-et", "0", *tiff_option_args(),
              "-te", repr(west), repr(south), repr(east), repr(north),
              "-ts", str(c1 - c0), str(r1 - r0), str(path), str(out)])
