@@ -1,18 +1,25 @@
 """landcover: ESA WorldCover 10 m -> COG for the clutter module.
 
-WorldCover tiles are 3x3 degree COGs. Only the blocks covering the bbox are
-read (GDAL /vsicurl/ range requests), mosaicked with a VRT and cut with an
-integer pixel window: class values are copied unchanged, never resampled.
+WorldCover tiles are 3x3 degree COGs. For each tile only the pixel window
+covering the bbox is read (GDAL /vsicurl/ range requests) and kept in the cache,
+so a failed download is retried and a rerun resumes. The cached windows are
+mosaicked with a VRT and cut with an integer pixel window: class values are
+copied unchanged, never resampled.
 """
 from __future__ import annotations
 
 import math
 import shutil
+import time
+from pathlib import Path
 
 from . import raster, sources
 from .common import BBox, BuildError, Dirs, fresh_dir, http_status, install, is_up_to_date, log, run, warn, write_meta
 
 OUT_NAME = "landcover.cog.tif"
+# GDAL retries throttled or failed range requests itself; WindowCache retries the whole window on top.
+HTTP_ENV = {"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR", "GDAL_HTTP_MAX_RETRY": "10",
+            "GDAL_HTTP_RETRY_DELAY": "5", "GDAL_HTTP_TIMEOUT": "120", "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".tif"}
 
 
 def add_arguments(p) -> None:
@@ -25,6 +32,68 @@ def _tile_name(lat: int, lon: int) -> str:
     return f"{'N' if lat >= 0 else 'S'}{abs(lat):02d}{'E' if lon >= 0 else 'W'}{abs(lon):03d}"
 
 
+class WindowCache:
+    """Copies the bbox window of each remote WorldCover tile into the cache, 1:1 and resumable."""
+
+    ATTEMPTS = 4
+    BACKOFF_S = 15
+
+    def __init__(self, bbox: BBox, cache: Path) -> None:
+        """Windows for bbox are kept under cache, one file per tile and window."""
+        self._bbox = bbox
+        self._cache = cache
+        cache.mkdir(parents=True, exist_ok=True)
+
+    def is_cached(self, url: str) -> bool:
+        """Whether the window of this tile is already complete in the cache."""
+        return self._destination(url).exists()
+
+    def fetch(self, url: str) -> Path:
+        """The cached window of one tile; downloaded first if a previous run did not finish it."""
+        dest = self._destination(url)
+        if dest.exists():
+            log(f"cached: {dest.name}")
+            return dest
+        part = dest.with_suffix(".part.tif")
+        self._copy_with_retries(self._remote(url), part)
+        part.replace(dest)
+        return dest
+
+    def _destination(self, url: str) -> Path:
+        stem = url.rsplit("/", 1)[1].removesuffix(".tif")
+        # Named by the exact bbox, not the pixel window, so a cache hit needs no network access.
+        key = "_".join(repr(v) for v in self._bbox.as_list())
+        return self._cache / f"{stem}_{key}.tif"
+
+    @staticmethod
+    def _remote(url: str) -> str:
+        """The GDAL path that reads url with HTTP range requests."""
+        return f"/vsicurl/{url}"
+
+    def _copy_with_retries(self, remote: str, part: Path) -> None:
+        for attempt in range(1, self.ATTEMPTS + 1):
+            try:
+                self._copy(remote, part)
+                return
+            except BuildError:
+                part.unlink(missing_ok=True)
+                if attempt == self.ATTEMPTS:
+                    raise
+                delay = self.BACKOFF_S * attempt
+                warn(f"WorldCover download failed (attempt {attempt} of {self.ATTEMPTS}); retrying in {delay} s")
+                time.sleep(delay)
+
+    def _copy(self, remote: str, part: Path) -> None:
+        """One attempt: reads the tile header for the pixel window, then copies the window."""
+        try:
+            with raster.gdal().config_options(HTTP_ENV):
+                srcwin = raster.srcwin_for_bbox(remote, self._bbox)
+        except RuntimeError as e:
+            raise BuildError(f"cannot open {remote}: {e}") from e
+        run(["gdal_translate", "-of", "GTiff", *raster.tiff_option_args(),
+             "-srcwin", *map(str, srcwin), remote, str(part)], env=HTTP_ENV)
+
+
 def build(args, dirs: Dirs) -> None:
     if not args.bbox:
         raise BuildError("landcover needs --bbox")
@@ -35,39 +104,35 @@ def build(args, dirs: Dirs) -> None:
     if is_up_to_date(dirs, OUT_NAME, params, args.force):
         return
 
+    cache = WindowCache(bbox, dirs.cache / f"esa-worldcover-{version}-{year}")
     urls, missing = [], []
     for lat in range(math.floor(bbox.min_lat / 3) * 3, math.ceil(bbox.max_lat / 3) * 3, 3):
         for lon in range(math.floor(bbox.min_lon / 3) * 3, math.ceil(bbox.max_lon / 3) * 3, 3):
             tile = _tile_name(lat, lon)
             url = sources.WORLDCOVER_URL.format(version=version, year=year, tile=tile)
-            if http_status(url) in (403, 404):
+            # A cached window needs no network access; only uncached tiles are probed.
+            if cache.is_cached(url) or http_status(url) not in (403, 404):
+                urls.append(url)
+            else:
                 warn(f"WorldCover tile {tile} does not exist (open ocean); area will be no-data (0)")
                 missing.append(tile)
-            else:
-                urls.append(url)
     if not urls:
         raise BuildError("no WorldCover tiles for this bbox")
 
+    windows = [cache.fetch(u) for u in urls]
     work = fresh_dir(dirs.work / "landcover")
     vrt = work / "mosaic.vrt"
-    run(["gdalbuildvrt", "-vrtnodata", "0", str(vrt), *[f"/vsicurl/{u}" for u in urls]],
-        env={"GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR", "GDAL_HTTP_MAX_RETRY": "5",
-             "GDAL_HTTP_RETRY_DELAY": "3", "CPL_VSIL_CURL_ALLOWED_EXTENSIONS": ".tif"})
+    run(["gdalbuildvrt", "-vrtnodata", "0", str(vrt), *map(str, windows)])
     srcwin = raster.srcwin_for_bbox(vrt, bbox)
     tmp = dirs.out / f".tmp-{OUT_NAME}"
     attribution = sources.WORLDCOVER["attribution"].format(year=year)
-    log("reading WorldCover blocks over HTTP (range requests)")
     raster.write_cog(vrt, tmp, srcwin=srcwin, predictor="NO", overview_resampling="MODE", nodata=0,
                      metadata={"RFMAP_SOURCE": f"ESA WorldCover 10m {year} {version}",
                                "RFMAP_ATTRIBUTION": attribution, "RFMAP_LICENCE": "CC BY 4.0"})
     errors = raster.validate_cog(tmp)
     if errors:
         raise BuildError("COG validation failed: " + "; ".join(errors))
-    verified = srcwin[2] * srcwin[3] <= 50_000_000  # re-reading huge areas over HTTP is too slow
-    if verified:
-        raster.assert_identical(vrt, srcwin, tmp)
-    else:
-        log("area too large for a full pixel re-check over HTTP; skipped (copy is a 1:1 -srcwin)")
+    raster.assert_identical(vrt, srcwin, tmp)
     install(tmp, dirs, OUT_NAME)
     summary = raster.raster_summary(dirs.out / OUT_NAME)
     write_meta(dirs, OUT_NAME, params, {
@@ -81,6 +146,6 @@ def build(args, dirs: Dirs) -> None:
         "bbox": summary["bbox"],
         "resolution": f"{summary['pixel_size_deg'][0] * 3600:.4g}\" (~10 m), source grid, not resampled",
         "raster": summary,
-        "verified_identical_to_source": verified,
+        "verified_identical_to_source": True,
     })
     shutil.rmtree(work, ignore_errors=True)

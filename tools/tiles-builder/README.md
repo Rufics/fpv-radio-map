@@ -52,7 +52,7 @@ Directory layout: the data directory (`--data`, default `$RFMAP_DATA` or the cur
 - Contours: `gdal_contour` runs on the unmodified COG. The output has two source layers, `contours` (all contours, from z12) and `contours_index` (every 5th, from z10). Both carry the attribute `ele` (m).
 - **The server's calculations read `dem.cog.tif` directly**, never these tiles.
 
-**Landcover** works the same way as the DEM: the source window is copied, class values are unchanged, and the result is verified pixel by pixel for areas up to 50 Mpx. It reads only the needed blocks of the 3°×3° WorldCover COGs over HTTP. Overviews use MODE. Classes: 10 tree, 20 shrub, 30 grass, 40 crop, 50 built-up, 60 bare, 70 snow/ice, 80 water, 90 wetland, 95 mangrove, 100 moss/lichen, 0 no data.
+**Landcover** works the same way as the DEM: the source window is copied, class values are unchanged, and the result is verified pixel by pixel. From each 3°×3° WorldCover COG only the window inside the bbox is read over HTTP and kept in `data/cache`, one file per tile. A failed request is retried, and a rerun after a failure downloads only the tiles that are still missing. Overviews use MODE. Classes: 10 tree, 20 shrub, 30 grass, 40 crop, 50 built-up, 60 bare, 70 snow/ice, 80 water, 90 wetland, 95 mangrove, 100 moss/lichen, 0 no data.
 
 **Satellite source is your choice, and there is no default.**
 - `--sat-provider` picks an XYZ mosaic from the built-in list: `eox-s2cloudless-2016` (EOX notes CC BY 4.0) and `eox-s2cloudless-2018` … `-2023` (EOX notes CC BY-NC-SA 4.0, non-commercial). Tiles are copied byte for byte, rate-limited (`--sat-rate`) and capped (`--sat-max-tiles`). An interrupted download resumes.

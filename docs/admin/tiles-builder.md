@@ -110,7 +110,7 @@ rsync -av --delete data/out/ server:/srv/rfmap/data/tiles/
 | Copernicus download cache | ~20–40 MB per 1°×1° tile | kept in `data/cache` |
 | hillshade z6–12 | ~10–20 MB per 1°×1° | test area: 2.1 MB for 0.5°×0.3° |
 | contours (20 m) | ~1–20 MB per 1°×1° | flat land is small, mountains are large |
-| landcover COG | ~10–40 MB per 1°×1° | only the needed blocks are downloaded |
+| landcover COG | ~10–40 MB per 1°×1° | the downloaded windows stay in `data/cache` and take about as much again |
 | satellite z6–14 | ~100–200 MB per 1°×1° | depends on the provider's JPEG quality |
 | basemap z0–16 | roughly 1–2× the `.osm.pbf` size | about half of that with `--basemap-maxzoom 14` |
 | basemap build | RAM ≥ 2–3× the `.pbf` size (min 2 GB); temporary disk ~5–10× the `.pbf` | a country of 1–2 GB `.pbf`: 8–16 GB RAM, 10–30 min on 4–8 cores |
