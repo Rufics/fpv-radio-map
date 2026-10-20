@@ -70,6 +70,9 @@ service, and **no API keys or accounts are needed** for any built-in source.
 | Satellite imagery | `satellite` | `satellite.pmtiles` | none: you choose a mosaic and check its licence | browser | optional |
 | Labels and credits | every step | `fonts/`, `manifest.json` (and `style-dark.json` for other clients) | the builder | browser, rfmap-server | yes |
 
+[How the tiles builder generates map data](map-generation.md) shows what each step copies,
+converts or derives, and the formats it reads and writes.
+
 `all` runs `basemap`, `dem` and `landcover`, and `satellite` as well when you give it a satellite
 source. Without one it logs `skipping satellite` and goes on. This guide runs satellite as a
 separate step, because it is the one you choose and time yourself.
