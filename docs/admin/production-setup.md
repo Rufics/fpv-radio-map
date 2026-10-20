@@ -187,7 +187,9 @@ docker compose logs rfmap-server | head -20
 ```
 
 `dem` and `landcover` must be `true`. In the log you should see `applied migration 001_init.sql`,
-`seeded 14 radio-profiles`, `terrain: DEM /data/dem.cog.tif` and `listening on 0.0.0.0:8080`. If
+`seeded 14 radio-profiles`, `seeded 38 antennas`, `seeded 21 batteries`, `seeded 3 drones`,
+`terrain: DEM /data/dem.cog.tif` and `listening on 0.0.0.0:8080`. No `seeded` line may end in
+`skipped`: a `seed ... rejected` line before it names the entry and the reason. If
 the log says `built with the PUBLIC development owner key`, the key from step 4 did not reach the
 build: check `.env` and run `docker compose up -d --build` again.
 
@@ -248,8 +250,12 @@ the six `fpv.*` ones. Now delete `owner.secret` from the server, as described in
 
 Pilots pick radios, antennas, batteries and drones from the library, and only the admin edits
 it. A new server has 14 control-link radio profiles (ExpressLRS and Crossfire), 38 antennas,
-21 batteries and 3 DJI drone profiles, all `verified: false` (see `data/library/<kind>/README.md`
-for where each figure comes from). Before the first flight plan:
+21 batteries and 3 DJI drone profiles, all `verified: false`. The README next to each seed file
+says where each figure comes from:
+[radio profiles](../../data/library/radio-profiles/README.md),
+[antennas](../../data/library/antennas/README.md),
+[batteries](../../data/library/batteries/README.md) and
+[drones](../../data/library/drones/README.md). Before the first flight plan:
 
 1. Open **Admin** in the web app, enter the admin token at the top right and choose **Use token**.
    The token stays in that browser tab only.
