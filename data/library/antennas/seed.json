@@ -721,7 +721,7 @@
       "url": "https://fccid.io/SS3-DN1A062624/Test-Report/Antenna-Spec-7505307",
       "retrieved": "2026-10-20"
     },
-    "notes": "Built-in antennas of the Neo, 5.8 GHz band. The lower of the two antennas' gains is used. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+    "notes": "Built-in antennas of the Neo, 5.8 GHz band. The lower of the two antennas' gains is used. The filing gives 1.2 / 1.03 dBi at 5.15-5.25 GHz (lower: 1.03 dBi). Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
   },
   {
     "id": "dji-goggles-2-5g8",
@@ -784,7 +784,7 @@
       "url": "https://fccid.io/SS3-TKGS323/Test-Report/Antenna-Gain-Info-SRD-7183251",
       "retrieved": "2026-10-20"
     },
-    "notes": "Video-link antennas of the DJI Goggles 3, 5.8 GHz band. The lower pair (Ant0/1) is used; Ant2/3 is 3.5 dBi. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
+    "notes": "Video-link antennas of the DJI Goggles 3, 5.8 GHz band. The lower pair (Ant0/1) is used; Ant2/3 is 3.5 dBi. The filing gives 1.5 dBi for Ant0/1 at 5.15-5.25 GHz. Gain is per antenna as declared in DJI's FCC filing, not a combined MIMO figure. The filing says only 'linear'; linear-vertical assumes the usual vertical mounting, change it to match yours. Unverified until an admin checks the source."
   },
   {
     "id": "dji-goggles-n3-2g4",
