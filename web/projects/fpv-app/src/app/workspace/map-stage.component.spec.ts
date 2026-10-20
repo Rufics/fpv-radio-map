@@ -181,6 +181,26 @@ describe('MapStageComponent drawing', () => {
     expect(ws.placing()).toBeNull();
   });
 
+  it('starts a new mission from the first pilot click, then adds points', () => {
+    const stage = fixture.componentInstance as unknown as {
+      placePilot: (p: { lat: number; lon: number }) => void;
+      cancelPlacing: () => void;
+      ws: { placing: { set: (v: string | null) => void; (): string | null }; pendingMission: { set: (m: Mission | null) => void; (): Mission | null } };
+    };
+    stage.ws.pendingMission.set({ ...exampleMission(), waypoints: [] });
+    stage.ws.placing.set('pilot');
+    stage.cancelPlacing();
+    expect(stage.ws.placing()).toBe('pilot');
+    stage.placePilot({ lat: 48.6, lon: 35.3 });
+    expect(store.mission()!.pilot).toMatchObject({ lat: 48.6, lon: 35.3 });
+    expect(stage.ws.pendingMission()).toBeNull();
+    expect(stage.ws.placing()).toBe('waypoints');
+
+    stage.ws.placing.set('pilot');
+    stage.cancelPlacing();
+    expect(stage.ws.placing()).toBeNull();
+  });
+
   it('accepts line and polygon limits and ignores other geometry', () => {
     const m = exampleMission();
     show(m, null);

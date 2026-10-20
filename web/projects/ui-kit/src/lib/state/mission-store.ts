@@ -143,6 +143,7 @@ export class MissionStore {
   }
 
   setPilotAgl(aglM: number): void {
+    if (this.busy()) return;
     this.update((m) => ({ ...m, pilot: { ...m.pilot, aglM } }));
   }
 

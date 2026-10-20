@@ -176,7 +176,8 @@ describe('MissionStore', () => {
       await settle();
       expect(store.busy()).toBe(true);
       store.movePoint(-1, { lat: 1, lon: 2 });
-      expect(store.mission()!.pilot.lat).toBe(48.5);
+      store.setPilotAgl(9);
+      expect(store.mission()!.pilot).toEqual({ lat: 48.5, lon: 35.2, aglM: 1.5 });
       expect(store.canUndoMove()).toBe(false);
     });
 
