@@ -13,7 +13,7 @@ without giving pull request code any secret or write access.
 | `ci.yml`, comment job, branches of this repository | `pull_request` | **no**: posts the finished report as text with `gh` | `pull-requests: write` | none |
 | `pr-title.yml` | `pull_request` | yes (commitlint config) | read-only | none |
 | `ci-report.yml`, forks | `workflow_run` after CI | **no**: main's code, PR artifacts read as data | `pull-requests: write` | none |
-| CodeQL, SonarCloud, Gitar | GitHub apps | analyse only | app's own | app's own |
+| CodeQL, SonarCloud, Gitar, CodeRabbit | GitHub apps | analyse only | app's own | app's own |
 
 The rule behind it: a job that runs pull request code never gets write access or secrets, and a
 job that has write access never checks out or runs pull request code. `pull_request_target` is
@@ -73,6 +73,17 @@ workflow creates new tags; nobody can move or delete a released one.
 - Secret scanning and **push protection**: on.
 - Private vulnerability reporting: on (`SECURITY.md` links to it).
 - CodeQL: default setup, for C/C++, JavaScript/TypeScript, Python and GitHub Actions.
+
+## CodeRabbit
+
+CodeRabbit is installed as a GitHub app and configured by `.coderabbit.yaml` in the repository
+root; the repository is public, so the free open-source plan covers every feature it uses. It
+reviews pull requests into `main` automatically, drafts included, and every later push
+incrementally. CodeRabbit can exclude authors but has no allowlist, so the bots that open pull
+requests here are listed under `reviews.auto_review.ignore_usernames` and skipped; a pull request
+from any other author, a fork included, is reviewed too. A skipped pull request is reviewed on an
+`@coderabbitai review` comment. CodeRabbit only comments and posts a status; it never requests
+changes, so approval stays with the code owner.
 
 ## General → Pull requests
 
