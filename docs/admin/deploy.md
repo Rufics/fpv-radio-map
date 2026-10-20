@@ -71,9 +71,10 @@ because the API keeps a model grid it failed to open as failed until it restarts
 `docker compose up -d` does not return until then. Run it in `tmux` or `screen` so a dropped SSH
 session does not cut it short, and follow the download from a second shell with
 `docker compose logs -f open-meteo-init`. postgis, rfmap-server and web are already running
-meanwhile: until the API is up, results state that no forecast covers the time and use
-k = 4/3. Every later `docker compose up -d` runs the pass again, which only fetches what
-changed, and restarts the API after it.
+meanwhile: until the API is up, results note that the forecast is unavailable and use k = 4/3.
+If the host reboots before the first pass has finished, Docker does not resume it; run
+`docker compose up -d` again. Every later `docker compose up -d` runs the pass again, which only
+fetches what changed, and restarts the API after it.
 
 Behind a TLS-intercepting proxy, the image builds need its CA, because CMake fetches
 json-schema-validator from GitHub and npm fetches packages. Pass it as a build secret:

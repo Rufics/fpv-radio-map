@@ -334,8 +334,9 @@ address range to use when the gateway is not in `172.16.0.0/12`, are covered und
 
 `open-meteo-init` downloads the forecast model once (about 6 GB; follow it with
 `docker compose logs -f open-meteo-init`), then the `open-meteo` API and `open-meteo-sync`, which
-keeps the data fresh, start. Until then, results say that no forecast covers the time and use
-k = 4/3. Check the instance once the API is up:
+keeps the data fresh, start. Until then, results note that the forecast is unavailable and use
+k = 4/3. If the server reboots before that first download has finished, run
+`docker compose up -d` again. Check the instance once the API is up:
 
 ```sh
 docker run --rm --network rfmap_backend curlimages/curl -s \
