@@ -69,12 +69,12 @@ class Mark:
     PILOT_X = 256.0
     PILOT_Y = 352.0
     PILOT_RADIUS = 38.0
-    STROKE = 40.0
-    RIDGE_LINE = 14.0
+    STROKE_WIDTH = 40.0
+    RIDGE_LINE_WIDTH = 14.0
     RADII = (108.0, 178.0, 248.0)
     # The ridge the pilot stands on; it runs past the canvas so it still fills the scaled marks.
-    RIDGE = ((-256.0, 452.0), (96.0, 404.0), (172.0, 430.0), (256.0, 390.0), (360.0, 436.0), (430.0, 412.0),
-             (768.0, 448.0), (768.0, 768.0), (-256.0, 768.0))
+    RIDGE_POINTS = ((-256.0, 452.0), (96.0, 404.0), (172.0, 430.0), (256.0, 390.0), (360.0, 436.0), (430.0, 412.0),
+                    (768.0, 448.0), (768.0, 768.0), (-256.0, 768.0))
 
     def _scaled(self, value):
         return CANVAS / 2 + (value - CANVAS / 2) * self.scale
@@ -86,11 +86,11 @@ class Mark:
 
     @property
     def stroke(self):
-        return self.STROKE * self.scale
+        return self.STROKE_WIDTH * self.scale
 
     @property
     def ridge_line(self):
-        return self.RIDGE_LINE * self.scale
+        return self.RIDGE_LINE_WIDTH * self.scale
 
     @property
     def arcs(self):
@@ -98,7 +98,7 @@ class Mark:
 
     @property
     def ridge(self):
-        return tuple((self._scaled(x), self._scaled(y)) for x, y in self.RIDGE)
+        return tuple((self._scaled(x), self._scaled(y)) for x, y in self.RIDGE_POINTS)
 
 
 class SvgRenderer:
@@ -127,9 +127,7 @@ class SvgRenderer:
             (x0, y0), (x1, y1) = (self._round(p) for p in arc.ends(x, y))
             path = f"M{x0:g} {y0:g}A{arc.radius:g} {arc.radius:g} 0 0 1 {x1:g} {y1:g}"
             parts.append(f'<path d="{path}" stroke="{arc.color}"/>')
-        parts.append("</g>")
-        parts.append(f'<circle cx="{x:g}" cy="{y:g}" r="{r:g}" fill="{PILOT}"/>')
-        parts.append("</svg>")
+        parts.extend(("</g>", f'<circle cx="{x:g}" cy="{y:g}" r="{r:g}" fill="{PILOT}"/>', "</svg>"))
         return "\n".join(parts) + "\n"
 
     @staticmethod
