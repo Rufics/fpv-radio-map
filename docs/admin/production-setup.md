@@ -614,7 +614,7 @@ After a `git pull` that changes `tools/tiles-builder`, build its image again (st
 |---|---|
 | `permission denied` on `/var/run/docker.sock` | Your user is not in the `docker` group yet. Log out and in after `usermod`. |
 | tiles-builder: `Permission denied: '/data/out'` | `--user "$(id -u):$(id -g)"` is missing, or `~/rfmap-data` belongs to another user (`sudo chown -R "$USER" ~/rfmap-data`). |
-| tiles-builder: `different pixel sizes` | The DEM tiles have different pixel sizes: the bbox crosses 50° N, or the `--dem-file` inputs use different grids. Add `--allow-dem-resample`, see [step 2.4](#24-terrain-dem-hillshade-and-contours). |
+| tiles-builder: `different pixel sizes` | The DEM tiles have different pixel sizes: the bbox crosses 50° N (or 60°, 70°, 80°), or the `--dem-file` inputs use different grids. Add `--allow-dem-resample`, see [step 2.4](#24-terrain-dem-hillshade-and-contours). |
 | tiles-builder: `WARNING: mixing pixel sizes` | Expected with `--allow-dem-resample`; not an error. |
 | tiles-builder: DEM pixel check fails after `mixing pixel sizes` | The builder image is older than the fix. `git pull` and build the image again (step 2.2); downloads are reused. |
 | tiles-builder: `WorldCover download failed (attempt N of 4)` | A network error on the WorldCover bucket; it is retried. If the step stops, run it again: only missing tiles are downloaded. An old image restarts the whole step, so build it again. |
