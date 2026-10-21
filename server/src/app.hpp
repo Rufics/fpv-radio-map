@@ -66,6 +66,8 @@ private:
     auto route(std::string rateClass, Method method);
     /// Logs an unexpected request failure and answers 500 without its details.
     void internalError(const httplib::Request& req, httplib::Response& res, std::string_view what);
+    /// The PIN hashing gate for this config, its limits logged.
+    std::unique_ptr<PinGate> makePinGate();
     void loadCacheSettings() const;
     [[nodiscard]] json cacheTiers() const;
     json moduleList(bool admin);
