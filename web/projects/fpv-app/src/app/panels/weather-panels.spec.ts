@@ -76,6 +76,27 @@ describe('weather views', () => {
     expect(ws.briefingOpen()).toBe(false);
   });
 
+  it('briefing: drops hours asked for before a refresh', async () => {
+    store.newMission(exampleMission());
+    await loaded();
+    TestBed.inject(FpvWorkspace).briefingOpen.set(true);
+    let release: (h: HourlyWeather[]) => void = () => undefined;
+    const old = new Promise<HourlyWeather[]>((resolve) => (release = resolve));
+    const spy = vi.spyOn(wx, 'hourly').mockReturnValue(old);
+    const b = vmOf<{ cards: () => { hoursLoaded: boolean }[]; refresh: () => void }>(WeatherBriefingComponent);
+    TestBed.tick();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+    b.refresh();
+    release([]);
+    await MockApiHarness.wait(0);
+    expect(b.cards().some((c) => c.hoursLoaded)).toBe(false);
+    await loaded();
+    TestBed.tick();
+    for (let i = 0; i < 50 && !b.cards().every((c) => c.hoursLoaded); i++) await MockApiHarness.wait(100);
+    expect(b.cards().every((c) => c.hoursLoaded)).toBe(true);
+  });
+
   it('briefing: never calm without a forecast to judge by', async () => {
     const vm = () => vmOf<{ verdict: () => { title: string; tone: string } }>(WeatherBriefingComponent);
     const spy = vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockRejectedValue(new Error('down'));

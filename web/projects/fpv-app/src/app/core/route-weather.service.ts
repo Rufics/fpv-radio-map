@@ -127,10 +127,21 @@ export class LimitedRunner {
   constructor(private readonly limit: number) {}
 
   async run<T, R>(items: readonly T[], job: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
-    const out: PromiseSettledResult<R>[] = [];
-    for (let i = 0; i < items.length; i += this.limit) {
-      out.push(...(await Promise.allSettled(items.slice(i, i + this.limit).map(job))));
-    }
+    const out = new Array<PromiseSettledResult<R>>(items.length);
+    let next = 0;
+    // each worker takes the next item as soon as its last one settles
+    const worker = (): Promise<void> => {
+      if (next >= items.length) return Promise.resolve();
+      const i = next++;
+      return Promise.resolve()
+        .then(() => job(items[i]))
+        .then(
+          (value) => (out[i] = { status: 'fulfilled', value }),
+          (reason: unknown) => (out[i] = { status: 'rejected', reason }),
+        )
+        .then(worker);
+    };
+    await Promise.all(Array.from({ length: Math.min(this.limit, items.length) }, worker));
     return out;
   }
 }
@@ -207,7 +218,7 @@ export class RouteWeatherService {
   readonly route = computed<RouteWeather | null>(() => {
     const t = this.timeline();
     const l = this.loaded();
-    return t && l && l.key === this.key() ? new RouteWeather(t, l.samples) : null;
+    return t && l?.key === this.key() ? new RouteWeather(t, l.samples) : null;
   });
 
   /** True once forecasts arrived but none covers the flight time. */

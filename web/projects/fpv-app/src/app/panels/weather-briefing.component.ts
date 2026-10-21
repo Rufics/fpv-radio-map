@@ -170,6 +170,8 @@ export class WeatherBriefingComponent {
   private readonly panel = viewChild<ElementRef<HTMLElement>>('panel');
   /** Hourly forecasts around each point's ETA, by place and time */
   private readonly hourly = signal<Map<string, HourlyWeather[]>>(new Map());
+  /** Goes up on every refresh, so hours asked for before it are dropped. */
+  private hoursGeneration = 0;
 
   protected readonly subtitle = computed(() => {
     const t = this.wx.timeline();
@@ -184,9 +186,9 @@ export class WeatherBriefingComponent {
     if (status === 'error') return NO_VERDICT.error;
     const route = this.wx.route();
     if (!route || route.empty) return NO_VERDICT.noForecast;
-    const levels = this.wx.summary().map((s) => s.level);
-    if (levels.includes('strong')) return VERDICT.strong;
-    return levels.includes('notable') ? VERDICT.notable : VERDICT.calm;
+    const levels = new Set(this.wx.summary().map((s) => s.level));
+    if (levels.has('strong')) return VERDICT.strong;
+    return levels.has('notable') ? VERDICT.notable : VERDICT.calm;
   });
 
   protected readonly cards = computed<BriefingCardVm[]>(() => {
@@ -211,6 +213,7 @@ export class WeatherBriefingComponent {
 
   /** Fresh forecasts for the route and for the hours around each ETA. */
   protected refresh(): void {
+    this.hoursGeneration++;
     this.hourly.set(new Map());
     this.wx.refresh();
   }
@@ -222,7 +225,10 @@ export class WeatherBriefingComponent {
   private async loadHours(k: KeyPointWeatherVm): Promise<void> {
     const key = WeatherBriefingComponent.keyOf(k);
     if (this.hourly().has(key)) return;
+    const gen = this.hoursGeneration;
     const hours = await this.wx.hourly(k.point);
+    // asked before a refresh: the fresh request is already on its way
+    if (gen !== this.hoursGeneration) return;
     this.hourly.update((m) => new Map(m).set(key, hours));
   }
 

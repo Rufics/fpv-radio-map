@@ -86,7 +86,8 @@ export class RouteWeather {
     const after = this.covered.findIndex((s) => s.point.alongM >= point.alongM);
     // before the first forecast or past the last one, the nearest one holds
     if (after === 0) return this.reading(point, this.covered[0].weather);
-    if (after < 0) return this.reading(point, this.covered[this.covered.length - 1].weather);
+    const last = this.covered.at(-1);
+    if (after < 0 && last) return this.reading(point, last.weather);
     const a = this.covered[after - 1];
     const b = this.covered[after];
     const span = b.point.alongM - a.point.alongM;
