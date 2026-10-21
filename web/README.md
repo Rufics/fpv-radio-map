@@ -19,6 +19,8 @@ Node ≥ 22.22.3 or ≥ 24.15 (Angular CLI 22). CI uses Node 24.
 npm ci --ignore-scripts
 ```
 
+`package.json` has one `overrides` entry: `@angular/build` 22.2.3 pins `vite` 8.3.0, which is affected by the `launch-editor` advisories (GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw, GHSA-587h-7wmj-h5pm, fixed in 8.3.3). The override moves it to the patched `~8.3.4` line. Remove it once an `@angular/build` release depends on `vite` ≥ 8.3.3.
+
 `npm run sync-schemas` runs before start, build and test. It copies `../schemas/mission.schema.json` and `../schemas/library/*.schema.json` into `projects/ui-kit/src/lib/schemas/schemas.generated.ts`, so the browser validates with the same JSON Schemas (draft-07, ajv strict) as the server.
 
 ## Run, build, test
