@@ -18,6 +18,7 @@ constexpr double kZeroCurrentA = 0.05;    // below this all flight, the sensor i
 constexpr std::uint32_t kArmBit = 1u;     // BOXARM is bit 0 in every release
 constexpr std::int64_t kStateGpsFixHome = 1;  // stateFlags: GPS_FIX_HOME
 constexpr std::int64_t kStateGpsFix = 2;      // stateFlags: GPS_FIX
+constexpr std::size_t kMaxCraftBytes = 128;
 
 json note(const char* code, const char* severity, std::string message, std::string fix = {}) {
     json n = {{"code", code}, {"severity", severity}, {"message", std::move(message)}};
@@ -30,6 +31,13 @@ std::optional<double> coordinate(std::optional<std::int64_t> raw, double limit) 
     const double deg = static_cast<std::int32_t>(*raw) / kCoordDivisor;
     if (std::abs(deg) > limit) return std::nullopt;
     return deg;
+}
+
+/// At most kMaxCraftBytes of UTF-8 text, cut between characters.
+std::string shortened(const std::string& text) {
+    std::size_t n = std::min(text.size(), kMaxCraftBytes);
+    while (n > 0 && n < text.size() && (static_cast<unsigned char>(text[n]) & 0xC0u) == 0x80u) --n;
+    return text.substr(0, n);
 }
 
 }  // namespace
@@ -469,7 +477,7 @@ json NormalizedLogBuilder::finish(const ParseStats& stats, int index, std::pair<
                 {"firmware", firmwareJson()},
                 {"channels", channelsJson()},
                 {"notes", notesJson(stats)}};
-    if (const auto craft = header_.value("Craft name"); craft.has_value() && !craft->empty()) log["craft"] = craft->substr(0, 128);
+    if (const auto craft = header_.value("Craft name"); craft.has_value() && !craft->empty()) log["craft"] = shortened(*craft);
     if (const auto at = startedAt(); at.has_value()) log["startedAt"] = *at;
     if (stats.firstTimeUs.has_value() && stats.lastTimeUs.has_value()) {
         log["durationS"] = static_cast<double>(*stats.lastTimeUs - *stats.firstTimeUs) / 1e6;

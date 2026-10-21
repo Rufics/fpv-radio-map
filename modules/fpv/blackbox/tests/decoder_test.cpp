@@ -306,6 +306,14 @@ TEST(BlackboxDecoder, SampleRateThinsTheMainLoopOnly) {
     EXPECT_EQ(l.at("stats").at("frames").at("I").get<int>() + l.at("stats").at("frames").at("P").get<int>(), 200);
 }
 
+TEST(LogHeader, ReplacesBytesThatAreNotUtf8) {
+    const LogHeader h = headerOf({{"Craft name", "Bad\xC3(\xFF \xE2\x82\xAC \xF0\x9F\x9A\x81 \xED\xA0\x80"},
+                                  {"Board \xC0\xAF", "x"}});
+    EXPECT_EQ(h.value("Craft name"), "Bad\uFFFD(\uFFFD \u20AC \U0001F681 \uFFFD\uFFFD\uFFFD");
+    EXPECT_EQ(h.value("Board \uFFFD\uFFFD"), "x");
+    EXPECT_NO_THROW((void)json(*h.value("Craft name")).dump());
+}
+
 TEST(BlackboxDecoder, HeaderOnlyLog) {
     SyntheticLog log;
     log.end();
@@ -314,6 +322,14 @@ TEST(BlackboxDecoder, HeaderOnlyLog) {
     EXPECT_TRUE(hasNote(l, "header-only"));
     EXPECT_FALSE(l.contains("series"));
     EXPECT_EQ(l.at("craft"), "TestQuad");
+
+    // A long craft name is cut between characters: 64 two-byte letters and one more.
+    std::string named(log.bytes().begin(), log.bytes().end());
+    std::string longName = "x";
+    for (int i = 0; i < 64; ++i) longName += "\u0416";
+    named.replace(named.find("TestQuad"), 8, longName);
+    const json cut = decodeOne(std::vector<std::uint8_t>(named.begin(), named.end()));
+    EXPECT_EQ(cut.at("craft").get<std::string>(), longName.substr(0, 127));
 }
 
 TEST(BlackboxDecoder, CorruptBytesBecomeAGapAndTheStreamResyncs) {

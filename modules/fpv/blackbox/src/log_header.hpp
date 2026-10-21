@@ -127,7 +127,7 @@ public:
     static std::vector<long long> splitIntegers(std::string_view text);
 
 private:
-    void addLine(std::string_view name, std::string_view value);
+    void addLine(std::string_view rawName, std::string_view rawValue);
     void addFieldLine(char type, std::string_view what, std::string_view value);
     void finish();
 
