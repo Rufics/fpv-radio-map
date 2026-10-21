@@ -257,7 +257,8 @@ export class RouteWeatherMapComponent {
   static shortValue(p: KeyPointWeatherVm, metric: WeatherMetric): string {
     switch (metric) {
       case 'headwind':
-        return p.alongTrack || p.windSpeed;
+        // no leg arrives at the start, so it has no head or tail part: give the wind with its direction
+        return p.alongTrack || `${p.windSpeed} ${p.windCompass}`.trim();
       case 'wind':
         return `${p.windSpeed} ${p.windCompass}`.trim();
       case 'temperature':

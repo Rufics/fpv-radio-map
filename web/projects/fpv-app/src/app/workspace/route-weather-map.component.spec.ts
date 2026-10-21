@@ -97,6 +97,8 @@ describe('RouteWeatherMapComponent', () => {
   it('tags each route point with its ETA and the value the route is coloured by (phones)', () => {
     const tags = () => [...canvas.querySelectorAll('.rf-wx-tag')].map((t) => t.textContent);
     expect(tags()).toHaveLength(4);
+    // the start has no arriving leg: its wind, with the direction, not a head or tail part
+    expect(tags()[0]).toMatch(/^\d\d:\d\d · \d+\.\d m\/s [NESW]+$/);
     expect(tags()[1]).toMatch(/^\d\d:\d\d · (head|tail) \d+\.\d m\/s$/);
     TestBed.inject(FpvWorkspace).weatherMetric.set('temperature');
     TestBed.tick();

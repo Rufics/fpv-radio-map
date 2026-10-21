@@ -32,6 +32,7 @@ import {
 } from '@rfmap/ui-kit';
 import { FpvWorkspace, LINK_LETTER, LegRowVm, endsAtTurnBack } from '../core/fpv-workspace.service';
 import { CompareService } from '../core/fpv-core';
+import { RouteWeatherService } from '../core/route-weather.service';
 import { RouteWeatherMapComponent } from './route-weather-map.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
@@ -157,6 +158,7 @@ export class MapStageComponent {
   private readonly missingData = new MissingDataLayer();
   private readonly routeDelta = new RouteDeltaLayer();
   protected readonly cmp = inject(CompareService);
+  private readonly wx = inject(RouteWeatherService);
   private readonly weather: WeatherLayer[] = [];
   private tags: Marker[] = [];
   private readonly ready = signal(false);
@@ -168,8 +170,11 @@ export class MapStageComponent {
   );
   protected readonly dim = computed(() => !this.ws.mission() && !this.ws.placing());
   protected readonly hasRoute = computed(() => (this.ws.mission()?.waypoints.length ?? 0) > 0);
-  /** Weather mode on the map; a fix preview draws its own route, so it keeps the leg labels */
-  protected readonly weatherShown = computed(() => this.ws.weatherMode() && !this.ws.store.preview());
+  /** The route coloured by the weather; until then (or in a fix preview, which draws its own route) the leg labels stay */
+  protected readonly weatherShown = computed(() => {
+    const route = this.wx.route();
+    return this.ws.weatherMode() && !this.ws.store.preview() && route !== null && !route.empty;
+  });
   protected readonly routeDeltaShown = computed(() => !!this.cmp.result()?.links?.[this.cmp.link()]?.points?.length && !this.ws.store.preview());
   protected readonly droneAgl = computed(() => this.ws.mission()?.coverage?.droneAglM ?? 120);
   protected readonly showHeatLegend = computed(() => !!this.ws.store.coverage()[this.ws.heatLink()] && this.layers.isVisible('results-coverage'));
