@@ -50,6 +50,10 @@ class RegionTest(unittest.TestCase):
         with self.assertRaisesRegex(dataset.DatasetError, "180th"):
             dataset.Region(10.0, 179.9, 50.0, 50.0).validate()
 
+    def test_rejects_box_beyond_max_latitude(self):
+        with self.assertRaisesRegex(dataset.DatasetError, "85"):
+            dataset.Region(84.99, 0.0, 10.0, 10.0).validate()
+
     def test_rejects_centre_out_of_range(self):
         with self.assertRaisesRegex(dataset.DatasetError, "out of range"):
             dataset.Region(89.0, 0.0, 10.0, 10.0).validate()
@@ -75,6 +79,10 @@ class TilesBuilderTest(unittest.TestCase):
         self.assertEqual(dem[dem.index("--bbox") + 1], "1.00000,2.00000,3.00000,4.00000")
         self.assertEqual(landcover[-1], "--force")
         self.assertIn(f"{Path('data')}:/data", dem)
+
+    def test_rejects_colon_in_directory(self):
+        with self.assertRaisesRegex(dataset.DatasetError, "':'"):
+            dataset.TilesBuilder(dataset.DEFAULT_IMAGE, Path("data:x"))
 
     def test_rejects_bad_image_name(self):
         with self.assertRaises(dataset.DatasetError):
@@ -134,7 +142,7 @@ class CliTest(unittest.TestCase):
     def test_verify_bad_manifest(self):
         out = Path(self.tmp.name) / "out"
         out.mkdir()
-        for content in ("{", '{"format": 99}', '{"format": 1, "files": {}}'):
+        for content in ("{", '{"format": 99}', '{"format": 1, "files": {}}', '{"format": 1}'):
             with self.subTest(content=content):
                 (out / dataset.MANIFEST_NAME).write_text(content)
                 self.assertEqual(self.cli.main(["verify", "--out", self.tmp.name]), 1)

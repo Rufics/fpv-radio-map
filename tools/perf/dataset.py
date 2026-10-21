@@ -43,6 +43,8 @@ PRESETS_KM = {"small": 10.0, "medium": 25.0, "large": 50.0}
 MIN_SIZE_KM = 1.0
 MAX_SIZE_KM = 200.0
 KM_PER_DEGREE_LAT = 111.32
+# tiles-builder rejects a bbox beyond this latitude.
+MAX_LATITUDE_DEG = 85.0
 # Copernicus DEM widens its longitude spacing at these latitudes; tiles-builder refuses to mosaic
 # across them without resampling.
 DEM_ZONE_BORDERS_DEG = (50.0, 60.0, 70.0, 80.0)
@@ -86,9 +88,11 @@ class Region:
         for size in (self.width_km, self.height_km):
             if not MIN_SIZE_KM <= size <= MAX_SIZE_KM:
                 raise DatasetError(f"region size must be {MIN_SIZE_KM:g} to {MAX_SIZE_KM:g} km, got {size:g}")
-        if not -85.0 < self.center_lat < 85.0 or not -180.0 < self.center_lon < 180.0:
+        if not -MAX_LATITUDE_DEG < self.center_lat < MAX_LATITUDE_DEG or not -180.0 < self.center_lon < 180.0:
             raise DatasetError(f"centre {self.center_lat},{self.center_lon} is out of range")
         box = self.bounding_box()
+        if box.min_lat <= -MAX_LATITUDE_DEG or box.max_lat >= MAX_LATITUDE_DEG:
+            raise DatasetError(f"region must stay within {MAX_LATITUDE_DEG:g} degrees of latitude")
         if box.min_lon <= -180.0 or box.max_lon >= 180.0:
             raise DatasetError("regions that cross the 180th meridian are not supported")
         for border in DEM_ZONE_BORDERS_DEG:
@@ -186,6 +190,8 @@ class DatasetManifest:
             raise DatasetError(f"{self.path} is not valid JSON: {error}") from error
         if not isinstance(content, dict) or content.get("format") != MANIFEST_FORMAT:
             raise DatasetError(f"{self.path} has an unknown format")
+        if not isinstance(content.get("region"), dict):
+            raise DatasetError(f"{self.path} has no region")
         return content
 
     def _raster(self, name):
@@ -201,6 +207,8 @@ class TilesBuilder:
     def __init__(self, image, data_dir, runner=subprocess.run):
         if not IMAGE_PATTERN.match(image):
             raise DatasetError(f"not a valid image name: {image!r}")
+        if ":" in str(data_dir):
+            raise DatasetError(f"the dataset directory cannot contain ':' (Docker mount syntax): {data_dir}")
         self._image = image
         self._data_dir = data_dir
         self._runner = runner
