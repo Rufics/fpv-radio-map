@@ -14,6 +14,10 @@ from perfkit.errors import PerfError
 SECONDS_PER_HOUR = 3600.0
 
 
+# Labels of the metric name and the scrape target: the same in every run, so not part of a name.
+_TARGET_LABELS = frozenset({"__name__", "instance", "job"})
+
+
 @dataclass(frozen=True)
 class Series:
     labels: dict[str, str]
@@ -21,7 +25,7 @@ class Series:
 
     def describe(self) -> str:
         """The label values that tell this series from the others of its query, e.g. "http"."""
-        return ",".join(value for name, value in sorted(self.labels.items()) if name != "__name__")
+        return ",".join(value for name, value in sorted(self.labels.items()) if name not in _TARGET_LABELS)
 
     def to_json(self) -> dict:
         return {"labels": self.labels, "values": [[time, value] for time, value in self.points]}
@@ -30,7 +34,7 @@ class Series:
 class SeriesStats:
     """The numbers a collector can make of one series."""
 
-    NAMES = ("max", "min", "avg", "last", "slope")
+    NAMES = ("max", "min", "avg", "last", "slope", "tail_slope")
 
     @classmethod
     def of(cls, stat: str, points: list[tuple[float, float]]) -> float:
@@ -47,6 +51,9 @@ class SeriesStats:
             return values[-1]
         if stat == "slope":
             return cls.slope(points)
+        if stat == "tail_slope":
+            # The second half only: caches fill up early in a run and would read as a leak.
+            return cls.slope(points[len(points) // 2:])
         raise PerfError(f"unknown statistic {stat}; one of {', '.join(cls.NAMES)}")
 
     @staticmethod

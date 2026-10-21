@@ -26,6 +26,8 @@ from perfkit.errors import PerfError
 
 TOOL_DIR = Path(__file__).resolve().parent.parent
 COMPOSE_FILE = TOOL_DIR / "stand" / "compose.yml"
+SANITIZE_FILE = TOOL_DIR / "stand" / "compose.sanitize.yml"
+SANITIZED_IMAGE = "rfmap-server:perf-sanitize"
 SERVER_CONFIG = TOOL_DIR / "stand" / "server.perf.json"
 PROJECT = "rfmap-perf"
 # The server seeds the library and migrates the database before it answers.
@@ -56,10 +58,18 @@ class StandSettings:
     monitoring: bool = True
     prometheus_port: int = 19090
     grafana_port: int = 13000
+    sanitize: bool = False
 
     @property
     def grafana(self) -> bool:
         return self.monitoring and self.keep
+
+    @property
+    def image(self) -> str:
+        """The server image; a sanitized build gets its own tag unless one was named."""
+        if self.sanitize and self.server_image == "rfmap-server:perf":
+            return SANITIZED_IMAGE
+        return self.server_image
 
 
 class StandLimits:
@@ -95,9 +105,24 @@ class Stand:
     def grafana_url(self) -> str:
         return f"http://127.0.0.1:{self.settings.grafana_port}"
 
+    def extras(self) -> list[str]:
+        """The optional services this stand runs, by the names collectors give in "needs"."""
+        return [name for name, on in (("prometheus", self.settings.monitoring), ("sanitizer", self.settings.sanitize))
+                if on]
+
     def endpoints(self) -> dict[str, str]:
-        """What collectors can read besides the run's files: the stand's Prometheus, when it runs."""
-        return {"prometheus": self.prometheus_url} if self.settings.monitoring else {}
+        """What collectors can read besides the run's files: the stand's Prometheus, when it runs, and
+        the folder of sanitizer reports of a sanitized server."""
+        found = {"prometheus": self.prometheus_url} if self.settings.monitoring else {}
+        if self.settings.sanitize:
+            found["sanitizer"] = str(self.sanitizer_dir)
+        return found
+
+    @property
+    def sanitizer_dir(self) -> Path:
+        if self.run_dir is None:
+            raise PerfError("the stand has no run folder yet")
+        return self.run_dir / "raw" / "sanitizer"
 
     @property
     def work_dir(self) -> Path:
@@ -134,15 +159,21 @@ class Stand:
             raise PerfError("the stand has no run folder yet")
         return {**os.environ, "RFMAP_PERF_DATA": str(s.dataset_dir), "RFMAP_PERF_RUN_DIR": str(self.run_dir),
                 "RFMAP_PERF_PORT": str(s.port), "RFMAP_PERF_ADMIN_TOKEN": self.admin_token,
-                "RFMAP_PERF_SERVER_IMAGE": s.server_image, "RFMAP_PERF_USER": user,
+                "RFMAP_PERF_SERVER_IMAGE": s.image, "RFMAP_PERF_USER": user,
                 "RFMAP_PERF_WORK_DIR": str(self.work_dir), "RFMAP_PERF_PROMETHEUS_PORT": str(s.prometheus_port),
-                "RFMAP_PERF_GRAFANA_PORT": str(s.grafana_port), **s.limits}
+                "RFMAP_PERF_GRAFANA_PORT": str(s.grafana_port),
+                "RFMAP_PERF_SANITIZER_DIR": str(self.sanitizer_dir), **s.limits}
 
     def _compose(self, *args: str) -> list[str]:
-        return ["docker", "compose", "-f", str(COMPOSE_FILE), "-p", PROJECT, *args]
+        files = ["-f", str(COMPOSE_FILE)] + (["-f", str(SANITIZE_FILE)] if self.settings.sanitize else [])
+        return ["docker", "compose", *files, "-p", PROJECT, *args]
 
     def up(self, client: ApiClient, clock=time.monotonic) -> None:
         build = "--build" if self.settings.build else "--no-build"
+        if self.settings.sanitize:
+            # Written by the server's user inside the container.
+            self.sanitizer_dir.mkdir(parents=True, exist_ok=True)
+            self.sanitizer_dir.chmod(0o777)
         self._runner.run(self._compose(*self._profiles(), "up", "-d", build, *self._services()),
                          env=self.environment())
         waits = [("rfmap-server", client, "/health")]
@@ -165,6 +196,10 @@ class Stand:
                                               "run", "--quiet", *k6_options, "/scripts/runner.js"),
                                 env=self.environment(), allowed=(0, K6_THRESHOLDS_CROSSED))
         return code == 0
+
+    def stop_server(self) -> None:
+        """Stops the server gracefully, so a sanitized one writes its leak report."""
+        self._runner.run(self._compose("stop", "-t", "60", "rfmap-server"), env=self.environment())
 
     def settle(self) -> None:
         """Waits until Prometheus has the last seconds of the load."""

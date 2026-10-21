@@ -60,7 +60,7 @@ class ScenarioSuite:
         self._fixtures = FixtureReader(catalog)
         self._plans = PlanBuilder(catalog, self._fixtures)
         self._environment: dict[str, Any] = {"dataset": dataset.manifest,
-                                             "monitoring": sorted(stand.endpoints())}
+                                             "extras": stand.extras()}
         self._problems: list[str] = []
         self._log = log
         self._skipped: set[str] = set()
@@ -76,7 +76,7 @@ class ScenarioSuite:
         found = []
         for item_id in self.scenario.manifest.get("collectors", []):
             item = self._require("collector", item_id)
-            missing = set(item.manifest.get("needs", [])) - set(self._stand.endpoints())
+            missing = set(item.manifest.get("needs", [])) - set(self._stand.extras())
             if missing and item.key not in self._skipped:
                 self._skipped.add(item.key)
                 print(f"skipping {item.key}: the stand runs no {', '.join(sorted(missing))}", file=self._log)
@@ -110,6 +110,9 @@ class ScenarioSuite:
             self._stages(timeline, summary)
             self._stand.settle()
             self._annotate(timeline)
+            if self._stand.settings.sanitize:
+                with timeline.phase("server stop", "stand"):
+                    self._stand.stop_server()
             return [self._collect(item, run_dir, load.started, load.finished) for item in self.collectors()]
         finally:
             self._save_logs(run_dir)
@@ -168,8 +171,9 @@ class ScenarioSuite:
         # Personas and fixtures shape the load, and the other collectors' services share the machine
         # (monitoring costs CPU): a new major of any of them, or a run without one, starts a new baseline.
         related = tuple(entry for entry in self.items() if entry.kind.name in ("persona", "fixture", "collector"))
+        limits = {key: float(value) for key, value in self.scenario.manifest.get("limits", {}).items()}
         return Collected(self.scenario, item, collection, frozenset(compare.get("metrics", DEFAULT_METRICS)),
-                         float(compare.get("maxRegressionPct", DEFAULT_LIMIT_PCT)), related)
+                         float(compare.get("maxRegressionPct", DEFAULT_LIMIT_PCT)), related, limits)
 
     def _save_logs(self, run_dir: Path) -> None:
         try:

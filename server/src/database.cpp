@@ -28,14 +28,14 @@ Database::Lease::Lease(Database& d) : db(d) {
 DbPoolStats Database::stats() {
     const std::lock_guard lock(mutex_);
     return {size_, static_cast<int>(idle_.size()), waiting_, leases_, waitSeconds_,
-            reconnects_.load(std::memory_order_relaxed)};
+            reconnects_.load()};
 }
 
 Database::Lease::~Lease() {
     if (broken || !conn->is_open()) {
         try {
             conn = std::make_unique<pqxx::connection>(db.url_);
-            db.reconnects_.fetch_add(1, std::memory_order_relaxed);
+            db.reconnects_.fetch_add(1);
         } catch (const pqxx::failure& e) {
             // Keep the dead one: the next lease fails fast with a clear error instead of hanging.
             db.log_.warn("database", std::string("reconnect failed: ") + e.what());

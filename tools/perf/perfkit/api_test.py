@@ -29,8 +29,9 @@ class ApiClientTest(ApiTestCase):
     def test_unreachable(self):
         gone = FakeServer()
         gone.stop()
+        client = ApiClient(gone.base_url)
         with self.assertRaises(PerfError):
-            ApiClient(gone.base_url).call("GET", "/health")
+            client.call("GET", "/health")
 
     def test_parse(self):
         self.assertIsNone(ApiClient._parse(b""))
@@ -48,12 +49,17 @@ class ProvisionerTest(ApiTestCase):
         self.assertEqual(link[2]["role"], "view")
         self.assertEqual(link[3]["X-Owner-Key"], "k1")
 
+    def test_link_token_gets_links_but_no_session_of_its_own(self):
+        (found,) = Provisioner(self.client).credentials({"type": "link-token", "role": "view"}, MISSIONS, 1)
+        self.assertEqual((found["token"], found["pin"]), ("t-m1", Provisioner.PIN))
+
     def test_owner_and_anonymous(self):
         owner = Provisioner(self.client).credentials({"type": "mission-owner"}, MISSIONS, 1)
         self.assertEqual(owner, [{"missionId": "m1", "ownerKey": "k1", "session": "s1"}])
         self.assertEqual(Provisioner(self.client).credentials({"type": "none"}, [], 5), [])
+        provisioner = Provisioner(self.client)
         with self.assertRaisesRegex(PerfError, "needs setup.missions"):
-            Provisioner(self.client).credentials({"type": "mission-owner"}, [], 1)
+            provisioner.credentials({"type": "mission-owner"}, [], 1)
 
 
 if __name__ == "__main__":

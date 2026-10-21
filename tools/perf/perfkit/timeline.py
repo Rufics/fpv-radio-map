@@ -35,14 +35,13 @@ class Timeline:
     def phase(self, name: str, kind: str, **attributes) -> Iterator[Event]:
         event = Event(name, kind, self._clock(), attributes=attributes)
         self._events.append(event)
+        succeeded = False
         try:
             yield event
-        except BaseException:
-            event.outcome = "failed"
-            raise
+            succeeded = True
         finally:
             event.finished = self._clock()
-            event.outcome = event.outcome or "ok"
+            event.outcome = event.outcome or ("ok" if succeeded else "failed")
 
     def record(self, name: str, kind: str, started: str, finished: str, **attributes) -> Event:
         """An event whose times another tool measured, such as a load stage inside k6."""

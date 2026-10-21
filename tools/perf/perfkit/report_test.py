@@ -73,6 +73,18 @@ class ReportsOfARunTest(ReportTestCase):
         self.assertIn("X / Y × 4", summary)
         self.assertIn("`c0ffee (dirty)`", summary)
 
+    def test_problems_lead_both_reports(self):
+        _, _, run_dir = self.run_suite({"BM_A": 100.0})
+        results = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
+        self.assertEqual(results["problems"], [])
+        results["problems"] = ["scenario/soak server_rss tail_slope is 40 MiB/h, above its limit 32 MiB/h"]
+        (run_dir / "results.json").write_text(json.dumps(results), encoding="utf-8")
+        ReportRunner(self.catalog.items("reporter")).render(run_dir, self.results, io.StringIO())
+        summary = (run_dir / "summary.md").read_text(encoding="utf-8")
+        self.assertTrue(summary.startswith("### 🔴 Failed: `micro`"))
+        self.assertIn("- scenario/soak server_rss tail_slope is 40 MiB/h", summary)
+        self.assertIn("1 problem(s) failed the run", (run_dir / "report.html").read_text(encoding="utf-8"))
+
     def test_first_run_has_no_baseline_and_no_series(self):
         _, _, run_dir = self.run_suite({"BM_A": 100.0})
         summary = (run_dir / "summary.md").read_text(encoding="utf-8")
@@ -116,7 +128,7 @@ class TrendChartTest(ReportTestCase):
                   PastValue("r2", "2026-01-02T00:00:00Z", 2100.0, {"benchmark/rf-core": "1.1.0"})]
         figures = module.Figures()
         module.TrendChart(row, points).add_to(figures)
-        (figure,) = figures.figures.values()
+        (figure,) = figures.charts.values()
         self.assertEqual(figure["layout"]["yaxis"]["title"]["text"], "µs")
         self.assertEqual(figure["data"][0]["y"], [2.0, 2.1])
         self.assertEqual(figure["layout"]["annotations"][0]["hovertext"], "benchmark/rf-core 1.0.0 → 1.1.0")
@@ -136,8 +148,9 @@ class ReportRunnerTest(ReportTestCase):
         self.assertIn("reporter/html could not write its report", problems[0])
 
     def test_unreadable_run_folder(self):
+        missing = self.root / "nope"
         with self.assertRaisesRegex(PerfError, "cannot read"):
-            RunFiles.read(self.root / "nope")
+            RunFiles.read(missing)
 
     def test_report_command(self):
         _, _, run_dir = self.run_suite({"BM_A": 100.0})

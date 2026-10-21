@@ -75,7 +75,7 @@ class Provisioner:
             created = self._client.expect(201, "POST", "/missions", missions[index % len(missions)])
             credential = {"missionId": created["missionId"], "ownerKey": created["ownerKey"],
                           "session": created["session"]}
-            if kind == "link-pin":
+            if kind in ("link-pin", "link-token"):
                 credential.update(self._link(credential, auth.get("role", "edit")))
             found.append(credential)
         return found

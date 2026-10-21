@@ -48,7 +48,7 @@ public:
 
     [[nodiscard]] PoolStats stats() {
         std::lock_guard lock(mutex_);
-        return {size(), tasks_.size(), busy_.load(std::memory_order_relaxed), completed_.load(std::memory_order_relaxed)};
+        return {size(), tasks_.size(), busy_.load(), completed_.load()};
     }
 
 private:
@@ -59,13 +59,13 @@ private:
             if (std::unique_lock lock(mutex_); wake_.wait(lock, stop, [this] { return !tasks_.empty(); })) {
                 task = std::move(tasks_.front());
                 tasks_.pop_front();
-                busy_.fetch_add(1, std::memory_order_relaxed);
+                busy_.fetch_add(1);
             } else {
                 return;
             }
             task();  // a packaged_task: it keeps its exception for the future and does not throw
-            busy_.fetch_sub(1, std::memory_order_relaxed);
-            completed_.fetch_add(1, std::memory_order_relaxed);
+            busy_.fetch_sub(1);
+            completed_.fetch_add(1);
         }
     }
 

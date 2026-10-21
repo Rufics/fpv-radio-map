@@ -1,7 +1,7 @@
 {
   "kind": "collector",
   "id": "prometheus",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Reads the stand's Prometheus over the load phase: CPU and memory of the containers, the server's thread and database pools, jobs and caches, PostgreSQL, and k6's own series. Saves every series to raw/prometheus.json for the reports.",
   "entry": "collector.py:PrometheusCollector",
   "needs": [
@@ -31,7 +31,8 @@
         "stats": [
           "max",
           "last",
-          "slope"
+          "slope",
+          "tail_slope"
         ],
         "title": "Server resident memory"
       },
@@ -52,7 +53,8 @@
         "better": "lower",
         "stats": [
           "max",
-          "slope"
+          "slope",
+          "tail_slope"
         ],
         "title": "Server open file descriptors"
       },

@@ -36,14 +36,19 @@ class _Handler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _range(params: dict) -> dict:
-        """Every query rises by one per step; "by (pool)" gives two series, "bad" an error."""
+        """Every query rises by one per step; "by (pool)" gives two series, "by (tier)" one with
+        labels, "bad" an error."""
         query = params["query"][0]
         if "bad" in query:
             return {"status": "error", "error": "parse error"}
         start, end, step = (float(params[name][0]) for name in ("start", "end", "step"))
         values = [[start + i * step, str(i + 1)] for i in range(int((end - start) // step) + 1)]
         values.append([end, "NaN"])
-        labels = [{"pool": "http"}, {"pool": "job-runners"}] if "by (pool)" in query else [{}]
+        labels: list[dict[str, str]] = [{}]
+        if "by (pool)" in query:
+            labels = [{"pool": "http"}, {"pool": "job-runners"}]
+        elif "by (tier)" in query:
+            labels = [{"tier": "dem-blocks", "instance": "rfmap-server:8080", "job": "rfmap-server"}]
         return {"status": "success", "data": {"resultType": "matrix",
                                               "result": [{"metric": label, "values": values} for label in labels]}}
 

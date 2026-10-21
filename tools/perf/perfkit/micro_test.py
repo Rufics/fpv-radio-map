@@ -66,19 +66,28 @@ class MicroSuiteTest(CollectorTestCase):
         keys = [item.key for item in self.suite().items()]
         self.assertEqual(keys, ["benchmark/result-cache", "benchmark/rf-core", "collector/google-benchmark"])
 
+    def test_one_repetition_has_no_median(self):
+        suite = self.suite(only=("rf-core",), repetitions=1)
+        with self.assertRaisesRegex(PerfError, "the median needs at least 2"):
+            suite.run(self.catalog.get("benchmark", "rf-core"), self.root / "raw")
+        self.assertEqual(self.runner.commands, [])
+
     def test_unknown_benchmark(self):
+        suite = self.suite(only=("nope", "rf-core"))
         with self.assertRaisesRegex(PerfError, "no benchmark nope"):
-            self.suite(only=("nope", "rf-core")).items()
+            suite.items()
 
     def test_missing_collector(self):
         self.catalog.get("benchmark", "rf-core").manifest["collector"] = "gone"
+        suite = self.suite(only=("rf-core",))
         with self.assertRaisesRegex(PerfError, "no collector 'gone'"):
-            self.suite(only=("rf-core",)).items()
+            suite.items()
 
     def test_no_benchmarks(self):
         suite = MicroSuite(Catalog(self.root, []), self.build, self.runner)
+        timeline, run_dir = Timeline(), self.root / "run"
         with self.assertRaisesRegex(PerfError, "no benchmarks"):
-            suite.execute(Timeline(), self.root / "run")
+            suite.execute(timeline, run_dir)
         self.assertEqual(self.runner.commands, [])
 
 

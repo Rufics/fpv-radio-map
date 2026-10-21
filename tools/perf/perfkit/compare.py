@@ -69,7 +69,9 @@ class Comparer:
     @staticmethod
     def worse_pct(value: float, baseline: float, better: str) -> float:
         """How much worse `value` is than `baseline`, in percent; negative when it is better."""
+        if baseline == 0 and value == 0:
+            return 0.0
         if baseline == 0:
-            return 0.0 if value == 0 else (100.0 if better == LOWER else -100.0)
+            return 100.0 if better == LOWER else -100.0
         change = (value - baseline) / abs(baseline) * 100.0
         return change if better == LOWER else -change

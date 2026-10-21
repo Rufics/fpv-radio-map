@@ -25,7 +25,7 @@
       "required": ["type"],
       "additionalProperties": false,
       "properties": {
-        "type": { "enum": ["none", "mission-owner", "link-pin", "admin-token"] },
+        "type": { "enum": ["none", "mission-owner", "link-pin", "link-token", "admin-token"] },
         "role": { "enum": ["edit", "view"] }
       }
     },
@@ -67,7 +67,14 @@
           "pattern": "^[a-z0-9][a-z0-9-]*:[A-Za-z0-9_][A-Za-z0-9_./-]*$",
           "description": "Inline JSON, or FIXTURE:FILE from a fixture; a file holding an array sends one element per request, in turn."
         },
-        "expect": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "expect": {
+          "description": "The status, or the statuses, a request must get.",
+          "type": ["integer", "array"],
+          "minimum": 100,
+          "maximum": 599,
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 100, "maximum": 599 }
+        },
         "maxPerLink": { "type": "integer", "minimum": 1 },
         "poll": {
           "type": "object",

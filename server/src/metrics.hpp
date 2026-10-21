@@ -105,14 +105,14 @@ public:
     void record(std::string_view rateClass, std::string_view method, int status, double seconds);
 
     // The request thread pool: a request is queued until a thread takes it, then busy.
-    void enqueued() { queued_.fetch_add(1, std::memory_order_relaxed); }
+    void enqueued() { queued_.fetch_add(1); }
     void started() {
-        queued_.fetch_sub(1, std::memory_order_relaxed);
-        busy_.fetch_add(1, std::memory_order_relaxed);
+        queued_.fetch_sub(1);
+        busy_.fetch_add(1);
     }
     void finished() {
-        busy_.fetch_sub(1, std::memory_order_relaxed);
-        completed_.fetch_add(1, std::memory_order_relaxed);
+        busy_.fetch_sub(1);
+        completed_.fetch_add(1);
     }
     [[nodiscard]] PoolStats pool(int threads) const;
 

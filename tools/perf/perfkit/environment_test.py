@@ -88,8 +88,9 @@ class EnvironmentTest(unittest.TestCase):
         self.assertNotEqual(Environment.host_fingerprint({"host": {**host, "logicalCpus": 8}}), fingerprint)
 
     def test_base_probe_is_abstract(self):
+        probe = Probe()
         with self.assertRaises(NotImplementedError):
-            Probe().collect()
+            probe.collect()
 
 
 if __name__ == "__main__":

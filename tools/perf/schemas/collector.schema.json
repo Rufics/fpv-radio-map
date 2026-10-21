@@ -18,9 +18,9 @@
     "entry": { "$ref": "common.schema.json#/$defs/entry" },
     "options": { "type": "object" },
     "needs": {
-      "description": "Services of the stand the collector queries; a run without them skips it (prometheus: --no-monitoring).",
+      "description": "Services of the stand the collector reads; a run without them skips it (prometheus: not with --no-monitoring; sanitizer: only with --sanitize).",
       "type": "array",
-      "items": { "enum": ["prometheus"] },
+      "items": { "enum": ["prometheus", "sanitizer"] },
       "uniqueItems": true
     },
     "metrics": {

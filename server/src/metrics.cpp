@@ -44,7 +44,7 @@ void HttpMetrics::record(std::string_view rateClass, std::string_view method, in
     std::lock_guard lock(mutex_);
     ++requests_[{std::string(rateClass), std::string(method), status}];
     auto it = durations_.find(rateClass);
-    if (it == durations_.end()) it = durations_.emplace(std::string(rateClass), Histogram{}).first;
+    if (it == durations_.end()) it = durations_.try_emplace(std::string(rateClass)).first;
     Histogram& h = it->second;
     for (std::size_t i = 0; i < kBuckets.size(); ++i) {
         if (seconds <= kBuckets[i]) {
@@ -57,8 +57,8 @@ void HttpMetrics::record(std::string_view rateClass, std::string_view method, in
 }
 
 PoolStats HttpMetrics::pool(int threads) const {
-    return {threads, static_cast<std::size_t>(std::max(0L, queued_.load(std::memory_order_relaxed))),
-            busy_.load(std::memory_order_relaxed), completed_.load(std::memory_order_relaxed)};
+    return {threads, static_cast<std::size_t>(std::max(0L, queued_.load())),
+            busy_.load(), completed_.load()};
 }
 
 void HttpMetrics::write(PrometheusText& out) const {
@@ -201,7 +201,10 @@ ProcessStats readProcessStats() {
     ProcessStats stats = parseProcStat(line, sysconf(_SC_CLK_TCK), sysconf(_SC_PAGESIZE));
     std::error_code error;
     std::filesystem::directory_iterator fds("/proc/self/fd", error);
-    if (!error) stats.openFds = static_cast<int>(std::distance(fds, std::filesystem::directory_iterator{}));
+    // The error overload of increment, so a failing scrape never throws; the iterator holds one fd itself.
+    int count = 0;
+    for (; !error && fds != std::filesystem::directory_iterator{}; fds.increment(error)) ++count;
+    if (!error) stats.openFds = count - 1;
     return stats;
 }
 

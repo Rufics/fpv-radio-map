@@ -7,7 +7,7 @@ from pathlib import Path
 from perfkit.api import ApiClient
 from perfkit.errors import PerfError
 from perfkit.fake_server_test import FakeServer
-from perfkit.stand import SERVER_CONFIG, ServerConfigFile, Stand, StandLimits, StandProbe, StandSettings
+from perfkit.stand import SANITIZE_FILE, SERVER_CONFIG, ServerConfigFile, Stand, StandLimits, StandProbe, StandSettings
 from perfkit.timeline import Event
 
 
@@ -99,6 +99,19 @@ class StandTest(StandTestCase):
         self.assertNotIn("monitoring", up)
         self.assertNotIn("experimental-prometheus-rw", load)
         self.assertEqual(stand.endpoints(), {})
+
+    def test_a_sanitized_server(self):
+        stand = self.stand(sanitize=True, monitoring=False)
+        stand.up(ApiClient(stand.base_url))
+        stand.stop_server()
+        up, stop = self.runner.runs
+        self.assertEqual(up[4:8], ["-f", str(SANITIZE_FILE), "-p", "rfmap-perf"])
+        self.assertEqual(stop[-4:], ["stop", "-t", "60", "rfmap-server"])
+        self.assertEqual(self.runner.envs[0]["RFMAP_PERF_SERVER_IMAGE"], "rfmap-server:perf-sanitize")
+        folder = self.root / "run" / "raw" / "sanitizer"
+        self.assertTrue(folder.is_dir())
+        self.assertEqual(stand.endpoints(), {"sanitizer": str(folder)})
+        self.assertEqual(StandSettings(self.root, sanitize=True, server_image="mine").image, "mine")
 
     def test_work_folder_holds_the_token_for_prometheus(self):
         stand = self.stand()

@@ -32,19 +32,19 @@ class Figures:
     """The Plotly figures of the page, by the id of the element each one goes into."""
 
     def __init__(self):
-        self.figures: dict[str, dict] = {}
+        self.charts: dict[str, dict] = {}
 
     def add(self, data: list[dict], layout: dict, css: str = "chart") -> str:
-        element = f"chart-{len(self.figures) + 1}"
+        element = f"chart-{len(self.charts) + 1}"
         base = {"margin": {"l": 56, "r": 16, "t": 36, "b": 40}, "hovermode": "x unified",
                 "legend": {"orientation": "h", "y": -0.18}, "font": {"size": 11}}
-        self.figures[element] = {"data": data, "layout": {**base, **layout}}
+        self.charts[element] = {"data": data, "layout": {**base, **layout}}
         height = f' style="height: {layout["height"]}px"' if "height" in layout else ""
         return f'<div id="{element}" class="{css}"{height}></div>'
 
     def to_script(self) -> str:
         # Inside <script>: no "</" may close it early.
-        return json.dumps(self.figures).replace("</", "<\\/")
+        return json.dumps(self.charts).replace("</", "<\\/")
 
 
 class Bands:
@@ -131,7 +131,8 @@ class HtmlReporter(Reporter):
                 f'{html.escape(run["finished"])} · outcome {html.escape(run.get("outcome", ""))} · commit '
                 f'{html.escape(str(git.get("commit", ""))[:12])}{" (dirty)" if git.get("dirty") else ""} · host '
                 f'{html.escape(results["host"])} · dataset {html.escape(results["dataset"])}</p>'
-                f"<p>{len(gated)} gated measurement(s): {badges or 'none'}; {len(rows)} in all.</p>")
+                f"<p>{len(gated)} gated measurement(s): {badges or 'none'}; {len(rows)} in all.</p>"
+                + Problems.html(results.get("problems", [])))
 
     @staticmethod
     def _environment(environment: dict[str, Any]) -> str:
@@ -195,6 +196,15 @@ class HtmlReporter(Reporter):
         return ('<h2>All measurements</h2><div class="table-wrap"><table><thead><tr><th>source</th><th>name</th>'
                 '<th>metric</th><th>value</th><th>baseline</th><th>runs</th><th>worse by</th><th>limit</th>'
                 f"<th>verdict</th></tr></thead><tbody>{body}</tbody></table></div>")
+
+
+class Problems:
+    @staticmethod
+    def html(problems: list[str]) -> str:
+        if not problems:
+            return ""
+        items = "".join(f"<li>{html.escape(problem)}</li>" for problem in problems)
+        return f'<div class="problems"><b>{len(problems)} problem(s) failed the run:</b><ul>{items}</ul></div>'
 
 
 class ResultRowHtml:

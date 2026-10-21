@@ -10,7 +10,8 @@ from perfkit.errors import PerfError
 from perfkit.measure import HIGHER, LOWER, CollectContext, Collection, Collector, Measurement
 
 _TAGGED = re.compile(r"^(?P<metric>[a-z_]+)\{persona:(?P<persona>[a-z0-9-]+),step:(?P<step>[a-z0-9-]+)\}$")
-_LATENCIES = {"p95": "p(95)", "p99": "p(99)", "med": "med"}
+_P95 = "p(95)"
+_LATENCIES = {"p95": _P95, "p99": "p(99)", "med": "med"}
 
 
 class K6SummaryCollector(Collector):
@@ -50,6 +51,6 @@ class K6SummaryCollector(Collector):
         if "rate" in failed:
             found.append(Measurement(source, name, "error_rate", "%", LOWER, float(failed["rate"]) * 100.0))
         job = metrics.get(f"job_duration{tags}", {}).get("values", {})
-        if "p(95)" in job:
-            found.append(Measurement(source, name, "job_p95", "ms", LOWER, float(job["p(95)"])))
+        if _P95 in job:
+            found.append(Measurement(source, name, "job_p95", "ms", LOWER, float(job[_P95])))
         return found

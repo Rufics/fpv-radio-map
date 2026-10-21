@@ -1,7 +1,7 @@
 {
   "kind": "collector",
   "id": "k6-summary",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Reads the end-of-test summary of k6/runner.js: latency, rate and errors for the whole run and per persona and step, and how long polled jobs took.",
   "entry": "collector.py:K6SummaryCollector",
   "metrics": [

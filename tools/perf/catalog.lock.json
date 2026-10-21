@@ -14,20 +14,24 @@
       "sha256": "92b683f0e6e528674a29f270ceebf0f1253c4a24775836bcd9ea32422fb05f15"
     },
     "collector/k6-summary": {
-      "version": "1.0.0",
-      "sha256": "2173746e609a8643a51d4ba57d2a8d42d9a35ada95f49522b776e4fc060d3960"
+      "version": "1.0.1",
+      "sha256": "f0e23d435766037848362d004296ba2462e64ff725d0c84db8e8d151d8fa1be0"
     },
     "collector/prometheus": {
+      "version": "1.1.0",
+      "sha256": "ecd95c2e3e5cf47162ccebb76f31f96350f021840c7278b833b66f76edcea766"
+    },
+    "collector/sanitizer": {
       "version": "1.0.0",
-      "sha256": "097dda9afc6211230c07f43e6eb40f75eacf0c61b9613ed1636f3f570f48a8c8"
+      "sha256": "2445ed3088f4a0e7a9b9e0e432e9f8435eeeffc70cf71438a6bc2e6b39ec5367"
     },
     "dashboard/rfmap-stand": {
       "version": "1.0.0",
       "sha256": "e29c438853b6b7684695e0157bad1ac8c89b4fee5cc21a363ef09a5fcdfd020c"
     },
     "fixture/warsaw-missions": {
-      "version": "1.0.0",
-      "sha256": "67b191e3b7ecbae745a89aa1a25f1bb43a4fb9caee0ff7d442356ff893c58136"
+      "version": "1.1.0",
+      "sha256": "ffa6d1fc639c7d9d38a8340b7564b9a8d08580fa9b7f4473b60ec1001220cb1c"
     },
     "fixture/warsaw-paths": {
       "version": "1.0.0",
@@ -41,29 +45,45 @@
       "version": "1.0.0",
       "sha256": "351d967d421f9a5db4ef5ad57fce049a0274e6b94265d0ccbdac69caad5302ce"
     },
+    "persona/link-opener": {
+      "version": "1.0.0",
+      "sha256": "44141a0cdef5d2fd7c3bd726049f8c91200fc0c9c056df145a293e747a39e0f9"
+    },
     "persona/mission-creator": {
       "version": "1.0.0",
       "sha256": "af13cbe7aa662b6e40e6165eb75dafbdf9a0b16ee16b6353e2b66ced334c4d45"
+    },
+    "persona/pin-guesser": {
+      "version": "1.0.0",
+      "sha256": "108b94c57e35fa014d7e3ef55e125d8c95da56a05078bddbb455aeca2dc535b2"
     },
     "persona/viewer": {
       "version": "1.0.0",
       "sha256": "cc0d7e1893348f8671561776360edad031ec6d4aa7f3016cc6ac5ba54a203260"
     },
     "reporter/html": {
-      "version": "1.0.0",
-      "sha256": "fba80211230817f8aa9b9ed8ee2868f21674af9827c7ba9a5a579baf5e4e9d8e"
+      "version": "1.1.0",
+      "sha256": "d2d485c60d6bc67d9b5cd236c92521cf1113fcaca8585495943fbf557d783792"
     },
     "reporter/markdown": {
+      "version": "1.1.0",
+      "sha256": "e89ba72eeeb71ddf9e90b8fa293ab5db0017d7739399de58bfab996b317d7a1f"
+    },
+    "scenario/auth-storm": {
       "version": "1.0.0",
-      "sha256": "8535ff93a4efbd96d9bdc63b52e9c793c2cbecb3212c266b6fcd99cdff9ab15b"
+      "sha256": "e572c0c240b625111bb3e6234f6c0203c8049c7adc7adf3017ea7b042771cb69"
     },
     "scenario/peak": {
-      "version": "1.1.0",
-      "sha256": "c3b7bff1d48c77a720ff540eecd4fcced8f55ef72704aaba080da6ee14c642a9"
+      "version": "1.2.0",
+      "sha256": "0e3ada561bf24dd03511600980e585744b9ddb742d1a215ef989dd1ffa929fdb"
     },
     "scenario/smoke": {
-      "version": "1.1.0",
-      "sha256": "e267c383209a358a950efc014abad853c1de648b51ce67bc7a0d2299591fd42e"
+      "version": "1.2.0",
+      "sha256": "a2515f22e95125378957f37773719e7b7800faa3bd26965df5baaa01d4664f05"
+    },
+    "scenario/soak": {
+      "version": "1.0.0",
+      "sha256": "f939d09b49ec4616d11b4ed2389b1275c99741b64b8ca762e8f9a257c72e0c16"
     }
   }
 }

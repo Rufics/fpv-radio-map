@@ -64,7 +64,7 @@ class ScenarioSuiteTest(StandTestCase):
         self.assertNotIn(("k6_p95", "max"), names)
         raw = json.loads((self.run_dir / "raw" / "prometheus.json").read_text(encoding="utf-8"))
         self.assertIn("k6_p95", [query["name"] for query in raw["queries"]])
-        self.assertEqual(suite.environment()["monitoring"], ["prometheus"])
+        self.assertEqual(suite.environment()["extras"], ["prometheus"])
         names = [(e.kind, e.name) for e in timeline.events()]
         self.assertEqual(names, [("stand", "stand up"), ("setup", "set-up"), ("load", "load"), ("stage", "steady")])
         self.assertEqual(timeline.events()[3].started, "2023-11-14T22:13:20.000Z")
@@ -84,6 +84,14 @@ class ScenarioSuiteTest(StandTestCase):
         self.assertEqual(entry.collector.key, "collector/k6-summary")
         self.assertEqual(self.log.getvalue().count("skipping collector/prometheus"), 1)
         self.assertNotIn("collector/prometheus", [item.key for item in suite.items()])
+
+    def test_a_sanitized_run_stops_the_server_before_collecting(self):
+        suite = self.suite(sanitize=True, monitoring=False)
+        timeline = Timeline()
+        collected = suite.execute(timeline, self.run_dir)
+        self.assertEqual([entry.collector.key for entry in collected], ["collector/k6-summary", "collector/sanitizer"])
+        self.assertIn(("stand", "server stop"), [(e.kind, e.name) for e in timeline.events()])
+        self.assertEqual(collected[1].limits, {"errors": 0.0, "leaked_bytes": 0.0, "leaked_allocations": 0.0})
 
     def test_a_kept_stand_gets_grafana_with_the_run_marked(self):
         suite = self.suite(keep=True)
@@ -106,17 +114,19 @@ class ScenarioSuiteTest(StandTestCase):
         self.assertEqual(suite.problems(), ["scenario/smoke: k6 thresholds crossed (see k6-summary.json)"])
 
     def test_the_stand_goes_down_after_a_failure(self):
+        suite, timeline = self.suite(), Timeline()
         with patch.object(Stand, "up", side_effect=PerfError("no stand")), \
                 self.assertRaisesRegex(PerfError, "no stand"):
-            self.suite().execute(Timeline(), self.run_dir)
+            suite.execute(timeline, self.run_dir)
         self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
 
     def test_unknown_scenario_and_missing_start(self):
         with self.assertRaisesRegex(PerfError, "no scenario nope"):
             self.suite("nope")
         (self.run_dir / "k6-summary.json").write_text("{}", encoding="utf-8")
+        suite, timeline = self.suite(), Timeline()
         with self.assertRaisesRegex(PerfError, "no start time"):
-            self.suite()._stages(Timeline(), self.run_dir / "k6-summary.json")
+            suite._stages(timeline, self.run_dir / "k6-summary.json")
 
 
 if __name__ == "__main__":

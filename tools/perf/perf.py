@@ -7,7 +7,7 @@
     python3 -I tools/perf/perf.py [--catalog-dir DIR] run --suite micro [--only ID] [--repetitions N]
         [--build-dir DIR] [--results-dir DIR] [--window N] [--no-gate] [--no-report]
     python3 -I tools/perf/perf.py [--catalog-dir DIR] run --scenario ID --dataset DIR [--port N]
-        [--server-image IMAGE] [--no-build] [--keep-stand] [--no-monitoring] [--prometheus-port N]
+        [--server-image IMAGE] [--no-build] [--keep-stand] [--no-monitoring] [--sanitize] [--prometheus-port N]
         [--grafana-port N] [--results-dir DIR] [--window N] [--no-gate] [--no-report]
     python3 -I tools/perf/perf.py [--catalog-dir DIR] report RUN_DIR [--reporter ID] [--results-dir DIR]
 

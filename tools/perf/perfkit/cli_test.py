@@ -57,8 +57,13 @@ class PerfCliTest(unittest.TestCase):
 
     def test_run_stops_before_building(self):
         results = ["--results-dir", str(self.root / "results")]
-        code, _, errors = self.run_cli("run", "--suite", "micro", "--repetitions", "0", *results)
-        self.assertEqual((code, errors.strip()), (2, "error: --repetitions must be at least 1"))
+        for options, message in ((["--repetitions", "1"], "--repetitions must be at least 2"),
+                                 (["--window", "0"], "--window must be at least 1"),
+                                 (["--port", "0"], "--port must be a port from 1 to 65535"),
+                                 (["--grafana-port", "65536"], "--grafana-port must be a port from 1 to 65535")):
+            with self.subTest(options=options):
+                code, _, errors = self.run_cli("run", "--suite", "micro", *options, *results)
+                self.assertEqual((code, errors.strip()), (2, f"error: {message}"))
         code, _, errors = self.run_cli("run", "--suite", "micro", "--only", "nope", *results)
         self.assertEqual(code, 1)
         self.assertIn("no benchmark nope", errors)

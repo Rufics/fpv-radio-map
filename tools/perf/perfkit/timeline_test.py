@@ -29,6 +29,14 @@ class TimelineTest(unittest.TestCase):
         event = timeline.events()[0]
         self.assertEqual((event.outcome, event.finished), ("failed", "2026-01-01T00:00:02.000Z"))
 
+    def test_outcome_set_inside_the_phase_stays(self):
+        timeline = Timeline(FakeClock())
+        with timeline.phase("load", "scenario") as event:
+            event.outcome = "thresholds crossed"
+        with self.assertRaises(KeyboardInterrupt), timeline.phase("stop", "stand"):
+            raise KeyboardInterrupt
+        self.assertEqual([e.outcome for e in timeline.events()], ["thresholds crossed", "failed"])
+
     def test_utc_now_format(self):
         self.assertRegex(utc_now(), r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")
 

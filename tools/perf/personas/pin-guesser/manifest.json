@@ -1,0 +1,32 @@
+{
+  "kind": "persona",
+  "id": "pin-guesser",
+  "version": "1.0.0",
+  "description": "Guesses PINs of shared links: wrong PINs until each link is paused, then keeps knocking. Measures the cost of argon2id on wrong PINs and of the lockout path.",
+  "auth": {
+    "type": "link-token",
+    "role": "view"
+  },
+  "setup": {
+    "missions": "warsaw-missions:missions.json",
+    "count": 200
+  },
+  "fixtures": [
+    "warsaw-missions"
+  ],
+  "steps": [
+    {
+      "name": "wrong-pin",
+      "weight": 1,
+      "method": "POST",
+      "path": "/links/{{token}}/open",
+      "body": {
+        "pin": "000000"
+      },
+      "expect": [
+        401,
+        429
+      ]
+    }
+  ]
+}

@@ -20,8 +20,12 @@ class MarkdownReporter(Reporter):
         gated = sorted((row for row in results["results"] if row["gated"]), key=lambda row: -(row["worsePct"] or 0.0))
         notable = [row for row in gated if row["verdict"] in ("regression", "improvement")]
         rest = [row for row in gated if row not in notable]
-        lines = [f"### {self._headline(gated)} `{Cell.text(results['suite'])}`", "",
+        lines = [f"### {self._headline(gated, results.get('problems', []))} `{Cell.text(results['suite'])}`", "",
                  self._about(files.environment, results, files.run), ""]
+        problems = results.get("problems", [])
+        if problems:
+            lines += [f"**{len(problems)} problem(s) failed the run:**", "",
+                      *(f"- {Cell.text(problem)}" for problem in problems), ""]
         lines += Table.of(notable) if notable else ["No gated measurement changed beyond its limit.", ""]
         if rest:
             lines += ["<details><summary>" + f"{len(rest)} other gated measurement(s)" + "</summary>", "",
@@ -33,10 +37,12 @@ class MarkdownReporter(Reporter):
         return [path]
 
     @staticmethod
-    def _headline(gated: list[dict[str, Any]]) -> str:
+    def _headline(gated: list[dict[str, Any]], problems: list[str]) -> str:
         regressions = sum(row["verdict"] == "regression" for row in gated)
         if regressions:
             return f"{ICONS['regression']} {regressions} regression(s) in"
+        if problems:
+            return f"{ICONS['regression']} Failed:"
         if all(row["verdict"] == "no baseline" for row in gated):
             return f"{ICONS['no baseline']} No baseline yet for"
         return f"{ICONS['ok']} No regression in"

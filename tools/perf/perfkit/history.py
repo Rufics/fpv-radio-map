@@ -136,7 +136,12 @@ class History:
 
     @staticmethod
     def same_majors(versions: dict[str, str], wanted: dict[str, str]) -> bool:
-        """True when every wanted item was used in the past run with the same major version."""
+        """True when the past run used exactly the wanted items, each with the same major version.
+
+        An extra item counts too: a run with a collector more (monitoring, sanitizers) loads the
+        stand differently, so it is no baseline for a run without it, nor the other way round."""
+        if set(versions) != set(wanted):
+            return False
         for key, version in wanted.items():
             if key not in versions or Version.parse(versions[key]).major != Version.parse(version).major:
                 return False

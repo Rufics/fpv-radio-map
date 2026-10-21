@@ -85,11 +85,12 @@ committed):
 All runs also go into `results/history.sqlite`.
 
 **Baseline and gate.** A measurement is compared with the median of its last 10 values
-(`--window`) from earlier runs on the same host, with the same dataset and the same major version
-of the benchmark and the collector. The host is a fingerprint of the CPU model, the number of
+(`--window`) from earlier runs on the same host, with the same dataset, the same items and the
+same major version of each (the benchmark and the collector). The host is a fingerprint of the CPU model, the number of
 CPUs, the memory and the cgroup limits, so a recreated VM of the same type continues the history.
 A change worse than `compare.maxRegressionPct` (5 % by default) is a regression and `run` exits 1;
 `--no-gate` reports it but exits 0. With fewer than 3 earlier values there is no verdict yet.
+`--repetitions` must be 2 or more, since Google Benchmark writes the median only then.
 
 Notes:
 
@@ -113,9 +114,12 @@ python3 -I tools/perf/perf.py run --scenario smoke --dataset ../rfmap-perf-data
 |---|---|
 | `smoke` | 4 requests per second for 60 s; a quick check that every persona works |
 | `peak` | warm-up at 5 rps, ramp to 30 rps, 5 minutes at 30 rps, ramp down |
+| `auth-storm` | link opens and PIN guesses ramp to 20 rps for two minutes next to normal viewers: argon2id takes the CPU, the viewers' latency shows the cost |
+| `soak` | an hour at 8 rps; fails when the server's memory or open files keep growing in the second half (`limits`) |
 
 A scenario mixes **personas** by weight. A persona is what one kind of user does: its auth
-(`link-pin`, `mission-owner` or none), weighted steps with method, path, body and expected status,
+(`link-pin`, `link-token`, `mission-owner` or none), weighted steps with method, path, body and the
+expected status or statuses,
 and an optional `setup` that creates missions from a fixture before the load starts.
 
 | persona | does |
@@ -124,6 +128,8 @@ and an optional `setup` that creates missions from a fixture before the load sta
 | `viewer` | opens a shared link: reads the mission, lists radios, health |
 | `coverage-planner` | starts a coverage job as the mission owner and polls it until it is done |
 | `mission-creator` | creates missions without an account |
+| `link-opener` | opens a shared link with the right PIN on every request (`link-token`: the step opens the link itself) |
+| `pin-guesser` | sends wrong PINs to shared links until they are paused, then keeps knocking (expects 401 or 429) |
 
 Fixtures hold request bodies made from the Warsaw dataset with a fixed seed: `warsaw-paths`
 (400 calc-path bodies) and `warsaw-missions` (40 missions with a coverage grid). A step whose
@@ -180,6 +186,19 @@ cAdvisor finds the containers by their cgroup parents (`rfmapperf_<service>.slic
 integration does not see containers on the containerd image store, the default since Docker 29.
 Where a sandbox gives no memory cgroup for a custom parent, the cAdvisor memory series stay empty;
 the server's own memory comes from the server and is unaffected.
+
+**Limits.** Next to the baseline, a scenario can set absolute `limits` by `METRIC` or
+`NAME:METRIC`, and a collector can set `failAbove` on its metrics. A measurement above one fails
+the run whatever the history says; the problems lead `results.json` and both reports. `soak` uses
+`server_rss:tail_slope` and `server_fds:tail_slope`, the growth per hour over the second half of
+the load, after the caches filled.
+
+**Sanitizers.** `--sanitize` runs the scenario against the server built with AddressSanitizer,
+LeakSanitizer and UndefinedBehaviorSanitizer (`stand/server-sanitize.Dockerfile`, image
+`rfmap-server:perf-sanitize`, added by `stand/compose.sanitize.yml`). After the load perf.py stops
+the server gracefully, so LeakSanitizer reports what was still allocated, and the `sanitizer`
+collector counts the reports in `raw/sanitizer/`: any error, leaked byte or undefined behaviour
+fails the run. Sanitized runs are 2-3 times slower and are only compared with each other.
 
 Limits of the stand's containers come from the caller's environment:
 

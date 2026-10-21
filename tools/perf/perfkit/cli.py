@@ -14,7 +14,7 @@ from perfkit.lock import LockComparer, LockFile, Mode
 from perfkit.micro import MicroBuild, MicroOptions, MicroSuite
 from perfkit.report import ReportRunner
 from perfkit.scenario import Dataset, ScenarioSuite
-from perfkit.session import RunSession, SessionSettings, Suite
+from perfkit.session import RunSession, SessionSettings
 from perfkit.stand import Stand, StandLimits, StandSettings
 
 # perfkit lives in tools/perf, which is also the default catalog.
@@ -22,6 +22,9 @@ TOOL_DIR = Path(__file__).resolve().parent.parent
 SCHEMAS_DIR = TOOL_DIR / "schemas"
 REPO_DIR = TOOL_DIR.parent.parent
 SUITES = ("micro",)
+# Google Benchmark writes the median and the other aggregates only with two repetitions or more.
+MIN_REPETITIONS = 2
+PORTS = range(1, 65536)
 
 
 class PerfCli:
@@ -68,6 +71,8 @@ class PerfCli:
         stand.add_argument("--no-monitoring", action="store_true",
                            help="run without Prometheus, cAdvisor and postgres_exporter "
                                 "(skips the prometheus collector)")
+        stand.add_argument("--sanitize", action="store_true",
+                           help="run the server built with ASan, LSan and UBSan (stand/server-sanitize.Dockerfile)")
         stand.add_argument("--prometheus-port", type=int, default=19090,
                            help="local port of the stand's Prometheus (default: %(default)s)")
         stand.add_argument("--grafana-port", type=int, default=13000,
@@ -126,8 +131,9 @@ class PerfCli:
     def _run(self, catalog: Catalog, problems: list[Problem], args: argparse.Namespace) -> int:
         if problems:
             return self._report(catalog, problems)
-        if args.repetitions is not None and args.repetitions < 1:
-            print("error: --repetitions must be at least 1", file=self._errors)
+        invalid = self._invalid_numbers(args)
+        if invalid:
+            print(f"error: {invalid}", file=self._errors)
             return 2
         build_dir = args.build_dir.resolve()
         suite = self._micro(catalog, args, build_dir) if args.suite else self._scenario(catalog, args)
@@ -140,6 +146,18 @@ class PerfCli:
         wanted = scenario.manifest.get("reporters", []) if scenario else []
         reports = None if args.no_report else ReportRunner(self._reporters(catalog, wanted))
         return RunSession(settings, environment, self._output, reports=reports).run(suite)
+
+    @staticmethod
+    def _invalid_numbers(args: argparse.Namespace) -> str:
+        """What is wrong with the numeric options of `run`, or "" when nothing is."""
+        if args.repetitions is not None and args.repetitions < MIN_REPETITIONS:
+            return f"--repetitions must be at least {MIN_REPETITIONS}"
+        if args.window < 1:
+            return "--window must be at least 1"
+        for option in ("port", "prometheus_port", "grafana_port"):
+            if getattr(args, option) not in PORTS:
+                return f"--{option.replace('_', '-')} must be a port from 1 to 65535"
+        return ""
 
     def _render(self, catalog: Catalog, problems: list[Problem], args: argparse.Namespace) -> int:
         if problems:
@@ -164,11 +182,11 @@ class PerfCli:
             found.append(item)
         return found
 
-    def _micro(self, catalog: Catalog, args: argparse.Namespace, build_dir: Path) -> Suite:
+    def _micro(self, catalog: Catalog, args: argparse.Namespace, build_dir: Path) -> MicroSuite:
         build = MicroBuild(REPO_DIR, build_dir, catalog.root)
         return MicroSuite(catalog, build, CommandRunner(self._errors), MicroOptions(tuple(args.only), args.repetitions))
 
-    def _scenario(self, catalog: Catalog, args: argparse.Namespace) -> Suite:
+    def _scenario(self, catalog: Catalog, args: argparse.Namespace) -> ScenarioSuite:
         if args.dataset is None:
             raise PerfError("--scenario needs --dataset, the folder dataset.py built")
         data_dir = args.dataset.resolve() / "out"
@@ -179,7 +197,7 @@ class PerfCli:
         settings = StandSettings(data_dir, port=args.port, build=not args.no_build, server_image=args.server_image,
                                  keep=args.keep_stand, limits=StandLimits.from_environment(),
                                  monitoring=not args.no_monitoring, prometheus_port=args.prometheus_port,
-                                 grafana_port=args.grafana_port)
+                                 grafana_port=args.grafana_port, sanitize=args.sanitize)
         stand = Stand(settings, CommandRunner(self._errors))
         return ScenarioSuite(catalog, args.scenario, stand, Dataset.of(manifest), log=self._errors)
 

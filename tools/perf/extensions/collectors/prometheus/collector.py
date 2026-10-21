@@ -57,9 +57,9 @@ class PrometheusCollector(Collector):
             if not points:
                 continue
             label = entry.describe()
-            name = f"{query['name']}/{label}" if len(series) > 1 and label else query["name"]
+            name = f"{query['name']}/{label}" if label else query["name"]
             for stat in query.get("stats", []):
-                unit = f"{query['unit']}/h" if stat == "slope" else query["unit"]
+                unit = f"{query['unit']}/h" if stat.endswith("slope") else query["unit"]
                 found.append(Measurement(source, name, stat, unit, query["better"],
                                          SeriesStats.of(stat, points)))
         return found

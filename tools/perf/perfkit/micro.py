@@ -18,6 +18,8 @@ from perfkit.timeline import Timeline
 
 DEFAULT_COLLECTOR = "google-benchmark"
 DEFAULT_REPETITIONS = 10
+# Google Benchmark writes the median and the other aggregates only with two repetitions or more.
+MIN_REPETITIONS = 2
 DEFAULT_METRIC = "cpu_time"
 DEFAULT_LIMIT_PCT = 5.0
 
@@ -112,6 +114,8 @@ class MicroSuite:
         out_dir.mkdir(parents=True, exist_ok=True)
         output = out_dir / f"{item.id}.json"
         count = self._options.repetitions or item.manifest.get("repetitions", DEFAULT_REPETITIONS)
+        if count < MIN_REPETITIONS:
+            raise PerfError(f"{item.key}: {count} repetition(s); the median needs at least {MIN_REPETITIONS}")
         self._runner.run([str(self._build.bin_dir / item.manifest["target"]), "--benchmark_format=console",
                           f"--benchmark_out={output}", "--benchmark_out_format=json",
                           f"--benchmark_repetitions={count}", "--benchmark_report_aggregates_only=true"])

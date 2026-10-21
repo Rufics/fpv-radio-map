@@ -13,7 +13,7 @@ and adds the run to <results>/history.sqlite.
 """
 import json
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, TextIO
 
@@ -37,11 +37,28 @@ class Collected:
     gate_metrics: frozenset[str]
     limit_pct: float
     related: tuple[Item, ...] = ()
+    extra_limits: dict[str, float] = field(default_factory=dict)
 
     @property
     def involved(self) -> dict[str, str]:
         items = (self.source, self.collector, *self.related)
         return {item.key: str(item.version) for item in items}
+
+    @property
+    def limits(self) -> dict[str, float]:
+        """Values a measurement must not exceed, by METRIC or NAME:METRIC: the collector's failAbove,
+        then the suite's own (a scenario's limits)."""
+        found = {metric["name"]: float(metric["failAbove"]) for metric in self.collector.manifest.get("metrics", [])
+                 if "failAbove" in metric}
+        return {**found, **self.extra_limits}
+
+    def over_limit(self, measurement: Measurement) -> float | None:
+        """The limit the measurement exceeds, or None."""
+        limits = self.limits
+        for key in (f"{measurement.name}:{measurement.metric}", measurement.metric):
+            if key in limits:
+                return limits[key] if measurement.value > limits[key] else None
+        return None
 
     def gates(self, measurement: Measurement) -> bool:
         """A gate names a metric of every measurement (p95) or of one (server_rss:slope)."""
@@ -101,9 +118,9 @@ class RunSession:
             history.record(record)
         finally:
             history.close()
-        self._write(run_dir, record, timeline, comparisons)
+        problems = suite.problems() + LimitCheck.problems(collected)
+        self._write(run_dir, record, timeline, comparisons, problems)
         ConsoleTable(self._output).print(run_dir, comparisons)
-        problems = suite.problems()
         if self._reports is not None:
             problems = problems + self._reports.render(run_dir, self._settings.results_dir, self._output)
         for problem in problems:
@@ -126,9 +143,10 @@ class RunSession:
                 for entry in collected for m in entry.collection.measurements]
 
     @staticmethod
-    def _write(run_dir: Path, record: RunRecord, timeline: Timeline, comparisons: list[Comparison]) -> None:
+    def _write(run_dir: Path, record: RunRecord, timeline: Timeline, comparisons: list[Comparison],
+               problems: list[str]) -> None:
         results = {"runId": record.run_id, "suite": record.suite, "host": record.host, "dataset": record.dataset,
-                   "items": record.items, "results": [ResultRow.of(c) for c in comparisons]}
+                   "items": record.items, "problems": problems, "results": [ResultRow.of(c) for c in comparisons]}
         files: dict[str, Any] = {"environment.json": record.environment, "events.json": timeline.to_json(),
                                  "results.json": results}
         for name, data in files.items():
@@ -137,6 +155,21 @@ class RunSession:
     @staticmethod
     def _write_json(path: Path, data: Any) -> None:
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+
+
+class LimitCheck:
+    """Measurements above an absolute limit fail the run whatever the baseline says."""
+
+    @staticmethod
+    def problems(collected: list[Collected]) -> list[str]:
+        found = []
+        for entry in collected:
+            for m in entry.collection.measurements:
+                limit = entry.over_limit(m)
+                if limit is not None:
+                    found.append(f"{m.source} {m.name} {m.metric} is {Quantity.text(m.value, m.unit)}, "
+                                 f"above its limit {Quantity.text(limit, m.unit)}")
+        return found
 
 
 class ResultRow:

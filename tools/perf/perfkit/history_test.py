@@ -43,9 +43,13 @@ class HistoryTest(HistoryTestCase):
 
     def test_same_majors(self):
         versions = {"benchmark/rf-core": "1.4.0", "collector/google-benchmark": "2.0.0"}
-        self.assertTrue(History.same_majors(versions, {"benchmark/rf-core": "1.0.3"}))
-        self.assertFalse(History.same_majors(versions, {"benchmark/rf-core": "2.0.0"}))
-        self.assertFalse(History.same_majors(versions, {"benchmark/other": "1.0.0"}))
+        same = {"benchmark/rf-core": "1.0.3", "collector/google-benchmark": "2.1.0"}
+        self.assertTrue(History.same_majors(versions, same))
+        self.assertFalse(History.same_majors(versions, {**same, "benchmark/rf-core": "2.0.0"}))
+        self.assertFalse(History.same_majors(versions, {**same, "collector/prometheus": "1.0.0"}),
+                         "a run with a collector more is no baseline")
+        self.assertFalse(History.same_majors(versions, {"benchmark/rf-core": "1.0.3"}),
+                         "nor one with a collector less")
 
     def test_events_are_stored(self):
         self.history.record(record("r1", "2026-01-01T00:00:01Z", [measurement(10)]))

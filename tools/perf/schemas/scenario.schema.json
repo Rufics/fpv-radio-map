@@ -57,6 +57,12 @@
     "collectors": { "$ref": "common.schema.json#/$defs/idList" },
     "reporters": { "$ref": "common.schema.json#/$defs/idList" },
     "thresholds": { "type": "object", "additionalProperties": { "type": "string" } },
+    "limits": {
+      "description": "Values a measurement must not exceed, by METRIC or NAME:METRIC (server_rss:tail_slope); above one, the run fails whatever the baseline.",
+      "type": "object",
+      "propertyNames": { "pattern": "^([A-Za-z0-9_./-]+:)?[a-z0-9_]+$" },
+      "additionalProperties": { "type": "number" }
+    },
     "compare": {
       "type": "object",
       "additionalProperties": false,

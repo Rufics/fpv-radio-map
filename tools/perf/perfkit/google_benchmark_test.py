@@ -97,7 +97,8 @@ class ExtensionLoaderTest(CollectorTestCase):
     def test_loads_once(self):
         loader = ExtensionLoader()
         item = self.catalog.get("collector", "google-benchmark")
-        self.assertIs(loader.load(item, Collector), loader.load(item, Collector))
+        first = loader.load(item, Collector)
+        self.assertIs(loader.load(item, Collector), first)
 
     def test_bad_entries(self):
         cases = [("collector.py:Missing", "class Other:\n    pass\n", "has no class Missing"),
@@ -105,12 +106,14 @@ class ExtensionLoaderTest(CollectorTestCase):
                  ("collector.py:K6SummaryCollector", "def broken(:\n", "cannot import"),
                  ("collector.py:K6SummaryCollector", "import perfkit_no_such_module\n", "cannot import")]
         for entry, code, message in cases:
+            item, loader = self.collector(entry, code), ExtensionLoader()
             with self.subTest(message=message), self.assertRaisesRegex(PerfError, message):
-                ExtensionLoader().load(self.collector(entry, code), Collector)
+                loader.load(item, Collector)
 
     def test_base_collector_is_abstract(self):
+        collector = Collector(self.catalog.get("collector", "k6-summary"))
         with self.assertRaises(NotImplementedError):
-            Collector(self.catalog.get("collector", "k6-summary")).collect(None)
+            collector.collect(None)
 
 
 if __name__ == "__main__":

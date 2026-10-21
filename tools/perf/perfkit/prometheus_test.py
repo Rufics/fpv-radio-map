@@ -24,6 +24,8 @@ class SeriesStatsTest(unittest.TestCase):
         self.assertEqual(SeriesStats.of("avg", POINTS), 2.0)
         self.assertEqual(SeriesStats.of("last", POINTS), 3.0)
         self.assertAlmostEqual(SeriesStats.of("slope", POINTS), 2.0)  # per hour
+        flat_then_rising = [(0.0, 5.0), (1800.0, 5.0), (3600.0, 1.0), (5400.0, 2.0)]
+        self.assertAlmostEqual(SeriesStats.of("tail_slope", flat_then_rising), 2.0)
 
     def test_flat_and_short_series_have_no_slope(self):
         self.assertEqual(SeriesStats.slope([(5.0, 1.0)]), 0.0)
@@ -37,6 +39,8 @@ class SeriesStatsTest(unittest.TestCase):
 
     def test_series_names_itself_by_its_labels(self):
         self.assertEqual(Series({"__name__": "x", "pool": "http", "a": "1"}).describe(), "1,http")
+        target = {"instance": "rfmap-server:8080", "job": "rfmap-server"}
+        self.assertEqual(Series({**target, "datname": "rfmap"}).describe(), "rfmap")
         self.assertEqual(Series({}, [(1.0, 2.0)]).to_json(), {"labels": {}, "values": [[1.0, 2.0]]})
 
 
@@ -65,7 +69,8 @@ class PrometheusCollectorTest(CollectorTestCase):
             {"name": "server_rss", "query": "rss", "unit": "MiB", "better": "lower", "stats": ["max", "slope"]},
             {"name": "pool_queued", "query": "max by (pool) (q)", "unit": "tasks", "better": "lower",
              "stats": ["avg"]},
-            {"name": "k6_p95", "query": "k6", "unit": "ms", "better": "lower", "stats": []}])
+            {"name": "k6_p95", "query": "k6", "unit": "ms", "better": "lower", "stats": []},
+            {"name": "cache_used", "query": "sum by (tier) (c)", "unit": "MiB", "better": "lower", "stats": ["max"]}])
         found = {(m.name, m.metric): (m.value, m.unit) for m in collection.measurements}
         # 30 s of padding is 3 steps before the load; the load has the values 4 to 10.
         self.assertEqual(found[("server_rss", "max")], (10.0, "MiB"))
@@ -73,7 +78,9 @@ class PrometheusCollectorTest(CollectorTestCase):
         self.assertEqual(found[("server_rss", "slope")][1], "MiB/h")
         self.assertEqual(found[("pool_queued/http", "avg")], (7.0, "tasks"))
         self.assertIn(("pool_queued/job-runners", "avg"), found)
-        self.assertEqual(len(found), 4)
+        # A labelled series keeps its label even when it is the only one, so names stay the same.
+        self.assertIn(("cache_used/dem-blocks", "max"), found)
+        self.assertEqual(len(found), 5)
         raw = json.loads((self.root / "raw" / "prometheus.json").read_text(encoding="utf-8"))
         self.assertEqual(raw["stepS"], 10)
         self.assertEqual(len(raw["queries"][0]["series"][0]["values"]), 10)
@@ -90,8 +97,9 @@ class PrometheusCollectorTest(CollectorTestCase):
 
     def test_client_reports_a_missing_endpoint(self):
         client = PrometheusClient("", ApiClient(self.server.base_url.replace("/api/v1", "/nope")))
+        start, end = _window()
         with self.assertRaisesRegex(PerfError, "could not run"):
-            client.query_range("up", *_window(), 5)
+            client.query_range("up", start, end, 5)
 
 
 class GateTest(CollectorTestCase):

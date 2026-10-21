@@ -15,6 +15,20 @@ const SUMMARY_PATH = __ENV.SUMMARY || "/run/perf/k6-summary.json";
 const plan = JSON.parse(open(PLAN_PATH));
 const jobDuration = new Trend("job_duration", true);
 
+// The step mix and think times come from a seeded generator, one stream per VU, so two runs of
+// one plan send the same sequence of requests. Load generation needs no secure randomness.
+const SEED = 0x5eed;
+let state = null;
+
+function random() {
+  if (state === null) state = (SEED ^ Math.imul(exec.vu.idInTest, 0x9e3779b1)) >>> 0;
+  state = (state + 0x6d2b79f5) >>> 0;  // mulberry32
+  let t = state;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
 // Arrival rates are set per minute, so a persona with a small share still gets whole iterations.
 const perMinute = (rps, share) => Math.max(0, Math.round(rps * share * 60));
 
@@ -67,7 +81,13 @@ export const options = {
 // Per persona: the step chooser (cumulative weights) and its credentials.
 const personas = Object.fromEntries(plan.personas.map((p) => {
   let total = 0;
-  const steps = p.steps.map((s) => { total += s.weight; return { ...s, upTo: total }; });
+  const steps = p.steps.map((s) => {
+    total += s.weight;
+    // expect: one status or several; only those count as answered well (also for http_req_failed).
+    const statuses = [].concat(s.expect || 200);
+    const responseCallback = s.expect === undefined ? undefined : http.expectedStatuses(...statuses);
+    return { ...s, upTo: total, statuses, responseCallback };
+  });
   return [p.id, { ...p, steps, total }];
 }));
 
@@ -83,7 +103,7 @@ function authHeaders(persona, credential) {
   const auth = persona.auth.type;
   if (auth === "admin-token") return { Authorization: `Bearer ${plan.adminToken}` };
   if (auth === "mission-owner") return { Authorization: `Bearer ${credential.session}` };
-  if (auth !== "link-pin") return {};
+  if (auth !== "link-pin") return {};  // link-token: the steps open the link themselves
   if (!sessions[persona.id]) {
     const res = http.post(`${plan.baseUrl}/links/${credential.token}/open`, JSON.stringify({ pin: credential.pin }), {
       headers: { "Content-Type": "application/json" }, tags: { persona: persona.id, step: "open-link" } });
@@ -95,7 +115,7 @@ function authHeaders(persona, credential) {
 }
 
 function pick(persona) {
-  const at = Math.random() * persona.total;
+  const at = random() * persona.total;
   return persona.steps.find((s) => at < s.upTo) || persona.steps[persona.steps.length - 1];
 }
 
@@ -144,11 +164,12 @@ export function step() {
   const body = bodyOf(s);
   const headers = { ...auth, "Content-Type": "application/json" };
   const res = http.request(s.method, `${plan.baseUrl}${fill(s.path, credential, null)}`,
-                           body === null ? null : JSON.stringify(body), { headers, tags, timeout: "120s" });
-  const expected = s.expect || 200;
-  check(res, { [`${s.name} answers ${expected}`]: (r) => r.status === expected }, tags);
-  if (s.poll && res.status === expected) poll(s, credential, auth, res.json(), tags);
-  if (persona.thinkTimeS) sleep(persona.thinkTimeS.min + Math.random() * (persona.thinkTimeS.max - persona.thinkTimeS.min));
+                           body === null ? null : JSON.stringify(body),
+                           { headers, tags, timeout: "120s", responseCallback: s.responseCallback });
+  const answered = s.statuses.includes(res.status);
+  check(res, { [`${s.name} answers ${s.statuses.join(" or ")}`]: () => answered }, tags);
+  if (s.poll && answered) poll(s, credential, auth, res.json(), tags);
+  if (persona.thinkTimeS) sleep(persona.thinkTimeS.min + random() * (persona.thinkTimeS.max - persona.thinkTimeS.min));
 }
 
 export function handleSummary(data) {

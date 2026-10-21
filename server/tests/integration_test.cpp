@@ -696,11 +696,16 @@ TEST_F(Integration, MetricsForPrometheus) {
     const std::string text = r.body.get<std::string>();
     for (const char* part : {"rfmap_http_requests_total{class=\"default\",method=\"GET\",status=\"200\"}",
                              "rfmap_http_requests_total{class=\"admin\",method=\"GET\",status=\"401\"}",
-                             "rfmap_pool_threads{pool=\"http\"} 8\n", "rfmap_pool_busy_threads{pool=\"http\"} 1\n",
+                             "rfmap_pool_threads{pool=\"http\"} 8\n",
                              "rfmap_pool_threads{pool=\"job-cells\"} 4\n", "rfmap_db_pool_connections 4\n",
                              "rfmap_cache_limit_bytes{tier=\"dem-blocks\"}", "rfmap_jobs_started_total"}) {
         EXPECT_NE(text.find(part), std::string::npos) << part << "\n" << text;
     }
+    // The scrape's own thread is busy; the thread of the call before may not have returned yet.
+    const std::string busy = "rfmap_pool_busy_threads{pool=\"http\"} ";
+    const auto at = text.find(busy);
+    ASSERT_NE(at, std::string::npos) << text;
+    EXPECT_GE(std::stoi(text.substr(at + busy.size())), 1) << text;
 }
 
 TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {

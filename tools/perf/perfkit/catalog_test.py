@@ -132,6 +132,13 @@ class CatalogLoaderTest(CatalogTestCase):
         self.assertTrue(any("$.load.type: must be one of" in m for m in messages))
         self.assertTrue(any("$.load.stages: needs at least 1" in m for m in messages))
 
+    def test_limit_keys_and_expected_statuses(self):
+        self.sample.change("scenarios/peak", limits={"server_rss:tail_slope": 32, "p95": 900, "bad key!": 1})
+        messages = self.messages()
+        self.assertEqual([m for m in messages if "limits" in m],
+                         [("scenarios/peak/manifest.json: $.limits.bad key!: 'bad key!' does not match "
+                           "^([A-Za-z0-9_./-]+:)?[a-z0-9_]+$")])
+
     def test_id_must_match_folder(self):
         self.sample.change("personas/link-editor", id="someone")
         self.assertTrue(any("must equal the folder name" in m for m in self.messages()))

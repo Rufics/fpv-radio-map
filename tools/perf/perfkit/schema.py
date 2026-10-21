@@ -95,6 +95,7 @@ class SchemaValidator:
             "required": self._check_required,
             "additionalProperties": self._check_additional,
             "minProperties": self._check_min_properties,
+            "propertyNames": self._check_property_names,
             "items": self._check_items,
             "minItems": self._check_min_items,
             "uniqueItems": self._check_unique,
@@ -180,6 +181,11 @@ class SchemaValidator:
     def _check_min_properties(self, node: _Node, argument: Any, value: Any) -> None:
         if isinstance(value, dict) and len(value) < argument:
             self._report(node, f"needs at least {argument} field(s)")
+
+    def _check_property_names(self, node: _Node, argument: Any, value: Any) -> None:
+        if isinstance(value, dict):
+            for name in value:
+                self._child(node, argument, f".{name}", name)
 
     def _check_items(self, node: _Node, argument: Any, value: Any) -> None:
         if isinstance(value, list):
