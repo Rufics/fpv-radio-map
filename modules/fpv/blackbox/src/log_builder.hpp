@@ -111,6 +111,9 @@ private:
     };
 
     static std::optional<double> field(std::span<const std::int64_t> values, const std::optional<std::size_t>& index);
+    /// A field read as the integer it was logged as: bit masks, flags and fixed-point values.
+    static std::optional<std::int64_t> integerField(std::span<const std::int64_t> values,
+                                                    const std::optional<std::size_t>& index);
     static std::optional<double> divided(std::optional<double> raw, const std::optional<double>& divisor);
     [[nodiscard]] std::optional<double> throttlePct(std::span<const std::int64_t> values) const;
     void applyModes(State& s, std::uint32_t mask) const;

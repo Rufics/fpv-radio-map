@@ -25,9 +25,9 @@ json note(const char* code, const char* severity, std::string message, std::stri
     return n;
 }
 
-std::optional<double> coordinate(std::optional<double> raw, double limit) {
+std::optional<double> coordinate(std::optional<std::int64_t> raw, double limit) {
     if (!raw.has_value()) return std::nullopt;
-    const double deg = static_cast<std::int32_t>(static_cast<std::int64_t>(*raw)) / kCoordDivisor;
+    const double deg = static_cast<std::int32_t>(*raw) / kCoordDivisor;
     if (std::abs(deg) > limit) return std::nullopt;
     return deg;
 }
@@ -84,8 +84,14 @@ NormalizedLogBuilder::NormalizedLogBuilder(const LogHeader& header, BuildOptions
 
 std::optional<double> NormalizedLogBuilder::field(std::span<const std::int64_t> values,
                                                   const std::optional<std::size_t>& index) {
+    if (const auto v = integerField(values, index); v.has_value()) return static_cast<double>(*v);
+    return std::nullopt;
+}
+
+std::optional<std::int64_t> NormalizedLogBuilder::integerField(std::span<const std::int64_t> values,
+                                                               const std::optional<std::size_t>& index) {
     if (!index || *index >= values.size()) return std::nullopt;
-    return static_cast<double>(values[*index]);
+    return values[*index];
 }
 
 std::optional<double> NormalizedLogBuilder::divided(std::optional<double> raw, const std::optional<double>& divisor) {
@@ -133,8 +139,8 @@ void NormalizedLogBuilder::onMainFrame(std::span<const std::int64_t> values, std
 void NormalizedLogBuilder::onGpsFrame(std::span<const std::int64_t> values, std::int64_t timeUs) {
     GpsSample s;
     s.timeUs = timeUs;
-    s.lat = coordinate(field(values, gpsFields_.lat), 90.0);
-    s.lon = coordinate(field(values, gpsFields_.lon), 180.0);
+    s.lat = coordinate(integerField(values, gpsFields_.lat), 90.0);
+    s.lon = coordinate(integerField(values, gpsFields_.lon), 180.0);
     if (s.lat.has_value() && s.lon.has_value() && *s.lat == 0.0 && *s.lon == 0.0) {
         s.lat.reset();
         s.lon.reset();
@@ -142,9 +148,9 @@ void NormalizedLogBuilder::onGpsFrame(std::span<const std::int64_t> values, std:
     s.sats = field(values, gpsFields_.sats);
     if (model_.unitsKnown()) {
         // GPS_altitude was unsigned before 4.5 but carried a signed altitude: read it as int32.
-        const auto alt = field(values, gpsFields_.alt);
+        const auto alt = integerField(values, gpsFields_.alt);
         if (const auto divisor = model_.gpsAltitudeDivisor(); alt.has_value() && divisor.has_value()) {
-            s.alt = static_cast<std::int32_t>(static_cast<std::int64_t>(*alt)) / *divisor;
+            s.alt = static_cast<std::int32_t>(*alt) / *divisor;
         }
         s.speed = divided(field(values, gpsFields_.speed), kSpeedDivisor);
         s.course = divided(field(values, gpsFields_.course), kCourseDivisor);
@@ -157,8 +163,8 @@ void NormalizedLogBuilder::onGpsFrame(std::span<const std::int64_t> values, std:
 
 void NormalizedLogBuilder::onHomeFrame(std::span<const std::int64_t> values, std::int64_t timeUs) {
     if (values.size() < 2 || (values[0] == 0 && values[1] == 0)) return;
-    const auto lat = coordinate(static_cast<double>(values[0]), 90.0);
-    const auto lon = coordinate(static_cast<double>(values[1]), 180.0);
+    const auto lat = coordinate(values[0], 90.0);
+    const auto lon = coordinate(values[1], 180.0);
     if (!lat.has_value() || !lon.has_value()) return;
     json home = {{"lat", *lat}, {"lon", *lon}};
     // 2025.12 added GPS_home[2], the home altitude in decimetres.
@@ -180,15 +186,16 @@ void NormalizedLogBuilder::applyModes(State& s, std::uint32_t mask) const {
 void NormalizedLogBuilder::onSlowFrame(std::span<const std::int64_t> values, std::int64_t timeUs) {
     State s = state_;
     s.timeUs = timeUs;
-    if (const auto mask = field(values, slowFields_.modes); mask.has_value()) applyModes(s, static_cast<std::uint32_t>(*mask));
+    if (const auto mask = integerField(values, slowFields_.modes); mask.has_value()) {
+        applyModes(s, static_cast<std::uint32_t>(*mask));
+    }
     if (model_.unitsKnown()) {
-        if (const auto flags = field(values, slowFields_.state); flags.has_value()) {
-            const auto f = static_cast<std::int64_t>(*flags);
-            s.gpsFix = (f & kStateGpsFix) != 0;
-            s.gpsHomeSet = (f & kStateGpsFixHome) != 0;
+        if (const auto flags = integerField(values, slowFields_.state); flags.has_value()) {
+            s.gpsFix = (*flags & kStateGpsFix) != 0;
+            s.gpsHomeSet = (*flags & kStateGpsFixHome) != 0;
         }
-        if (const auto phase = field(values, slowFields_.failsafe); phase.has_value()) {
-            s.failsafe = FirmwareModel::failsafePhase(static_cast<std::int64_t>(*phase));
+        if (const auto phase = integerField(values, slowFields_.failsafe); phase.has_value()) {
+            s.failsafe = FirmwareModel::failsafePhase(*phase);
         }
     }
     if (const auto rx = field(values, slowFields_.rxSignal); rx.has_value()) s.rxSignal = *rx != 0;

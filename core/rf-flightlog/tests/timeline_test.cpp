@@ -3,6 +3,7 @@
 
 #include "flight_fixture.hpp"
 
+#include <cmath>
 #include <rfflightlog/timeline.hpp>
 
 #include <gtest/gtest.h>
@@ -41,6 +42,8 @@ TEST(CellCounter, CountsSeriesCellsFromTheStartVoltage) {
     EXPECT_EQ(c.count({0.0}, {4.2}), 1);
     EXPECT_EQ(c.count({0.0, 10.0}, {kNoValue, 16.8}), 0) << "only the first seconds count";
     EXPECT_EQ(c.count({}, {}), 0);
+    EXPECT_EQ(CellCounter(1e-9).count({0.0}, {16.8}), 0) << "a cell maximum near zero gives no count";
+    EXPECT_EQ(c.count({0.0}, {1e12}), 0) << "nor does a voltage no pack has";
 }
 
 TEST(TimelineBuilder, BuildsTheDerivedChannels) {
@@ -62,6 +65,9 @@ TEST(TimelineBuilder, BuildsTheDerivedChannels) {
     EXPECT_DOUBLE_EQ(tl.at("rssiPct", tl.indexAt(31.0)), 20.0);
     EXPECT_DOUBLE_EQ(tl.at("sats", 5), 14.0);
     EXPECT_FALSE(hasValue(tl.at("nothing", 0)));
+    EXPECT_EQ(tl.indexAt(std::nan("")), 0u);
+    EXPECT_EQ(tl.indexAt(-5.0), 0u);
+    EXPECT_EQ(tl.indexAt(1e300), end);
     const json j = tl.toJson();
     EXPECT_EQ(j.at("t").size(), 601u);
     EXPECT_TRUE(j.at("channels").contains("lat"));

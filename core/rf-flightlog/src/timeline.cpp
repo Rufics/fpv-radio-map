@@ -14,6 +14,8 @@ constexpr std::size_t kMaxSamples = 200'000;
 constexpr double kStandingMps = 0.5;
 /// A pack is read at the start of the log, before the voltage sags under load.
 constexpr double kCellWindowS = 5.0;
+/// More series cells than any flight controller reads: the voltage or the cell maximum is not real.
+constexpr double kMaxCells = 16.0;
 
 /// The last value at or before each instant, if it is no older than `maxAgeS`.
 std::vector<double> holdLast(const std::vector<double>& t, const std::vector<double>& v, const std::vector<double>& at,
@@ -91,7 +93,8 @@ double Timeline::at(const std::string& name, std::size_t i) const {
 std::size_t Timeline::indexAt(double t) const {
     if (size() == 0) return 0;
     const double i = std::round((t - samples.t.front()) * hz);
-    return static_cast<std::size_t>(std::clamp(i, 0.0, static_cast<double>(size() - 1)));
+    if (!(i > 0.0)) return 0;
+    return static_cast<std::size_t>(std::min(i, static_cast<double>(size() - 1)));
 }
 
 json Timeline::toJson() const {
@@ -144,7 +147,9 @@ int CellCounter::count(const std::vector<double>& t, const std::vector<double>& 
         if (hasValue(voltageV[i])) top = std::max(top, voltageV[i]);
     }
     if (!(top > 0.5) || !(cellMaxV_ > 0.0)) return 0;
-    return static_cast<int>(std::floor(top / cellMaxV_)) + 1;
+    const double full = std::floor(top / cellMaxV_);
+    if (!(full < kMaxCells)) return 0;
+    return static_cast<int>(full) + 1;
 }
 
 int TimelineBuilder::cells(const FlightLog& log) {
@@ -157,9 +162,11 @@ std::vector<double> TimelineBuilder::instants(const FlightLog& log) const {
     double end = log.durationS;
     if (!log.series.t.empty()) end = std::max(end, log.series.t.back());
     if (!log.gps.t.empty()) end = std::max(end, log.gps.t.back());
-    const auto n = static_cast<std::size_t>(std::floor(end * options_.hz)) + 1;
-    std::vector<double> t(std::min(n, kMaxSamples));
-    const double step = n > kMaxSamples ? end / static_cast<double>(kMaxSamples - 1) : 1.0 / options_.hz;
+    if (!(end > 0.0)) end = 0.0;
+    const double wanted = std::floor(end * options_.hz) + 1.0;
+    const bool coarse = !(wanted <= static_cast<double>(kMaxSamples));
+    std::vector<double> t(coarse ? kMaxSamples : static_cast<std::size_t>(wanted));
+    const double step = coarse ? end / static_cast<double>(kMaxSamples - 1) : 1.0 / options_.hz;
     for (std::size_t i = 0; i < t.size(); ++i) t[i] = static_cast<double>(i) * step;
     return t;
 }
