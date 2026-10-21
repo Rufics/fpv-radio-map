@@ -81,8 +81,9 @@ class MicroSuiteTest(CollectorTestCase):
 
     def test_one_repetition_has_no_median(self):
         suite = self.suite(only=("rf-core",), repetitions=1)
+        item, out_dir = self.catalog.get("benchmark", "rf-core"), self.root / "raw"
         with self.assertRaisesRegex(PerfError, "the median needs at least 2"):
-            suite.run(self.catalog.get("benchmark", "rf-core"), self.root / "raw")
+            suite.run(item, out_dir)
         self.assertEqual(self.runner.commands, [])
 
     def test_each_regressed_benchmark_runs_alone_under_the_profiler(self):
