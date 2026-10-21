@@ -48,6 +48,15 @@ describe('RouteColoursComponent', () => {
     expect(render().textContent).toContain('dry');
   });
 
+  it('tells a forecast too short to colour the route from no forecast', async () => {
+    let calls = 0;
+    // only the first sample has a forecast (no return leg, which would share the pilot's cached forecast)
+    vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockImplementation(async () => (calls++ === 0 ? { tier: 'hourly', temperatureC: 4 } : { tier: 'none' }));
+    TestBed.inject(MissionStore).newMission({ ...exampleMission(), returnToPilot: false });
+    await settle(() => wx.status() === 'ready');
+    expect(render().textContent).toContain('covers too little of the route');
+  });
+
   it('leaves the legend out where the map carries it', async () => {
     TestBed.inject(MissionStore).newMission(exampleMission());
     await settle(() => wx.status() === 'ready');

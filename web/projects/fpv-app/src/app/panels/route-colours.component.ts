@@ -46,6 +46,7 @@ export class RouteColoursComponent {
   protected readonly note = computed(() => {
     const status = this.wx.status();
     if (status === 'error') return 'The forecast could not be loaded';
-    return status === 'ready' ? 'No forecast covers this flight time' : 'Loading the forecast…';
+    if (status !== 'ready') return 'Loading the forecast…';
+    return this.wx.route()?.empty === false ? 'The forecast covers too little of the route to colour it' : 'No forecast covers this flight time';
   });
 }
