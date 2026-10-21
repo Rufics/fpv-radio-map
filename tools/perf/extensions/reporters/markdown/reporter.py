@@ -30,11 +30,26 @@ class MarkdownReporter(Reporter):
         if rest:
             lines += ["<details><summary>" + f"{len(rest)} other gated measurement(s)" + "</summary>", "",
                       *Table.of(rest), "</details>", ""]
+        lines += self._flamegraphs(files.run_dir.name, results.get("profiles", []))
         lines.append(f"Full report: `{files.run_dir.name}/report.html`; all results: "
                      f"`{files.run_dir.name}/results.json`.")
         path = files.run_dir / SUMMARY_NAME
         path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
         return [path]
+
+    @staticmethod
+    def _flamegraphs(run_id: str, profiles: list[dict[str, Any]]) -> list[str]:
+        if not profiles:
+            return []
+        lines = ["**Flamegraphs of the regression:**", ""]
+        for profile in profiles:
+            target = Cell.text(profile.get("target", ""))
+            svgs = [name for name in profile.get("files", []) if name.endswith(".svg")]
+            if profile.get("error") or not svgs:
+                lines.append(f"- `{target}`: no profile, {Cell.text(profile.get('error') or 'no flamegraph')}")
+            else:
+                lines += [f"- `{target}`: `{run_id}/{Cell.text(name)}`" for name in svgs]
+        return [*lines, ""]
 
     @staticmethod
     def _headline(gated: list[dict[str, Any]], problems: list[str]) -> str:
@@ -43,6 +58,8 @@ class MarkdownReporter(Reporter):
             return f"{ICONS['regression']} {regressions} regression(s) in"
         if problems:
             return f"{ICONS['regression']} Failed:"
+        if not gated:
+            return f"{ICONS['ok']} No gated measurement in"
         if all(row["verdict"] == "no baseline" for row in gated):
             return f"{ICONS['no baseline']} No baseline yet for"
         return f"{ICONS['ok']} No regression in"

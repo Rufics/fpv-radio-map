@@ -5,14 +5,18 @@ The C++ tree is configured with RFMAP_BUILD_BENCHMARKS=ON in a Release build fol
 benchmarks of another catalog folder are built too. Each binary's JSON is read by the collector
 the benchmark names (google-benchmark by default).
 """
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from perfkit.catalog import Catalog, Item
 from perfkit.commands import CommandRunner
+from perfkit.compare import Comparison
 from perfkit.errors import PerfError
 from perfkit.extensions import ExtensionLoader
 from perfkit.measure import CollectContext, Collector
+from perfkit.profile import Profile, ProfileRunner, ProfileTarget
 from perfkit.session import Collected
 from perfkit.timeline import Timeline
 
@@ -20,6 +24,8 @@ DEFAULT_COLLECTOR = "google-benchmark"
 DEFAULT_REPETITIONS = 10
 # Google Benchmark writes the median and the other aggregates only with two repetitions or more.
 MIN_REPETITIONS = 2
+# How long a regressed benchmark runs under the profiler.
+PROFILE_S = 5
 DEFAULT_METRIC = "cpu_time"
 DEFAULT_LIMIT_PCT = 5.0
 
@@ -108,6 +114,20 @@ class MicroSuite:
         compare = item.manifest.get("compare", {})
         return Collected(item, collector_item, collection, frozenset({compare.get("metric", DEFAULT_METRIC)}),
                          float(compare.get("maxRegressionPct", DEFAULT_LIMIT_PCT)))
+
+    def profile(self, regressions: Sequence[Comparison], run_dir: Path, profiles: ProfileRunner) -> list[Profile]:
+        """Runs each regressed benchmark once more, alone and for a few seconds, under the profilers."""
+        benchmarks = {item.key: item for item in self.benchmarks()}
+        targets: dict[str, ProfileTarget] = {}
+        for comparison in regressions:
+            item = benchmarks.get(comparison.measurement.source)
+            name = comparison.measurement.name
+            if item is None or name in targets:
+                continue
+            binary = str(self._build.bin_dir / item.manifest["target"])
+            targets[name] = ProfileTarget(name, (binary, f"--benchmark_filter=^{re.escape(name)}$",
+                                                 "--benchmark_repetitions=1", f"--benchmark_min_time={PROFILE_S}s"))
+        return profiles.profile(list(targets.values()), run_dir)
 
     def run(self, item: Item, out_dir: Path) -> Path:
         """Runs one benchmark binary; returns the JSON file it wrote."""

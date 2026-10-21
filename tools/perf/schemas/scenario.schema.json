@@ -57,6 +57,15 @@
     "collectors": { "$ref": "common.schema.json#/$defs/idList" },
     "reporters": { "$ref": "common.schema.json#/$defs/idList" },
     "thresholds": { "type": "object", "additionalProperties": { "type": "string" } },
+    "profile": {
+      "description": "How a regression of this scenario is profiled: the server under the peak load, after a warm-up.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "warmUpS": { "type": "number", "minimum": 0, "maximum": 600 },
+        "durationS": { "type": "number", "minimum": 1, "maximum": 600 }
+      }
+    },
     "limits": {
       "description": "Values a measurement must not exceed, by METRIC or NAME:METRIC (server_rss:tail_slope); above one, the run fails whatever the baseline.",
       "type": "object",

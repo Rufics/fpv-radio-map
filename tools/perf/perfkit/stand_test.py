@@ -29,6 +29,8 @@ class FakeRunner:
 
     def capture(self, args, env=None):
         sql = args[-1]
+        if args[:3] == ["docker", "inspect", "--format"]:
+            return "4242\n"
         if args[:2] == ["docker", "inspect"]:
             return json.dumps([{"Name": "/rfmap-perf-rfmap-server-1", "Image": "sha256:abc",
                                 "Config": {"Image": "rfmap-server:perf"},

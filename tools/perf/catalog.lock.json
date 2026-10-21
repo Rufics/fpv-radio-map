@@ -61,13 +61,17 @@
       "version": "1.0.0",
       "sha256": "cc0d7e1893348f8671561776360edad031ec6d4aa7f3016cc6ac5ba54a203260"
     },
+    "profiler/flamegraph": {
+      "version": "1.0.0",
+      "sha256": "4edb480ce8c01d5e89488d796443cc8d3bcb07ac767c452a260be9225a3867bf"
+    },
     "reporter/html": {
-      "version": "1.1.0",
-      "sha256": "d2d485c60d6bc67d9b5cd236c92521cf1113fcaca8585495943fbf557d783792"
+      "version": "1.2.0",
+      "sha256": "b1874e2ebf1e89b29b6c9ab0b50bcf61b3f4435c4e21e7d6afd0477bbf1e058a"
     },
     "reporter/markdown": {
-      "version": "1.1.0",
-      "sha256": "e89ba72eeeb71ddf9e90b8fa293ab5db0017d7739399de58bfab996b317d7a1f"
+      "version": "1.2.0",
+      "sha256": "027af952d0a3f65e6e14a378bc1b75101e5bfa147d1d8460405831ce55632efd"
     },
     "scenario/auth-storm": {
       "version": "1.0.0",

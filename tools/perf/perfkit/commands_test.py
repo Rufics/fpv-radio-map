@@ -1,6 +1,8 @@
 import io
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 from perfkit.commands import CommandRunner
 from perfkit.errors import PerfError
@@ -15,6 +17,13 @@ class CommandRunnerTest(unittest.TestCase):
         self.assertEqual(self.runner.run([sys.executable, "-c", "raise SystemExit(3)"], allowed=(0, 3)), 3)
         self.assertIn("+ ", self.log.getvalue())
         self.assertEqual(self.runner.capture([sys.executable, "-c", "print('hi')"]), "hi\n")
+
+    def test_output_into_a_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "out.txt"
+            self.runner.run([sys.executable, "-c", "print('to file')"], stdout_path=out)
+            self.assertEqual(out.read_text(encoding="utf-8").strip(), "to file")
+            self.assertIn(f"> {out}", self.log.getvalue())
 
     def test_failures(self):
         failing = [sys.executable, "-c", "import sys; sys.stderr.write('bad'); raise SystemExit(2)"]

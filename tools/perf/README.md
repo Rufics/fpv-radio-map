@@ -1,9 +1,10 @@
 # Performance tools
 
 Tooling for the load and performance tests of the C++ code (core, platform, FPV modules and the
-server). So far there are the terrain dataset builder, the catalog of descriptions and
-extensions, and the micro suite (Google Benchmark) with its history and baseline; the k6
-scenarios, monitoring and reports follow. CI runs only the unit tests of
+server): the terrain dataset builder, the catalog of descriptions and extensions, the micro
+suite (Google Benchmark), HTTP scenarios with k6 on a Docker stand with Prometheus and Grafana,
+sanitizer runs, the history with its baseline, HTML and Markdown reports, and flamegraphs of a
+regression. CI runs only the unit tests of
 these tools, which include a `catalog check` of the repository catalog; the perf runs themselves
 are not part of CI.
 
@@ -85,8 +86,8 @@ committed):
 All runs also go into `results/history.sqlite`.
 
 **Baseline and gate.** A measurement is compared with the median of its last 10 values
-(`--window`) from earlier runs on the same host, with the same dataset, the same items and the
-same major version of each (the benchmark and the collector). The host is a fingerprint of the CPU model, the number of
+(`--window`) from earlier runs on the same host, with the same dataset, the same collectors and
+the same major version of the benchmark and the collector. The host is a fingerprint of the CPU model, the number of
 CPUs, the memory and the cgroup limits, so a recreated VM of the same type continues the history.
 A change worse than `compare.maxRegressionPct` (5 % by default) is a regression and `run` exits 1;
 `--no-gate` reports it but exits 0. With fewer than 3 earlier values there is no verdict yet.
@@ -236,6 +237,27 @@ writes them again, for example for older runs after a reporter changed. `report.
 static file; Plotly comes from jsDelivr, pinned with its integrity hash (option `plotly` of the
 `html` reporter points elsewhere). A reporter is a class derived from `perfkit.report.Reporter`
 whose `render()` gets the run's files and the trends.
+
+## Flamegraphs of a regression
+
+When a run has a gated regression, every `profiler` extension profiles it before the results are
+written (`--no-profile` skips this), and both reports show the result:
+
+- **micro:** each regressed benchmark (the five worst at most) runs once more alone, for 5 s,
+  under the profiler (`--benchmark_filter=^NAME$`);
+- **scenario:** the stand comes up again and gets the scenario's highest rate as a constant load;
+  after `profile.warmUpS` (10 s) the profiler attaches to the server for `profile.durationS`
+  (30 s). The set-up and k6 of this second load go into `profile/` of the run folder.
+
+The `flamegraph` profiler samples the call stacks with Linux perf (`frequencyHz` 99, DWARF
+unwinding, so the release build needs no frame pointers) and draws `raw/flamegraph-NAME.svg` with
+[inferno](https://github.com/jonhoo/inferno); it keeps the folded stacks `raw/NAME.folded`, so
+two runs can be compared with `inferno-diff-folded`. It needs `perf` (`linux-perf` or
+`linux-tools`) and `cargo install inferno`; attaching to the server needs root or
+`kernel.perf_event_paranoid` ≤ 1. `RFMAP_PERF_PERF` names another perf binary, for a kernel
+without a matching perf package. A profile that fails is noted in `results.json` (`profiles`) and
+in the reports; it does not fail the run. A profiler is a class derived from
+`perfkit.profile.Profiler`.
 
 ## Terrain dataset (`dataset.py`)
 

@@ -44,6 +44,9 @@ class FakeSuite:
     def problems(self):
         return []
 
+    def profile(self, regressions, run_dir, profiles):
+        return []
+
     def execute(self, timeline, run_dir):
         with timeline.phase("benchmark/rf-core", "benchmark"):
             if self.fail:

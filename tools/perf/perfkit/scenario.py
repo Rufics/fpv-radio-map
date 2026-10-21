@@ -9,6 +9,8 @@ run (Prometheus with --no-monitoring) is skipped.
 import hashlib
 import json
 import sys
+import threading
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,10 +18,12 @@ from typing import Any, TextIO
 
 from perfkit.api import ApiClient, Provisioner
 from perfkit.catalog import Catalog, Item
+from perfkit.compare import Comparison
 from perfkit.errors import PerfError
 from perfkit.extensions import ExtensionLoader
 from perfkit.measure import CollectContext, Collector
 from perfkit.plan import FixtureReader, PlanBuilder
+from perfkit.profile import Profile, ProfileRunner, ProfileTarget
 from perfkit.session import Collected
 from perfkit.stand import Stand, StandProbe
 from perfkit.timeline import Timeline
@@ -29,6 +33,30 @@ SUMMARY_NAME = "k6-summary.json"
 DEFAULT_METRICS = ("p95", "error_rate")
 DEFAULT_LIMIT_PCT = 5.0
 DEFAULT_CREDENTIALS = 8
+# The profile of a regressed scenario: the load runs warm-up + duration + tail at the peak rate.
+DEFAULT_PROFILE_WARM_UP_S = 10.0
+DEFAULT_PROFILE_S = 30.0
+PROFILE_TAIL_S = 5.0
+
+
+class LoadInBackground:
+    """Runs the stand's k6 in a thread, so a profiler can attach to the server meanwhile."""
+
+    def __init__(self, stand: Stand):
+        self._error: PerfError | None = None
+        self._thread = threading.Thread(target=self._run, args=(stand,), name="k6", daemon=True)
+        self._thread.start()
+
+    def _run(self, stand: Stand) -> None:
+        try:
+            stand.load()  # crossed thresholds do not matter here: the load only feeds the profile
+        except PerfError as error:
+            self._error = error
+
+    def join(self) -> None:
+        self._thread.join()
+        if self._error is not None:
+            raise self._error
 
 
 @dataclass(frozen=True)
@@ -118,6 +146,37 @@ class ScenarioSuite:
             self._save_logs(run_dir)
             self._stand.down()
 
+    def profile(self, regressions: Sequence[Comparison], run_dir: Path, profiles: ProfileRunner) -> list[Profile]:
+        """Brings the stand up again and profiles the server under the scenario's peak load.
+
+        One profile of the server whatever regressed: the set-up and k6 of this second load go
+        into profile/ of the run, so they do not replace the measured run's files."""
+        settings = self.scenario.manifest.get("profile", {})
+        warm_up = float(settings.get("warmUpS", DEFAULT_PROFILE_WARM_UP_S))
+        duration = float(settings.get("durationS", DEFAULT_PROFILE_S))
+        profile_dir = run_dir / "profile"
+        profile_dir.mkdir(exist_ok=True)
+        self._stand.run_dir = profile_dir
+        client = ApiClient(self._stand.base_url)
+        try:
+            self._stand.up(client)
+            self._write_plan(profile_dir, client, self._peak_load(warm_up + duration + PROFILE_TAIL_S))
+            load = LoadInBackground(self._stand)
+            self._stand.wait(warm_up)
+            done = profiles.profile([ProfileTarget("rfmap-server", pid=self._stand.server_pid(),
+                                                   duration_s=duration)], run_dir)
+            load.join()
+            return done
+        finally:
+            self._save_logs(profile_dir)
+            self._stand.down()
+
+    def _peak_load(self, duration_s: float) -> dict[str, Any]:
+        """A constant load at the scenario's highest rate, for as long as the profile needs."""
+        peak = max(stage["targetRps"] for stage in self.scenario.manifest["load"]["stages"])
+        return {"type": "constant-arrival-rate",
+                "stages": [{"name": "profile", "durationS": duration_s, "targetRps": peak}]}
+
     def _dashboards(self) -> None:
         if not self._stand.settings.grafana:
             return
@@ -134,7 +193,7 @@ class ScenarioSuite:
         print(f"Grafana: {self._stand.grafana_url} (the stand keeps running; "
               f"docker compose -p rfmap-perf down -v removes it)", file=self._log)
 
-    def _write_plan(self, run_dir: Path, client: ApiClient) -> None:
+    def _write_plan(self, run_dir: Path, client: ApiClient, load: dict[str, Any] | None = None) -> None:
         provisioner = Provisioner(client)
 
         def credentials(persona: Item, missions: list[dict]) -> list[dict]:
@@ -143,6 +202,8 @@ class ScenarioSuite:
 
         # k6 runs next to the server in the stand's network.
         plan = self._plans.build(self.scenario, "http://rfmap-server:8080/api/v1", self._stand.admin_token, credentials)
+        if load is not None:
+            plan["load"] = load
         (run_dir / PLAN_NAME).write_text(json.dumps(plan), encoding="utf-8")
 
     def _stages(self, timeline: Timeline, summary: Path) -> None:

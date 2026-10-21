@@ -85,10 +85,35 @@ class ReportsOfARunTest(ReportTestCase):
         self.assertIn("- scenario/soak server_rss tail_slope is 40 MiB/h", summary)
         self.assertIn("1 problem(s) failed the run", (run_dir / "report.html").read_text(encoding="utf-8"))
 
+    def test_flamegraphs_of_a_regression(self):
+        _, _, run_dir = self.run_suite({"BM_A": 100.0})
+        results = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
+        self.assertEqual(results["profiles"], [])
+        results["profiles"] = [
+            {"profiler": "profiler/flamegraph", "target": "BM_A", "error": "",
+             "files": ["raw/flamegraph-BM_A.svg", "raw/BM_A.folded"]},
+            {"profiler": "profiler/flamegraph", "target": "BM_<b>", "error": "perf is not installed", "files": []}]
+        (run_dir / "results.json").write_text(json.dumps(results), encoding="utf-8")
+        ReportRunner(self.catalog.items("reporter")).render(run_dir, self.results, io.StringIO())
+        page = (run_dir / "report.html").read_text(encoding="utf-8")
+        self.assertIn('<object class="flamegraph" type="image/svg+xml" data="raw/flamegraph-BM_A.svg">', page)
+        self.assertNotIn('data="raw/BM_A.folded"', page)
+        self.assertIn("BM_&lt;b&gt;: no profile, perf is not installed", page)
+        summary = (run_dir / "summary.md").read_text(encoding="utf-8")
+        self.assertIn(f"- `BM_A`: `{run_dir.name}/raw/flamegraph-BM_A.svg`", summary)
+        self.assertIn("- `BM_<b>`: no profile, perf is not installed", summary)
+
     def test_first_run_has_no_baseline_and_no_series(self):
         _, _, run_dir = self.run_suite({"BM_A": 100.0})
         summary = (run_dir / "summary.md").read_text(encoding="utf-8")
         self.assertTrue(summary.startswith("### ⚫ No baseline yet for"))
+        results = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
+        for row in results["results"]:
+            row["gated"] = False
+        (run_dir / "results.json").write_text(json.dumps(results), encoding="utf-8")
+        ReportRunner(self.catalog.items("reporter")).render(run_dir, self.results, io.StringIO())
+        summary = (run_dir / "summary.md").read_text(encoding="utf-8")
+        self.assertTrue(summary.startswith("### ⚪ No gated measurement in"), "not a missing baseline")
         page = (run_dir / "report.html").read_text(encoding="utf-8")
         self.assertNotIn("Server, database and load generator", page)
         self.assertIn("<h2>Timeline</h2>", page)

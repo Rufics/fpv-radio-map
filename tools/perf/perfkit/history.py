@@ -136,13 +136,20 @@ class History:
 
     @staticmethod
     def same_majors(versions: dict[str, str], wanted: dict[str, str]) -> bool:
-        """True when the past run used exactly the wanted items, each with the same major version.
+        """True when the past run used every wanted item with the same major version, and the same
+        collectors.
 
-        An extra item counts too: a run with a collector more (monitoring, sanitizers) loads the
-        stand differently, so it is no baseline for a run without it, nor the other way round."""
-        if set(versions) != set(wanted):
+        `versions` are all items of the past run, `wanted` only those a measurement depends on,
+        so other benchmarks of the run do not matter. Collectors do: a run with a collector more
+        (monitoring, sanitizers) loads the stand differently, so it is no baseline for a run
+        without it, nor the other way round."""
+        if History._collectors(versions) != History._collectors(wanted):
             return False
         for key, version in wanted.items():
             if key not in versions or Version.parse(versions[key]).major != Version.parse(version).major:
                 return False
         return True
+
+    @staticmethod
+    def _collectors(items: dict[str, str]) -> set[str]:
+        return {key for key in items if key.startswith("collector/")}

@@ -1,7 +1,7 @@
 {
   "kind": "reporter",
   "id": "html",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "report.html: a static Plotly page with the environment, the timeline, every Prometheus series with the run's phases shaded, the trend of each gated measurement with version markers, and every measurement.",
   "entry": "reporter.py:HtmlReporter",
   "options": {

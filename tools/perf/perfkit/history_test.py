@@ -45,7 +45,11 @@ class HistoryTest(HistoryTestCase):
         versions = {"benchmark/rf-core": "1.4.0", "collector/google-benchmark": "2.0.0"}
         same = {"benchmark/rf-core": "1.0.3", "collector/google-benchmark": "2.1.0"}
         self.assertTrue(History.same_majors(versions, same))
+        self.assertTrue(History.same_majors({**versions, "benchmark/result-cache": "1.0.0"}, same),
+                        "another benchmark of the past run does not matter")
         self.assertFalse(History.same_majors(versions, {**same, "benchmark/rf-core": "2.0.0"}))
+        self.assertFalse(History.same_majors(versions, {"benchmark/other": "1.0.0",
+                                                        "collector/google-benchmark": "2.0.0"}))
         self.assertFalse(History.same_majors(versions, {**same, "collector/prometheus": "1.0.0"}),
                          "a run with a collector more is no baseline")
         self.assertFalse(History.same_majors(versions, {"benchmark/rf-core": "1.0.3"}),

@@ -23,12 +23,18 @@ class CommandRunner:
         self._log = log
 
     def run(self, args: list[str], cwd: Path | None = None, env: Mapping[str, str] | None = None,
-            allowed: tuple[int, ...] = (0,), timeout: float = RUN_TIMEOUT_S) -> int:
-        """Runs `args`; returns its exit code, which must be one of `allowed`."""
-        print("+ " + " ".join(args), file=self._log, flush=True)
+            allowed: tuple[int, ...] = (0,), timeout: float = RUN_TIMEOUT_S, stdout_path: Path | None = None) -> int:
+        """Runs `args`; returns its exit code, which must be one of `allowed`. What it prints goes to
+        `stdout_path` when given, else to stderr."""
+        print("+ " + " ".join(args) + (f" > {stdout_path}" if stdout_path else ""), file=self._log, flush=True)
         try:
-            done = subprocess.run(args, cwd=cwd, env=env, check=False, stdout=sys.stderr,  # nosec B603
-                                  timeout=timeout)
+            if stdout_path is None:
+                done = subprocess.run(args, cwd=cwd, env=env, check=False, stdout=sys.stderr,  # nosec B603
+                                      timeout=timeout)
+            else:
+                with stdout_path.open("wb") as out:
+                    done = subprocess.run(args, cwd=cwd, env=env, check=False, stdout=out,  # nosec B603
+                                          timeout=timeout)
         except FileNotFoundError as error:
             raise PerfError(f"{args[0]} is not installed") from error
         except subprocess.TimeoutExpired as error:

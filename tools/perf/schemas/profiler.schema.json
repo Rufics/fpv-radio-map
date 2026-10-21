@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "profiler.schema.json",
+  "title": "Profiler: Python code that profiles a command or a process and writes a flamegraph",
+  "x-perfkit": {
+    "folder": "extensions/profilers",
+    "group": "extension",
+    "files": [{ "path": "entry", "before": ":" }]
+  },
+  "type": "object",
+  "required": ["kind", "id", "version", "entry"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "profiler" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/version" },
+    "description": { "$ref": "common.schema.json#/$defs/description" },
+    "entry": { "$ref": "common.schema.json#/$defs/entry" },
+    "options": { "type": "object" }
+  }
+}

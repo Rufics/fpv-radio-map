@@ -201,6 +201,19 @@ class Stand:
         """Stops the server gracefully, so a sanitized one writes its leak report."""
         self._runner.run(self._compose("stop", "-t", "60", "rfmap-server"), env=self.environment())
 
+    def wait(self, seconds: float) -> None:
+        self._sleep(seconds)
+
+    def server_pid(self) -> int:
+        """The server's process id on this machine, for a profiler to attach to."""
+        ids = self._runner.capture(self._compose("ps", "-q", "rfmap-server"), env=self.environment()).split()
+        if not ids:
+            raise PerfError("the stand's server is not running")
+        pid = self._runner.capture(["docker", "inspect", "--format", "{{.State.Pid}}", ids[0]]).strip()
+        if not pid.isdigit() or int(pid) == 0:
+            raise PerfError(f"docker gave no process id for the server: {pid!r}")
+        return int(pid)
+
     def settle(self) -> None:
         """Waits until Prometheus has the last seconds of the load."""
         if self.settings.monitoring:

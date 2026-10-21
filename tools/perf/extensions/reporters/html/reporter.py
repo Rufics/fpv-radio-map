@@ -105,7 +105,8 @@ class HtmlReporter(Reporter):
         figures = Figures()
         kinds = tuple(self.options.get("bandKinds", list(BAND_COLORS)))
         bands = Bands(files.events, kinds)
-        sections = [self._summary(context), self._environment(files.environment),
+        sections = [self._summary(context), Flamegraphs.html(files.results.get("profiles", [])),
+                    self._environment(files.environment),
                     self._timeline(files.events, figures), self._series(files.raw("prometheus.json"), bands, figures),
                     self._trends(context, figures), self._table(files.results["results"])]
         plotly = {**PLOTLY, **self.options.get("plotly", {})}
@@ -205,6 +206,29 @@ class Problems:
             return ""
         items = "".join(f"<li>{html.escape(problem)}</li>" for problem in problems)
         return f'<div class="problems"><b>{len(problems)} problem(s) failed the run:</b><ul>{items}</ul></div>'
+
+
+class Flamegraphs:
+    """The flamegraphs a regression got, each in a frame of its own (they are interactive SVGs)."""
+
+    @staticmethod
+    def html(profiles: list[dict[str, Any]]) -> str:
+        if not profiles:
+            return ""
+        parts = ["<h2>Flamegraphs of the regression</h2>"]
+        for profile in profiles:
+            if profile.get("error"):
+                parts.append(f'<p class="muted">{html.escape(profile.get("target", ""))}: no profile, '
+                             f'{html.escape(profile["error"])}</p>')
+                continue
+            for name in profile.get("files", []):
+                if not (name.startswith("raw/") and name.endswith(".svg")):
+                    continue
+                link = html.escape(name)
+                parts.append(f'<p><b>{html.escape(profile.get("target", ""))}</b> · '
+                             f'<a href="{link}">open</a></p>'
+                             f'<object class="flamegraph" type="image/svg+xml" data="{link}"></object>')
+        return "\n".join(parts)
 
 
 class ResultRowHtml:

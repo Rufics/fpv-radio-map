@@ -10,6 +10,7 @@ from perfkit.catalog_test import SCHEMAS_DIR
 from perfkit.errors import PerfError
 from perfkit.google_benchmark_test import TOOL_DIR
 from perfkit.k6_summary_test import summary
+from perfkit.micro_test import TargetsOnly
 from perfkit.scenario import Dataset, ScenarioSuite
 from perfkit.stand import Stand, StandSettings
 from perfkit.stand_test import FakeRunner, StandTestCase
@@ -103,6 +104,25 @@ class ScenarioSuiteTest(StandTestCase):
         self.assertEqual(texts, ["stand: stand up", "setup: set-up", "load: load", "stage: steady"])
         self.assertIn("Grafana: http://127.0.0.1:", self.log.getvalue())
         self.assertEqual(suite.problems(), [])
+
+    def test_a_regression_profiles_the_server_under_the_peak_load(self):
+        profiles = TargetsOnly()
+        self.suite("peak").profile([], self.run_dir, profiles)
+        (target,) = profiles.targets
+        self.assertEqual((target.name, target.pid, target.duration_s), ("rfmap-server", 4242, 30.0))
+        plan = json.loads((self.run_dir / "profile" / "plan.json").read_text(encoding="utf-8"))
+        peak = max(stage["targetRps"] for stage in self.catalog.get("scenario", "peak").manifest["load"]["stages"])
+        self.assertEqual(plan["load"], {"type": "constant-arrival-rate",
+                                        "stages": [{"name": "profile", "durationS": 45.0, "targetRps": peak}]})
+        self.assertTrue((self.run_dir / "profile" / "k6-summary.json").is_file(), "k6 ran into profile/")
+        self.assertFalse((self.run_dir / "k6-summary.json").exists())
+        self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
+
+    def test_a_failed_profile_load_is_an_error(self):
+        self.runner.k6_code = 1
+        with self.assertRaisesRegex(PerfError, "exit 1"):
+            self.suite().profile([], self.run_dir, TargetsOnly())
+        self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
 
     def test_items_and_thresholds(self):
         keys = [item.key for item in self.suite("peak").items()]

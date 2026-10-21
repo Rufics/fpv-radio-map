@@ -7,12 +7,13 @@ hands back what its collectors read. The session writes into <results>/<run id>/
     environment.json   what the numbers depend on besides the code
     events.json        when each phase started and finished
     results.json       every measurement, its baseline and verdict
-    raw/               what the tools wrote
+    raw/               what the tools wrote, and the flamegraphs of a regression
 
-and adds the run to <results>/history.sqlite.
+and adds the run to <results>/history.sqlite. With a gated regression, the suite profiles what
+regressed before the results are written (perfkit/profile.py).
 """
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, TextIO
@@ -23,6 +24,7 @@ from perfkit.environment import Environment
 from perfkit.errors import PerfError
 from perfkit.history import History, RunRecord
 from perfkit.measure import Collection, Measurement
+from perfkit.profile import MAX_TARGETS, Profile, ProfileRunner
 from perfkit.report import ReportRunner
 from perfkit.timeline import Timeline, utc_now
 
@@ -78,6 +80,8 @@ class Suite(Protocol):
 
     def problems(self) -> list[str]: ...
 
+    def profile(self, regressions: Sequence[Comparison], run_dir: Path, profiles: ProfileRunner) -> list[Profile]: ...
+
 
 @dataclass(frozen=True)
 class SessionSettings:
@@ -88,9 +92,11 @@ class SessionSettings:
 
 class RunSession:
     def __init__(self, settings: SessionSettings, environment: Environment, output: TextIO,
-                 clock: Callable[[], str] = utc_now, reports: ReportRunner | None = None):
+                 clock: Callable[[], str] = utc_now, reports: ReportRunner | None = None,
+                 profiles: ProfileRunner | None = None):
         self._settings = settings
         self._reports = reports
+        self._profiles = profiles
         self._environment = environment
         self._output = output
         self._clock = clock
@@ -118,8 +124,9 @@ class RunSession:
             history.record(record)
         finally:
             history.close()
+        profiles = self._profile(suite, timeline, comparisons, run_dir)
         problems = suite.problems() + LimitCheck.problems(collected)
-        self._write(run_dir, record, timeline, comparisons, problems)
+        self._write(run_dir, record, timeline, comparisons, problems, profiles)
         ConsoleTable(self._output).print(run_dir, comparisons)
         if self._reports is not None:
             problems = problems + self._reports.render(run_dir, self._settings.results_dir, self._output)
@@ -137,6 +144,19 @@ class RunSession:
                 return path
         raise PerfError(f"too many runs started at {stamp} in {self._settings.results_dir}")
 
+    def _profile(self, suite: Suite, timeline: Timeline, comparisons: list[Comparison],
+                 run_dir: Path) -> list[Profile]:
+        """Flamegraphs of what regressed; a profile that fails is noted, the run goes on."""
+        regressions = ProfileRunner.regressions(comparisons)
+        if not regressions or not self._profiles:
+            return []
+        try:
+            with timeline.phase("profile", "profile"):
+                return suite.profile(regressions[:MAX_TARGETS], run_dir, self._profiles)
+        except PerfError as error:
+            print(f"profile: could not profile the regression: {error}", file=self._output)
+            return [Profile("", suite.name, error=str(error))]
+
     def _compare(self, history: History, record: RunRecord, collected: list[Collected]) -> list[Comparison]:
         comparer = Comparer(Baseline(history, record.host, record.dataset, record.started), self._settings.window)
         return [comparer.compare(m, entry.involved, entry.limit_pct, entry.gates(m))
@@ -144,9 +164,10 @@ class RunSession:
 
     @staticmethod
     def _write(run_dir: Path, record: RunRecord, timeline: Timeline, comparisons: list[Comparison],
-               problems: list[str]) -> None:
+               problems: list[str], profiles: list[Profile]) -> None:
         results = {"runId": record.run_id, "suite": record.suite, "host": record.host, "dataset": record.dataset,
-                   "items": record.items, "problems": problems, "results": [ResultRow.of(c) for c in comparisons]}
+                   "items": record.items, "problems": problems, "profiles": [p.to_json() for p in profiles],
+                   "results": [ResultRow.of(c) for c in comparisons]}
         files: dict[str, Any] = {"environment.json": record.environment, "events.json": timeline.to_json(),
                                  "results.json": results}
         for name, data in files.items():

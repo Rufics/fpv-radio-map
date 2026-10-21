@@ -1,5 +1,6 @@
 import json
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from perfkit.catalog import Catalog, CatalogLoader, KindRegistry
@@ -7,6 +8,7 @@ from perfkit.catalog_test import SCHEMAS_DIR
 from perfkit.errors import PerfError
 from perfkit.google_benchmark_test import CollectorTestCase, benchmark_output
 from perfkit.micro import MicroBuild, MicroOptions, MicroSuite
+from perfkit.profile_test import comparison
 from perfkit.timeline import Timeline
 
 
@@ -22,6 +24,17 @@ class FakeRunner:
         for arg in args:
             if arg.startswith("--benchmark_out="):
                 Path(arg.split("=", 1)[1]).write_text(json.dumps(self.output), encoding="utf-8")
+
+
+class TargetsOnly:
+    """A ProfileRunner that keeps the targets it was given."""
+
+    def __init__(self):
+        self.targets = []
+
+    def profile(self, targets, run_dir):
+        self.targets.extend(targets)
+        return []
 
 
 class MicroSuiteTest(CollectorTestCase):
@@ -71,6 +84,17 @@ class MicroSuiteTest(CollectorTestCase):
         with self.assertRaisesRegex(PerfError, "the median needs at least 2"):
             suite.run(self.catalog.get("benchmark", "rf-core"), self.root / "raw")
         self.assertEqual(self.runner.commands, [])
+
+    def test_each_regressed_benchmark_runs_alone_under_the_profiler(self):
+        profiles = TargetsOnly()
+        gone = comparison("BM_Gone", 9.0)
+        other = replace(gone, measurement=replace(gone.measurement, source="benchmark/gone"))
+        regressions = [comparison("BM_Path/100", 20.0), comparison("BM_Path/100", 10.0), other]
+        self.suite().profile(regressions, self.root / "run", profiles)
+        (target,) = profiles.targets
+        self.assertEqual(target.name, "BM_Path/100")
+        self.assertEqual(target.command, (str(self.build.bin_dir / "bench_rf_core"), "--benchmark_filter=^BM_Path/100$",
+                                          "--benchmark_repetitions=1", "--benchmark_min_time=5s"))
 
     def test_unknown_benchmark(self):
         suite = self.suite(only=("nope", "rf-core"))

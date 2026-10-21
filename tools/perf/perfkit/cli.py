@@ -12,6 +12,7 @@ from perfkit.environment import BuildProbe, Environment, GitProbe, HostProbe, Pr
 from perfkit.errors import PerfError, Problem
 from perfkit.lock import LockComparer, LockFile, Mode
 from perfkit.micro import MicroBuild, MicroOptions, MicroSuite
+from perfkit.profile import ProfileRunner
 from perfkit.report import ReportRunner
 from perfkit.scenario import Dataset, ScenarioSuite
 from perfkit.session import RunSession, SessionSettings
@@ -58,6 +59,7 @@ class PerfCli:
         run.add_argument("--window", type=int, default=10, help="earlier runs in the baseline (default: 10)")
         run.add_argument("--no-gate", action="store_true", help="exit 0 even when a measurement regressed")
         run.add_argument("--no-report", action="store_true", help="write no reports (report.html, summary.md)")
+        run.add_argument("--no-profile", action="store_true", help="make no flamegraphs of a regression")
         stand = run.add_argument_group("HTTP scenarios")
         stand.add_argument("--dataset", type=Path, help="the folder dataset.py built (its --out)")
         stand.add_argument("--port", type=int, default=18080,
@@ -145,7 +147,9 @@ class PerfCli:
         scenario = None if args.suite else catalog.get("scenario", args.scenario)
         wanted = scenario.manifest.get("reporters", []) if scenario else []
         reports = None if args.no_report else ReportRunner(self._reporters(catalog, wanted))
-        return RunSession(settings, environment, self._output, reports=reports).run(suite)
+        profiles = None if args.no_profile else ProfileRunner(catalog.items("profiler"), CommandRunner(self._errors),
+                                                              self._errors)
+        return RunSession(settings, environment, self._output, reports=reports, profiles=profiles).run(suite)
 
     @staticmethod
     def _invalid_numbers(args: argparse.Namespace) -> str:
