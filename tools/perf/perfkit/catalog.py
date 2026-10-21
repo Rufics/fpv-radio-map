@@ -165,18 +165,19 @@ class FieldPath:
         if not parts:
             yield data
             return
-        head, rest = parts[0], parts[1:]
-        if head == "*":
-            children = list(data.values()) if isinstance(data, dict) else []
-        else:
-            name = head.removesuffix("[]")
-            child = data.get(name) if isinstance(data, dict) else None
-            if head.endswith("[]"):
-                children = child if isinstance(child, list) else []
-            else:
-                children = [] if child is None else [child]
-        for child in children:
-            yield from cls._walk(child, rest)
+        for child in cls._children(data, parts[0]):
+            yield from cls._walk(child, parts[1:])
+
+    @staticmethod
+    def _children(data: Any, part: str) -> list[Any]:
+        if not isinstance(data, dict):
+            return []
+        if part == "*":
+            return list(data.values())
+        child = data.get(part.removesuffix("[]"))
+        if part.endswith("[]"):
+            return child if isinstance(child, list) else []
+        return [] if child is None else [child]
 
 
 class Catalog:

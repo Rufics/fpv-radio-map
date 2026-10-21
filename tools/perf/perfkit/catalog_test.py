@@ -73,11 +73,7 @@ class CatalogTestCase(unittest.TestCase):
         self.sample = SampleCatalog(Path(tmp.name))
         self.registry = KindRegistry.load(SCHEMAS_DIR)
 
-    def load(self):
-        return CatalogLoader(self.registry).load(self.sample.root)
-
-    def messages(self):
-        return [problem.describe(self.sample.root) for problem in self.load()[1]]
+        self.loader = CatalogLoader(self.registry)
 
 
 class KindRegistryTest(unittest.TestCase):
@@ -105,16 +101,20 @@ class KindRegistryTest(unittest.TestCase):
 
 
 class CatalogLoaderTest(CatalogTestCase):
+    def messages(self):
+        return [problem.describe(self.sample.root) for problem in self.loader.load(self.sample.root)[1]]
+
     def test_sample_is_valid(self):
-        catalog, problems = self.load()
+        catalog, problems = self.loader.load(self.sample.root)
         self.assertEqual(problems, [])
         self.assertEqual(len(catalog.items()), 7)
         self.assertEqual([item.id for item in catalog.items("fixture")], ["link-setups", "warsaw-points"])
         self.assertEqual(str(catalog.get("persona", "link-editor").version), "1.0.0")
 
     def test_missing_root(self):
+        missing = self.sample.root / "nope"
         with self.assertRaises(PerfError):
-            CatalogLoader(self.registry).load(self.sample.root / "nope")
+            self.loader.load(missing)
 
     def test_folder_without_manifest_and_bad_json(self):
         (self.sample.root / "personas" / "empty").mkdir()

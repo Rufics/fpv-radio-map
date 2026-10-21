@@ -8,7 +8,7 @@ from perfkit.version import Version
 
 class LockTest(CatalogTestCase):
     def comparer(self):
-        catalog, problems = self.load()
+        catalog, problems = self.loader.load(self.sample.root)
         self.assertEqual(problems, [])
         lock_file = LockFile(self.sample.root)
         return LockComparer(catalog, lock_file.read(), lock_file.path), lock_file
@@ -65,8 +65,9 @@ class LockTest(CatalogTestCase):
         path = self.sample.root / LOCK_NAME
         for content in ("{", '{"format": 2, "items": {}}', '{"format": 1, "items": {"a/b": {}}}', "[]"):
             path.write_text(content, encoding="utf-8")
+            lock_file = LockFile(self.sample.root)
             with self.subTest(content=content), self.assertRaises(PerfError):
-                LockFile(self.sample.root).read()
+                lock_file.read()
 
 
 class VersionTest(unittest.TestCase):
