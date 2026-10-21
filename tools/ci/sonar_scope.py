@@ -68,11 +68,13 @@ class ChangeClassifier:
     # The analysis itself; sonar_lcov.py runs only in the web coverage step.
     ANALYSIS_FILES = ("sonar-project.properties", ".github/workflows/sonar.yml", "tools/ci/sonar_scope.py",
                       "tools/ci/sonar_lcov.py")
+    # The composite actions that build and test each part for the analysis.
+    ANALYSIS_FOLDERS = (".github/actions/sonar-",)
     # The test patterns of sonar-project.properties (sonar.test.inclusions).
     TEST_SUFFIXES = ("_test.py", ".spec.ts")
 
     def needs_everything(self, path):
-        return path in self.ANALYSIS_FILES
+        return path in self.ANALYSIS_FILES or path.startswith(self.ANALYSIS_FOLDERS)
 
     def is_header(self, path):
         return path.endswith(self.HEADER_SUFFIXES)

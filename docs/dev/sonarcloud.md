@@ -50,9 +50,12 @@ does not change the gate.
 
 The whole repository is analysed instead on every push to `main`, on manual runs, and on a pull
 request that changes the analysis itself (`sonar-project.properties`, `.github/workflows/sonar.yml`,
-`tools/ci/sonar_scope.py`, `tools/ci/sonar_lcov.py`), changes more than 500 files, only deletes
-files, or has a file name that a Sonar pattern cannot carry (anything but letters, digits and
-`_./@+-`).
+the `.github/actions/sonar-*` actions, `tools/ci/sonar_scope.py`, `tools/ci/sonar_lcov.py`), changes
+more than 500 files, only deletes files, or has a file name that a Sonar pattern cannot carry
+(anything but letters, digits and `_./@+-`).
+
+The workflow reads in three blocks: the scope step, one composite action per part that builds and
+tests it with coverage (`.github/actions/sonar-cpp`, `sonar-python`, `sonar-web`), and the scan.
 
 ## One-time setup
 

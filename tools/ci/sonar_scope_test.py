@@ -39,6 +39,7 @@ class ChangeClassifierTest(unittest.TestCase):
     def test_analysis_files_need_everything(self):
         self.assertTrue(self.classifier.needs_everything("sonar-project.properties"))
         self.assertTrue(self.classifier.needs_everything(".github/workflows/sonar.yml"))
+        self.assertTrue(self.classifier.needs_everything(".github/actions/sonar-web/action.yml"))
         self.assertFalse(self.classifier.needs_everything("web/package.json"))
 
 
