@@ -17,7 +17,7 @@ constexpr std::size_t kMaxFileName = 120;
 
 /// Bytes of the valid UTF-8 character at `i`, or 0 when the bytes there are not one.
 std::size_t utf8Length(std::string_view s, std::size_t i) {
-    const auto lead = static_cast<unsigned char>(s[i]);
+    const unsigned lead = static_cast<unsigned char>(s[i]);
     std::size_t n = 0;
     if (lead < 0x80) n = 1;
     else if (lead >= 0xC2 && lead <= 0xDF) n = 2;
@@ -26,16 +26,17 @@ std::size_t utf8Length(std::string_view s, std::size_t i) {
     if (n == 0 || i + n > s.size()) return 0;
     if (n == 1) return 1;
     // The second byte's range also rules out overlong forms, surrogates and code points past U+10FFFF.
-    const auto second = static_cast<unsigned char>(s[i + 1]);
-    unsigned char low = 0x80;
-    unsigned char high = 0xBF;
+    const unsigned second = static_cast<unsigned char>(s[i + 1]);
+    unsigned low = 0x80;
+    unsigned high = 0xBF;
     if (lead == 0xE0) low = 0xA0;
     else if (lead == 0xED) high = 0x9F;
     else if (lead == 0xF0) low = 0x90;
     else if (lead == 0xF4) high = 0x8F;
     if (second < low || second > high) return 0;
     for (std::size_t k = 2; k < n; ++k) {
-        if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80) return 0;
+        const unsigned next = static_cast<unsigned char>(s[i + k]);
+        if ((next & 0xC0u) != 0x80u) return 0;
     }
     return n;
 }
@@ -52,7 +53,8 @@ std::optional<std::string> startedAtOf(const json& entry) {
 std::optional<std::vector<std::string>> FlightLogStore::add(const std::string& missionId, const std::string& fileName,
                                                             const std::string& sha256, const std::string& decoder,
                                                             const std::vector<NewFlight>& flights, int maxPerMission) {
-    return db_.tx([&](pqxx::work& w) -> std::optional<std::vector<std::string>> {
+    return db_.tx([&missionId, &fileName, &sha256, &decoder, &flights, maxPerMission](pqxx::work& w)
+                      -> std::optional<std::vector<std::string>> {
         // Imports into one mission take turns, so two of them cannot both pass the limit.
         w.exec("select 1 from missions where id = $1 for update", pqxx::params{missionId});
         const int stored = w.exec("select count(*) from flight_logs where mission_id = $1", pqxx::params{missionId})[0][0].as<int>();
@@ -98,7 +100,7 @@ json FlightLogStore::list(const std::string& missionId) const {
 }
 
 std::optional<FlightLogStore::Stored> FlightLogStore::get(const std::string& missionId, const std::string& id) const {
-    return db_.tx([&](pqxx::work& w) -> std::optional<Stored> {
+    return db_.tx([&missionId, &id](pqxx::work& w) -> std::optional<Stored> {
         const auto r = w.exec("select file_name, decoder, normalized::text from flight_logs where mission_id = $1 and id = $2",
                               pqxx::params{missionId, id});
         if (r.empty()) return std::nullopt;
@@ -107,7 +109,7 @@ std::optional<FlightLogStore::Stored> FlightLogStore::get(const std::string& mis
 }
 
 bool FlightLogStore::remove(const std::string& missionId, const std::string& id) {
-    return db_.tx([&](pqxx::work& w) {
+    return db_.tx([&missionId, &id](pqxx::work& w) {
         return w.exec("delete from flight_logs where mission_id = $1 and id = $2", pqxx::params{missionId, id}).affected_rows() > 0;
     });
 }
@@ -156,10 +158,10 @@ rfflightlog::ProcessOptions FlightLogService::options() const {
     return out;
 }
 
-json FlightLogService::invoke(rfmod::IModuleInstance& decoder, const std::string& method, const json& request) {
+json FlightLogService::decodeWith(rfmod::IModuleInstance& decoder, const json& request) {
     const std::string& id = decoder.manifest().id;
     try {
-        return decoder.invoke(method, request);
+        return decoder.invoke("flightlog.decode", request);
     } catch (const rfmod::ModuleError& e) {
         if (e.code() == "bad_request") throw HttpError(422, id + " could not read the file: " + e.what(), {{"decoder", id}});
         throw HttpError(502, id + " failed on this file: " + e.what(), {{"decoder", id}, {"code", e.code()}});
@@ -184,7 +186,7 @@ FlightLogService::Decoded FlightLogService::decode(const std::string& bytes, con
     const auto* data = reinterpret_cast<const std::uint8_t*>(bytes.data());
     const json request = {{"file", rfmod::toBase64(data, bytes.size())}, {"fileName", fileName}};
     const std::shared_lock gate(modules_.gate());
-    rfmod::ModuleRegistry* registry = modules_.registry();
+    const rfmod::ModuleRegistry* registry = modules_.registry();
     const std::vector<rfmod::IModuleInstance*> decoders =
         registry ? registry->withCapability("flightlog.decoder") : std::vector<rfmod::IModuleInstance*>{};
     if (decoders.empty()) throw HttpError(422, "no flight log decoder module is installed on this server");
@@ -192,7 +194,7 @@ FlightLogService::Decoded FlightLogService::decode(const std::string& bytes, con
     for (rfmod::IModuleInstance* d : decoders) {
         tried.push_back(d->manifest().id);
         if (!probe(*d, request)) continue;
-        json document = invoke(*d, "flightlog.decode", request);
+        json document = decodeWith(*d, request);
         if (const auto problems = schemas_.check("flightlog", document); !problems.empty()) {
             throw HttpError(502, d->manifest().id + " answered a document that does not match the flightlog schema: " +
                                      problems.front().pointer + " " + problems.front().message,
@@ -215,7 +217,7 @@ json FlightLogService::preview(const std::string& bytes, const std::string& file
     return {{"decoder", d.decoder}, {"source", d.document.at("source")}, {"flights", flights}};
 }
 
-json FlightLogService::import(const std::string& missionId, const std::string& bytes, const std::string& fileName) {
+json FlightLogService::importFile(const std::string& missionId, const std::string& bytes, const std::string& fileName) {
     requireEnabled();
     requireStore();
     const std::string name = cleanFileName(fileName);
@@ -224,8 +226,8 @@ json FlightLogService::import(const std::string& missionId, const std::string& b
     std::vector<FlightLogStore::NewFlight> rows;
     for (std::size_t i = 0; i < processed.size(); ++i) {
         const json& entry = d.document.at("logs").at(i);
-        rows.push_back({entry.at("index").get<int>(), startedAtOf(entry), processed[i].log.durationS, single(d.document, entry),
-                        processed[i].summaryJson()});
+        rows.emplace_back(entry.at("index").get<int>(), startedAtOf(entry), processed[i].log.durationS,
+                          single(d.document, entry), processed[i].summaryJson());
     }
     const std::string sha = rfmod::Sha256::hex({reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()});
     const auto added = store_->add(missionId, name, sha, d.decoder, rows, limits_.maxPerMission);

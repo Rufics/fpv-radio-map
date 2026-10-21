@@ -642,7 +642,7 @@ void Application::FlightLogApi::getList(const Req& req, Res& res) const {
 
 void Application::FlightLogApi::postImport(const Req& req, Res& res) const {
     const Principal p = principal(req, true);
-    sendJson(res, 201, app.flightLogs_->import(p.missionId, req.body, fileName(req)));
+    sendJson(res, 201, app.flightLogs_->importFile(p.missionId, req.body, fileName(req)));
 }
 
 void Application::FlightLogApi::getFlight(const Req& req, Res& res) const {

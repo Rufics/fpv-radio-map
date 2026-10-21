@@ -64,7 +64,7 @@ public:
     /// Decodes and processes without storing: the replay view of every flight in the file.
     [[nodiscard]] json preview(const std::string& bytes, const std::string& fileName) const;
     /// Decodes, processes and stores every flight of the file in the mission.
-    [[nodiscard]] json import(const std::string& missionId, const std::string& bytes, const std::string& fileName);
+    [[nodiscard]] json importFile(const std::string& missionId, const std::string& bytes, const std::string& fileName);
     [[nodiscard]] json list(const std::string& missionId) const;
     /// One stored flight's replay view, with plan against fact for the mission's route.
     [[nodiscard]] json view(const MissionRecord& mission, const std::string& id) const;
@@ -80,7 +80,7 @@ private:
     };
     [[nodiscard]] Decoded decode(const std::string& bytes, const std::string& fileName) const;
     [[nodiscard]] static bool probe(rfmod::IModuleInstance& decoder, const json& request);
-    [[nodiscard]] static json invoke(rfmod::IModuleInstance& decoder, const std::string& method, const json& request);
+    [[nodiscard]] static json decodeWith(rfmod::IModuleInstance& decoder, const json& request);
     [[nodiscard]] rfflightlog::ProcessOptions options() const;
     void requireEnabled() const;
     void requireStore() const;
