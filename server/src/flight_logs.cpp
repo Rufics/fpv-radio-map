@@ -48,6 +48,37 @@ std::optional<std::string> startedAtOf(const json& entry) {
     return std::nullopt;
 }
 
+/// The file a flight comes from, as stored with each of its flights.
+struct FileRef {
+    std::string_view missionId;
+    std::string_view fileName;
+    std::string_view sha256;
+    std::string_view decoder;
+};
+
+/// Flights of the file the mission does not hold yet.
+std::ptrdiff_t countNew(pqxx::work& w, const std::string& missionId, const std::string& sha256,
+                        const std::vector<FlightLogStore::NewFlight>& flights) {
+    std::set<int> known;
+    for (const auto& r : w.exec("select log_index from flight_logs where mission_id = $1 and file_sha256 = $2",
+                                pqxx::params{missionId, sha256})) {
+        known.insert(r[0].as<int>());
+    }
+    return std::ranges::count_if(flights, [&known](const FlightLogStore::NewFlight& f) { return !known.contains(f.index); });
+}
+
+/// Stores one flight, or names the file again for a flight stored before; answers its id.
+std::string insert(pqxx::work& w, const FileRef& file, const FlightLogStore::NewFlight& f) {
+    const auto r = w.exec(
+        "insert into flight_logs(id, mission_id, file_name, file_sha256, log_index, decoder, started_at, "
+        "duration_s, normalized, summary) values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb) "
+        "on conflict (mission_id, file_sha256, log_index) do update set file_name = excluded.file_name "
+        "returning id",
+        pqxx::params{Secrets::randomToken(12), file.missionId, file.fileName, file.sha256, f.index, file.decoder,
+                     f.startedAt, f.durationS, f.normalized.dump(), f.summary.dump()});
+    return r[0][0].as<std::string>();
+}
+
 }  // namespace
 
 // ---- store ----
@@ -60,24 +91,10 @@ std::optional<std::vector<std::string>> FlightLogStore::add(const std::string& m
         // Imports into one mission take turns, so two of them cannot both pass the limit.
         w.exec("select 1 from missions where id = $1 for update", pqxx::params{missionId});
         const int stored = w.exec("select count(*) from flight_logs where mission_id = $1", pqxx::params{missionId})[0][0].as<int>();
-        std::set<int> known;
-        for (const auto& r : w.exec("select log_index from flight_logs where mission_id = $1 and file_sha256 = $2",
-                                    pqxx::params{missionId, sha256})) {
-            known.insert(r[0].as<int>());
-        }
-        const auto added = std::ranges::count_if(flights, [&known](const NewFlight& f) { return !known.contains(f.index); });
-        if (stored + added > maxPerMission) return std::nullopt;
+        if (stored + countNew(w, missionId, sha256, flights) > maxPerMission) return std::nullopt;
         std::vector<std::string> ids;
-        for (const NewFlight& f : flights) {
-            const auto r = w.exec(
-                "insert into flight_logs(id, mission_id, file_name, file_sha256, log_index, decoder, started_at, "
-                "duration_s, normalized, summary) values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb) "
-                "on conflict (mission_id, file_sha256, log_index) do update set file_name = excluded.file_name "
-                "returning id",
-                pqxx::params{Secrets::randomToken(12), missionId, fileName, sha256, f.index, decoder, f.startedAt,
-                             f.durationS, f.normalized.dump(), f.summary.dump()});
-            ids.push_back(r[0][0].as<std::string>());
-        }
+        ids.reserve(flights.size());
+        for (const NewFlight& f : flights) ids.push_back(insert(w, {missionId, fileName, sha256, decoder}, f));
         return ids;
     });
 }
@@ -180,7 +197,7 @@ bool FlightLogService::probe(rfmod::IModuleInstance& decoder, const json& reques
     }
 }
 
-FlightLogService::Decoded FlightLogService::decode(const std::string& bytes, const std::string& fileName) const {
+FlightLogService::Decoded FlightLogService::decode(std::string_view bytes, const std::string& fileName) const {
     if (bytes.empty()) throw HttpError(400, "the request body is empty: send the log file's bytes");
     if (bytes.size() > limits_.maxBytes) {
         throw HttpError(413, std::format("the file is {} bytes; this server takes up to {}", bytes.size(), limits_.maxBytes));

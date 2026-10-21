@@ -78,7 +78,7 @@ private:
         std::string decoder;
         json document;
     };
-    [[nodiscard]] Decoded decode(const std::string& bytes, const std::string& fileName) const;
+    [[nodiscard]] Decoded decode(std::string_view bytes, const std::string& fileName) const;
     [[nodiscard]] static bool probe(rfmod::IModuleInstance& decoder, const json& request);
     [[nodiscard]] static json decodeWith(rfmod::IModuleInstance& decoder, const json& request);
     [[nodiscard]] rfflightlog::ProcessOptions options() const;

@@ -203,7 +203,7 @@ void FieldReader::readTag8_4S16v2(ByteReader& in, unsigned selector, std::span<s
     // starts in the middle of a byte continues in the next one.
     bool halfByte = false;  // the low nibble of `buffer` is still unread
     unsigned buffer = 0;
-    const auto nibble = [&in, &halfByte, &buffer]() -> std::uint32_t {
+    const auto nibble = [&in, &halfByte, &buffer] {
         if (halfByte) {
             halfByte = false;
             return buffer & 0x0Fu;
