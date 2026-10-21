@@ -243,12 +243,10 @@ export class FlightImportComponent {
   private async keepAll(chosenFile: number) {
     const missionId = this.store.missionId();
     if (!missionId) return null;
-    let chosen = null;
-    for (const [i, f] of this.files().entries()) {
-      if (f.state !== 'done' || !this.replayable(f).length) continue;
-      const result = await this.api.importFlightLog(missionId, f.file, f.file.name);
-      if (i === chosenFile) chosen = result;
-    }
-    return chosen;
+    const kept = this.files()
+      .map((f, i) => ({ f, i }))
+      .filter(({ f }) => f.state === 'done' && this.replayable(f).length > 0);
+    const results = await Promise.all(kept.map(({ f }) => this.api.importFlightLog(missionId, f.file, f.file.name)));
+    return results[kept.findIndex(({ i }) => i === chosenFile)] ?? null;
   }
 }

@@ -120,7 +120,7 @@ export class ReplayTimeline {
   constructor(private readonly view: FlightView) {
     const t = view.timeline.t;
     this.start = t.length ? t[0] : 0;
-    this.end = t.length ? t[t.length - 1] : 0;
+    this.end = t.at(-1) ?? 0;
   }
 
   get duration(): number {
@@ -203,7 +203,7 @@ export class ReplayTimeline {
         continue;
       }
       // a new class starts where the last one ended, so the line has no holes
-      const next: TrackSegment = { points: current ? [current.points[current.points.length - 1], p] : [p], color: TrackScale.color(metric, values[i]) };
+      const next: TrackSegment = { points: current ? [current.points.at(-1) ?? p, p] : [p], color: TrackScale.color(metric, values[i]) };
       out.push(next);
       current = next;
       currentClass = c;
@@ -264,6 +264,6 @@ export class ReplayFormat {
     if (Number.isNaN(d.getTime())) return 'start time not logged';
     const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
     const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' });
-    return `${day.replace(/,/g, '')}, ${time} UTC`;
+    return `${day.replaceAll(',', '')}, ${time} UTC`;
   }
 }

@@ -79,7 +79,7 @@ export class PlanFactPanelComponent {
   }
 
   protected margin(db: number | null): string {
-    return db === null ? '–' : `${db >= 0 ? '+' : '−'}${Math.abs(db).toFixed(1)} dB`;
+    return db === null ? '–' : ReplayVm.signedDb(db);
   }
 
   protected distance(m: number): string {

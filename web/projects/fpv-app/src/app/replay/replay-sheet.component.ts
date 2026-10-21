@@ -65,8 +65,8 @@ export class ReplaySheetComponent {
     const v = this.replay.view();
     const r = this.replay.reading();
     if (!v || !r) return [];
-    const wanted = ['From home', 'Altitude', 'Ground speed', 'Battery'];
-    return ReplayVm.readout(v, r).filter((k) => wanted.includes(k.label));
+    const wanted = new Set(['From home', 'Altitude', 'Ground speed', 'Battery']);
+    return ReplayVm.readout(v, r).filter((k) => wanted.has(k.label));
   });
   protected readonly important = computed(() =>
     (this.replay.view()?.story ?? [])

@@ -55,32 +55,49 @@ export class ReplayVm {
   /** The read-out at the replay time (design 01 tiles). */
   static readout(view: FlightView, r: ReplayReading): KeyValueVm[] {
     const v = r.values;
-    // One channel for the value and its name: a gap in link quality is a gap, not the RSSI.
-    const linkKey = v.linkQualityPct === undefined ? 'rssiPct' : 'linkQualityPct';
-    const link = v[linkKey];
-    const out: KeyValueVm[] = [];
+    const tiles: (KeyValueVm | null)[] = [];
     if (view.channels['gps']) {
-      out.push({ label: 'From home', value: ReplayFormat.distance(v.homeDistM) });
-      out.push({ label: 'Ground speed', value: ReplayFormat.speed(v.speedMps) });
+      tiles.push({ label: 'From home', value: ReplayFormat.distance(v.homeDistM) }, { label: 'Ground speed', value: ReplayFormat.speed(v.speedMps) });
     }
-    if (v.altM !== undefined) out.push({ label: 'Altitude', value: ReplayFormat.fixed(v.altM, 0, 'm'), sub: v.climbMps ? ReplayFormat.fixed(v.climbMps, 1, 'm/s') : undefined });
-    if (v.cellV !== undefined || v.voltageV !== undefined) {
-      const used = v.usedMah === undefined || v.usedMah === null ? '' : ` · ${Math.round(v.usedMah).toLocaleString('en-GB')} mAh`;
-      out.push({
-        label: 'Battery',
-        value: v.cellV === undefined ? ReplayFormat.fixed(v.voltageV, 2, 'V') : ReplayFormat.fixed(v.cellV, 2, 'V'),
-        sub: v.cellV === undefined ? undefined : `${ReplayFormat.fixed(v.voltageV, 1, 'V')}${used}`,
-        tone: v.cellV !== undefined && v.cellV !== null && v.cellV < LOW_CELL_V ? 'warn' : undefined,
-      });
+    tiles.push(ReplayVm.altitudeTile(v), ReplayVm.batteryTile(v), ReplayVm.linkTile(v));
+    if (v.sats !== undefined) tiles.push({ label: 'GPS', value: v.sats === null ? 'no fix' : `${Math.round(v.sats)} sats` });
+    tiles.push(ReplayVm.modeTile(r));
+    return tiles.filter((t): t is KeyValueVm => t !== null);
+  }
+
+  private static altitudeTile(v: ReplayReading['values']): KeyValueVm | null {
+    if (v.altM === undefined) return null;
+    return { label: 'Altitude', value: ReplayFormat.fixed(v.altM, 0, 'm'), sub: v.climbMps ? ReplayFormat.fixed(v.climbMps, 1, 'm/s') : undefined };
+  }
+
+  private static batteryTile(v: ReplayReading['values']): KeyValueVm | null {
+    if (v.cellV === undefined) {
+      return v.voltageV === undefined ? null : { label: 'Battery', value: ReplayFormat.fixed(v.voltageV, 2, 'V') };
     }
-    if (link !== undefined) {
-      out.push({ label: linkKey === 'rssiPct' ? 'RSSI' : 'Link quality', value: ReplayFormat.fixed(link, 0, '%'), tone: link !== null && link < LOW_LINK_PCT ? 'warn' : undefined });
-    }
-    if (v.sats !== undefined) out.push({ label: 'GPS', value: v.sats === null ? 'no fix' : `${Math.round(v.sats)} sats` });
-    if (r.band) {
-      out.push({ label: 'Mode', value: ReplayFormat.band(r.band), sub: v.throttlePct === undefined ? undefined : `throttle ${ReplayFormat.fixed(v.throttlePct, 0, '%')}` });
-    }
-    return out;
+    const used = v.usedMah === undefined || v.usedMah === null ? '' : ` · ${Math.round(v.usedMah).toLocaleString('en-GB')} mAh`;
+    const low = v.cellV !== null && v.cellV < LOW_CELL_V;
+    return { label: 'Battery', value: ReplayFormat.fixed(v.cellV, 2, 'V'), sub: `${ReplayFormat.fixed(v.voltageV, 1, 'V')}${used}`, tone: low ? 'warn' : undefined };
+  }
+
+  /** One channel for the value and its name: a gap in link quality is a gap, not the RSSI. */
+  private static linkTile(v: ReplayReading['values']): KeyValueVm | null {
+    const quality = v.linkQualityPct !== undefined;
+    const link = quality ? v.linkQualityPct : v.rssiPct;
+    if (link === undefined) return null;
+    const weak = link !== null && link < LOW_LINK_PCT;
+    return { label: quality ? 'Link quality' : 'RSSI', value: ReplayFormat.fixed(link, 0, '%'), tone: weak ? 'warn' : undefined };
+  }
+
+  private static modeTile(r: ReplayReading): KeyValueVm | null {
+    if (!r.band) return null;
+    const v = r.values;
+    return { label: 'Mode', value: ReplayFormat.band(r.band), sub: v.throttlePct === undefined ? undefined : `throttle ${ReplayFormat.fixed(v.throttlePct, 0, '%')}` };
+  }
+
+  /** "+3.2 dB" or "−1.0 dB", with a real minus sign. */
+  static signedDb(db: number): string {
+    const sign = db >= 0 ? '+' : '−';
+    return `${sign}${Math.abs(db).toFixed(1)} dB`;
   }
 
   /** The logbook head (design 10): how much was flown. */
@@ -120,12 +137,13 @@ export class ReplayVm {
       case 'whPerKm':
         return `${v.toFixed(1)} Wh/km`;
       default:
-        return which === 'plan' ? `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)} dB` : `${Math.round(v)} %`;
+        return which === 'plan' ? ReplayVm.signedDb(v) : `${Math.round(v)} %`;
     }
   }
 
   static planDelta(row: PlanFactRow): string {
     if (row.deltaPct === undefined) return '';
-    return `${row.deltaPct >= 0 ? '+' : '−'}${Math.abs(Math.round(row.deltaPct))} %`;
+    const sign = row.deltaPct >= 0 ? '+' : '−';
+    return `${sign}${Math.abs(Math.round(row.deltaPct))} %`;
   }
 }

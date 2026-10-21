@@ -99,7 +99,11 @@ export class FlightReplayMapComponent {
         ev.stopPropagation();
         this.replay.selectEvent(i);
       });
-      this.markers.push(new Marker({ element: el, anchor: 'center' }).setLngLat([e.lon, e.lat]).addTo(map));
+      this.markers.push(this.placeMarker(map, el, [e.lon, e.lat]));
     });
+  }
+
+  private placeMarker(map: MlMap, el: HTMLElement, at: [number, number]): Pick<Marker, 'remove'> {
+    return new Marker({ element: el, anchor: 'center' }).setLngLat(at).addTo(map);
   }
 }

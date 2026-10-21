@@ -240,7 +240,7 @@ export class MockFlights {
       }
       along += len;
     }
-    out.push({ t, p: route[route.length - 1], alongM: along });
+    out.push({ t, p: route.at(-1) ?? route[0], alongM: along });
     return out;
   }
 }
