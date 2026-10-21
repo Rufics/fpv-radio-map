@@ -9,8 +9,10 @@
 
 #include <rfflightlog/processor.hpp>
 
+#include <cstddef>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfmap {
@@ -45,6 +47,19 @@ public:
     bool remove(const std::string& missionId, const std::string& id);
 
 private:
+    /// The file a flight comes from, as stored with each of its flights.
+    struct FileRef {
+        std::string_view missionId;
+        std::string_view fileName;
+        std::string_view sha256;
+        std::string_view decoder;
+    };
+    /// Flights of the file the mission does not hold yet.
+    static std::ptrdiff_t countNew(pqxx::work& w, const std::string& missionId, const std::string& sha256,
+                                   const std::vector<NewFlight>& flights);
+    /// Stores one flight, or names the file again for a flight stored before; answers its id.
+    static std::string insert(pqxx::work& w, const FileRef& file, const NewFlight& f);
+
     Database& db_;
 };
 

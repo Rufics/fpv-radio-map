@@ -48,27 +48,21 @@ std::optional<std::string> startedAtOf(const json& entry) {
     return std::nullopt;
 }
 
-/// The file a flight comes from, as stored with each of its flights.
-struct FileRef {
-    std::string_view missionId;
-    std::string_view fileName;
-    std::string_view sha256;
-    std::string_view decoder;
-};
+}  // namespace
 
-/// Flights of the file the mission does not hold yet.
-std::ptrdiff_t countNew(pqxx::work& w, const std::string& missionId, const std::string& sha256,
-                        const std::vector<FlightLogStore::NewFlight>& flights) {
+// ---- store ----
+
+std::ptrdiff_t FlightLogStore::countNew(pqxx::work& w, const std::string& missionId, const std::string& sha256,
+                                        const std::vector<NewFlight>& flights) {
     std::set<int> known;
     for (const auto& r : w.exec("select log_index from flight_logs where mission_id = $1 and file_sha256 = $2",
                                 pqxx::params{missionId, sha256})) {
         known.insert(r[0].as<int>());
     }
-    return std::ranges::count_if(flights, [&known](const FlightLogStore::NewFlight& f) { return !known.contains(f.index); });
+    return std::ranges::count_if(flights, [&known](const NewFlight& f) { return !known.contains(f.index); });
 }
 
-/// Stores one flight, or names the file again for a flight stored before; answers its id.
-std::string insert(pqxx::work& w, const FileRef& file, const FlightLogStore::NewFlight& f) {
+std::string FlightLogStore::insert(pqxx::work& w, const FileRef& file, const NewFlight& f) {
     const auto r = w.exec(
         "insert into flight_logs(id, mission_id, file_name, file_sha256, log_index, decoder, started_at, "
         "duration_s, normalized, summary) values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb) "
@@ -78,10 +72,6 @@ std::string insert(pqxx::work& w, const FileRef& file, const FlightLogStore::New
                      f.startedAt, f.durationS, f.normalized.dump(), f.summary.dump()});
     return r[0][0].as<std::string>();
 }
-
-}  // namespace
-
-// ---- store ----
 
 std::optional<std::vector<std::string>> FlightLogStore::add(const std::string& missionId, const std::string& fileName,
                                                             const std::string& sha256, const std::string& decoder,
