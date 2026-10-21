@@ -160,18 +160,22 @@ class ScenarioSuite:
         profile_dir.mkdir(exist_ok=True)
         self._stand.run_dir = profile_dir
         client = ApiClient(self._stand.base_url)
+        load: LoadInBackground | None = None
         try:
             self._stand.up(client)
             self._write_plan(profile_dir, client, self._peak_load(warm_up + duration + PROFILE_TAIL_S))
             load = LoadInBackground(self._stand)
             self._stand.wait(warm_up)
-            done = profiles.profile([ProfileTarget("rfmap-server", pid=self._stand.server_pid(),
+            return profiles.profile([ProfileTarget("rfmap-server", pid=self._stand.server_pid(),
                                                    duration_s=duration)], run_dir)
-            load.join()
-            return done
         finally:
-            self._save_logs(profile_dir)
-            self._stand.down()
+            # k6 ends before the logs are read and the stand goes, also when the profile failed.
+            try:
+                if load is not None:
+                    load.join()
+            finally:
+                self._save_logs(profile_dir)
+                self._stand.down()
 
     def _peak_load(self, duration_s: float) -> dict[str, Any]:
         """A constant load at the scenario's highest rate, for as long as the profile needs."""

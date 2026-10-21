@@ -131,6 +131,15 @@ class ScenarioSuiteTest(StandTestCase):
             suite.profile(regressions, self.run_dir, profiles)
         self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
 
+    def test_a_failed_profile_still_waits_for_the_load(self):
+        suite, profiles, regressions = self.suite(), TargetsOnly(), [comparison("all", 20.0)]
+        with patch.object(Stand, "server_pid", side_effect=PerfError("the stand's server is not running")), \
+                self.assertRaisesRegex(PerfError, "server is not running"):
+            suite.profile(regressions, self.run_dir, profiles)
+        k6 = next(index for index, run in enumerate(self.runner.runs) if "k6" in run)
+        self.assertLess(k6, len(self.runner.runs) - 1, "k6 ran before the stand went down")
+        self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
+
     def test_items_and_thresholds(self):
         keys = [item.key for item in self.suite("peak").items()]
         self.assertEqual(keys[0], "scenario/peak")
