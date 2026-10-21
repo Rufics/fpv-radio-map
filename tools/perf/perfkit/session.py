@@ -22,7 +22,7 @@ from perfkit.compare import Baseline, Comparer, Comparison, Verdict
 from perfkit.environment import Environment
 from perfkit.errors import PerfError
 from perfkit.history import History, RunRecord
-from perfkit.measure import Collection
+from perfkit.measure import Collection, Measurement
 from perfkit.timeline import Timeline, utc_now
 
 
@@ -41,6 +41,11 @@ class Collected:
     def involved(self) -> dict[str, str]:
         items = (self.source, self.collector, *self.related)
         return {item.key: str(item.version) for item in items}
+
+    def gates(self, measurement: Measurement) -> bool:
+        """A gate names a metric of every measurement (p95) or of one (server_rss:slope)."""
+        return (measurement.metric in self.gate_metrics
+                or f"{measurement.name}:{measurement.metric}" in self.gate_metrics)
 
 
 class Suite(Protocol):
@@ -112,7 +117,7 @@ class RunSession:
 
     def _compare(self, history: History, record: RunRecord, collected: list[Collected]) -> list[Comparison]:
         comparer = Comparer(Baseline(history, record.host, record.dataset, record.started), self._settings.window)
-        return [comparer.compare(m, entry.involved, entry.limit_pct, m.metric in entry.gate_metrics)
+        return [comparer.compare(m, entry.involved, entry.limit_pct, entry.gates(m))
                 for entry in collected for m in entry.collection.measurements]
 
     @staticmethod

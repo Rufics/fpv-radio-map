@@ -3,12 +3,20 @@
 Every scenario gets a stand of its own with an empty database, so runs start from the same
 state. What the stand looked like goes into environment.json: the server's configuration file,
 image and version, the containers' CPU and memory limits, and PostgreSQL's settings and sizes.
+
+With monitoring (the default), Prometheus scrapes the server, the containers and PostgreSQL and
+receives k6's metrics; with --keep-stand, Grafana shows them with the run's phases as
+annotations. The stand's work folder, outside the run folder, holds the admin token Prometheus
+sends and the dashboards Grafana loads; it goes with the stand.
 """
 import json
 import os
 import secrets
+import shutil
+import tempfile
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +31,13 @@ PROJECT = "rfmap-perf"
 # The server seeds the library and migrates the database before it answers.
 READY_TIMEOUT_S = 180
 K6_THRESHOLDS_CROSSED = 99
+MONITORING = ("prometheus", "cadvisor", "postgres-exporter")
+# One scrape and one push of k6 after the load, so the last seconds are in Prometheus too.
+SETTLE_S = 6
+K6_REMOTE_WRITE = {"K6_PROMETHEUS_RW_SERVER_URL": "http://prometheus:9090/api/v1/write",
+                   "K6_PROMETHEUS_RW_TREND_STATS": "p(50),p(95),p(99),max",
+                   "K6_PROMETHEUS_RW_PUSH_INTERVAL": "5s"}
+ANNOTATION_TAG = "rfmap-perf"
 _PG_SETTINGS_SQL = ("select name, setting, coalesce(unit, '') from pg_settings where name in ('max_connections', "
                     "'shared_buffers', 'effective_cache_size', 'work_mem', 'maintenance_work_mem', 'random_page_cost', "
                     "'synchronous_commit', 'max_wal_size', 'checkpoint_timeout', 'jit')")
@@ -38,6 +53,13 @@ class StandSettings:
     server_image: str = "rfmap-server:perf"
     keep: bool = False
     limits: dict[str, str] = field(default_factory=dict)  # RFMAP_PERF_*_CPUS / _MEMORY overrides
+    monitoring: bool = True
+    prometheus_port: int = 19090
+    grafana_port: int = 13000
+
+    @property
+    def grafana(self) -> bool:
+        return self.monitoring and self.keep
 
 
 class StandLimits:
@@ -53,15 +75,57 @@ class StandLimits:
 
 
 class Stand:
-    def __init__(self, settings: StandSettings, runner: CommandRunner, admin_token: str = ""):
+    def __init__(self, settings: StandSettings, runner: CommandRunner, admin_token: str = "", sleep=time.sleep):
         self.settings = settings
         self.admin_token = admin_token or secrets.token_urlsafe(32)
         self.run_dir: Path | None = None  # set by the suite once the run has its folder
         self._runner = runner
+        self._sleep = sleep
+        self._work_dir: Path | None = None
 
     @property
     def base_url(self) -> str:
         return f"http://127.0.0.1:{self.settings.port}/api/v1"
+
+    @property
+    def prometheus_url(self) -> str:
+        return f"http://127.0.0.1:{self.settings.prometheus_port}/api/v1"
+
+    @property
+    def grafana_url(self) -> str:
+        return f"http://127.0.0.1:{self.settings.grafana_port}"
+
+    def endpoints(self) -> dict[str, str]:
+        """What collectors can read besides the run's files: the stand's Prometheus, when it runs."""
+        return {"prometheus": self.prometheus_url} if self.settings.monitoring else {}
+
+    @property
+    def work_dir(self) -> Path:
+        if self._work_dir is None:
+            self._work_dir = Path(tempfile.mkdtemp(prefix="rfmap-perf-"))
+            # Readable by the containers that run as the caller; the token itself is 0600.
+            self._work_dir.chmod(0o755)
+            token = self._work_dir / "admin-token"
+            token.touch(mode=0o600)
+            token.write_text(self.admin_token, encoding="utf-8")
+            (self._work_dir / "dashboards").mkdir()
+        return self._work_dir
+
+    def add_dashboard(self, name: str, source: Path) -> None:
+        shutil.copyfile(source, self.work_dir / "dashboards" / f"{name}.json")
+
+    def _profiles(self) -> list[str]:
+        names = ["load"] + (["monitoring"] if self.settings.monitoring else []) + (
+            ["grafana"] if self.settings.grafana else [])
+        return [arg for name in names for arg in ("--profile", name)]
+
+    def _services(self) -> list[str]:
+        services = ["postgis", "rfmap-server"]
+        if self.settings.monitoring:
+            services += MONITORING
+        if self.settings.grafana:
+            services.append("grafana")
+        return services
 
     def environment(self) -> dict[str, str]:
         s = self.settings
@@ -70,36 +134,65 @@ class Stand:
             raise PerfError("the stand has no run folder yet")
         return {**os.environ, "RFMAP_PERF_DATA": str(s.dataset_dir), "RFMAP_PERF_RUN_DIR": str(self.run_dir),
                 "RFMAP_PERF_PORT": str(s.port), "RFMAP_PERF_ADMIN_TOKEN": self.admin_token,
-                "RFMAP_PERF_SERVER_IMAGE": s.server_image, "RFMAP_PERF_USER": user, **s.limits}
+                "RFMAP_PERF_SERVER_IMAGE": s.server_image, "RFMAP_PERF_USER": user,
+                "RFMAP_PERF_WORK_DIR": str(self.work_dir), "RFMAP_PERF_PROMETHEUS_PORT": str(s.prometheus_port),
+                "RFMAP_PERF_GRAFANA_PORT": str(s.grafana_port), **s.limits}
 
     def _compose(self, *args: str) -> list[str]:
         return ["docker", "compose", "-f", str(COMPOSE_FILE), "-p", PROJECT, *args]
 
-    def up(self, client: ApiClient, clock=time.monotonic, sleep=time.sleep) -> None:
+    def up(self, client: ApiClient, clock=time.monotonic) -> None:
         build = "--build" if self.settings.build else "--no-build"
-        self._runner.run(self._compose("up", "-d", build, "postgis", "rfmap-server"), env=self.environment())
+        self._runner.run(self._compose(*self._profiles(), "up", "-d", build, *self._services()),
+                         env=self.environment())
+        waits = [("rfmap-server", client, "/health")]
+        if self.settings.monitoring:
+            waits.append(("prometheus", ApiClient(self.prometheus_url), "/status/buildinfo"))
+        if self.settings.grafana:
+            waits.append(("grafana", ApiClient(self.grafana_url), "/api/health"))
         deadline = clock() + READY_TIMEOUT_S
-        while clock() < deadline:
-            try:
-                if client.call("GET", "/health").status == 200:
-                    return
-            except PerfError:
-                pass  # not listening yet
-            sleep(1)
-        raise PerfError(f"rfmap-server did not answer /health within {READY_TIMEOUT_S} s; "
-                        f"see docker compose -p {PROJECT} logs rfmap-server")
+        for service, service_client, path in waits:
+            ReadyWait(service, service_client, path).until(deadline, clock, self._sleep)
 
     def load(self) -> bool:
         """Runs k6 with the plan in the run folder; False when the scenario's thresholds were crossed."""
-        code = self._runner.run(self._compose("--profile", "load", "run", "--rm", "--no-deps", "k6", "run",
-                                              "--quiet", "/scripts/runner.js"),
+        run_options: list[str] = []
+        k6_options: list[str] = []
+        if self.settings.monitoring:
+            run_options = [arg for name, value in K6_REMOTE_WRITE.items() for arg in ("-e", f"{name}={value}")]
+            k6_options = ["-o", "experimental-prometheus-rw"]
+        code = self._runner.run(self._compose("--profile", "load", "run", "--rm", "--no-deps", *run_options, "k6",
+                                              "run", "--quiet", *k6_options, "/scripts/runner.js"),
                                 env=self.environment(), allowed=(0, K6_THRESHOLDS_CROSSED))
         return code == 0
+
+    def settle(self) -> None:
+        """Waits until Prometheus has the last seconds of the load."""
+        if self.settings.monitoring:
+            self._sleep(SETTLE_S)
+
+    def annotate(self, events: list) -> None:
+        """Marks the run's phases and stages in Grafana, where the dashboards show them."""
+        if not self.settings.grafana:
+            return
+        client = ApiClient(self.grafana_url)
+        for event in events:
+            if not event.finished:
+                continue
+            client.expect(200, "POST", "/api/annotations", {
+                "time": _epoch_ms(event.started), "timeEnd": _epoch_ms(event.finished),
+                "tags": [ANNOTATION_TAG, event.kind], "text": f"{event.kind}: {event.name}"})
 
     def down(self) -> None:
         if self.settings.keep:
             return
-        self._runner.run(self._compose("--profile", "load", "down", "-v", "--remove-orphans"), env=self.environment())
+        try:
+            self._runner.run(self._compose(*self._profiles(), "down", "-v", "--remove-orphans"),
+                             env=self.environment())
+        finally:
+            if self._work_dir is not None:
+                shutil.rmtree(self._work_dir, ignore_errors=True)
+                self._work_dir = None
 
     def logs(self, path: Path) -> None:
         path.write_text(self._runner.capture(self._compose("logs", "--no-color", "rfmap-server"),
@@ -121,6 +214,30 @@ class Stand:
                                                 "nanoCpus": host.get("NanoCpus", 0),
                                                 "memoryBytes": host.get("Memory", 0)}
         return found
+
+
+class ReadyWait:
+    """Polls one service of the stand until it answers 200."""
+
+    def __init__(self, service: str, client: ApiClient, path: str):
+        self._service = service
+        self._client = client
+        self._path = path
+
+    def until(self, deadline: float, clock, sleep) -> None:
+        while clock() < deadline:
+            try:
+                if self._client.call("GET", self._path).status == 200:
+                    return
+            except PerfError:
+                pass  # not listening yet
+            sleep(1)
+        raise PerfError(f"{self._service} did not answer {self._path} within {READY_TIMEOUT_S} s; "
+                        f"see docker compose -p {PROJECT} logs {self._service}")
+
+
+def _epoch_ms(moment: str) -> int:
+    return int(datetime.fromisoformat(moment).timestamp() * 1000)
 
 
 class StandProbe:

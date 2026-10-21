@@ -6,6 +6,15 @@
 #
 # CPU and memory limits make runs on different machines comparable; they are recorded with
 # every run. Images are pinned by digest, read from the registries on 2026-10-21.
+#
+# Profiles: `load` is k6, `monitoring` is Prometheus with cAdvisor and postgres_exporter (on
+# unless --no-monitoring), `grafana` is Grafana on the same Prometheus (only with --keep-stand,
+# since it is for looking at the stand by hand).
+#
+# Each container runs in a cgroup parent of its own (rfmapperf_<service>.slice), so cAdvisor
+# reports it by that fixed name: its Docker integration cannot see containers on the containerd
+# image store (the default since Docker 29), its raw cgroup view always can. No dash in the
+# names, since systemd would read one as a level of slices.
 
 name: rfmap-perf
 
@@ -17,6 +26,7 @@ services:
       POSTGRES_USER: rfmap
       # The stand's database is reachable only from its own network and lives for one run.
       POSTGRES_PASSWORD: perf
+    cgroup_parent: rfmapperf_postgis.slice
     cpus: ${RFMAP_PERF_DB_CPUS:-2}
     mem_limit: ${RFMAP_PERF_DB_MEMORY:-2g}
     healthcheck:
@@ -43,6 +53,7 @@ services:
       - ${RFMAP_PERF_DATA:?perf.py passes the dataset folder}:/data:ro
     ports:
       - "127.0.0.1:${RFMAP_PERF_PORT:-18080}:8080"
+    cgroup_parent: rfmapperf_server.slice
     cpus: ${RFMAP_PERF_SERVER_CPUS:-4}
     mem_limit: ${RFMAP_PERF_SERVER_MEMORY:-4g}
 
@@ -56,4 +67,78 @@ services:
     volumes:
       - ../k6:/scripts:ro
       - ${RFMAP_PERF_RUN_DIR:?perf.py passes the run folder}:/run/perf
+    cgroup_parent: rfmapperf_k6.slice
     cpus: ${RFMAP_PERF_K6_CPUS:-2}
+
+  prometheus:
+    image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
+    profiles: [monitoring]
+    # The caller's user, so it can read the admin token perf.py wrote with mode 0600.
+    user: ${RFMAP_PERF_USER:-12345:12345}
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=2d
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${RFMAP_PERF_WORK_DIR:?perf.py passes its work folder}:/run/rfmap-perf:ro
+    tmpfs:
+      - /prometheus:mode=1777
+    ports:
+      - "127.0.0.1:${RFMAP_PERF_PROMETHEUS_PORT:-19090}:9090"
+    cpus: 1
+    mem_limit: 1g
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.54.1@sha256:bc8acf1ad463294f25f3ad34262bc524cb9ec8401d1442953045d59fb8e9119a
+    profiles: [monitoring]
+    # Reads every container's cgroup: CPU, memory, I/O and network of the stand's containers.
+    privileged: true
+    command:
+      - --docker_only=true
+      - --raw_cgroup_prefix_whitelist=/rfmapperf_
+      - --housekeeping_interval=2s
+      - --store_container_labels=false
+      - --disable_metrics=advtcp,cpu_topology,cpuset,hugetlb,memory_numa,percpu,process,referenced_memory,resctrl,sched,tcp,udp
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    cpus: 0.5
+    mem_limit: 512m
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.17.1@sha256:38606faa38c54787525fb0ff2fd6b41b4cfb75d455c1df294927c5f611699b17
+    profiles: [monitoring]
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_URI: postgis:5432/rfmap?sslmode=disable
+      DATA_SOURCE_USER: rfmap
+      DATA_SOURCE_PASS: perf
+    cpus: 0.25
+    mem_limit: 128m
+
+  grafana:
+    image: grafana/grafana:12.1.1@sha256:a1701c2180249361737a99a01bc770db39381640e4d631825d38ff4535efa47d
+    profiles: [grafana]
+    depends_on: [prometheus]
+    user: ${RFMAP_PERF_USER:-12345:12345}
+    environment:
+      # Local only (127.0.0.1) and gone with the stand: no login.
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana:/etc/grafana/provisioning:ro
+      - ${RFMAP_PERF_WORK_DIR:?perf.py passes its work folder}:/var/lib/rfmap-perf:ro
+    tmpfs:
+      - /var/lib/grafana:mode=1777
+    ports:
+      - "127.0.0.1:${RFMAP_PERF_GRAFANA_PORT:-13000}:3000"

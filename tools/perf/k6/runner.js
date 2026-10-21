@@ -59,6 +59,9 @@ export const options = {
   thresholds: thresholds(),
   summaryTrendStats: ["avg", "min", "med", "max", "p(90)", "p(95)", "p(99)"],
   discardResponseBodies: false,
+  // No url and name tags: paths hold mission ids, and Prometheus would get a series per mission.
+  // persona and step name every request instead.
+  systemTags: ["status", "method", "scenario", "expected_response", "error_code", "check"],
 };
 
 // Per persona: the step chooser (cumulative weights) and its credentials.

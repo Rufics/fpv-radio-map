@@ -61,7 +61,15 @@ class PerfCli:
                            help="image of the server (default: %(default)s)")
         stand.add_argument("--no-build", action="store_true",
                            help="use the server image as it is instead of building it")
-        stand.add_argument("--keep-stand", action="store_true", help="leave the stand running after the run")
+        stand.add_argument("--keep-stand", action="store_true",
+                           help="leave the stand running after the run, with Grafana on its Prometheus")
+        stand.add_argument("--no-monitoring", action="store_true",
+                           help="run without Prometheus, cAdvisor and postgres_exporter "
+                                "(skips the prometheus collector)")
+        stand.add_argument("--prometheus-port", type=int, default=19090,
+                           help="local port of the stand's Prometheus (default: %(default)s)")
+        stand.add_argument("--grafana-port", type=int, default=13000,
+                           help="local port of the stand's Grafana with --keep-stand (default: %(default)s)")
         return parser
 
     def main(self, argv: list[str] | None = None) -> int:
@@ -133,9 +141,11 @@ class PerfCli:
         except DatasetError as error:
             raise PerfError(f"dataset: {error}") from error
         settings = StandSettings(data_dir, port=args.port, build=not args.no_build, server_image=args.server_image,
-                                 keep=args.keep_stand, limits=StandLimits.from_environment())
+                                 keep=args.keep_stand, limits=StandLimits.from_environment(),
+                                 monitoring=not args.no_monitoring, prometheus_port=args.prometheus_port,
+                                 grafana_port=args.grafana_port)
         stand = Stand(settings, CommandRunner(self._errors))
-        return ScenarioSuite(catalog, args.scenario, stand, Dataset.of(manifest))
+        return ScenarioSuite(catalog, args.scenario, stand, Dataset.of(manifest), log=self._errors)
 
     def _report(self, catalog: Catalog, problems: list[Problem]) -> int:
         for problem in problems:

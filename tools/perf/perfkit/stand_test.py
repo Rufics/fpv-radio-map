@@ -1,4 +1,5 @@
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,7 @@ from perfkit.api import ApiClient
 from perfkit.errors import PerfError
 from perfkit.fake_server_test import FakeServer
 from perfkit.stand import SERVER_CONFIG, ServerConfigFile, Stand, StandLimits, StandProbe, StandSettings
+from perfkit.timeline import Event
 
 
 class FakeRunner:
@@ -57,7 +59,10 @@ class StandTestCase(unittest.TestCase):
         self.runner = FakeRunner()
 
     def stand(self, **settings):
-        stand = Stand(StandSettings(self.root / "data", port=self.port, **settings), self.runner, "admin-token")
+        # Prometheus and Grafana answer on the fake server's port too.
+        settings = {"prometheus_port": self.port, "grafana_port": self.port, **settings}
+        stand = Stand(StandSettings(self.root / "data", port=self.port, **settings), self.runner, "admin-token",
+                      sleep=lambda _s: None)
         stand.run_dir = self.root / "run"
         return stand
 
@@ -69,13 +74,58 @@ class StandTest(StandTestCase):
         self.assertTrue(stand.load())
         stand.down()
         up, load, down = self.runner.runs
-        self.assertEqual(up[-4:], ["-d", "--build", "postgis", "rfmap-server"])
-        self.assertIn("/scripts/runner.js", load)
+        self.assertEqual(up[-7:], ["-d", "--build", "postgis", "rfmap-server", "prometheus", "cadvisor",
+                                   "postgres-exporter"])
+        self.assertIn("monitoring", up)
+        self.assertNotIn("grafana", up)
+        self.assertEqual(load[-4:], ["--quiet", "-o", "experimental-prometheus-rw", "/scripts/runner.js"])
+        self.assertIn("K6_PROMETHEUS_RW_SERVER_URL=http://prometheus:9090/api/v1/write", load)
         self.assertEqual(down[-3:], ["down", "-v", "--remove-orphans"])
         env = self.runner.envs[0]
         self.assertEqual(env["RFMAP_PERF_ADMIN_TOKEN"], "admin-token")
         self.assertEqual(env["RFMAP_PERF_RUN_DIR"], str(self.root / "run"))
         self.assertEqual(env["RFMAP_PERF_SERVER_CPUS"], "2")
+        self.assertEqual(env["RFMAP_PERF_PROMETHEUS_PORT"], str(self.port))
+        self.assertFalse(Path(env["RFMAP_PERF_WORK_DIR"]).exists(), "the work folder goes with the stand")
+        self.assertEqual(stand.endpoints(), {"prometheus": f"http://127.0.0.1:{self.port}/api/v1"})
+
+    def test_without_monitoring(self):
+        stand = self.stand(monitoring=False)
+        stand.up(ApiClient(stand.base_url))
+        stand.load()
+        stand.settle()
+        up, load = self.runner.runs
+        self.assertEqual(up[-4:], ["-d", "--build", "postgis", "rfmap-server"])
+        self.assertNotIn("monitoring", up)
+        self.assertNotIn("experimental-prometheus-rw", load)
+        self.assertEqual(stand.endpoints(), {})
+
+    def test_work_folder_holds_the_token_for_prometheus(self):
+        stand = self.stand()
+        token = stand.work_dir / "admin-token"
+        self.assertEqual(token.read_text(encoding="utf-8"), "admin-token")
+        if hasattr(token, "owner"):
+            self.assertEqual(token.stat().st_mode & 0o777, 0o600)
+        source = self.root / "board.json"
+        source.write_text("{}", encoding="utf-8")
+        stand.add_dashboard("rfmap-stand", source)
+        self.assertTrue((stand.work_dir / "dashboards" / "rfmap-stand.json").is_file())
+        stand.down()
+        self.assertFalse(token.exists())
+
+    def test_grafana_with_a_kept_stand(self):
+        stand = self.stand(keep=True)
+        stand.up(ApiClient(stand.base_url))
+        self.assertIn("grafana", self.runner.runs[0])
+        stand.annotate([Event("load", "load", "2026-10-21T10:00:00.000Z", "2026-10-21T10:01:00.000Z"),
+                        Event("run", "run", "2026-10-21T09:59:00.000Z")])
+        (annotation,) = [call for call in self.server.calls if call[1] == "/api/annotations"]
+        self.assertEqual(annotation[2], {"time": 1792576800000, "timeEnd": 1792576860000,
+                                         "tags": ["rfmap-perf", "load"], "text": "load: load"})
+        work_dir = stand.work_dir
+        stand.down()
+        self.assertTrue(work_dir.exists(), "a kept stand keeps its work folder")
+        shutil.rmtree(work_dir)
 
     def test_thresholds_kept_and_stand_left_running(self):
         self.runner.k6_code = 99
@@ -89,7 +139,7 @@ class StandTest(StandTestCase):
         times = iter(range(0, 1000, 100))
         dead = ApiClient("http://127.0.0.1:9/api/v1")
         with self.assertRaisesRegex(PerfError, "did not answer /health"):
-            stand.up(dead, clock=lambda: next(times), sleep=lambda _s: None)
+            stand.up(dead, clock=lambda: next(times))
 
     def test_needs_a_run_folder(self):
         stand = Stand(StandSettings(self.root), self.runner)

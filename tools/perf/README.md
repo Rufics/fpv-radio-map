@@ -20,6 +20,7 @@ personas, scenarios or collectors are new folders; the core code does not change
 | `collector` | `extensions/collectors/<id>/` | extension | Python code that reads metrics from one tool |
 | `reporter` | `extensions/reporters/<id>/` | extension | Python code that turns results into a report |
 | `benchmark` | `extensions/benchmarks/<id>/` | extension | Google Benchmark sources for one C++ component |
+| `dashboard` | `extensions/dashboards/<id>/` | extension | a Grafana dashboard for the stand's Grafana |
 
 Descriptions are JSON only; extensions also carry code. Each kind is defined by
 `schemas/<kind>.schema.json`: its `x-perfkit` block says where items live, which fields refer to
@@ -147,6 +148,39 @@ items, so a new major version of either starts a new baseline. `environment.json
 server's settings, the PostgreSQL version, settings and database size, and the containers'
 limits.
 
+**Monitoring.** Unless `--no-monitoring` is given, the stand also runs Prometheus
+(`127.0.0.1:19090`, `--prometheus-port`), cAdvisor and postgres_exporter. Prometheus scrapes every
+5 s the server's `/api/v1/admin/metrics` (with the run's admin token), the containers and
+PostgreSQL, and k6 writes its own series in with remote write. After the load, the `prometheus`
+collector reads its queries over the load phase and gives one measurement per statistic:
+
+| query | from |
+|---|---|
+| `server_cpu`, `server_rss`, `server_threads`, `server_fds` | the server's own `rfmap_process_*` |
+| `server_rps`, `server_5xx`, `server_p95` (by rate class) | `rfmap_http_*` |
+| `pool_queued`, `pool_busy` (by pool), `db_pool_waiting`, `db_pool_wait` | the thread and database pools |
+| `jobs`, `cache_hit_ratio`, `cache_used` (by tier) | jobs and caches |
+| `db_cpu`, `db_memory`, `k6_cpu`, `container_cpu`, `container_memory` | cAdvisor |
+| `pg_connections`, `pg_transactions`, `pg_size` | postgres_exporter |
+| `k6_p95` (by persona), `k6_vus` | k6 |
+
+A query with several series gives one measurement per series (`pool_queued/http`). Every series,
+from a minute before the load to a little after it, is saved to `raw/prometheus.json` for the
+reports. The queries live in the collector's manifest (`options.queries`: name, PromQL, unit,
+better, stats out of `max`, `min`, `avg`, `last` and `slope` per hour), so a new one needs no code.
+These measurements are recorded and compared but only gate the run when the scenario names them:
+`compare.metrics` takes a metric of every measurement (`p95`) or one measurement
+(`server_rss:slope`). Runs with and without monitoring are never compared with each other.
+
+With `--keep-stand`, Grafana runs too (`http://127.0.0.1:13000`, `--grafana-port`, no login) with
+the `dashboard` extensions of the catalog (`extensions/dashboards/<id>/`: a manifest and a Grafana
+JSON model) and the run's phases and load stages as annotations.
+
+cAdvisor finds the containers by their cgroup parents (`rfmapperf_<service>.slice`): its Docker
+integration does not see containers on the containerd image store, the default since Docker 29.
+Where a sandbox gives no memory cgroup for a custom parent, the cAdvisor memory series stay empty;
+the server's own memory comes from the server and is unaffected.
+
 Limits of the stand's containers come from the caller's environment:
 
 | variable | default |
@@ -154,6 +188,9 @@ Limits of the stand's containers come from the caller's environment:
 | `RFMAP_PERF_SERVER_CPUS`, `RFMAP_PERF_SERVER_MEMORY` | `4`, `4g` |
 | `RFMAP_PERF_DB_CPUS`, `RFMAP_PERF_DB_MEMORY` | `2`, `2g` |
 | `RFMAP_PERF_K6_CPUS` | `2` |
+
+Prometheus gets 1 CPU, cAdvisor half and postgres_exporter a quarter; on a small machine that
+is load of its own, which is one more reason to keep a baseline per machine.
 
 Notes:
 

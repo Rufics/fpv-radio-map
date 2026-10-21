@@ -1,7 +1,7 @@
 {
   "kind": "scenario",
   "id": "peak",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A busy evening: warm-up, a ramp to the peak rate, a five-minute plateau and the ramp down.",
   "personas": [
     {
@@ -47,7 +47,8 @@
     ]
   },
   "collectors": [
-    "k6-summary"
+    "k6-summary",
+    "prometheus"
   ],
   "thresholds": {
     "http_req_failed": "rate<0.01",

@@ -3,14 +3,16 @@
 Phases: the stand comes up, the set-up creates the missions and links the personas sign in
 with, k6 runs the load (its stages become events of their own, timed from k6's start), and the
 collectors read what k6 and the stand reported. The stand is removed at the end, also after a
-failure, unless it is kept for debugging.
+failure, unless it is kept for debugging. A collector that needs a service the stand does not
+run (Prometheus with --no-monitoring) is skipped.
 """
 import hashlib
 import json
+import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from perfkit.api import ApiClient, Provisioner
 from perfkit.catalog import Catalog, Item
@@ -44,7 +46,7 @@ class Dataset:
 
 class ScenarioSuite:
     def __init__(self, catalog: Catalog, scenario_id: str, stand: Stand, dataset: Dataset,
-                 loader: ExtensionLoader | None = None):
+                 loader: ExtensionLoader | None = None, log: TextIO = sys.stderr):
         scenario = catalog.get("scenario", scenario_id)
         if scenario is None:
             raise PerfError(f"no scenario {scenario_id}; perf.py list --kind scenario shows them")
@@ -57,8 +59,11 @@ class ScenarioSuite:
         self._loader = loader or ExtensionLoader()
         self._fixtures = FixtureReader(catalog)
         self._plans = PlanBuilder(catalog, self._fixtures)
-        self._environment: dict[str, Any] = {"dataset": dataset.manifest}
+        self._environment: dict[str, Any] = {"dataset": dataset.manifest,
+                                             "monitoring": sorted(stand.endpoints())}
         self._problems: list[str] = []
+        self._log = log
+        self._skipped: set[str] = set()
 
     def items(self) -> list[Item]:
         personas = [persona for persona, _ in self._plans.personas(self.scenario)]
@@ -67,7 +72,17 @@ class ScenarioSuite:
         return [self.scenario, *personas, *fixtures, *self.collectors()]
 
     def collectors(self) -> list[Item]:
-        return [self._require("collector", item_id) for item_id in self.scenario.manifest.get("collectors", [])]
+        """The scenario's collectors that can run on this stand."""
+        found = []
+        for item_id in self.scenario.manifest.get("collectors", []):
+            item = self._require("collector", item_id)
+            missing = set(item.manifest.get("needs", [])) - set(self._stand.endpoints())
+            if missing and item.key not in self._skipped:
+                self._skipped.add(item.key)
+                print(f"skipping {item.key}: the stand runs no {', '.join(sorted(missing))}", file=self._log)
+            if not missing:
+                found.append(item)
+        return found
 
     def environment(self) -> dict[str, Any]:
         return self._environment
@@ -80,6 +95,7 @@ class ScenarioSuite:
         client = ApiClient(self._stand.base_url)
         probe = StandProbe(self._stand, client)
         try:
+            self._dashboards()
             with timeline.phase("stand up", "stand"):
                 self._stand.up(client)
             self._environment["server"] = probe.server()
@@ -92,10 +108,28 @@ class ScenarioSuite:
             self._environment["database"]["afterLoad"] = probe.sizes()
             summary = run_dir / SUMMARY_NAME
             self._stages(timeline, summary)
-            return [self._collect(item, summary, load.started, load.finished) for item in self.collectors()]
+            self._stand.settle()
+            self._annotate(timeline)
+            return [self._collect(item, run_dir, load.started, load.finished) for item in self.collectors()]
         finally:
             self._save_logs(run_dir)
             self._stand.down()
+
+    def _dashboards(self) -> None:
+        if not self._stand.settings.grafana:
+            return
+        for item in self._catalog.items("dashboard"):
+            self._stand.add_dashboard(item.id, item.folder / item.manifest["file"])
+
+    def _annotate(self, timeline: Timeline) -> None:
+        if not self._stand.settings.grafana:
+            return
+        try:
+            self._stand.annotate(timeline.events())
+        except PerfError as error:
+            self._problems.append(f"could not mark the run in Grafana: {error}")
+        print(f"Grafana: {self._stand.grafana_url} (the stand keeps running; "
+              f"docker compose -p rfmap-perf down -v removes it)", file=self._log)
 
     def _write_plan(self, run_dir: Path, client: ApiClient) -> None:
         provisioner = Provisioner(client)
@@ -125,12 +159,15 @@ class ScenarioSuite:
     def _iso(moment: datetime) -> str:
         return moment.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-    def _collect(self, item: Item, summary: Path, started: str, finished: str) -> Collected:
+    def _collect(self, item: Item, run_dir: Path, started: str, finished: str) -> Collected:
         collector = self._loader.load(item, Collector)(item)
-        collection = collector.collect(CollectContext(self.scenario, (summary,), started, finished))
+        context = CollectContext(self.scenario, (run_dir / SUMMARY_NAME,), started, finished,
+                                 self._stand.endpoints(), run_dir / "raw")
+        collection = collector.collect(context)
         compare = self.scenario.manifest.get("compare", {})
-        # Personas and fixtures shape the load too: a new major of any of them starts a new baseline.
-        related = tuple(entry for entry in self.items() if entry.kind.name in ("persona", "fixture"))
+        # Personas and fixtures shape the load, and the other collectors' services share the machine
+        # (monitoring costs CPU): a new major of any of them, or a run without one, starts a new baseline.
+        related = tuple(entry for entry in self.items() if entry.kind.name in ("persona", "fixture", "collector"))
         return Collected(self.scenario, item, collection, frozenset(compare.get("metrics", DEFAULT_METRICS)),
                          float(compare.get("maxRegressionPct", DEFAULT_LIMIT_PCT)), related)
 

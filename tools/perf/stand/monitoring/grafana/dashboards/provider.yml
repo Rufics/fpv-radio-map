@@ -1,0 +1,9 @@
+# The dashboards of the catalog (extensions/dashboards), copied there by perf.py.
+apiVersion: 1
+providers:
+  - name: rfmap-perf
+    folder: rfmap-perf
+    type: file
+    disableDeletion: true
+    options:
+      path: /var/lib/rfmap-perf/dashboards

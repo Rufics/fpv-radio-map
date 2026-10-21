@@ -61,7 +61,12 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "metrics": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "metrics": {
+          "description": "Metrics that gate the run: a metric of every measurement (p95) or NAME:METRIC of one (server_rss:slope).",
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
         "window": { "type": "integer", "minimum": 1 },
         "maxRegressionPct": { "$ref": "common.schema.json#/$defs/percent" }
       }

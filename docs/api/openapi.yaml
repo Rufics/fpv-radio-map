@@ -703,8 +703,9 @@ paths:
         `http`, `job-runners` and `job-cells` pools), `rfmap_db_pool_*` (connections, idle,
         waiting callers, leases, wait time, reconnects), `rfmap_jobs` and
         `rfmap_jobs_started_total`, `rfmap_cache_*` (hits, misses, evictions, entries, bytes per
-        tier), `rfmap_build_info` and `rfmap_process_start_time_seconds`. Nothing in it queries
-        the database.
+        tier), `rfmap_build_info`, `rfmap_process_start_time_seconds` and, on Linux,
+        `rfmap_process_*` (CPU seconds, resident and virtual memory, threads, open file
+        descriptors). Nothing in it queries the database.
       responses:
         '200':
           description: The metrics

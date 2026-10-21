@@ -1,5 +1,8 @@
+import io
 import json
+import shutil
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from perfkit.catalog import CatalogLoader, KindRegistry
@@ -34,9 +37,13 @@ class ScenarioSuiteTest(StandTestCase):
         self.run_dir = self.root / "run"
         self.run_dir.mkdir()
 
-    def suite(self, scenario="smoke"):
-        stand = Stand(StandSettings(self.root / "data", port=self.port), self.runner, "tok")
-        return ScenarioSuite(self.catalog, scenario, stand, Dataset.of({"files": {"dem.cog.tif": "abc"}}))
+    def suite(self, scenario="smoke", **settings):
+        settings = {"prometheus_port": self.port, "grafana_port": self.port, **settings}
+        stand = Stand(StandSettings(self.root / "data", port=self.port, **settings), self.runner, "tok",
+                      sleep=lambda _s: None)
+        self.log = io.StringIO()
+        return ScenarioSuite(self.catalog, scenario, stand, Dataset.of({"files": {"dem.cog.tif": "abc"}}),
+                             log=self.log)
 
     def test_a_whole_scenario(self):
         suite = self.suite()
@@ -45,10 +52,19 @@ class ScenarioSuiteTest(StandTestCase):
         self.assertEqual(suite.name, "scenario/smoke")
         self.assertRegex(suite.dataset, r"^terrain-[0-9a-f]{12}$")
         self.assertEqual(suite.problems(), [])
-        (entry,) = collected
+        entry, monitored = collected
         self.assertEqual(entry.gate_metrics, frozenset({"p95", "error_rate"}))
         self.assertIn("persona/link-editor", entry.involved)
         self.assertIn("fixture/warsaw-paths", entry.involved)
+        self.assertIn("collector/prometheus", entry.involved, "runs without monitoring are not compared")
+        self.assertEqual(monitored.collector.key, "collector/prometheus")
+        names = {(m.name, m.metric) for m in monitored.collection.measurements}
+        self.assertIn(("server_cpu", "max"), names)
+        self.assertIn(("pool_queued/http", "avg"), names)
+        self.assertNotIn(("k6_p95", "max"), names)
+        raw = json.loads((self.run_dir / "raw" / "prometheus.json").read_text(encoding="utf-8"))
+        self.assertIn("k6_p95", [query["name"] for query in raw["queries"]])
+        self.assertEqual(suite.environment()["monitoring"], ["prometheus"])
         names = [(e.kind, e.name) for e in timeline.events()]
         self.assertEqual(names, [("stand", "stand up"), ("setup", "set-up"), ("load", "load"), ("stage", "steady")])
         self.assertEqual(timeline.events()[3].started, "2023-11-14T22:13:20.000Z")
@@ -61,6 +77,24 @@ class ScenarioSuiteTest(StandTestCase):
         self.assertEqual(environment["server"]["health"]["ok"], True)
         self.assertEqual((self.run_dir / "raw" / "rfmap-server.log").read_text(encoding="utf-8"), "server log\n")
         self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
+
+    def test_without_monitoring_the_prometheus_collector_is_skipped(self):
+        suite = self.suite(monitoring=False)
+        (entry,) = suite.execute(Timeline(), self.run_dir)
+        self.assertEqual(entry.collector.key, "collector/k6-summary")
+        self.assertEqual(self.log.getvalue().count("skipping collector/prometheus"), 1)
+        self.assertNotIn("collector/prometheus", [item.key for item in suite.items()])
+
+    def test_a_kept_stand_gets_grafana_with_the_run_marked(self):
+        suite = self.suite(keep=True)
+        suite.execute(Timeline(), self.run_dir)
+        stand_dir = Path(self.runner.envs[0]["RFMAP_PERF_WORK_DIR"])
+        self.addCleanup(shutil.rmtree, stand_dir, True)
+        self.assertTrue((stand_dir / "dashboards" / "rfmap-stand.json").is_file())
+        texts = [call[2]["text"] for call in self.server.calls if call[1] == "/api/annotations"]
+        self.assertEqual(texts, ["stand: stand up", "setup: set-up", "load: load", "stage: steady"])
+        self.assertIn("Grafana: http://127.0.0.1:", self.log.getvalue())
+        self.assertEqual(suite.problems(), [])
 
     def test_items_and_thresholds(self):
         keys = [item.key for item in self.suite("peak").items()]

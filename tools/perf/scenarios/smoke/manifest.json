@@ -1,7 +1,7 @@
 {
   "kind": "scenario",
   "id": "smoke",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Every persona at a low constant rate for one minute: checks that the stand, the set-up and the steps work.",
   "personas": [
     {
@@ -32,7 +32,8 @@
     ]
   },
   "collectors": [
-    "k6-summary"
+    "k6-summary",
+    "prometheus"
   ],
   "thresholds": {
     "http_req_failed": "rate<0.01"

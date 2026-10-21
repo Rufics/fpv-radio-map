@@ -17,6 +17,14 @@
       "version": "1.0.0",
       "sha256": "2173746e609a8643a51d4ba57d2a8d42d9a35ada95f49522b776e4fc060d3960"
     },
+    "collector/prometheus": {
+      "version": "1.0.0",
+      "sha256": "097dda9afc6211230c07f43e6eb40f75eacf0c61b9613ed1636f3f570f48a8c8"
+    },
+    "dashboard/rfmap-stand": {
+      "version": "1.0.0",
+      "sha256": "e29c438853b6b7684695e0157bad1ac8c89b4fee5cc21a363ef09a5fcdfd020c"
+    },
     "fixture/warsaw-missions": {
       "version": "1.0.0",
       "sha256": "67b191e3b7ecbae745a89aa1a25f1bb43a4fb9caee0ff7d442356ff893c58136"
@@ -42,12 +50,12 @@
       "sha256": "cc0d7e1893348f8671561776360edad031ec6d4aa7f3016cc6ac5ba54a203260"
     },
     "scenario/peak": {
-      "version": "1.0.0",
-      "sha256": "f5cc3ca2fd624120b1c1988b55aec979946c3869daf5a910b5d8eb4b465e6b61"
+      "version": "1.1.0",
+      "sha256": "c3b7bff1d48c77a720ff540eecd4fcced8f55ef72704aaba080da6ee14c642a9"
     },
     "scenario/smoke": {
-      "version": "1.0.0",
-      "sha256": "75f51fcc13e2acce45386df3a40637c21988b11551cc978e9565f903154b134b"
+      "version": "1.1.0",
+      "sha256": "e267c383209a358a950efc014abad853c1de648b51ce67bc7a0d2299591fd42e"
     }
   }
 }

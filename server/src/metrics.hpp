@@ -53,10 +53,27 @@ struct CacheSample {
     bool sized = true;
 };
 
+/// What the kernel says about this process; `known` is false where /proc/self is missing.
+struct ProcessStats {
+    bool known = false;
+    double cpuSeconds = 0.0;     ///< user plus system time
+    double residentBytes = 0.0;
+    double virtualBytes = 0.0;
+    int threads = 0;
+    int openFds = -1;            ///< -1 when /proc/self/fd cannot be listed
+};
+
+/// Reads /proc/self/stat and /proc/self/fd (Linux).
+[[nodiscard]] ProcessStats readProcessStats();
+
+/// One line of /proc/<pid>/stat; the name in parentheses may hold spaces.
+[[nodiscard]] ProcessStats parseProcStat(std::string_view line, long ticksPerSecond, long pageBytes);
+
 /// Everything but the HTTP layer, read by the application for one scrape.
 struct ServerSample {
     std::string version;
     double startTimeSeconds = 0.0;  ///< Unix time the process started
+    ProcessStats process;
     std::vector<std::pair<std::string, PoolStats>> pools;
     DbPoolStats db;
     JobStats jobs;

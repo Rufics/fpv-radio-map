@@ -81,7 +81,7 @@ class KindRegistryTest(unittest.TestCase):
     def test_every_schema_with_a_block_is_a_kind(self):
         registry = KindRegistry.load(SCHEMAS_DIR)
         self.assertEqual({kind.name for kind in registry.kinds()},
-                         {"fixture", "persona", "scenario", "collector", "reporter", "benchmark"})
+                         {"fixture", "persona", "scenario", "collector", "reporter", "benchmark", "dashboard"})
         self.assertEqual(registry.get("benchmark").required_files, ("CMakeLists.txt",))
         self.assertIsNone(registry.get("nope"))
 

@@ -17,6 +17,12 @@
     "description": { "$ref": "common.schema.json#/$defs/description" },
     "entry": { "$ref": "common.schema.json#/$defs/entry" },
     "options": { "type": "object" },
+    "needs": {
+      "description": "Services of the stand the collector queries; a run without them skips it (prometheus: --no-monitoring).",
+      "type": "array",
+      "items": { "enum": ["prometheus"] },
+      "uniqueItems": true
+    },
     "metrics": {
       "type": "array",
       "items": {

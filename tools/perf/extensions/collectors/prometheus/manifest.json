@@ -1,0 +1,260 @@
+{
+  "kind": "collector",
+  "id": "prometheus",
+  "version": "1.0.0",
+  "description": "Reads the stand's Prometheus over the load phase: CPU and memory of the containers, the server's thread and database pools, jobs and caches, PostgreSQL, and k6's own series. Saves every series to raw/prometheus.json for the reports.",
+  "entry": "collector.py:PrometheusCollector",
+  "needs": [
+    "prometheus"
+  ],
+  "options": {
+    "stepS": 5,
+    "padBeforeS": 60,
+    "padAfterS": 15,
+    "queries": [
+      {
+        "name": "server_cpu",
+        "query": "rate(rfmap_process_cpu_seconds_total[15s])",
+        "unit": "cores",
+        "better": "lower",
+        "stats": [
+          "avg",
+          "max"
+        ],
+        "title": "Server CPU"
+      },
+      {
+        "name": "server_rss",
+        "query": "rfmap_process_resident_memory_bytes / 1048576",
+        "unit": "MiB",
+        "better": "lower",
+        "stats": [
+          "max",
+          "last",
+          "slope"
+        ],
+        "title": "Server resident memory"
+      },
+      {
+        "name": "server_threads",
+        "query": "rfmap_process_threads",
+        "unit": "threads",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "Server threads"
+      },
+      {
+        "name": "server_fds",
+        "query": "rfmap_process_open_fds",
+        "unit": "fds",
+        "better": "lower",
+        "stats": [
+          "max",
+          "slope"
+        ],
+        "title": "Server open file descriptors"
+      },
+      {
+        "name": "container_cpu",
+        "query": "sum by (service) (rate(container_cpu_usage_seconds_total{service!=\"\"}[15s]))",
+        "unit": "cores",
+        "better": "lower",
+        "stats": [],
+        "title": "CPU by container (cAdvisor)"
+      },
+      {
+        "name": "container_memory",
+        "query": "sum by (service) (container_memory_working_set_bytes{service!=\"\"}) / 1048576",
+        "unit": "MiB",
+        "better": "lower",
+        "stats": [],
+        "title": "Memory by container (cAdvisor)"
+      },
+      {
+        "name": "db_cpu",
+        "query": "sum(rate(container_cpu_usage_seconds_total{service=\"postgis\"}[15s]))",
+        "unit": "cores",
+        "better": "lower",
+        "stats": [
+          "avg",
+          "max"
+        ],
+        "title": "PostgreSQL CPU"
+      },
+      {
+        "name": "db_memory",
+        "query": "sum(container_memory_working_set_bytes{service=\"postgis\"}) / 1048576",
+        "unit": "MiB",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "PostgreSQL working set"
+      },
+      {
+        "name": "k6_cpu",
+        "query": "sum(rate(container_cpu_usage_seconds_total{service=\"k6\"}[15s]))",
+        "unit": "cores",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "k6 CPU (the load generator must not be the bottleneck)"
+      },
+      {
+        "name": "server_rps",
+        "query": "sum(rate(rfmap_http_requests_total[15s]))",
+        "unit": "1/s",
+        "better": "higher",
+        "stats": [
+          "avg",
+          "max"
+        ],
+        "title": "Requests the server answered"
+      },
+      {
+        "name": "server_5xx",
+        "query": "sum(rate(rfmap_http_requests_total{status=~\"5..\"}[15s])) or vector(0)",
+        "unit": "1/s",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "Server errors (5xx)"
+      },
+      {
+        "name": "server_p95",
+        "query": "histogram_quantile(0.95, sum by (class, le) (rate(rfmap_http_request_duration_seconds_bucket[15s]))) * 1000",
+        "unit": "ms",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "Server-side p95 by rate class"
+      },
+      {
+        "name": "pool_queued",
+        "query": "max by (pool) (rfmap_pool_queued_tasks)",
+        "unit": "tasks",
+        "better": "lower",
+        "stats": [
+          "avg",
+          "max"
+        ],
+        "title": "Queued tasks by thread pool"
+      },
+      {
+        "name": "pool_busy",
+        "query": "max by (pool) (rfmap_pool_busy_threads / rfmap_pool_threads) * 100",
+        "unit": "%",
+        "better": "lower",
+        "stats": [
+          "avg",
+          "max"
+        ],
+        "title": "Busy threads by pool"
+      },
+      {
+        "name": "db_pool_waiting",
+        "query": "max(rfmap_db_pool_waiting)",
+        "unit": "requests",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "Requests waiting for a database connection"
+      },
+      {
+        "name": "db_pool_wait",
+        "query": "rate(rfmap_db_pool_wait_seconds_total[15s]) / clamp_min(rate(rfmap_db_pool_leases_total[15s]), 1e-9) * 1000",
+        "unit": "ms",
+        "better": "lower",
+        "stats": [
+          "avg",
+          "max"
+        ],
+        "title": "Mean wait for a database connection"
+      },
+      {
+        "name": "jobs",
+        "query": "sum by (state) (rfmap_jobs)",
+        "unit": "jobs",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "Coverage jobs by state"
+      },
+      {
+        "name": "cache_hit_ratio",
+        "query": "sum by (tier) (rate(rfmap_cache_hits_total[30s])) / clamp_min(sum by (tier) (rate(rfmap_cache_hits_total[30s]) + rate(rfmap_cache_misses_total[30s])), 1e-9) * 100",
+        "unit": "%",
+        "better": "higher",
+        "stats": [
+          "avg"
+        ],
+        "title": "Cache hit ratio by tier"
+      },
+      {
+        "name": "cache_used",
+        "query": "sum by (tier) (rfmap_cache_used_bytes) / 1048576",
+        "unit": "MiB",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "Cache memory by tier"
+      },
+      {
+        "name": "pg_connections",
+        "query": "sum(pg_stat_activity_count{datname=\"rfmap\"})",
+        "unit": "connections",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "PostgreSQL connections"
+      },
+      {
+        "name": "pg_transactions",
+        "query": "sum(rate(pg_stat_database_xact_commit{datname=\"rfmap\"}[15s]))",
+        "unit": "1/s",
+        "better": "higher",
+        "stats": [
+          "avg"
+        ],
+        "title": "PostgreSQL commits"
+      },
+      {
+        "name": "pg_size",
+        "query": "pg_database_size_bytes{datname=\"rfmap\"} / 1048576",
+        "unit": "MiB",
+        "better": "lower",
+        "stats": [
+          "last"
+        ],
+        "title": "Database size"
+      },
+      {
+        "name": "k6_p95",
+        "query": "max by (persona) (k6_http_req_duration_p95) * 1000",
+        "unit": "ms",
+        "better": "lower",
+        "stats": [],
+        "title": "Client-side p95 by persona (k6)"
+      },
+      {
+        "name": "k6_vus",
+        "query": "sum(k6_vus)",
+        "unit": "VUs",
+        "better": "lower",
+        "stats": [
+          "max"
+        ],
+        "title": "Virtual users k6 needed"
+      }
+    ]
+  }
+}

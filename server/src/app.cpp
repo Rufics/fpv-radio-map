@@ -316,6 +316,7 @@ std::string Application::metricsText() {
     ServerSample sample;
     sample.version = RFMAP_HOST_VERSION;
     sample.startTimeSeconds = startTimeSeconds_;
+    sample.process = readProcessStats();
     sample.jobs = jobs_->stats();
     sample.pools = {{"http", httpMetrics_.pool(config_.server.threads)},
                     {"job-runners", sample.jobs.runners},

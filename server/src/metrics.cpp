@@ -1,7 +1,13 @@
 #include "metrics.hpp"
 
+#include <unistd.h>
+
 #include <algorithm>
+#include <charconv>
+#include <filesystem>
 #include <format>
+#include <fstream>
+#include <iterator>
 
 namespace rfmap {
 
@@ -134,13 +140,77 @@ void writeCaches(PrometheusText& out, const std::vector<CacheSample>& caches) {
          [](const CacheStats& s) { return s.limitBytes; });
 }
 
+void writeProcess(PrometheusText& out, const ProcessStats& p) {
+    if (!p.known) return;
+    out.family("rfmap_process_cpu_seconds_total", "counter", "User and system CPU time of the server.");
+    out.sample("rfmap_process_cpu_seconds_total", p.cpuSeconds);
+    out.family("rfmap_process_resident_memory_bytes", "gauge", "Resident memory of the server.");
+    out.sample("rfmap_process_resident_memory_bytes", p.residentBytes);
+    out.family("rfmap_process_virtual_memory_bytes", "gauge", "Virtual memory of the server.");
+    out.sample("rfmap_process_virtual_memory_bytes", p.virtualBytes);
+    out.family("rfmap_process_threads", "gauge", "Threads of the server.");
+    out.sample("rfmap_process_threads", p.threads);
+    if (p.openFds >= 0) {
+        out.family("rfmap_process_open_fds", "gauge", "Open file descriptors of the server.");
+        out.sample("rfmap_process_open_fds", p.openFds);
+    }
+}
+
+// Fields of /proc/<pid>/stat counted from the one after the name: state is 0, utime 11.
+constexpr std::size_t kUtime = 11;
+constexpr std::size_t kStime = 12;
+constexpr std::size_t kThreads = 17;
+constexpr std::size_t kVsize = 20;
+constexpr std::size_t kRss = 21;
+
+double field(const std::vector<std::string_view>& fields, std::size_t index) {
+    double value = 0.0;
+    const std::string_view text = fields[index];
+    std::from_chars(text.data(), text.data() + text.size(), value);
+    return value;
+}
+
 }  // namespace
+
+ProcessStats parseProcStat(std::string_view line, long ticksPerSecond, long pageBytes) {
+    ProcessStats stats;
+    const auto close = line.rfind(')');
+    if (close == std::string_view::npos || ticksPerSecond <= 0) return stats;
+    std::vector<std::string_view> fields;
+    std::string_view rest = line.substr(close + 1);
+    while (!rest.empty()) {
+        const auto start = rest.find_first_not_of(" \n");
+        if (start == std::string_view::npos) break;
+        rest.remove_prefix(start);
+        const auto end = std::min(rest.find_first_of(" \n"), rest.size());
+        fields.push_back(rest.substr(0, end));
+        rest.remove_prefix(end);
+    }
+    if (fields.size() <= kRss) return stats;
+    stats.known = true;
+    stats.cpuSeconds = (field(fields, kUtime) + field(fields, kStime)) / static_cast<double>(ticksPerSecond);
+    stats.threads = static_cast<int>(field(fields, kThreads));
+    stats.virtualBytes = field(fields, kVsize);
+    stats.residentBytes = field(fields, kRss) * static_cast<double>(pageBytes);
+    return stats;
+}
+
+ProcessStats readProcessStats() {
+    std::ifstream in("/proc/self/stat");
+    const std::string line{std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    ProcessStats stats = parseProcStat(line, sysconf(_SC_CLK_TCK), sysconf(_SC_PAGESIZE));
+    std::error_code error;
+    std::filesystem::directory_iterator fds("/proc/self/fd", error);
+    if (!error) stats.openFds = static_cast<int>(std::distance(fds, std::filesystem::directory_iterator{}));
+    return stats;
+}
 
 void writeServerMetrics(PrometheusText& out, const ServerSample& sample) {
     out.family("rfmap_build_info", "gauge", "Always 1; the server version is a label.");
     out.sample("rfmap_build_info", 1, {{"version", sample.version}});
     out.family("rfmap_process_start_time_seconds", "gauge", "Unix time the server started.");
     out.sample("rfmap_process_start_time_seconds", sample.startTimeSeconds);
+    writeProcess(out, sample.process);
     writePools(out, sample.pools);
     writeDatabase(out, sample.db);
     writeJobs(out, sample.jobs);

@@ -116,4 +116,33 @@ TEST(ServerMetricsTest, WritesEveryFamily) {
     }
     // The table tier has no size without a query, so it has no size samples.
     EXPECT_FALSE(contains(t, "rfmap_cache_used_bytes{tier=\"results-table\"}"));
+    // Without /proc there are no process samples.
+    EXPECT_FALSE(contains(t, "rfmap_process_resident_memory_bytes"));
+}
+
+TEST(ProcessStatsTest, ParsesProcStatWithSpacesInTheName) {
+    const std::string line =
+        "4242 (rfmap server) S 1 4242 4242 0 -1 4194560 900 0 0 0 250 50 0 0 20 0 17 0 12345 "
+        "104857600 2560 18446744073709551615 1 1 0 0 0 0 0 0 0 0 0 0 17 3 0 0 0 0 0\n";
+    const ProcessStats p = parseProcStat(line, 100, 4096);
+    ASSERT_TRUE(p.known);
+    EXPECT_DOUBLE_EQ(p.cpuSeconds, 3.0);
+    EXPECT_EQ(p.threads, 17);
+    EXPECT_DOUBLE_EQ(p.virtualBytes, 104857600.0);
+    EXPECT_DOUBLE_EQ(p.residentBytes, 2560.0 * 4096);
+    EXPECT_FALSE(parseProcStat("4242 (short) S 1 2", 100, 4096).known);
+    EXPECT_FALSE(parseProcStat("no name", 100, 4096).known);
+}
+
+TEST(ProcessStatsTest, ReadsThisProcessAndWritesIt) {
+    ServerSample sample;
+    sample.process = readProcessStats();
+    ASSERT_TRUE(sample.process.known);
+    EXPECT_GT(sample.process.residentBytes, 0.0);
+    EXPECT_GE(sample.process.threads, 1);
+    EXPECT_GT(sample.process.openFds, 0);
+    PrometheusText out;
+    writeServerMetrics(out, sample);
+    EXPECT_TRUE(contains(out.text(), "# TYPE rfmap_process_cpu_seconds_total counter\n"));
+    EXPECT_TRUE(contains(out.text(), "rfmap_process_open_fds "));
 }

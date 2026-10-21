@@ -7,10 +7,11 @@
     python3 -I tools/perf/perf.py [--catalog-dir DIR] run --suite micro [--only ID] [--repetitions N]
         [--build-dir DIR] [--results-dir DIR] [--window N] [--no-gate]
     python3 -I tools/perf/perf.py [--catalog-dir DIR] run --scenario ID --dataset DIR [--port N]
-        [--server-image IMAGE] [--no-build] [--keep-stand] [--results-dir DIR] [--window N] [--no-gate]
+        [--server-image IMAGE] [--no-build] [--keep-stand] [--no-monitoring] [--prometheus-port N]
+        [--grafana-port N] [--results-dir DIR] [--window N] [--no-gate]
 
 The catalog is one folder (default: tools/perf) with fixtures/, personas/, scenarios/ and
-extensions/{collectors,reporters,benchmarks}/, one subfolder with a manifest.json per item.
+extensions/{collectors,reporters,benchmarks,dashboards}/, one subfolder with a manifest.json per item.
 `list` shows what was found. `catalog check` validates every manifest against its schema, checks
 that referenced items and files exist, and that catalog.lock.json matches the catalog, so no item
 changed without a new version. `catalog lock` rewrites catalog.lock.json after versions were

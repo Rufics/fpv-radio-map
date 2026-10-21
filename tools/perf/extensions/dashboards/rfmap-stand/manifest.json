@@ -1,0 +1,7 @@
+{
+  "kind": "dashboard",
+  "id": "rfmap-stand",
+  "version": "1.0.0",
+  "description": "Every series the prometheus collector reads, one panel each, with the run's phases and load stages as annotations.",
+  "file": "dashboard.json"
+}

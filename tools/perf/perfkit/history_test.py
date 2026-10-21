@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from perfkit.errors import PerfError
@@ -48,7 +49,8 @@ class HistoryTest(HistoryTestCase):
 
     def test_events_are_stored(self):
         self.history.record(record("r1", "2026-01-01T00:00:01Z", [measurement(10)]))
-        rows = sqlite3.connect(self.folder / HISTORY_NAME).execute("select name, kind, outcome from events").fetchall()
+        with closing(sqlite3.connect(self.folder / HISTORY_NAME)) as connection:
+            rows = connection.execute("select name, kind, outcome from events").fetchall()
         self.assertEqual(rows, [("micro run", "run", "ok")])
 
     def test_reopen_keeps_runs_and_unknown_schema_fails(self):

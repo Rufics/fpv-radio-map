@@ -2,7 +2,8 @@
 
 A collector is an extension (extensions/collectors/<id>/) whose entry class derives from
 Collector. The run gives it a CollectContext: the catalog item whose numbers it reads, the files
-the tool wrote and the time window of the phase. It returns a Collection.
+the tool wrote, the time window of the phase, the services it may query (`endpoints`, e.g. the
+stand's Prometheus) and a folder for raw data the reports draw. It returns a Collection.
 """
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +37,8 @@ class CollectContext:
     files: tuple[Path, ...]
     started: str
     finished: str
+    endpoints: dict[str, str] = field(default_factory=dict)
+    raw_dir: Path | None = None
 
 
 @dataclass
