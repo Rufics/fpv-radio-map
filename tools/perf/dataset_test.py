@@ -39,24 +39,29 @@ class RegionTest(unittest.TestCase):
         dataset.Region(*dataset.DEFAULT_CENTER, 25.0, 25.0).validate()
 
     def test_rejects_zone_border(self):
+        region = dataset.Region(49.95, 20.0, 25.0, 25.0)
         with self.assertRaisesRegex(dataset.DatasetError, "latitude 50"):
-            dataset.Region(49.95, 20.0, 25.0, 25.0).validate()
+            region.validate()
 
     def test_rejects_size_out_of_range(self):
+        region = dataset.Region(52.23, 21.01, 0.5, 10.0)
         with self.assertRaisesRegex(dataset.DatasetError, "size"):
-            dataset.Region(52.23, 21.01, 0.5, 10.0).validate()
+            region.validate()
 
     def test_rejects_antimeridian(self):
+        region = dataset.Region(10.0, 179.9, 50.0, 50.0)
         with self.assertRaisesRegex(dataset.DatasetError, "180th"):
-            dataset.Region(10.0, 179.9, 50.0, 50.0).validate()
+            region.validate()
 
     def test_rejects_box_beyond_max_latitude(self):
+        region = dataset.Region(84.99, 0.0, 10.0, 10.0)
         with self.assertRaisesRegex(dataset.DatasetError, "85"):
-            dataset.Region(84.99, 0.0, 10.0, 10.0).validate()
+            region.validate()
 
     def test_rejects_centre_out_of_range(self):
+        region = dataset.Region(89.0, 0.0, 10.0, 10.0)
         with self.assertRaisesRegex(dataset.DatasetError, "out of range"):
-            dataset.Region(89.0, 0.0, 10.0, 10.0).validate()
+            region.validate()
 
 
 class RegionParserTest(unittest.TestCase):
@@ -95,15 +100,17 @@ class TilesBuilderTest(unittest.TestCase):
         box = dataset.BoundingBox(1, 2, 3, 4)
         with mock.patch.object(dataset.shutil, "which", return_value="/usr/bin/docker"):
             for runner in (FakeRunner(returncode=3), timeout):
-                with self.subTest(runner=runner), tempfile.TemporaryDirectory() as tmp, \
-                        self.assertRaises(dataset.DatasetError):
-                    dataset.TilesBuilder(dataset.DEFAULT_IMAGE, Path(tmp), runner=runner).build(box, False)
+                with self.subTest(runner=runner), tempfile.TemporaryDirectory() as tmp:
+                    builder = dataset.TilesBuilder(dataset.DEFAULT_IMAGE, Path(tmp), runner=runner)
+                    with self.assertRaises(dataset.DatasetError):
+                        builder.build(box, False)
 
-    def test_missing_docker(self):
+    @mock.patch.object(dataset.shutil, "which", return_value=None)
+    def test_missing_docker(self, _which):
         builder = dataset.TilesBuilder(dataset.DEFAULT_IMAGE, Path("data"), runner=FakeRunner())
-        with mock.patch.object(dataset.shutil, "which", return_value=None), \
-                self.assertRaisesRegex(dataset.DatasetError, "docker"):
-            builder.build(dataset.BoundingBox(1, 2, 3, 4), False)
+        box = dataset.BoundingBox(1, 2, 3, 4)
+        with self.assertRaisesRegex(dataset.DatasetError, "docker"):
+            builder.build(box, False)
 
 
 class CliTest(unittest.TestCase):
