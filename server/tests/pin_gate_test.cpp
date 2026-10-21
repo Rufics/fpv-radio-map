@@ -54,6 +54,9 @@ TEST(PinGateLimits, AutomaticLimitsKeepMostRequestThreadsFree) {
     EXPECT_EQ(PinGate::limitsFor(automatic, 8, 32).concurrency, 2);
     // ... and never none, even when the core count is unknown (0).
     EXPECT_EQ(PinGate::limitsFor(automatic, 2, 0).concurrency, 1);
+    // On two request threads the automatic queue stays empty, leaving one thread for other requests.
+    EXPECT_EQ(PinGate::limitsFor(automatic, 2, 8).queue, 0);
+    EXPECT_EQ(PinGate::limitsFor(automatic, 4, 8).queue, 1);
 
     Config::Auth set;
     set.pinConcurrency = 3;
