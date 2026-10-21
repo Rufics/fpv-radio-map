@@ -603,3 +603,29 @@ button.rf-leg-label {
   color: var(--rf-blocked-text);
   font-size: 13px;
 }
+
+/* Numbered story events on the replayed track (fpv-flight-replay-map) */
+.rf-flight-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid #0b0f14;
+  background: var(--rf-video);
+  color: #0b0f14;
+  font: 700 12px/1 var(--rf-font-sans);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.rf-flight-mark.is-warn {
+  background: var(--rf-warn);
+}
+.rf-flight-mark.is-blocked {
+  background: var(--rf-blocked);
+}
+.rf-flight-mark.is-selected {
+  outline: 3px solid var(--rf-text);
+  outline-offset: 1px;
+}

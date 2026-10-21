@@ -34,12 +34,13 @@ import { FpvWorkspace, LINK_LETTER, LegRowVm, endsAtTurnBack } from '../core/fpv
 import { CompareService } from '../core/fpv-core';
 import { RouteWeatherService } from '../core/route-weather.service';
 import { RouteWeatherMapComponent } from './route-weather-map.component';
+import { FlightReplayMapComponent } from '../replay/flight-replay-map.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
   selector: 'fpv-map-stage',
   host: { '(document:keydown.escape)': 'cancelPlacing()' },
-  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent],
+  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent, FlightReplayMapComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
       <rf-map-view class="map" [class.weather-mode]="weatherShown()" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
@@ -101,6 +102,7 @@ import { RouteWeatherMapComponent } from './route-weather-map.component';
           <div class="overlay hint" role="status">Drag a point to move it · coverage is from before the edit</div>
         }
         <fpv-route-weather-map [compact]="compact()" />
+        <fpv-flight-replay-map [fitPadding]="fitPadding()" />
         <rf-slot-host class="overlay slot" name="map.overlays" />
       </rf-map-view>
       @if (dim()) {
