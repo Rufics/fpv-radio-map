@@ -207,7 +207,8 @@ class TilesBuilder:
     def __init__(self, image, data_dir, runner=subprocess.run):
         if not IMAGE_PATTERN.match(image):
             raise DatasetError(f"not a valid image name: {image!r}")
-        if ":" in str(data_dir):
+        # A Windows drive letter ("C:") is fine for Docker; any other colon splits the -v fields.
+        if ":" in str(data_dir)[len(data_dir.drive):]:
             raise DatasetError(f"the dataset directory cannot contain ':' (Docker mount syntax): {data_dir}")
         self._image = image
         self._data_dir = data_dir
