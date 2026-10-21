@@ -79,8 +79,17 @@ export class WeatherRibbon {
   selector: 'fpv-route-weather-map',
   imports: [RouteColoursComponent],
   template: `
-    @if (shown() && !compact()) {
-      <fpv-route-colours class="metric" role="group" aria-label="Route colours in weather mode" />
+    @if (shown()) {
+      @if (compact()) {
+        <div class="keys" role="group" [attr.aria-label]="'Route coloured by ' + title()">
+          <b>{{ title() }}</b>
+          @for (k of legend(); track k.label) {
+            <span><i [style.background]="k.color"></i>{{ k.label }}</span>
+          }
+        </div>
+      } @else {
+        <fpv-route-colours class="metric" role="group" aria-label="Route colours in weather mode" />
+      }
     }
     @if (active()) {
       @if (hover(); as h) {
@@ -97,6 +106,11 @@ export class WeatherRibbon {
     :host { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
     .metric { position: absolute; left: 14px; top: 16px; pointer-events: auto; padding: 8px; border-radius: var(--rf-radius-lg); background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); display: flex; flex-direction: column; gap: 6px; }
 
+    .keys { position: absolute; left: 10px; right: 64px; bottom: 44px; padding: 6px 8px; border-radius: var(--rf-radius-md); background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); display: flex; flex-wrap: wrap; align-items: center; gap: 3px 10px; font-size: 11px; color: var(--rf-text-2); }
+    .keys b { color: var(--rf-text); font-weight: 600; }
+    .keys span { display: inline-flex; align-items: center; gap: 4px; }
+    .keys i { width: 14px; height: 5px; border-radius: 2px; }
+
     .hover { position: absolute; transform: translate(14px, 14px); max-width: 280px; padding: 8px 10px; border-radius: var(--rf-radius-md); background: rgba(16, 22, 29, 0.97); border: 1px solid var(--rf-border-strong); display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-family: var(--rf-font-mono); color: var(--rf-text); }
     .hover b { font-family: var(--rf-font-sans); font-size: 12px; color: var(--rf-text-2); font-weight: 500; }
   `,
@@ -106,13 +120,15 @@ export class RouteWeatherMapComponent {
   private readonly wx = inject(RouteWeatherService);
   private readonly layers = inject(LayerRegistry);
   private readonly ctx = inject(MapContext);
-  /** Phone: the route colours sit in the weather card and tags are left out, so the small map stays clear; tap instead of hover */
+  /** Phone: the metric picker sits in the weather card, the map keeps a one-line legend and short tags; tap instead of hover */
   readonly compact = input(false);
 
   protected readonly hover = signal<RouteHover | null>(null);
+  protected readonly title = computed(() => WeatherScale.title(this.ws.weatherMetric()));
+  protected readonly legend = computed(() => WeatherScale.legend(this.ws.weatherMetric()));
 
   private readonly layer = new RouteWeatherLayer();
-  private tags: Marker[] = [];
+  private tags: Pick<Marker, 'remove'>[] = [];
 
   /** Weather mode with a route, outside a fix preview (the preview draws its own route). */
   protected readonly shown = computed(() => this.ws.weatherMode() && !this.ws.store.preview() && this.wx.timeline() !== null);
@@ -132,9 +148,10 @@ export class RouteWeatherMapComponent {
     });
     effect(() => {
       const map = this.ctx.map();
-      // phones show the same values in the card right under the map, so the small map stays clear
-      const points = this.active() && !this.compact() ? this.wx.keyPoints() : [];
-      untracked(() => this.drawTags(map, points));
+      const points = this.active() ? this.wx.keyPoints() : [];
+      const metric = this.ws.weatherMetric();
+      const compact = this.compact();
+      untracked(() => this.drawTags(map, points, compact ? metric : null));
     });
     effect(() => {
       if (!this.active()) untracked(() => this.hover.set(null));
@@ -145,7 +162,7 @@ export class RouteWeatherMapComponent {
       off();
       offMap();
       offClick();
-      this.drawTags(null, []);
+      this.drawTags(null, [], null);
     });
   }
 
@@ -207,8 +224,11 @@ export class RouteWeatherMapComponent {
     };
   }
 
-  /** A weather tag above each route point; the return to the pilot shares the pilot's place, so it has none. */
-  private drawTags(map: MlMap | null, points: KeyPointWeatherVm[]): void {
+  /**
+   * A weather tag above each route point; the return to the pilot shares the pilot's place, so it has none.
+   * With a metric (phones) a tag holds the ETA and that value only.
+   */
+  private drawTags(map: MlMap | null, points: KeyPointWeatherVm[], metric: WeatherMetric | null): void {
     this.tags.forEach((m) => m.remove());
     this.tags = [];
     if (!map) return;
@@ -218,16 +238,34 @@ export class RouteWeatherMapComponent {
     for (const p of shown) {
       if (!p.reading) continue;
       const el = document.createElement('div');
-      el.className = `rf-wx-tag is-${p.level}`;
-      el.textContent = this.tagText(p);
+      el.className = `rf-wx-tag is-${p.level}${metric ? ' rf-wx-tag--compact' : ''}`;
+      el.textContent = metric ? `${p.eta} · ${RouteWeatherMapComponent.shortValue(p, metric)}` : this.tagText(p);
       el.setAttribute('aria-hidden', 'true');
-      this.tags.push(new Marker({ element: el, anchor: 'bottom', offset: [0, -20] }).setLngLat([p.point.lon, p.point.lat]).addTo(map));
+      this.tags.push(this.placeTag(map, el, p));
     }
+  }
+
+  protected placeTag(map: MlMap, el: HTMLElement, p: KeyPointWeatherVm): Pick<Marker, 'remove'> {
+    return new Marker({ element: el, anchor: 'bottom', offset: [0, -20] }).setLngLat([p.point.lon, p.point.lat]).addTo(map);
   }
 
   private tagText(p: KeyPointWeatherVm): string {
     const rain = p.rain === 'dry' ? '' : ` · ${p.rain}`;
     return `${p.eta} · ${p.temperature} · ${p.windSpeed} ${p.windCompass}${rain}`;
+  }
+
+  /** The value a phone tag shows for the metric the route is coloured by. */
+  static shortValue(p: KeyPointWeatherVm, metric: WeatherMetric): string {
+    switch (metric) {
+      case 'headwind':
+        return p.alongTrack || p.windSpeed;
+      case 'wind':
+        return `${p.windSpeed} ${p.windCompass}`.trim();
+      case 'temperature':
+        return p.temperature;
+      default:
+        return p.rain;
+    }
   }
 
   private samePlace(a: KeyPointWeatherVm, b: KeyPointWeatherVm): boolean {

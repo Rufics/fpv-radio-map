@@ -249,6 +249,14 @@ export class RouteWeatherService {
     };
   });
 
+  /** Which flight the weather is for: "Flying now" or "Planned flight · Thu 22 Oct"; empty without a route. */
+  readonly when = computed(() => {
+    const t = this.timeline();
+    const m = this.ws.mission();
+    if (!t || !m) return '';
+    return MissionTimelineBuilder.flownNow(m) ? 'Flying now' : `Planned flight · ${FlightClock.day(t.departureMs)}`;
+  });
+
   /** "15:00–15:27" for the flight, or empty without a route. */
   readonly window = computed(() => {
     const t = this.timeline();

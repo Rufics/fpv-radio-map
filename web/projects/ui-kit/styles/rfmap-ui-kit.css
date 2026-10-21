@@ -515,6 +515,10 @@ code {
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
+.rf-wx-tag--compact {
+  padding: 2px 6px;
+  font-size: 10px;
+}
 .rf-wx-tag.is-notable {
   border-color: var(--rf-warn-border);
   background: var(--rf-warn-bg);

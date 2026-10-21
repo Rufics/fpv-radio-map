@@ -43,6 +43,7 @@ describe('RouteWeatherService', () => {
     expect(wx.status()).toBe('idle');
     expect(wx.keyPoints()).toEqual([]);
     expect(wx.window()).toBe('');
+    expect(wx.when()).toBe('');
   });
 
   it('reads the weather at every route point at its arrival time', async () => {
@@ -60,6 +61,7 @@ describe('RouteWeatherService', () => {
     expect(wx.summary().map((s) => s.key)).toEqual(['wind', 'rain', 'temperature']);
     expect(wx.source()?.model).toContain('Open-Meteo');
     expect(wx.window()).toMatch(/^\d\d:\d\d–\d\d:\d\d$/);
+    expect(wx.when()).toBe('Flying now');
     expect(wx.usedInCalculation()).toBe(true);
     expect(wx.speedMps()).toBe(10);
   });
@@ -69,6 +71,7 @@ describe('RouteWeatherService', () => {
     store.newMission({ ...m, time: { mode: 'planned', utc: new Date(Date.now() + 40 * 86400e3).toISOString() } });
     await loaded();
     expect(wx.beyondForecast()).toBe(true);
+    expect(wx.when()).toMatch(/^Planned flight · \w{3},? \d+ \w{3}$/);
     expect(wx.summary()).toEqual([]);
     expect(wx.source()).toBeNull();
   });

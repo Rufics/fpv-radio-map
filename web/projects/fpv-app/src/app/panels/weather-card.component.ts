@@ -14,8 +14,9 @@ import { RouteColoursComponent } from './route-colours.component';
         <span id="wx-card-title" class="rf-eyebrow">Weather on the route</span>
         <span class="window rf-mono">{{ wx.window() }}</span>
       </div>
+      <div class="rf-caption when">{{ wx.when() }}</div>
       @if (routeColours()) {
-        <fpv-route-colours />
+        <fpv-route-colours [keys]="false" />
       }
       @switch (wx.status()) {
         @case ('loading') {
@@ -89,6 +90,7 @@ import { RouteColoursComponent } from './route-colours.component';
     .card { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: var(--rf-radius-lg); background: var(--rf-surface-1); border: 1px solid var(--rf-border); }
     .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
     .window { font-size: 12px; color: var(--rf-text-2); }
+    .when { margin-top: -6px; }
     .now { display: flex; align-items: center; gap: 12px; }
     .temp { font-size: 28px; font-weight: 500; }
     .now-text { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }

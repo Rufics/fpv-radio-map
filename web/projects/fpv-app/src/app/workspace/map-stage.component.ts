@@ -41,7 +41,7 @@ import { RouteWeatherMapComponent } from './route-weather-map.component';
   imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
-      <rf-map-view class="map" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
+      <rf-map-view class="map" [class.weather-mode]="weatherShown()" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
         <div class="overlay top-right">
           <div class="map-actions">
             <rf-base-switcher />
@@ -110,6 +110,8 @@ import { RouteWeatherMapComponent } from './route-weather-map.component';
   styles: `
     :host { position: relative; display: block; overflow: hidden; }
     .map { position: absolute; inset: 0; }
+    /* weather mode shows the weather, not the link results: the leg result labels step aside */
+    .map.weather-mode ::ng-deep .rf-leg-label { display: none; }
     .overlay { position: absolute; z-index: 3; }
     .top-right { top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-height: calc(100% - 32px); }
     .map-actions { display: flex; gap: 8px; align-items: center; }
@@ -166,6 +168,8 @@ export class MapStageComponent {
   );
   protected readonly dim = computed(() => !this.ws.mission() && !this.ws.placing());
   protected readonly hasRoute = computed(() => (this.ws.mission()?.waypoints.length ?? 0) > 0);
+  /** Weather mode on the map; a fix preview draws its own route, so it keeps the leg labels */
+  protected readonly weatherShown = computed(() => this.ws.weatherMode() && !this.ws.store.preview());
   protected readonly routeDeltaShown = computed(() => !!this.cmp.result()?.links?.[this.cmp.link()]?.points?.length && !this.ws.store.preview());
   protected readonly droneAgl = computed(() => this.ws.mission()?.coverage?.droneAglM ?? 120);
   protected readonly showHeatLegend = computed(() => !!this.ws.store.coverage()[this.ws.heatLink()] && this.layers.isVisible('results-coverage'));

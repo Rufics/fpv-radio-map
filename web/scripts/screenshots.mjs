@@ -50,6 +50,16 @@ try {
   await settle(laptop, 3000);
   await laptop.screenshot({ path: `${OUT}/laptop-briefing.png` });
   await laptop.getByRole('button', { name: 'Back to map' }).click();
+  // a planned flight: the mission time sets when the route is flown, and the weather follows it
+  await laptop.getByRole('button', { name: 'Planned', exact: true }).click();
+  await laptop.locator('fpv-mission-time input[type=time]').fill('10:00');
+  await laptop.locator('fpv-weather-card tbody tr').first().waitFor({ timeout: 10000 });
+  await settle(laptop, 2500);
+  await laptop.setViewportSize({ width: 1440, height: 1400 });
+  await settle(laptop, 1000);
+  await laptop.screenshot({ path: `${OUT}/laptop-planned-time.png` });
+  await laptop.setViewportSize({ width: 1440, height: 900 });
+  await laptop.getByRole('button', { name: 'Now', exact: true }).click();
   await laptop.getByRole('button', { name: 'Weather', exact: true }).click();
   await laptop.getByRole('button', { name: 'Show why' }).click();
   await settle(laptop, 5000);

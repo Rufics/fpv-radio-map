@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { SegmentedComponent, WeatherScale } from '@rfmap/ui-kit';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { RouteWeatherService } from '../core/route-weather.service';
@@ -9,14 +9,14 @@ import { RouteWeatherService } from '../core/route-weather.service';
   imports: [SegmentedComponent],
   template: `
     <rf-segmented label="Colour the route by" [options]="metrics" [value]="ws.weatherMetric()" (valueChange)="ws.weatherMetric.set($event)" />
-    @if (coloured()) {
+    @if (!coloured()) {
+      <div class="keys" role="status">{{ note() }}</div>
+    } @else if (keys()) {
       <div class="keys" aria-label="Route colours">
         @for (k of legend(); track k.label) {
           <span><i [style.background]="k.color"></i>{{ k.label }}</span>
         }
       </div>
-    } @else {
-      <div class="keys" role="status">{{ note() }}</div>
     }
   `,
   styles: `
@@ -30,6 +30,8 @@ import { RouteWeatherService } from '../core/route-weather.service';
 export class RouteColoursComponent {
   protected readonly ws = inject(FpvWorkspace);
   private readonly wx = inject(RouteWeatherService);
+  /** Off where the map carries the colour keys itself (phones) */
+  readonly keys = input(true);
 
   protected readonly metrics = WeatherScale.METRICS.map((value) => ({ value, label: WeatherScale.title(value) }));
   protected readonly legend = computed(() => WeatherScale.legend(this.ws.weatherMetric()));

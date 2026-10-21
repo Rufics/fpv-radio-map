@@ -48,6 +48,17 @@ describe('RouteColoursComponent', () => {
     expect(render().textContent).toContain('dry');
   });
 
+  it('leaves the legend out where the map carries it', async () => {
+    TestBed.inject(MissionStore).newMission(exampleMission());
+    await settle(() => wx.status() === 'ready');
+    const fixture = TestBed.createComponent(RouteColoursComponent);
+    fixture.componentRef.setInput('keys', false);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('[aria-label="Route colours"]')).toBeNull();
+    expect(el.querySelectorAll('button')).toHaveLength(4);
+  });
+
   it('says why the route is not coloured: failed or beyond the forecast', async () => {
     const store = TestBed.inject(MissionStore);
     const spy = vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockRejectedValue(new Error('down'));
