@@ -8,7 +8,9 @@
 #include <pqxx/pqxx>
 
 #include "logger.hpp"
+#include "metrics.hpp"
 
+#include <atomic>
 #include <condition_variable>
 #include <filesystem>
 #include <functional>
@@ -57,6 +59,8 @@ public:
     /// Returns the names applied.
     std::vector<std::string> migrate(const std::filesystem::path& sqlDir);
 
+    [[nodiscard]] DbPoolStats stats();
+
 private:
     /// Returns a leased connection to the pool and wakes one waiting lease.
     void giveBack(std::unique_ptr<pqxx::connection> c);
@@ -70,7 +74,13 @@ private:
     };
 
     std::string url_;
+    int size_ = 0;
     std::mutex mutex_;
+    // Guarded by mutex_, except reconnects_, which the lease updates outside the lock.
+    int waiting_ = 0;
+    std::uint64_t leases_ = 0;
+    double waitSeconds_ = 0.0;
+    std::atomic<std::uint64_t> reconnects_{0};
     std::condition_variable available_;
     std::vector<std::unique_ptr<pqxx::connection>> idle_;
     Logger log_;

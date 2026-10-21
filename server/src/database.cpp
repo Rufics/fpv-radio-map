@@ -1,6 +1,7 @@
 #include "database.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -8,21 +9,33 @@
 
 namespace rfmap {
 
-Database::Database(std::string url, int poolSize) : url_(std::move(url)) {
-    for (int i = 0; i < std::max(1, poolSize); ++i) idle_.push_back(std::make_unique<pqxx::connection>(url_));
+Database::Database(std::string url, int poolSize) : url_(std::move(url)), size_(std::max(1, poolSize)) {
+    for (int i = 0; i < size_; ++i) idle_.push_back(std::make_unique<pqxx::connection>(url_));
 }
 
 Database::Lease::Lease(Database& d) : db(d) {
+    const auto asked = std::chrono::steady_clock::now();
     std::unique_lock lock(db.mutex_);
+    ++db.waiting_;
     db.available_.wait(lock, [this] { return !db.idle_.empty(); });
+    --db.waiting_;
+    ++db.leases_;
+    db.waitSeconds_ += std::chrono::duration<double>(std::chrono::steady_clock::now() - asked).count();
     conn = std::move(db.idle_.back());
     db.idle_.pop_back();
+}
+
+DbPoolStats Database::stats() {
+    const std::lock_guard lock(mutex_);
+    return {size_, static_cast<int>(idle_.size()), waiting_, leases_, waitSeconds_,
+            reconnects_.load(std::memory_order_relaxed)};
 }
 
 Database::Lease::~Lease() {
     if (broken || !conn->is_open()) {
         try {
             conn = std::make_unique<pqxx::connection>(db.url_);
+            db.reconnects_.fetch_add(1, std::memory_order_relaxed);
         } catch (const pqxx::failure& e) {
             // Keep the dead one: the next lease fails fast with a clear error instead of hanging.
             db.log_.warn("database", std::string("reconnect failed: ") + e.what());

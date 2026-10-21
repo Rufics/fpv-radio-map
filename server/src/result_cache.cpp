@@ -106,6 +106,14 @@ void ResultCache::clearTable() {
     if (table_) table_->clear();
 }
 
+CacheStats ResultCache::tableCounts() const {
+    std::lock_guard lock(mutex_);
+    CacheStats s;
+    s.hits = tableHits_;
+    s.misses = tableMisses_;
+    return s;
+}
+
 ResultCache::TableStats ResultCache::tableStats() const {
     const IResultTable::Usage u = table_ ? table_->usage() : IResultTable::Usage{0, 0};
     std::lock_guard lock(mutex_);
