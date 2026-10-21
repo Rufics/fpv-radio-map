@@ -23,6 +23,7 @@ from perfkit.environment import Environment
 from perfkit.errors import PerfError
 from perfkit.history import History, RunRecord
 from perfkit.measure import Collection, Measurement
+from perfkit.report import ReportRunner
 from perfkit.timeline import Timeline, utc_now
 
 
@@ -70,8 +71,9 @@ class SessionSettings:
 
 class RunSession:
     def __init__(self, settings: SessionSettings, environment: Environment, output: TextIO,
-                 clock: Callable[[], str] = utc_now):
+                 clock: Callable[[], str] = utc_now, reports: ReportRunner | None = None):
         self._settings = settings
+        self._reports = reports
         self._environment = environment
         self._output = output
         self._clock = clock
@@ -101,10 +103,13 @@ class RunSession:
             history.close()
         self._write(run_dir, record, timeline, comparisons)
         ConsoleTable(self._output).print(run_dir, comparisons)
-        for problem in suite.problems():
+        problems = suite.problems()
+        if self._reports is not None:
+            problems = problems + self._reports.render(run_dir, self._settings.results_dir, self._output)
+        for problem in problems:
             print(f"problem: {problem}", file=self._output)
         failed = [c for c in comparisons if c.gated and c.verdict is Verdict.REGRESSION]
-        return 1 if (failed and self._settings.gate) or suite.problems() else 0
+        return 1 if (failed and self._settings.gate) or problems else 0
 
     def _run_dir(self) -> Path:
         stamp = self._clock().replace("-", "").replace(":", "").split(".")[0] + "Z"

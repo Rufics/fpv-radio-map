@@ -6,12 +6,13 @@ from typing import TextIO
 
 from dataset import DatasetError, DatasetManifest
 
-from perfkit.catalog import Catalog, CatalogLoader, KindRegistry
+from perfkit.catalog import Catalog, CatalogLoader, Item, KindRegistry
 from perfkit.commands import CommandRunner
 from perfkit.environment import BuildProbe, Environment, GitProbe, HostProbe, Probe
 from perfkit.errors import PerfError, Problem
 from perfkit.lock import LockComparer, LockFile, Mode
 from perfkit.micro import MicroBuild, MicroOptions, MicroSuite
+from perfkit.report import ReportRunner
 from perfkit.scenario import Dataset, ScenarioSuite
 from perfkit.session import RunSession, SessionSettings, Suite
 from perfkit.stand import Stand, StandLimits, StandSettings
@@ -53,6 +54,7 @@ class PerfCli:
                          help="run folders and history.sqlite (default: %(default)s)")
         run.add_argument("--window", type=int, default=10, help="earlier runs in the baseline (default: 10)")
         run.add_argument("--no-gate", action="store_true", help="exit 0 even when a measurement regressed")
+        run.add_argument("--no-report", action="store_true", help="write no reports (report.html, summary.md)")
         stand = run.add_argument_group("HTTP scenarios")
         stand.add_argument("--dataset", type=Path, help="the folder dataset.py built (its --out)")
         stand.add_argument("--port", type=int, default=18080,
@@ -70,6 +72,12 @@ class PerfCli:
                            help="local port of the stand's Prometheus (default: %(default)s)")
         stand.add_argument("--grafana-port", type=int, default=13000,
                            help="local port of the stand's Grafana with --keep-stand (default: %(default)s)")
+        report = commands.add_parser("report", help="write the reports of a run folder again")
+        report.add_argument("run_dir", type=Path, metavar="RUN_DIR", help="a run folder, results/<UTC time>")
+        report.add_argument("--reporter", action="append", default=[], metavar="ID",
+                            help="only this reporter; repeat for more (default: all)")
+        report.add_argument("--results-dir", type=Path,
+                            help="folder with history.sqlite for the trends (default: the run folder's parent)")
         return parser
 
     def main(self, argv: list[str] | None = None) -> int:
@@ -81,6 +89,8 @@ class PerfCli:
                 return self._list(catalog, problems, args.kind, registry)
             if args.command == "run":
                 return self._run(catalog, problems, args)
+            if args.command == "report":
+                return self._render(catalog, problems, args)
             return self._catalog(catalog, problems, Mode(args.action))
         except PerfError as error:
             print(f"error: {error}", file=self._errors)
@@ -126,7 +136,33 @@ class PerfCli:
             probes.append(BuildProbe(build_dir))
         environment = Environment(probes)
         settings = SessionSettings(args.results_dir.resolve(), gate=not args.no_gate, window=args.window)
-        return RunSession(settings, environment, self._output).run(suite)
+        scenario = None if args.suite else catalog.get("scenario", args.scenario)
+        wanted = scenario.manifest.get("reporters", []) if scenario else []
+        reports = None if args.no_report else ReportRunner(self._reporters(catalog, wanted))
+        return RunSession(settings, environment, self._output, reports=reports).run(suite)
+
+    def _render(self, catalog: Catalog, problems: list[Problem], args: argparse.Namespace) -> int:
+        if problems:
+            return self._report(catalog, problems)
+        run_dir = args.run_dir.resolve()
+        results_dir = args.results_dir.resolve() if args.results_dir else run_dir.parent
+        failed = ReportRunner(self._reporters(catalog, args.reporter)).render(run_dir, results_dir, self._output)
+        for problem in failed:
+            print(f"problem: {problem}", file=self._errors)
+        return 1 if failed else 0
+
+    @staticmethod
+    def _reporters(catalog: Catalog, wanted: list[str]) -> list[Item]:
+        """The reporters by id, or all of the catalog when none is named."""
+        if not wanted:
+            return catalog.items("reporter")
+        found = []
+        for reporter_id in wanted:
+            item = catalog.get("reporter", reporter_id)
+            if item is None:
+                raise PerfError(f"no reporter {reporter_id}; perf.py list --kind reporter shows them")
+            found.append(item)
+        return found
 
     def _micro(self, catalog: Catalog, args: argparse.Namespace, build_dir: Path) -> Suite:
         build = MicroBuild(REPO_DIR, build_dir, catalog.root)

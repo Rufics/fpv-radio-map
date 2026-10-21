@@ -199,6 +199,25 @@ Notes:
 - Behind a proxy, Docker needs the proxy for pulls and builds; with Docker Hub rate limits, a
   registry mirror in `/etc/docker/daemon.json` helps.
 
+## Reports
+
+At the end of every `run`, each `reporter` extension writes its file into the run folder
+(`--no-report` skips them; a scenario's `reporters` picks some instead of all):
+
+| reporter | writes |
+|---|---|
+| `html` | `report.html`: the verdict, the environment (machine, build, server and PostgreSQL settings), the timeline of phases, a chart per Prometheus query with the phases and load stages shaded, the trend of every gated measurement over the last 30 runs on the same host and dataset (baseline, allowed change and a marker where an item changed its version), and every measurement |
+| `markdown` | `summary.md`: the verdict and the gated measurements in GitHub Markdown, for a pull request |
+
+```bash
+python3 -I tools/perf/perf.py report tools/perf/results/<run> [--reporter html]
+```
+
+writes them again, for example for older runs after a reporter changed. `report.html` is one
+static file; Plotly comes from jsDelivr, pinned with its integrity hash (option `plotly` of the
+`html` reporter points elsewhere). A reporter is a class derived from `perfkit.report.Reporter`
+whose `render()` gets the run's files and the trends.
+
 ## Terrain dataset (`dataset.py`)
 
 Load tests must run against the same terrain every time, or results of different builds cannot

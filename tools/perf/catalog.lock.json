@@ -49,6 +49,14 @@
       "version": "1.0.0",
       "sha256": "cc0d7e1893348f8671561776360edad031ec6d4aa7f3016cc6ac5ba54a203260"
     },
+    "reporter/html": {
+      "version": "1.0.0",
+      "sha256": "fba80211230817f8aa9b9ed8ee2868f21674af9827c7ba9a5a579baf5e4e9d8e"
+    },
+    "reporter/markdown": {
+      "version": "1.0.0",
+      "sha256": "8535ff93a4efbd96d9bdc63b52e9c793c2cbecb3212c266b6fcd99cdff9ab15b"
+    },
     "scenario/peak": {
       "version": "1.1.0",
       "sha256": "c3b7bff1d48c77a720ff540eecd4fcced8f55ef72704aaba080da6ee14c642a9"
