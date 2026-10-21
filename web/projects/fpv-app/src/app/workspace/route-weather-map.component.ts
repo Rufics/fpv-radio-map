@@ -9,7 +9,6 @@ import {
   RouteTimeline,
   RouteWeather,
   RouteWeatherLayer,
-  SegmentedComponent,
   WeatherMetric,
   WeatherReading,
   WeatherRibbonSegment,
@@ -18,6 +17,7 @@ import {
 } from '@rfmap/ui-kit';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { FlightClock, KeyPointWeatherVm, RouteWeatherService } from '../core/route-weather.service';
+import { RouteColoursComponent } from '../panels/route-colours.component';
 
 /** Read-out of the weather where the cursor (or a tap) meets the route. */
 interface RouteHover {
@@ -71,24 +71,18 @@ export class WeatherRibbon {
 }
 
 /**
- * Weather on the map: a ribbon beside the route coloured by the chosen value, a weather tag at each
- * route point, and a read-out where the cursor (or a tap) meets the route.
+ * Weather mode on the map: the route recoloured by the chosen value with its legend, a weather tag
+ * at each route point, and a read-out where the cursor (or a tap) meets the route. Outside weather
+ * mode it draws nothing.
  */
 @Component({
   selector: 'fpv-route-weather-map',
-  imports: [SegmentedComponent],
+  imports: [RouteColoursComponent],
   template: `
+    @if (shown() && !compact()) {
+      <fpv-route-colours class="metric" role="group" aria-label="Route colours in weather mode" />
+    }
     @if (active()) {
-      @if (!compact()) {
-        <div class="metric">
-          <rf-segmented label="Colour the weather ribbon by" [options]="metrics" [value]="metric()" (valueChange)="metric.set($event)" />
-          <div class="keys" aria-label="Ribbon colours">
-            @for (k of legend(); track k.label) {
-              <span><i [style.background]="k.color"></i>{{ k.label }}</span>
-            }
-          </div>
-        </div>
-      }
       @if (hover(); as h) {
         <div class="hover" role="status" [style.left.px]="h.x" [style.top.px]="h.y">
           <b>{{ h.title }}</b>
@@ -102,10 +96,7 @@ export class WeatherRibbon {
   styles: `
     :host { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
     .metric { position: absolute; left: 14px; top: 16px; pointer-events: auto; padding: 8px; border-radius: var(--rf-radius-lg); background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); display: flex; flex-direction: column; gap: 6px; }
-    .metric ::ng-deep .rf-segmented > button { height: 28px; font-size: 12px; padding: 0 10px; }
-    .keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--rf-text-2); max-width: 320px; }
-    .keys span { display: inline-flex; align-items: center; gap: 4px; }
-    .keys i { width: 14px; height: 5px; border-radius: 2px; }
+
     .hover { position: absolute; transform: translate(14px, 14px); max-width: 280px; padding: 8px 10px; border-radius: var(--rf-radius-md); background: rgba(16, 22, 29, 0.97); border: 1px solid var(--rf-border-strong); display: flex; flex-direction: column; gap: 3px; font-size: 12px; font-family: var(--rf-font-mono); color: var(--rf-text); }
     .hover b { font-family: var(--rf-font-sans); font-size: 12px; color: var(--rf-text-2); font-weight: 500; }
   `,
@@ -115,23 +106,23 @@ export class RouteWeatherMapComponent {
   private readonly wx = inject(RouteWeatherService);
   private readonly layers = inject(LayerRegistry);
   private readonly ctx = inject(MapContext);
-  /** Phone: no metric picker and no tags, tap instead of hover */
+  /** Phone: the route colours sit in the weather card and tags are left out, so the small map stays clear; tap instead of hover */
   readonly compact = input(false);
 
-  protected readonly metrics = WeatherScale.METRICS.map((value) => ({ value, label: WeatherScale.title(value) }));
-  protected readonly metric = signal<WeatherMetric>('headwind');
   protected readonly hover = signal<RouteHover | null>(null);
-  protected readonly legend = computed(() => WeatherScale.legend(this.metric()));
 
   private readonly layer = new RouteWeatherLayer();
   private tags: Marker[] = [];
 
-  /** Shown while the layer is on, outside a fix preview, with forecasts on the route. */
+  /** Weather mode with a route, outside a fix preview (the preview draws its own route). */
+  protected readonly shown = computed(() => this.ws.weatherMode() && !this.ws.store.preview() && this.wx.timeline() !== null);
+
+  /** Shown, with forecasts on the route to colour it by. */
   protected readonly active = computed(() => {
     const route = this.wx.route();
-    const on = this.layers.layers().some((e) => e.def.id === this.layer.id && e.visible);
-    return on && !this.ws.store.preview() && route !== null && !route.empty;
+    return this.shown() && route !== null && !route.empty;
   });
+
 
   constructor() {
     const off = this.layers.register(this.layer);
@@ -161,7 +152,7 @@ export class RouteWeatherMapComponent {
   private ribbon(): WeatherRibbonSegment[] {
     const t = this.wx.timeline();
     const r = this.wx.route();
-    return t && r ? new WeatherRibbon(t, r).segments(this.metric()) : [];
+    return t && r ? new WeatherRibbon(t, r).segments(this.ws.weatherMetric()) : [];
   }
 
   /** Mouse move and leave on the map, attached once the map exists. */

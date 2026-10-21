@@ -12,6 +12,7 @@ import {
   RfFormat,
   RouteResult,
   Tone,
+  WeatherMetric,
   distanceM,
   linksEvaluated,
 } from '@rfmap/ui-kit';
@@ -103,6 +104,10 @@ export class FpvWorkspace {
   /** "Show why" selection */
   readonly why = signal<{ leg: number; link: LinkKind } | null>(null);
   readonly shareOpen = signal(false);
+  /** Weather mode: the route coloured by the weather, the weather card and tags; off by default */
+  readonly weatherMode = signal(false);
+  /** The weather value that colours the route in weather mode */
+  readonly weatherMetric = signal<WeatherMetric>('headwind');
   /** Pre-flight weather briefing over the map */
   readonly briefingOpen = signal(false);
   readonly layersOpen = signal(false);
@@ -413,6 +418,7 @@ export class FpvWorkspace {
     this.placing.set(null);
     this.editingRoute.set(false);
     this.briefingOpen.set(false);
+    this.weatherMode.set(false);
     this.store.clear();
   }
 }

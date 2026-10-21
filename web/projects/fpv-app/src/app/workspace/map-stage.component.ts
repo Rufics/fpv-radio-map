@@ -48,6 +48,11 @@ import { RouteWeatherMapComponent } from './route-weather-map.component';
             <button type="button" class="rf-btn rf-btn--sm map-btn" [attr.aria-expanded]="ws.layersOpen()" (click)="ws.layersOpen.set(!ws.layersOpen())">
               <span aria-hidden="true">◫</span> Layers
             </button>
+            @if (hasRoute()) {
+              <button type="button" class="rf-btn rf-btn--sm map-btn" [class.is-on]="ws.weatherMode()" [attr.aria-pressed]="ws.weatherMode()" (click)="ws.weatherMode.set(!ws.weatherMode())">
+                <span aria-hidden="true">☁</span> Weather
+              </button>
+            }
           </div>
           @if (ws.layersOpen()) {
             <rf-layer-panel
@@ -109,6 +114,7 @@ import { RouteWeatherMapComponent } from './route-weather-map.component';
     .top-right { top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-height: calc(100% - 32px); }
     .map-actions { display: flex; gap: 8px; align-items: center; }
     .map-btn { background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); }
+    .map-btn.is-on { border-color: var(--rf-ok); color: var(--rf-ok-text); background: var(--rf-ok-bg); }
     .delta-scale { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #FF6B5B, #8A96A5 50%, #35D0BA); }
     .delta-keys { display: flex; justify-content: space-between; font-size: 11px; }
     .legend { width: 240px; padding: 10px 12px; border-radius: var(--rf-radius-lg); background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--rf-text-2); }
@@ -159,6 +165,7 @@ export class MapStageComponent {
     () => this.interactiveEdit() && this.ws.store.canEdit() && !this.ws.store.preview() && !this.ws.store.busy(),
   );
   protected readonly dim = computed(() => !this.ws.mission() && !this.ws.placing());
+  protected readonly hasRoute = computed(() => (this.ws.mission()?.waypoints.length ?? 0) > 0);
   protected readonly routeDeltaShown = computed(() => !!this.cmp.result()?.links?.[this.cmp.link()]?.points?.length && !this.ws.store.preview());
   protected readonly droneAgl = computed(() => this.ws.mission()?.coverage?.droneAglM ?? 120);
   protected readonly showHeatLegend = computed(() => !!this.ws.store.coverage()[this.ws.heatLink()] && this.layers.isVisible('results-coverage'));

@@ -36,7 +36,11 @@ try {
   await laptop.getByText('Recalculate').or(laptop.getByText('Calculated')).first().waitFor({ timeout: 20000 }).catch(() => {});
   await settle(laptop, 4500);
   await laptop.screenshot({ path: `${OUT}/laptop-result.png` });
-  // weather on the route: the read-out where the cursor meets leg 3, then the pre-flight briefing
+  // weather mode: the route coloured by the weather, the read-out where the cursor meets leg 3,
+  // then the pre-flight briefing; weather mode is switched off again for the shots after it
+  await laptop.getByRole('button', { name: 'Weather', exact: true }).click();
+  await laptop.locator('fpv-weather-card tbody tr').first().waitFor({ timeout: 10000 });
+  await settle(laptop, 1500);
   const wp2 = await laptop.locator('.rf-marker--waypoint', { hasText: '2' }).boundingBox();
   const target = await laptop.locator('.rf-marker--target').boundingBox();
   await laptop.mouse.move((wp2.x + wp2.width / 2 + target.x + target.width / 2) / 2, (wp2.y + wp2.height / 2 + target.y + target.height / 2) / 2);
@@ -46,6 +50,7 @@ try {
   await settle(laptop, 3000);
   await laptop.screenshot({ path: `${OUT}/laptop-briefing.png` });
   await laptop.getByRole('button', { name: 'Back to map' }).click();
+  await laptop.getByRole('button', { name: 'Weather', exact: true }).click();
   await laptop.getByRole('button', { name: 'Show why' }).click();
   await settle(laptop, 5000);
   await laptop.screenshot({ path: `${OUT}/laptop-why.png` });
@@ -129,9 +134,15 @@ try {
   await phone.waitForURL(/\/mission\//, { timeout: 10000 });
   await settle(phone, 3500);
   await phone.screenshot({ path: `${OUT}/phone-mission.png` });
+  await phone.getByRole('button', { name: 'Weather', exact: true }).click();
+  await phone.locator('fpv-weather-card tbody tr').first().waitFor({ timeout: 10000 });
+  await settle(phone, 1500);
+  await phone.screenshot({ path: `${OUT}/phone-weather-map.png` });
   await phone.locator('fpv-weather-card').scrollIntoViewIfNeeded();
   await settle(phone, 300);
   await phone.screenshot({ path: `${OUT}/phone-weather.png` });
+  await phone.getByRole('button', { name: 'Weather', exact: true }).click();
+  await settle(phone, 500);
   const failing = phone.locator('button.leg.bad').first();
   if (await failing.count()) {
     await failing.click();

@@ -220,6 +220,6 @@ describe('RouteWeatherLayer', () => {
     const data = setData.mock.calls[0][0];
     expect(data.features).toHaveLength(1);
     expect(data.features[0].properties.color).toBe('#FF6B5B');
-    expect(layer.styleLayerIds()).toEqual(['route-weather']);
+    expect(layer.styleLayerIds()).toEqual(['route-weather-casing', 'route-weather']);
   });
 });

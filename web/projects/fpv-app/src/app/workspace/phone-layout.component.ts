@@ -68,8 +68,8 @@ import { MapStageComponent } from './map-stage.component';
               }
             }
           </div>
-          @if (ws.mission()!.waypoints.length) {
-            <fpv-weather-card />
+          @if (ws.weatherMode() && ws.mission()!.waypoints.length) {
+            <fpv-weather-card [routeColours]="true" />
           }
           @if (!ws.store.result() && ws.store.canEdit()) {
             <button type="button" class="rf-btn rf-btn--primary" (click)="ws.store.calculate()" [disabled]="busy()">{{ busy() ? 'Calculating…' : 'Calculate' }}</button>

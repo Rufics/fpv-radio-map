@@ -19,6 +19,7 @@ describe('weather card and briefing, rendered', () => {
     TestBed.configureTestingModule({ providers: [provideMapView()] });
     await MockApiHarness.settle(TestBed.inject(FpvDataService).load());
     wx = TestBed.inject(RouteWeatherService);
+    TestBed.inject(FpvWorkspace).weatherMode.set(true);
   });
 
   afterEach(() => MockApiHarness.tearDown());
@@ -47,6 +48,16 @@ describe('weather card and briefing, rendered', () => {
     expect(button.disabled).toBe(false);
     button.click();
     expect(TestBed.inject(FpvWorkspace).briefingOpen()).toBe(true);
+  });
+
+  it('card: carries the route colours on phones only', async () => {
+    TestBed.inject(MissionStore).newMission(exampleMission());
+    await settle(() => wx.status() === 'ready');
+    expect(render(WeatherCardComponent).querySelector('fpv-route-colours')).toBeNull();
+    const fixture = TestBed.createComponent(WeatherCardComponent);
+    fixture.componentRef.setInput('routeColours', true);
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('fpv-route-colours')).not.toBeNull();
   });
 
   it('card: loading, error with a retry, and beyond the forecast', async () => {

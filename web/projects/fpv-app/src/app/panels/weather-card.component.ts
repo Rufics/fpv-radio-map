@@ -1,17 +1,22 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { RfFormat } from '@rfmap/ui-kit';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { FALLBACK_SPEED_MPS, RouteWeatherService } from '../core/route-weather.service';
+import { RouteColoursComponent } from './route-colours.component';
 
 /** Side panel card: the weather at each route point at its arrival time, and what changes along the route. */
 @Component({
   selector: 'fpv-weather-card',
+  imports: [RouteColoursComponent],
   template: `
     <section class="card" aria-labelledby="wx-card-title">
       <div class="head">
         <span id="wx-card-title" class="rf-eyebrow">Weather on the route</span>
         <span class="window rf-mono">{{ wx.window() }}</span>
       </div>
+      @if (routeColours()) {
+        <fpv-route-colours />
+      }
       @switch (wx.status()) {
         @case ('loading') {
           <div class="rf-caption" role="status">Loading the forecast along the route…</div>
@@ -108,6 +113,8 @@ import { FALLBACK_SPEED_MPS, RouteWeatherService } from '../core/route-weather.s
 export class WeatherCardComponent {
   protected readonly ws = inject(FpvWorkspace);
   protected readonly wx = inject(RouteWeatherService);
+  /** Phone: the route colour picker and legend sit here instead of over the small map */
+  readonly routeColours = input(false);
   protected readonly launch = computed(() => this.wx.keyPoints()[0] ?? null);
   protected readonly isReturn = computed(() => this.ws.mission()?.returnToPilot !== false);
 

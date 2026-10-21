@@ -33,6 +33,7 @@ describe('weather views', () => {
     store = TestBed.inject(MissionStore);
     await MockApiHarness.settle(TestBed.inject(FpvDataService).load());
     wx = TestBed.inject(RouteWeatherService);
+    TestBed.inject(FpvWorkspace).weatherMode.set(true);
   });
 
   afterEach(() => MockApiHarness.tearDown());

@@ -1,8 +1,9 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import type { Map as MlMap } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LayerRegistry, MapContext, MissionStore, provideMapView } from '@rfmap/ui-kit';
+import { MapContext, MissionStore, provideMapView } from '@rfmap/ui-kit';
 import { FpvDataService } from '../core/fpv-data.service';
+import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { RouteWeatherService } from '../core/route-weather.service';
 import { exampleMission } from '../mock/reference-case';
 import { MockApiHarness } from '../tests/mock-api-harness';
@@ -15,9 +16,8 @@ interface Hover {
 
 interface MapVm {
   active: () => boolean;
+  shown: () => boolean;
   hover: () => Hover | null;
-  legend: () => { label: string }[];
-  metric: { set: (m: string) => void };
 }
 
 /** Weather read-outs on the map, against a stand-in map that projects degrees to pixels. */
@@ -43,6 +43,7 @@ describe('RouteWeatherMapComponent', () => {
     wx = TestBed.inject(RouteWeatherService);
     ctx = TestBed.inject(MapContext);
     ctx.map.set(fakeMap);
+    TestBed.inject(FpvWorkspace).weatherMode.set(true);
     fixture = TestBed.createComponent(RouteWeatherMapComponent);
     fixture.componentRef.setInput('compact', true);
     TestBed.inject(MissionStore).newMission(exampleMission());
@@ -64,11 +65,13 @@ describe('RouteWeatherMapComponent', () => {
     return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
   }
 
-  it('is active with forecasts on the route and the layer on', () => {
+  it('is active in weather mode with forecasts on the route, and draws nothing outside it', () => {
     expect(vm().active()).toBe(true);
-    TestBed.inject(LayerRegistry).setVisible('results-route-weather', false);
+    TestBed.inject(FpvWorkspace).weatherMode.set(false);
     expect(vm().active()).toBe(false);
+    expect(vm().shown()).toBe(false);
   });
+
 
   it('reads the weather where the cursor meets the route, and clears it off the route', () => {
     handlers.get('mousemove')!({ point: midLeg(2) });
@@ -89,8 +92,4 @@ describe('RouteWeatherMapComponent', () => {
     expect(vm().hover()?.title).toMatch(/^Leg 2 · WP1 → WP2/);
   });
 
-  it('changes the legend with the metric', () => {
-    vm().metric.set('rain');
-    expect(vm().legend()[0].label).toBe('dry');
-  });
 });

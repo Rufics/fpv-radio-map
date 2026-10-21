@@ -4,6 +4,7 @@ import { MissionStore, RfmapApiClient, RouteTimeline, WeatherPoint, provideMapVi
 import { exampleMission } from '../mock/reference-case';
 import { MockApiHarness } from '../tests/mock-api-harness';
 import { FpvDataService } from './fpv-data.service';
+import { FpvWorkspace } from './fpv-workspace.service';
 import { FALLBACK_SPEED_MPS, FlightClock, ForecastCache, LimitedRunner, MissionTimelineBuilder, RouteWeatherService } from './route-weather.service';
 
 /** Weather along the route from the dev mock backend's /weather/point. */
@@ -17,6 +18,7 @@ describe('RouteWeatherService', () => {
     store = TestBed.inject(MissionStore);
     await MockApiHarness.settle(TestBed.inject(FpvDataService).load());
     wx = TestBed.inject(RouteWeatherService);
+    TestBed.inject(FpvWorkspace).weatherMode.set(true);
   });
 
   afterEach(() => MockApiHarness.tearDown());
@@ -25,6 +27,16 @@ describe('RouteWeatherService', () => {
     TestBed.tick();
     for (let i = 0; i < 100 && wx.status() !== 'ready' && wx.status() !== 'error'; i++) await MockApiHarness.wait(100);
   }
+
+  it('asks for no forecast outside weather mode', async () => {
+    const spy = vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint');
+    TestBed.inject(FpvWorkspace).weatherMode.set(false);
+    store.newMission(exampleMission());
+    TestBed.tick();
+    await MockApiHarness.wait(1000);
+    expect(wx.status()).toBe('idle');
+    expect(spy).not.toHaveBeenCalled();
+  });
 
   it('stays idle without a route', () => {
     TestBed.tick();

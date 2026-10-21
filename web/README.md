@@ -64,7 +64,7 @@ Demo data:
 | `coverage/` | Heatmap with the 4-colour scale (`CoverageLayer`), radio and battery limits, and scenario difference: `subtractGrids`, `CoverageDeltaLayer`, `RouteDeltaLayer` and `DeltaScale` (▲/▼ marks as well as colour). |
 | `charts/` | SVG terrain profile with the Fresnel zone and earth bulge, and the link-budget waterfall. |
 | `tools/` | Geo helpers and `RouteTool` (markers, legs, drag, add point). |
-| `weather/` | Weather along the route: `RouteTimeline` (arrival time at each place at the cruise speed), `RouteWeather` (forecast samples read at any distance, head/tail wind per leg), `WeatherScale` (classes and colours), `RouteWeatherLayer` (the ribbon beside the route) and `PolylineHitTest` (hover read-outs). |
+| `weather/` | Weather along the route: `RouteTimeline` (arrival time at each place at the cruise speed), `RouteWeather` (forecast samples read at any distance, head/tail wind per leg), `WeatherScale` (classes and colours), `RouteWeatherLayer` (the route recoloured by the weather in weather mode) and `PolylineHitTest` (hover read-outs). |
 | `state/` | `RfmapApiClient` (one method per contract operation), `MissionStore` (signals; save, calculate, job parts, preview fix with JSON merge patch), `CredentialStore` and `applyMergePatch`. |
 | `modules/` | `ModuleUiLoader`: runtime UI bundles (see below). |
 | `export/` | `MissionExporter`, a client-side KML/GPX fallback that writes AGL heights. |

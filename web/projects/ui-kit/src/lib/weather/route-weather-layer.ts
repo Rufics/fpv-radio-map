@@ -3,7 +3,7 @@ import type { GeoJSONSource, LayerSpecification, SourceSpecification } from 'map
 import { StyleLayerSet } from '../layers/layer-definition';
 import { LatLon } from '../tools/geo';
 
-/** One coloured piece of the weather ribbon. */
+/** One coloured piece of the route in weather mode. */
 export interface WeatherRibbonSegment {
   from: LatLon;
   to: LatLon;
@@ -11,16 +11,17 @@ export interface WeatherRibbonSegment {
 }
 
 /**
- * Weather along the route: a ribbon beside the route line, coloured by the chosen weather value
- * at the time the drone is expected there. It runs beside the line, not over it, so the radio
- * verdict colours of the legs stay readable.
+ * The route in weather mode: the same single line per leg, recoloured by the chosen weather value
+ * at the time the drone is expected there. It is drawn right over the route line, on a solid
+ * casing, so the radio colours and dashes under it do not show through. Nothing is drawn outside
+ * weather mode.
  */
 export class RouteWeatherLayer extends StyleLayerSet {
-  readonly id = 'results-route-weather';
-  readonly title = 'Weather along the route';
-  readonly group = 'results' as const;
-  override readonly order = 4;
-  override readonly legend = 'Forecast at the time the drone is there; hover the route for values';
+  readonly id = 'mission-route-weather';
+  readonly title = 'Route weather';
+  readonly group = 'mission' as const;
+  override readonly order = 1;
+  override readonly internal = true;
   private data: FeatureCollection<LineString> = { type: 'FeatureCollection', features: [] };
 
   protected sources(): Record<string, SourceSpecification> {
@@ -28,14 +29,10 @@ export class RouteWeatherLayer extends StyleLayerSet {
   }
 
   protected layers(): LayerSpecification[] {
+    const layout = { 'line-cap': 'round', 'line-join': 'round' } as const;
     return [
-      {
-        id: 'route-weather',
-        type: 'line',
-        source: 'rf-route-weather',
-        layout: { 'line-cap': 'butt', 'line-join': 'round' },
-        paint: { 'line-color': ['get', 'color'], 'line-width': 5, 'line-offset': 9, 'line-opacity': 0.9 },
-      },
+      { id: 'route-weather-casing', type: 'line', source: 'rf-route-weather', layout, paint: { 'line-color': '#0B0F14', 'line-width': 10 } },
+      { id: 'route-weather', type: 'line', source: 'rf-route-weather', layout, paint: { 'line-color': ['get', 'color'], 'line-width': 4 } },
     ];
   }
 

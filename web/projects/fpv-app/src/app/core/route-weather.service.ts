@@ -168,8 +168,9 @@ export class MissionTimelineBuilder {
 
 /**
  * Weather along the mission's route at the time the drone is expected at each place: the route
- * points and samples about every kilometre, from the server's /weather/point. Used by the side
- * panel card, the briefing and the map; it does not change what the calculation uses.
+ * points and samples about every kilometre, from the server's /weather/point. Loaded in weather
+ * mode only, for the side panel card, the briefing and the map; it does not change what the
+ * calculation uses.
  */
 @Injectable({ providedIn: 'root' })
 export class RouteWeatherService {
@@ -196,7 +197,9 @@ export class RouteWeatherService {
     return new RouteTimeline(MissionTimelineBuilder.stops(m), MissionTimelineBuilder.departureMs(m, this.nowMs()), this.speedMps());
   });
 
+  /** What to load; nothing outside weather mode, so the plain workspace asks for no forecasts. */
   private readonly key = computed(() => {
+    if (!this.ws.weatherMode()) return null;
     const t = this.timeline();
     return t ? JSON.stringify([t.stops, t.departureMs, t.speedMps]) : null;
   });

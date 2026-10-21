@@ -64,7 +64,7 @@ import { CompareService } from '../core/fpv-core';
 
       <fpv-mission-time [editable]="canEdit" />
 
-      @if (m.waypoints.length) {
+      @if (ws.weatherMode() && m.waypoints.length) {
         <fpv-weather-card />
       }
 
