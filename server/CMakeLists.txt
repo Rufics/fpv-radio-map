@@ -29,6 +29,7 @@ add_library(rfmap_server_lib STATIC
   src/calculator.cpp
   src/rate_limiter.cpp
   src/jobs.cpp
+  src/metrics.cpp
   src/logger.cpp
   src/app.cpp)
 target_include_directories(rfmap_server_lib PUBLIC src)

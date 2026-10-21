@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "common.schema.json",
+  "title": "Definitions shared by every perf catalog manifest",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+      "description": "Lower-case id; equals the name of the item's folder."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+      "description": "MAJOR.MINOR.PATCH. Major: results are no longer comparable. Minor: comparable, load changed a little. Patch: numbers do not change."
+    },
+    "description": { "type": "string", "maxLength": 500 },
+    "entry": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*\\.py:[A-Za-z_][A-Za-z0-9_]*$",
+      "description": "FILE.py:ClassName inside the extension's folder."
+    },
+    "percent": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+    "idList": { "type": "array", "items": { "$ref": "#/$defs/id" }, "uniqueItems": true }
+  }
+}

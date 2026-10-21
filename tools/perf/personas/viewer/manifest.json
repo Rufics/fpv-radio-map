@@ -1,0 +1,40 @@
+{
+  "kind": "persona",
+  "id": "viewer",
+  "version": "1.0.0",
+  "description": "Someone with a read-only link who looks at the mission and the library.",
+  "auth": {
+    "type": "link-pin",
+    "role": "view"
+  },
+  "setup": {
+    "missions": "warsaw-missions:missions.json",
+    "count": 8
+  },
+  "fixtures": [
+    "warsaw-missions"
+  ],
+  "steps": [
+    {
+      "name": "get-mission",
+      "weight": 5,
+      "method": "GET",
+      "path": "/missions/{{missionId}}",
+      "expect": 200
+    },
+    {
+      "name": "list-radios",
+      "weight": 1,
+      "method": "GET",
+      "path": "/library/radio-profiles",
+      "expect": 200
+    },
+    {
+      "name": "health",
+      "weight": 1,
+      "method": "GET",
+      "path": "/health",
+      "expect": 200
+    }
+  ]
+}

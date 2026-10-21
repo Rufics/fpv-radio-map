@@ -1,0 +1,38 @@
+# Prometheus of the perf stand: the server's /admin/metrics, the containers (cAdvisor) and
+# PostgreSQL, every 5 s. k6 writes its own metrics in with remote write. The data lives in a
+# tmpfs and goes with the stand; the prometheus collector copies what the reports need.
+global:
+  scrape_interval: 5s
+  scrape_timeout: 4s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: rfmap-server
+    metrics_path: /api/v1/admin/metrics
+    authorization:
+      type: Bearer
+      # Written by perf.py into the stand's work folder: the admin token of this run.
+      credentials_file: /run/rfmap-perf/admin-token
+    static_configs:
+      - targets: ["rfmap-server:8080"]
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    metric_relabel_configs:
+      # Only the stand's cgroup parents (compose.yml); the host may run other containers.
+      - source_labels: [id]
+        regex: /rfmapperf_[a-z0-9]+\.slice
+        action: keep
+      - source_labels: [id]
+        regex: /rfmapperf_([a-z0-9]+)\.slice
+        target_label: service
+        replacement: $1
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

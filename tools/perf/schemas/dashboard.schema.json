@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "dashboard.schema.json",
+  "title": "Dashboard: a Grafana dashboard the stand's Grafana loads (with --keep-stand)",
+  "x-perfkit": {
+    "folder": "extensions/dashboards",
+    "group": "extension",
+    "files": [{ "path": "file" }]
+  },
+  "type": "object",
+  "required": ["kind", "id", "version", "file"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "dashboard" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/version" },
+    "description": { "$ref": "common.schema.json#/$defs/description" },
+    "file": {
+      "description": "The dashboard's JSON model in the item's folder. Its datasource uid is rfmap-perf-prometheus.",
+      "type": "string",
+      "pattern": "\\.json$"
+    }
+  }
+}

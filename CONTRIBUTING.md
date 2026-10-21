@@ -64,7 +64,7 @@ history, so commit messages follow [Conventional Commits 1.0](https://www.conven
 | `docs`, `test`, `refactor`, `build`, `ci`, `chore`, `style`, `revert` | everything else | none |
 
 Scopes: `rf-core`, `rf-ext`, `rfmod`, `fpv`, `server`, `web`, `tiles`, `deploy`, `data`,
-`schemas`, `docs`, `ci`, `deps`. The scope is optional.
+`schemas`, `docs`, `ci`, `perf`, `deps`. The scope is optional.
 
 Examples:
 

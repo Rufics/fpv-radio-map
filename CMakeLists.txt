@@ -16,6 +16,10 @@ option(RFMAP_COVERAGE "Instrument the build for line coverage (GCC or Clang, CI 
 # Fuzz targets (fuzz/). With Clang they are libFuzzer binaries and the whole tree is built with
 # AddressSanitizer and UndefinedBehaviorSanitizer; with other compilers they only replay the corpus.
 option(RFMAP_BUILD_FUZZERS "Build fuzz targets" OFF)
+# Google Benchmark binaries of the perf toolchain, one per folder in the catalog's
+# extensions/benchmarks (tools/perf/README.md). Only perf.py turns this on.
+option(RFMAP_BUILD_BENCHMARKS "Build the perf benchmarks" OFF)
+set(RFMAP_PERF_CATALOG_DIR "${PROJECT_SOURCE_DIR}/tools/perf" CACHE PATH "Perf catalog whose benchmarks are built")
 
 if(MSVC)
   add_compile_options(/W4 /permissive-)
@@ -54,4 +58,8 @@ endif()
 add_subdirectory(modules/fpv)
 if(RFMAP_BUILD_FUZZERS)
   add_subdirectory(fuzz)
+endif()
+# Last, so every target a benchmark links to is already defined.
+if(RFMAP_BUILD_BENCHMARKS)
+  add_subdirectory(tools/perf/cmake ${CMAKE_BINARY_DIR}/perf)
 endif()

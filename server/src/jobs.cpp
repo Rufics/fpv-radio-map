@@ -86,6 +86,7 @@ json JobManager::start(std::string_view missionId, const json& mission) {
         std::lock_guard lock(mutex_);
         sweep();
         jobs_[job->id] = job;
+        ++started_;
     }
     runners_.submit([this, job, mission] { runJob(*job, mission); });
     std::lock_guard lock(mutex_);
@@ -182,6 +183,18 @@ std::size_t JobManager::running() const {
         if (j->state == "running" || j->state == "queued") ++n;
     }
     return n;
+}
+
+JobStats JobManager::stats() {
+    JobStats s;
+    {
+        const std::lock_guard lock(mutex_);
+        for (const auto& [id, j] : jobs_) ++s.byState[j->state];
+        s.started = started_;
+    }
+    s.runners = runners_.stats();
+    s.cells = cells_.stats();
+    return s;
 }
 
 }  // namespace rfmap

@@ -1,0 +1,10 @@
+{
+  "kind": "benchmark",
+  "id": "rf-core",
+  "version": "1.0.0",
+  "description": "The rf-core maths a path calculation runs: Fresnel integrals, knife edge, geodesics, path geometry and Bullington diffraction.",
+  "target": "bench_rf_core",
+  "links": ["rf_core"],
+  "repetitions": 10,
+  "compare": { "metric": "cpu_time", "stat": "median", "maxRegressionPct": 5 }
+}

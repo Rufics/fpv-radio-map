@@ -1,0 +1,61 @@
+{
+  "kind": "scenario",
+  "id": "soak",
+  "version": "1.0.0",
+  "description": "An hour at a steady everyday load: memory, file descriptors and latency must stay flat once the caches are full.",
+  "personas": [
+    {
+      "id": "link-editor",
+      "weight": 55
+    },
+    {
+      "id": "viewer",
+      "weight": 35
+    },
+    {
+      "id": "mission-creator",
+      "weight": 8
+    },
+    {
+      "id": "coverage-planner",
+      "weight": 2
+    }
+  ],
+  "load": {
+    "type": "ramping-arrival-rate",
+    "stages": [
+      {
+        "name": "warm-up",
+        "durationS": 300,
+        "targetRps": 8
+      },
+      {
+        "name": "steady",
+        "durationS": 3300,
+        "targetRps": 8
+      }
+    ]
+  },
+  "collectors": [
+    "k6-summary",
+    "prometheus",
+    "sanitizer"
+  ],
+  "thresholds": {
+    "http_req_failed": "rate<0.01"
+  },
+  "limits": {
+    "server_rss:tail_slope": 32,
+    "server_fds:tail_slope": 10
+  },
+  "compare": {
+    "metrics": [
+      "p95",
+      "p99",
+      "error_rate",
+      "server_rss:max"
+    ],
+    "window": 10,
+    "maxRegressionPct": 10
+  }
+}

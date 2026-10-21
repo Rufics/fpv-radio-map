@@ -1,0 +1,28 @@
+{
+  // rfmap-server for the perf stand (tools/perf/stand/compose.yml). Like the shipped example,
+  // except: metrics on, no weather (k = 4/3), rate limits far above any scenario so k6 from one
+  // address measures the server and not the limiter. PIN hashing keeps the production cost, so
+  // sign-ins cost what they cost. The admin token and database URL come from the environment.
+  "server": { "listen": "0.0.0.0", "port": 8080, "threads": 16, "trustProxy": false },
+  "database": { "poolSize": 8 },
+  "metrics": { "enabled": true },
+  "data": {
+    "dem": "/data/dem.cog.tif",
+    "landcover": "/data/landcover.cog.tif",
+    "demName": "Copernicus DEM GLO-30 (perf dataset)",
+    "landcoverName": "ESA WorldCover (perf dataset)"
+  },
+  "schemasDir": "/usr/share/rfmap/schemas",
+  "seedDir": "/usr/share/rfmap/library",
+  "cache": { "demBlocksMb": 256, "resultMemoryMb": 64, "resultTableRows": 20000, "resultTableMb": 1024 },
+  "rateLimits": {
+    "default": { "perMinute": 1000000, "burst": 100000 },
+    "open": { "perMinute": 1000000, "burst": 100000 },
+    "create": { "perMinute": 1000000, "burst": 100000 },
+    "calc": { "perMinute": 1000000, "burst": 100000 },
+    "coverage": { "perMinute": 1000000, "burst": 100000 },
+    "admin": { "perMinute": 1000000, "burst": 100000 },
+    "upload": { "perMinute": 1000000, "burst": 100000 }
+  },
+  "coverage": { "threads": 4, "maxCells": 250000, "maxJobs": 4, "keepMinutes": 30 }
+}

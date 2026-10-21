@@ -1,0 +1,16 @@
+{
+  "kind": "collector",
+  "id": "k6-summary",
+  "version": "1.0.1",
+  "description": "Reads the end-of-test summary of k6/runner.js: latency, rate and errors for the whole run and per persona and step, and how long polled jobs took.",
+  "entry": "collector.py:K6SummaryCollector",
+  "metrics": [
+    { "name": "p95", "unit": "ms", "better": "lower" },
+    { "name": "p99", "unit": "ms", "better": "lower" },
+    { "name": "med", "unit": "ms", "better": "lower" },
+    { "name": "rps", "unit": "1/s", "better": "higher" },
+    { "name": "error_rate", "unit": "%", "better": "lower" },
+    { "name": "dropped", "unit": "iterations", "better": "lower" },
+    { "name": "job_p95", "unit": "ms", "better": "lower" }
+  ]
+}

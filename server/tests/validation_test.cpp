@@ -157,6 +157,14 @@ TEST(ConfigTest, EnvironmentOverridesTheFile) {
     EXPECT_THROW(Config::fromJson({{"server", {{"port", 70000}}}}), std::invalid_argument);
 }
 
+TEST(ConfigTest, MetricsAreOffUnlessEnabled) {
+    EXPECT_FALSE(Config::fromJson(json::object()).metrics.enabled);
+    EXPECT_TRUE(Config::fromJson({{"metrics", {{"enabled", true}}}}).metrics.enabled);
+    const auto file = rfmap::test::scratchDir("config") / "rfmap-metrics-config-test.json";
+    std::ofstream(file) << "{}";
+    EXPECT_TRUE(Config::load(file, {{"RFMAP__METRICS__ENABLED", "true"}}).metrics.enabled);
+}
+
 TEST(ConfigTest, ShippedExampleLoads) {
     // deploy/docker-compose.yml mounts this file; it must stay loadable.
     const Config c = Config::load(RFMAP_EXAMPLE_CONFIG, {{"RFMAP_ADMIN_TOKEN", "x"}});

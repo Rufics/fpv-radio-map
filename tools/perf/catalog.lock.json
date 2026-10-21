@@ -1,0 +1,93 @@
+{
+  "format": 1,
+  "items": {
+    "benchmark/result-cache": {
+      "version": "1.0.0",
+      "sha256": "2ffb8858724b5851628a18fed04c2246970fc6e4a0adcc26aac3c320f0c64ada"
+    },
+    "benchmark/rf-core": {
+      "version": "1.0.0",
+      "sha256": "c1e83eb38ac5f1f783d216136ef6a0312161cc11d4ba2ad1753aec4f8ae1db83"
+    },
+    "collector/google-benchmark": {
+      "version": "1.0.0",
+      "sha256": "92b683f0e6e528674a29f270ceebf0f1253c4a24775836bcd9ea32422fb05f15"
+    },
+    "collector/k6-summary": {
+      "version": "1.0.1",
+      "sha256": "f0e23d435766037848362d004296ba2462e64ff725d0c84db8e8d151d8fa1be0"
+    },
+    "collector/prometheus": {
+      "version": "1.1.0",
+      "sha256": "ecd95c2e3e5cf47162ccebb76f31f96350f021840c7278b833b66f76edcea766"
+    },
+    "collector/sanitizer": {
+      "version": "1.0.0",
+      "sha256": "2445ed3088f4a0e7a9b9e0e432e9f8435eeeffc70cf71438a6bc2e6b39ec5367"
+    },
+    "dashboard/rfmap-stand": {
+      "version": "1.0.0",
+      "sha256": "e29c438853b6b7684695e0157bad1ac8c89b4fee5cc21a363ef09a5fcdfd020c"
+    },
+    "fixture/warsaw-missions": {
+      "version": "1.1.0",
+      "sha256": "ffa6d1fc639c7d9d38a8340b7564b9a8d08580fa9b7f4473b60ec1001220cb1c"
+    },
+    "fixture/warsaw-paths": {
+      "version": "1.0.0",
+      "sha256": "4fcd06bf2c5939b35b5dd6dbcae925d6732c3d079ab0b7d9a399c8d7af1a8cd4"
+    },
+    "persona/coverage-planner": {
+      "version": "1.0.0",
+      "sha256": "80aa12628c4cfa1956b2eab075e1ede28a97ec9568ec27d4c4adee8300a45b7a"
+    },
+    "persona/link-editor": {
+      "version": "1.0.0",
+      "sha256": "351d967d421f9a5db4ef5ad57fce049a0274e6b94265d0ccbdac69caad5302ce"
+    },
+    "persona/link-opener": {
+      "version": "1.0.0",
+      "sha256": "44141a0cdef5d2fd7c3bd726049f8c91200fc0c9c056df145a293e747a39e0f9"
+    },
+    "persona/mission-creator": {
+      "version": "1.0.0",
+      "sha256": "af13cbe7aa662b6e40e6165eb75dafbdf9a0b16ee16b6353e2b66ced334c4d45"
+    },
+    "persona/pin-guesser": {
+      "version": "1.0.0",
+      "sha256": "108b94c57e35fa014d7e3ef55e125d8c95da56a05078bddbb455aeca2dc535b2"
+    },
+    "persona/viewer": {
+      "version": "1.0.0",
+      "sha256": "cc0d7e1893348f8671561776360edad031ec6d4aa7f3016cc6ac5ba54a203260"
+    },
+    "profiler/flamegraph": {
+      "version": "1.0.0",
+      "sha256": "4edb480ce8c01d5e89488d796443cc8d3bcb07ac767c452a260be9225a3867bf"
+    },
+    "reporter/html": {
+      "version": "1.2.0",
+      "sha256": "b1874e2ebf1e89b29b6c9ab0b50bcf61b3f4435c4e21e7d6afd0477bbf1e058a"
+    },
+    "reporter/markdown": {
+      "version": "1.2.0",
+      "sha256": "027af952d0a3f65e6e14a378bc1b75101e5bfa147d1d8460405831ce55632efd"
+    },
+    "scenario/auth-storm": {
+      "version": "1.0.0",
+      "sha256": "e572c0c240b625111bb3e6234f6c0203c8049c7adc7adf3017ea7b042771cb69"
+    },
+    "scenario/peak": {
+      "version": "1.2.0",
+      "sha256": "0e3ada561bf24dd03511600980e585744b9ddb742d1a215ef989dd1ffa929fdb"
+    },
+    "scenario/smoke": {
+      "version": "1.2.0",
+      "sha256": "a2515f22e95125378957f37773719e7b7800faa3bd26965df5baaa01d4664f05"
+    },
+    "scenario/soak": {
+      "version": "1.0.0",
+      "sha256": "f939d09b49ec4616d11b4ed2389b1275c99741b64b8ca762e8f9a257c72e0c16"
+    }
+  }
+}

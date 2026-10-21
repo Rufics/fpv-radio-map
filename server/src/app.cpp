@@ -3,6 +3,7 @@
 #include <httplib.h>
 
 #include <charconv>
+#include <chrono>
 #include <format>
 #include <fstream>
 #include <regex>
@@ -28,6 +29,36 @@ std::string bearer(const Req& req) {
     if (const std::string h = header(req, "Authorization"); h.starts_with("Bearer ")) return h.substr(7);
     return {};
 }
+
+/// httplib's request thread pool, counting the requests that wait for a thread and those served.
+class CountingTaskQueue final : public httplib::TaskQueue {
+public:
+    CountingTaskQueue(std::size_t threads, HttpMetrics& metrics) : pool_(threads), metrics_(metrics) {}
+
+    // httplib 0.14 (Ubuntu 24.04) declares enqueue without a result.
+    void enqueue(std::function<void()> fn) override {
+        metrics_.enqueued();
+        pool_.enqueue([this, fn = std::move(fn)] {
+            metrics_.started();
+            const Served served{metrics_};
+            fn();
+        });
+    }
+    void shutdown() override { pool_.shutdown(); }
+
+private:
+    /// Ends the busy count also when the request handler throws.
+    struct Served {
+        explicit Served(HttpMetrics& m) : metrics(m) {}
+        HttpMetrics& metrics;
+        Served(const Served&) = delete;
+        Served& operator=(const Served&) = delete;
+        ~Served() { metrics.finished(); }
+    };
+
+    httplib::ThreadPool pool_;
+    HttpMetrics& metrics_;
+};
 
 /// Paths carry link tokens and module ids; the token must never reach the log.
 std::string redacted(const std::string& path) {
@@ -225,6 +256,8 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
+    startTimeSeconds_ =
+        std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
     http_ = std::make_unique<httplib::Server>();
     routes();
 }
@@ -277,6 +310,25 @@ json Application::cacheTiers() const {
          {{"id", "results-table"}, {"label", "Results (database table)"}, {"limitBytes", limits.tableBytes},
           {"usedBytes", table.bytes}, {"limitRows", limits.tableRows}, {"entries", table.rows}, {"hits", table.hits},
           {"misses", table.misses}, {"hitRate", rate(table.hits, table.misses)}}});
+}
+
+std::string Application::metricsText() {
+    ServerSample sample;
+    sample.version = RFMAP_HOST_VERSION;
+    sample.startTimeSeconds = startTimeSeconds_;
+    sample.process = readProcessStats();
+    sample.jobs = jobs_->stats();
+    sample.pools = {{"http", httpMetrics_.pool(config_.server.threads)},
+                    {"job-runners", sample.jobs.runners},
+                    {"job-cells", sample.jobs.cells}};
+    sample.db = store_.db->stats();
+    sample.caches = {{"dem-blocks", terrain_.blocks->stats()},
+                     {"results-memory", resultStore_.cache->memoryStats()},
+                     {"results-table", resultStore_.cache->tableCounts(), false}};
+    PrometheusText out;
+    httpMetrics_.write(out);
+    writeServerMetrics(out, sample);
+    return out.text();
 }
 
 json Application::moduleList(bool admin) {
@@ -411,6 +463,7 @@ struct Application::AdminApi {
     void getAdminCache(const Req& req, Res& res) const;
     void putAdminCache(const Req& req, Res& res) const;
     void deleteAdminCache(const Req& req, Res& res) const;
+    void getAdminMetrics(const Req& req, Res& res) const;
 };
 
 template <typename Run>
@@ -436,7 +489,10 @@ void Application::internalError(const Req& req, Res& res, std::string_view what)
 template <typename Api, typename Method>
 auto Application::route(std::string rateClass, Method method) {
     return [this, rateClass = std::move(rateClass), method](const Req& req, Res& res) {
+        const auto started = std::chrono::steady_clock::now();
         dispatch(rateClass, [this, method, &req, &res] { (Api{*this}.*method)(req, res); }, req, res);
+        httpMetrics_.record(rateClass, req.method, res.status,
+                            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count());
     };
 }
 
@@ -444,8 +500,8 @@ void Application::routes() {
     httplib::Server& s = *http_;
     const int threads = config_.server.threads;
     // httplib takes ownership of the queue it gets and deletes it when the server stops.
-    s.new_task_queue = [threads] {
-        return std::make_unique<httplib::ThreadPool>(static_cast<std::size_t>(threads)).release();
+    s.new_task_queue = [this, threads] {
+        return std::make_unique<CountingTaskQueue>(static_cast<std::size_t>(threads), httpMetrics_).release();
     };
     s.set_payload_max_length(config_.server.maxUploadBytes);
     s.set_read_timeout(30, 0);
@@ -519,6 +575,7 @@ void Application::routes() {
     s.Get(api + "/admin/cache", route<AdminApi>("admin", &AdminApi::getAdminCache));
     s.Put(api + "/admin/cache", route<AdminApi>("admin", &AdminApi::putAdminCache));
     s.Delete(api + "/admin/cache", route<AdminApi>("admin", &AdminApi::deleteAdminCache));
+    s.Get(api + "/admin/metrics", route<AdminApi>("admin", &AdminApi::getAdminMetrics));
 }
 
 void Application::MissionApi::getHealth(const Req&, Res& res) const {
@@ -917,6 +974,13 @@ void Application::AdminApi::deleteAdminCache(const Req& req, Res& res) const {
         throw HttpError(422, "unknown cache tier " + tier);
     }
     res.status = 204;
+}
+
+void Application::AdminApi::getAdminMetrics(const Req& req, Res& res) const {
+    app.requireAdmin(req);
+    if (!app.config_.metrics.enabled) throw HttpError(404, "metrics are off; set metrics.enabled in the server config");
+    res.status = 200;
+    res.set_content(app.metricsText(), "text/plain; version=0.0.4; charset=utf-8");
 }
 
 }  // namespace rfmap

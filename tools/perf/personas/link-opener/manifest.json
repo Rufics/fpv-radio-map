@@ -1,0 +1,29 @@
+{
+  "kind": "persona",
+  "id": "link-opener",
+  "version": "1.0.0",
+  "description": "Opens a shared link with the right PIN every time, as many people arriving from a link in a chat would: each open verifies the PIN with argon2id.",
+  "auth": {
+    "type": "link-token",
+    "role": "view"
+  },
+  "setup": {
+    "missions": "warsaw-missions:missions.json",
+    "count": 40
+  },
+  "fixtures": [
+    "warsaw-missions"
+  ],
+  "steps": [
+    {
+      "name": "open-link",
+      "weight": 1,
+      "method": "POST",
+      "path": "/links/{{token}}/open",
+      "body": {
+        "pin": "246810"
+      },
+      "expect": 200
+    }
+  ]
+}
