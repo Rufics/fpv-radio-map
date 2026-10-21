@@ -126,9 +126,9 @@ class ScenarioSuiteTest(StandTestCase):
 
     def test_a_failed_profile_load_is_an_error(self):
         self.runner.k6_code = 1
-        suite, profiles = self.suite(), TargetsOnly()
+        suite, profiles, regressions = self.suite(), TargetsOnly(), [comparison("all", 20.0)]
         with self.assertRaisesRegex(PerfError, "exit 1"):
-            suite.profile([comparison("all", 20.0)], self.run_dir, profiles)
+            suite.profile(regressions, self.run_dir, profiles)
         self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
 
     def test_items_and_thresholds(self):
