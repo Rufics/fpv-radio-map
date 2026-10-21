@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 namespace rfflightlog {
 namespace {
@@ -156,6 +157,10 @@ int TimelineBuilder::cells(const FlightLog& log) {
     const std::vector<double>* v = log.series.channel("voltageV");
     if (v == nullptr) return 0;
     return CellCounter(log.battery.cellMaxV.value_or(4.3)).count(log.series.t, *v);
+}
+
+TimelineBuilder::TimelineBuilder(Options options) : options_(options) {
+    if (!(std::isfinite(options_.hz) && options_.hz > 0.0)) throw std::invalid_argument("timeline hz must be finite and above zero");
 }
 
 std::vector<double> TimelineBuilder::instants(const FlightLog& log) const {

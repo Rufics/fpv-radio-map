@@ -4,6 +4,8 @@
 #include "flight_fixture.hpp"
 
 #include <cmath>
+#include <limits>
+#include <stdexcept>
 #include <rfflightlog/timeline.hpp>
 
 #include <gtest/gtest.h>
@@ -44,6 +46,14 @@ TEST(CellCounter, CountsSeriesCellsFromTheStartVoltage) {
     EXPECT_EQ(c.count({}, {}), 0);
     EXPECT_EQ(CellCounter(1e-9).count({0.0}, {16.8}), 0) << "a cell maximum near zero gives no count";
     EXPECT_EQ(c.count({0.0}, {1e12}), 0) << "nor does a voltage no pack has";
+}
+
+TEST(TimelineBuilder, RefusesARateThatIsNotPositive) {
+    for (const double hz : {0.0, -1.0, std::nan(""), std::numeric_limits<double>::infinity()}) {
+        TimelineBuilder::Options o;
+        o.hz = hz;
+        EXPECT_THROW(TimelineBuilder{o}, std::invalid_argument) << hz;
+    }
 }
 
 TEST(TimelineBuilder, BuildsTheDerivedChannels) {

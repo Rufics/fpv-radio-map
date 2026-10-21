@@ -242,6 +242,7 @@ export class FlightImportComponent {
       const row = keep.chosen?.flights.find((r) => r.index === view.index);
       if (row?.id) await this.replay.open(row.id);
       else this.replay.show(view);
+      if (gone()) return;
       this.close();
     } catch (e) {
       if (!gone()) this.error.set(ApiError.from(e).message);

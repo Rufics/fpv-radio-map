@@ -74,7 +74,8 @@ public:
         double maxGpsGapS = 2.5;   ///< GPS updates slower, so its gaps may be longer
     };
 
-    explicit TimelineBuilder(Options options) : options_(options) {}
+    /// Throws std::invalid_argument unless `hz` is finite and above zero.
+    explicit TimelineBuilder(Options options);
     [[nodiscard]] Timeline build(const FlightLog& log) const;
     /// Cells found while building (0 without a voltage).
     [[nodiscard]] static int cells(const FlightLog& log);
