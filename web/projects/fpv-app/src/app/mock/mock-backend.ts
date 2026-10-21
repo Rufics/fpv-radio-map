@@ -119,7 +119,7 @@ export class MockBackend {
     r('GET', /^\/library\/([a-z-]+)\/([^/]+)$/, (_req, m) => this.libraryItem(m[1] as LibraryKind, m[2]));
     r('PUT', /^\/library\/([a-z-]+)\/([^/]+)$/, (req, m) => this.admin(req, () => this.saveLibrary(m[1] as LibraryKind, m[2], req.body)));
     r('GET', /^\/weather\/horizon$/, () => this.ok(horizon()));
-    r('GET', /^\/weather\/point$/, (req) => this.ok(weatherAt(req.params.get('timeUtc') ?? undefined, this.scenario() === 'stale-forecast')));
+    r('GET', /^\/weather\/point$/, (req) => this.ok(weatherAt(req.params.get('timeUtc') ?? undefined, this.scenario() === 'stale-forecast', { lat: Number(req.params.get('lat')), lon: Number(req.params.get('lon')) })));
     r('GET', /^\/modules$/, () => this.ok(this.modules));
     r('PUT', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.setModule(decodeURIComponent(m[1]), req.body as { enabled?: boolean })));
     r('DELETE', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.removeModule(decodeURIComponent(m[1]))));

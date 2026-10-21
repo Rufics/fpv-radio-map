@@ -103,6 +103,8 @@ export class FpvWorkspace {
   /** "Show why" selection */
   readonly why = signal<{ leg: number; link: LinkKind } | null>(null);
   readonly shareOpen = signal(false);
+  /** Pre-flight weather briefing over the map */
+  readonly briefingOpen = signal(false);
   readonly layersOpen = signal(false);
   readonly radioSetup = signal<LinkKind | null>(null);
   /** Link shown in the coverage heatmap */
@@ -410,6 +412,7 @@ export class FpvWorkspace {
     this.why.set(null);
     this.placing.set(null);
     this.editingRoute.set(false);
+    this.briefingOpen.set(false);
     this.store.clear();
   }
 }

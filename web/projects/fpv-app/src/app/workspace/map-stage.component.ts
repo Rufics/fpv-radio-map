@@ -32,12 +32,13 @@ import {
 } from '@rfmap/ui-kit';
 import { FpvWorkspace, LINK_LETTER, LegRowVm, endsAtTurnBack } from '../core/fpv-workspace.service';
 import { CompareService } from '../core/fpv-core';
+import { RouteWeatherMapComponent } from './route-weather-map.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
   selector: 'fpv-map-stage',
   host: { '(document:keydown.escape)': 'cancelPlacing()' },
-  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent],
+  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
       <rf-map-view class="map" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
@@ -93,6 +94,7 @@ import { CompareService } from '../core/fpv-core';
         } @else if (ws.editingRoute()) {
           <div class="overlay hint" role="status">Drag a point to move it · coverage is from before the edit</div>
         }
+        <fpv-route-weather-map [compact]="compact()" />
         <rf-slot-host class="overlay slot" name="map.overlays" />
       </rf-map-view>
       @if (dim()) {

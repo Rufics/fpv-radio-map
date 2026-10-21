@@ -36,6 +36,7 @@ npm ci --ignore-scripts
 The flag is `environment.mockApi`. It is `true` in `environment.development.ts` and `environment.mock.ts`, and `false` in `environment.ts`. Those two configurations also swap in `app/mock-entry.mock.ts`, which lazy-loads `app/mock/*`:
 
 - An `HttpInterceptor` answers every `/api/v1` call from an in-memory backend (`MockBackend`) with realistic latency. Jobs finish part by part over about 3 s.
+- `/weather/point` answers for the place asked: the wind freshens and veers towards the north-east, it cools with height and rain sets in east of the ridge, so the weather along the route changes. Without a place it is the reference value at the pilot.
 - `mockdem://`, `mocksat://` and `mockwx://` map protocols draw terrain, satellite and weather tiles locally, and the mock map config adds a GeoJSON base map and contours. No third-party map service is used.
 - It serves the reference case near Dnipro (48.53 N 35.20 E). Leg 3 WP2 → B fails on video 915 MHz: FSPL 106.13 dB, ridge 622 m diffraction 29.61 dB, received −98.74 dBm, required −95.00 dBm, margin −3.74 dB. Control 433 MHz holds at +6.01 dB. The fix "leg 3 at 345 m AGL" gives +25.32 dB. The battery has 10.2 km of range against 16.1 km needed, and turns back at T after 6.0 km.
 
@@ -63,6 +64,7 @@ Demo data:
 | `coverage/` | Heatmap with the 4-colour scale (`CoverageLayer`), radio and battery limits, and scenario difference: `subtractGrids`, `CoverageDeltaLayer`, `RouteDeltaLayer` and `DeltaScale` (▲/▼ marks as well as colour). |
 | `charts/` | SVG terrain profile with the Fresnel zone and earth bulge, and the link-budget waterfall. |
 | `tools/` | Geo helpers and `RouteTool` (markers, legs, drag, add point). |
+| `weather/` | Weather along the route: `RouteTimeline` (arrival time at each place at the cruise speed), `RouteWeather` (forecast samples read at any distance, head/tail wind per leg), `WeatherScale` (classes and colours), `RouteWeatherLayer` (the ribbon beside the route) and `PolylineHitTest` (hover read-outs). |
 | `state/` | `RfmapApiClient` (one method per contract operation), `MissionStore` (signals; save, calculate, job parts, preview fix with JSON merge patch), `CredentialStore` and `applyMergePatch`. |
 | `modules/` | `ModuleUiLoader`: runtime UI bundles (see below). |
 | `export/` | `MissionExporter`, a client-side KML/GPX fallback that writes AGL heights. |

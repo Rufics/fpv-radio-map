@@ -4,15 +4,19 @@ import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { exampleMissionFor } from '../core/example-mission';
 import { WhyDrawerComponent } from '../panels/why-drawer.component';
 import { PreviewPanelComponent } from '../panels/preview-panel.component';
+import { WeatherBriefingComponent } from '../panels/weather-briefing.component';
+import { WeatherCardComponent } from '../panels/weather-card.component';
 import { MapStageComponent } from './map-stage.component';
 
 /** Layout C (phone, view-oriented): full map + bottom sheet; "why" opens full screen. */
 @Component({
   selector: 'fpv-phone-layout',
-  imports: [PillComponent, MapStageComponent, WhyDrawerComponent, PreviewPanelComponent],
+  imports: [PillComponent, MapStageComponent, WhyDrawerComponent, PreviewPanelComponent, WeatherCardComponent, WeatherBriefingComponent],
   host: { class: 'phone' },
   template: `
-    @if (ws.why() && ws.whyLeg(); as leg) {
+    @if (ws.briefingOpen() && ws.mission()) {
+      <fpv-weather-briefing />
+    } @else if (ws.why() && ws.whyLeg(); as leg) {
       <section class="why" aria-labelledby="phone-why-title">
         <div class="why-head">
           <button type="button" class="back" aria-label="Back to mission" (click)="ws.why.set(null)">‹</button>
@@ -64,6 +68,9 @@ import { MapStageComponent } from './map-stage.component';
               }
             }
           </div>
+          @if (ws.mission()!.waypoints.length) {
+            <fpv-weather-card />
+          }
           @if (!ws.store.result() && ws.store.canEdit()) {
             <button type="button" class="rf-btn rf-btn--primary" (click)="ws.store.calculate()" [disabled]="busy()">{{ busy() ? 'Calculating…' : 'Calculate' }}</button>
           }
