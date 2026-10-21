@@ -3,6 +3,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <optional>
 
 using namespace fpv;
 using namespace fpv::failsafe;
@@ -67,9 +68,12 @@ TEST(Failsafe, RthAtCurrentAltitudeHitsTheHillAndSuggestsAltitude) {
 TEST(Failsafe, EnergyIncludesOutboundClimbAndReturn) {
     const auto w = hillWorld();
     const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
-    const json drone = {{"id", "d"}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
-                        {"climb", {{"method", "potential-energy"}, {"efficiency", 0.5}}}};
-    const json battery = {{"id", "b"}, {"cellsSeries", 1}, {"capacityAh", 1.0}, {"nominalCellVoltage", 1.0}, {"usableFraction", 1.0}};
+    const std::optional<json> drone{std::in_place,
+                                    json{{"id", "d"}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
+                                         {"climb", {{"method", "potential-energy"}, {"efficiency", 0.5}}}}};
+    const std::optional<json> battery{
+        std::in_place,
+        json{{"id", "b"}, {"cellsSeries", 1}, {"capacityAh", 1.0}, {"nominalCellVoltage", 1.0}, {"usableFraction", 1.0}}};
     const json r = analyze({{"mission", mission(w, 3.0, 100.0)}, {"options", {{"altitudeMode", "fixed"}, {"rthAltitudeAboveHomeM", 150.0}}}},
                            w, probe, drone, battery);
     const json& rth = r.at("data").at("rth");
@@ -85,10 +89,14 @@ json lossRequest(const IWorld& w, const json& options, const std::string& evalua
     return {{"mission", m}, {"options", options}};
 }
 
-const json kDrone = {{"id", "d"}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
-                     {"climb", {{"method", "potential-energy"}, {"efficiency", 0.5}}}};
-const json kBattery = {{"id", "b"}, {"cellsSeries", 6}, {"capacityAh", 2.0}, {"nominalCellVoltage", 3.7}, {"usableFraction", 0.8},
-                       {"temperatureDerating", {{{"celsius", 0}, {"factor", 0.5}}, {{"celsius", 25}, {"factor", 1.0}}}}};
+// Built in place: GCC 15 finds converting a json to std::optional<json> ambiguous.
+const std::optional<json> kDrone{std::in_place,
+                                 json{{"id", "d"}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
+                                      {"climb", {{"method", "potential-energy"}, {"efficiency", 0.5}}}}};
+const std::optional<json> kBattery{
+    std::in_place,
+    json{{"id", "b"}, {"cellsSeries", 6}, {"capacityAh", 2.0}, {"nominalCellVoltage", 3.7}, {"usableFraction", 0.8},
+         {"temperatureDerating", {{{"celsius", 0}, {"factor", 0.5}}, {{"celsius", 25}, {"factor", 1.0}}}}}};
 
 }  // namespace
 

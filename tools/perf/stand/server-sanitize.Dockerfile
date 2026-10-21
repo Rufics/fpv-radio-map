@@ -5,7 +5,7 @@
 # It is 2-3 times slower and uses more memory: its numbers are only compared with other sanitized
 # runs (the sanitizer collector takes part in the baseline).
 
-FROM ubuntu:24.04 AS build
+FROM ubuntu:26.04 AS build
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates cmake git \
@@ -36,12 +36,12 @@ RUN --mount=type=secret,id=build_ca,required=false \
     && DESTDIR=/out cmake --install build/server \
     && install -D -m 0755 build/platform/rfmod/rfmod /out/usr/bin/rfmod
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
-# libasan8 and libubsan1 are the runtimes of GCC 13; binutils brings addr2line, which symbolizes.
+# libasan8 and libubsan1 are the runtimes of GCC 15; binutils brings addr2line, which symbolizes.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        binutils ca-certificates libarchive13t64 libasan8 libcpp-httplib0.14t64 libgdal34t64 \
-        libgeographiclib26 libpqxx-7.8t64 libsodium23 libubsan1 \
+        binutils ca-certificates libarchive13t64 libasan8 libcpp-httplib0.26 libgdal38 \
+        libgeographiclib26 libpq5 libsodium23 libubsan1 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --home-dir /var/lib/rfmap --shell /usr/sbin/nologin rfmap \
     && install -d -o rfmap -g rfmap -m 0750 /var/lib/rfmap /var/lib/rfmap/modules \

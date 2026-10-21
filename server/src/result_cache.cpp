@@ -10,34 +10,34 @@ std::string inputHash(const json& inputs) { return Secrets::hex(Secrets::sha256(
 
 std::optional<json> PgResultTable::get(const std::string& hash) {
     return db_.tx([&hash](pqxx::work& w) -> std::optional<json> {
-        const auto r = w.exec_params(
+        const auto r = w.exec(
             "update result_cache set last_hit_at = now(), hits = hits + 1 where input_hash = $1 returning result::text",
-            hash);
+            pqxx::params{hash});
         if (r.empty()) return std::nullopt;
-        return json::parse(r[0][0].as<std::string>());
+        return std::make_optional(json::parse(r[0][0].as<std::string>()));
     });
 }
 
 void PgResultTable::put(const std::string& hash, const std::string& kind, const json& result, std::size_t bytes) {
     db_.tx([&hash, &kind, &result, bytes](pqxx::work& w) {
-        w.exec_params(
+        w.exec(
             "insert into result_cache(input_hash, kind, result, bytes) values ($1, $2, $3::jsonb, $4) "
             "on conflict (input_hash) do update set result = excluded.result, bytes = excluded.bytes, last_hit_at = now()",
-            hash, kind, result.dump(), static_cast<long long>(bytes));
+            pqxx::params{hash, kind, result.dump(), static_cast<long long>(bytes)});
     });
 }
 
 void PgResultTable::trim(std::size_t maxRows, std::size_t maxBytes) {
     db_.tx([maxRows, maxBytes](pqxx::work& w) {
         // Keep the newest rows whose running byte total stays within the limit.
-        w.exec_params(
+        w.exec(
             "delete from result_cache where input_hash in ("
             "  select input_hash from ("
             "    select input_hash, row_number() over (order by last_hit_at desc) as n,"
             "           sum(bytes) over (order by last_hit_at desc rows unbounded preceding) as total"
             "    from result_cache) ranked"
             "  where n > $1 or total > $2)",
-            static_cast<long long>(maxRows), static_cast<long long>(maxBytes));
+            pqxx::params{static_cast<long long>(maxRows), static_cast<long long>(maxBytes)});
     });
 }
 
@@ -56,7 +56,7 @@ ResultCache::ResultCache(Limits limits, IResultTable* table)
     : memory_(limits.memoryBytes, [](std::string_view s) { return s.size(); }), table_(table), limits_(limits) {}
 
 std::optional<json> ResultCache::get(const std::string& hash) {
-    if (auto hit = memory_.get(hash)) return json::parse(*hit);
+    if (auto hit = memory_.get(hash)) return std::make_optional(json::parse(*hit));
     if (!table_) return std::nullopt;
     auto row = table_->get(hash);
     {

@@ -29,7 +29,7 @@ concurrency:
 jobs:
   plan:
     name: Next version
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
     outputs:
@@ -93,7 +93,7 @@ jobs:
   release:
     name: Build, sign and release v${{ needs.plan.outputs.version }}
     needs: [plan, ci]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # The only job that reads the signing key. The environment allows main only and can require a
     # maintainer's approval (docs/maintainers/repository-settings.md).
     environment: release
@@ -175,7 +175,7 @@ jobs:
   images:
     name: Publish images v${{ needs.plan.outputs.version }}
     needs: [plan, release]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: read
       packages: write

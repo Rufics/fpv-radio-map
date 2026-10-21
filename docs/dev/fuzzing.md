@@ -28,13 +28,13 @@ instead, against published values.
 
 ## Running it locally
 
-The fuzz build needs Clang with its runtime libraries. On Ubuntu 24.04, on top of the packages in
+The fuzz build needs Clang with its runtime libraries. On Ubuntu 26.04, on top of the packages in
 [Contributing](../../CONTRIBUTING.md):
 
 ```
-sudo apt-get install -y clang-18 libclang-rt-18-dev
+sudo apt-get install -y clang-21 libclang-rt-21-dev
 cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DCMAKE_CXX_COMPILER=clang++-18 -DRFMAP_BUILD_FUZZERS=ON -DRFMAP_BUILD_TESTS=OFF
+  -DCMAKE_CXX_COMPILER=clang++-21 -DRFMAP_BUILD_FUZZERS=ON -DRFMAP_BUILD_TESTS=OFF
 cmake --build build-fuzz --target rfmap_fuzzers
 ```
 

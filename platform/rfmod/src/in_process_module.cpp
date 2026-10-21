@@ -3,7 +3,6 @@
 
 #include <dlfcn.h>
 
-#include <bit>
 #include <cstdio>
 #include <format>
 
@@ -64,7 +63,7 @@ struct InProcessModule::Library {
 
     [[nodiscard]] rfmod_get_module_fn entry() const {
         // POSIX guarantees a function symbol's address round-trips through dlsym's void*.
-        return std::bit_cast<rfmod_get_module_fn>(dlsym(handle.get(), RFMOD_ENTRY_SYMBOL));
+        return reinterpret_cast<rfmod_get_module_fn>(dlsym(handle.get(), RFMOD_ENTRY_SYMBOL));
     }
 };
 

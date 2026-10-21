@@ -279,7 +279,7 @@ pinned by tag and by the digest of its multi-arch index, read from the registry 
 
 | Image | Tag |
 |---|---|
-| `ubuntu` | `24.04` (build and runtime of rfmap-server; it matches the GDAL 3.8, libpqxx 7.8 and cpp-httplib 0.14 the code is tested with) |
+| `ubuntu` | `26.04` (build and runtime of rfmap-server; it matches the GDAL 3.12, libpqxx 7.10 and cpp-httplib 0.26 the code is tested with in CI) |
 | `node` | `24-bookworm-slim` (client build) |
 | `nginx` | `1.28-alpine` |
 | `postgis/postgis` | `16-3.5` |

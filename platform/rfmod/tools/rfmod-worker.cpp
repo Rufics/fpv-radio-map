@@ -14,7 +14,6 @@
 #include <unistd.h>
 
 #include <array>
-#include <bit>
 #include <cerrno>
 #include <iostream>
 #include <string>
@@ -146,7 +145,7 @@ int run(const char* library) {
     void* handle = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (!handle) return fail(std::string("dlopen: ") + dlerror());
     // POSIX guarantees a function symbol's address round-trips through dlsym's void*.
-    const auto entry = std::bit_cast<rfmod_get_module_fn>(dlsym(handle, RFMOD_ENTRY_SYMBOL));
+    const auto entry = reinterpret_cast<rfmod_get_module_fn>(dlsym(handle, RFMOD_ENTRY_SYMBOL));
     if (!entry) return fail(std::string("library does not export ") + RFMOD_ENTRY_SYMBOL);
     const rfmod_module* api = entry();
     if (!api || api->abi_version != RFMOD_ABI_VERSION) return fail("library speaks a different rfmod ABI");

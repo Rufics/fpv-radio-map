@@ -164,7 +164,7 @@ docker compose up -d --build
 Or use the published images: `ghcr.io/rufics/fpv-radio-map-server` and `ghcr.io/rufics/fpv-radio-map-web`
 (`:edge` follows `main`; releases are tagged `X.Y.Z`). See [docs/admin/deploy.md](docs/admin/deploy.md).
 
-**Build and test from source** (Linux; Ubuntu 24.04 packages are listed in [CONTRIBUTING.md](CONTRIBUTING.md#checks)):
+**Build and test from source** (Linux; Ubuntu 26.04 packages are listed in [CONTRIBUTING.md](CONTRIBUTING.md#checks)):
 
 ```sh
 cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build

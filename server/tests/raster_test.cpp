@@ -46,7 +46,8 @@ public:
             ds->SetSpatialRef(&srs);
         }
         std::vector<float> pixels(16, value_);
-        (void)ds->GetRasterBand(1)->RasterIO(GF_Write, 0, 0, 4, 4, pixels.data(), 4, 4, GDT_Float32, 0, 0);
+        const CPLErr written = ds->GetRasterBand(1)->RasterIO(GF_Write, 0, 0, 4, 4, pixels.data(), 4, 4, GDT_Float32, 0, 0);
+        EXPECT_EQ(written, CE_None);
         GDALClose(ds);
         return file_;
     }

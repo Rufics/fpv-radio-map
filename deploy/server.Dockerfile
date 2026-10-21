@@ -6,7 +6,7 @@
 # same tag (docs/admin/deploy.md, "Updating base images").
 
 # ---- build ----
-FROM ubuntu:24.04 AS build
+FROM ubuntu:26.04 AS build
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates cmake git \
@@ -38,11 +38,12 @@ RUN --mount=type=secret,id=build_ca,required=false \
     && install -D -m 0755 build/platform/rfmod/rfmod /out/usr/bin/rfmod
 
 # ---- runtime ----
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
+# libpqxx is linked statically (server/CMakeLists.txt), so only libpq is needed at run time.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates libarchive13t64 libcpp-httplib0.14t64 libgdal34t64 \
-        libgeographiclib26 libpqxx-7.8t64 libsodium23 \
+        ca-certificates libarchive13t64 libcpp-httplib0.26 libgdal38 \
+        libgeographiclib26 libpq5 libsodium23 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --home-dir /var/lib/rfmap --shell /usr/sbin/nologin rfmap \
     && install -d -o rfmap -g rfmap -m 0750 /var/lib/rfmap /var/lib/rfmap/modules \

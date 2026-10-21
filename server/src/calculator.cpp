@@ -166,7 +166,7 @@ std::optional<json> analyzeRoute(const ModuleRunner::Active& a, const json& req,
     json resp;
     std::string failure = moduleCallFailure([&a, &req, &resp] { resp = a.instance->invoke("route.analyze", req); });
     if (failure.empty() && !resp.is_object()) failure = "route.analyze did not return an object";
-    if (failure.empty()) return resp;
+    if (failure.empty()) return std::make_optional(std::move(resp));
     appendModuleFailure(result["moduleFailures"], {a.id, failure});
     return std::nullopt;
 }
@@ -746,7 +746,7 @@ json Calculator::coverage(const json& mission, LinkKind kind, CoverageProgress& 
     for (std::size_t i = 0; i < run.margins.size(); ++i) {
         marginJson.push_back(nullable(run.margins[i]));
         worstJson.push_back(nullable(run.worstBand[i]));
-        reachable[i] = run.margins[i].has_value() && *run.margins[i] >= 0.0;
+        reachable[i] = run.margins[i].value_or(-1.0) >= 0.0;
     }
     const double south = g.north - static_cast<double>(g.rows) * g.dLat;
     const double east = g.west + static_cast<double>(g.cols) * g.dLon;

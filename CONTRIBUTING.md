@@ -94,7 +94,7 @@ git config core.hooksPath .githooks      # once per clone
 Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a CI report comment:
 
 - C++: everything under `ctest` on the Release build, including the server integration test against
-  PostgreSQL 16 + PostGIS and the signed-package upload checks of every FPV module;
+  PostgreSQL 18 + PostGIS and the signed-package upload checks of every FPV module;
 - C++ coverage: the same tests on an instrumented build, reported per area (core, FPV modules,
   platform, server) and for the lines the pull request changes;
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
@@ -168,13 +168,13 @@ Only the parts a pull request can affect are built: changes to `web/` run the we
 the C++ tree run the C++ job, and changes to docs alone run neither. A file the rules in `ci.yml`
 do not know builds everything. Pushes to `main` that only touch docs skip the image build.
 
-Run the same locally. On Ubuntu 24.04 the build needs:
+Run the same locally. On Ubuntu 26.04 the build needs:
 
 ```
 sudo apt-get install -y build-essential cmake ninja-build pkg-config \
   libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
   libpqxx-dev libgdal-dev gdal-bin libcpp-httplib-dev libgtest-dev \
-  postgresql-16 postgresql-16-postgis-3
+  postgresql-18 postgresql-18-postgis-3
 ```
 
 Then:

@@ -1,11 +1,11 @@
 #!/bin/sh
-# Starts or stops a throw-away PostgreSQL 16 + PostGIS cluster for the server tests.
+# Starts or stops a throw-away PostgreSQL 18 + PostGIS cluster for the server tests.
 #   pg_fixture.sh start <dir> <port>    pg_fixture.sh stop <dir>
 # PostgreSQL refuses to run as root, so under root the cluster runs as the postgres user.
 set -eu
 cmd=$1
 dir=$2
-bin=${PG_BIN:-/usr/lib/postgresql/16/bin}
+bin=${PG_BIN:-/usr/lib/postgresql/18/bin}
 as_pg() {
   if [ "$(id -u)" = 0 ]; then runuser -u postgres -- "$@"; else "$@"; fi
 }

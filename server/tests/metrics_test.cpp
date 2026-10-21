@@ -58,6 +58,16 @@ TEST(HttpMetricsTest, RequestThreadPool) {
     EXPECT_EQ(s.completed, 1u);
 }
 
+TEST(HttpMetricsTest, RejectedRequestLeavesTheQueue) {
+    HttpMetrics m;
+    m.enqueued();
+    m.rejected();
+    const PoolStats s = m.pool(4);
+    EXPECT_EQ(s.queued, 0u);
+    EXPECT_EQ(s.busy, 0);
+    EXPECT_EQ(s.completed, 0u);
+}
+
 TEST(ThreadPoolTest, ReportsQueuedBusyAndCompleted) {
     ThreadPool pool(1);
     std::latch running(1);

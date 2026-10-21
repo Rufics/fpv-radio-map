@@ -78,7 +78,7 @@ std::vector<std::string> Database::migrate(const std::filesystem::path& sqlDir) 
             std::ostringstream sql;
             sql << in.rdbuf();
             w.exec(sql.str());
-            w.exec_params("insert into schema_migrations(name) values ($1)", name);
+            w.exec("insert into schema_migrations(name) values ($1)", pqxx::params{name});
             applied.push_back(name);
         }
     });
