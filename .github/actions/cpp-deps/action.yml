@@ -1,6 +1,6 @@
-# The Ubuntu 24.04 packages the C++ build and tests need, in one place for every C++ job.
+# The Ubuntu 26.04 packages the C++ build and tests need, in one place for every C++ job.
 name: C++ build dependencies
-description: Installs the compilers, libraries and the PostgreSQL 16 + PostGIS test cluster.
+description: Installs the compilers, libraries and the PostgreSQL 18 + PostGIS test cluster.
 inputs:
   extra:
     description: Further apt packages, separated by spaces
@@ -20,4 +20,4 @@ runs:
           build-essential cmake ninja-build pkg-config \
           libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
           libpqxx-dev libgdal-dev gdal-bin libcpp-httplib-dev libgtest-dev \
-          postgresql-16 postgresql-16-postgis-3 $EXTRA
+          postgresql-18 postgresql-18-postgis-3 $EXTRA

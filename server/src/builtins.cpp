@@ -43,8 +43,8 @@ BuiltinModules::BuiltinModules(Database* db, SchemaRegistry& schemas, std::strin
     if (!db_) return;
     db_->tx([this](pqxx::work& w) {
         for (auto& [id, e] : entries_) {
-            w.exec_params("insert into builtin_modules(id) values ($1) on conflict do nothing", id);
-            const auto r = w.exec_params("select enabled, options::text from builtin_modules where id = $1", id);
+            w.exec("insert into builtin_modules(id) values ($1) on conflict do nothing", pqxx::params{id});
+            const auto r = w.exec("select enabled, options::text from builtin_modules where id = $1", pqxx::params{id});
             e.enabled = r[0][0].as<bool>();
             e.options = json::parse(r[0][1].as<std::string>());
         }
@@ -74,8 +74,8 @@ void BuiltinModules::set(const std::string& id, std::optional<bool> enabled, std
     if (options) e.options = *options;
     if (db_) {
         db_->tx([&id, &e](pqxx::work& w) {
-            w.exec_params("update builtin_modules set enabled = $2, options = $3::jsonb, updated_at = now() where id = $1", id,
-                          e.enabled, e.options.dump());
+            w.exec("update builtin_modules set enabled = $2, options = $3::jsonb, updated_at = now() where id = $1",
+                   pqxx::params{id, e.enabled, e.options.dump()});
         });
     }
 }

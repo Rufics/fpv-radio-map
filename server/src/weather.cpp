@@ -201,7 +201,7 @@ std::optional<json> WeatherService::fetchOrError(double lat, double lon, const C
                                                  std::string& error) {
     // A tier that cannot be fetched is skipped; the caller reports the error when no tier answers.
     try {
-        return fetchCached(lat, lon, tier);
+        return std::make_optional(fetchCached(lat, lon, tier));
     } catch (const json::exception& e) {
         error = e.what();
     } catch (const ForecastUnavailableError& e) {

@@ -24,7 +24,7 @@ concurrency:
 jobs:
   changes:
     name: Changed parts
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
       cpp: ${{ steps.scope.outputs.cpp }}
@@ -74,7 +74,7 @@ jobs:
     name: C++ static analysis (${{ matrix.shard }}/4)
     needs: changes
     if: needs.changes.outputs.cpp == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     strategy:
       # Every part runs to the end, so one run reports all the findings.
@@ -88,24 +88,24 @@ jobs:
           fetch-depth: 2
       - uses: ./.github/actions/cpp-deps
         with:
-          extra: clang-18 clang-tidy-18
+          extra: clang-21 clang-tidy-21
       - name: Configure
         run: >-
-          cmake -S . -B build-tidy -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++-18
+          cmake -S . -B build-tidy -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++-21
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON
       - name: Generate headers
         run: cmake --build build-tidy --target platform/rfmod/generated/manifest_schema.hpp
       # On a pull request HEAD is the merge commit and HEAD^1 the base branch it was merged onto.
       - name: clang-tidy
         run: >-
-          python3 -I tools/ci/clang_tidy.py --build-dir build-tidy --clang-tidy clang-tidy-18 --shard ${{ matrix.shard }}/4
+          python3 -I tools/ci/clang_tidy.py --build-dir build-tidy --clang-tidy clang-tidy-21 --shard ${{ matrix.shard }}/4
           ${{ github.event_name == 'pull_request' && '--base HEAD^1' || '' }}
 
   cpp:
     name: C++ build and tests
     needs: [changes, clang-tidy]
     if: needs.changes.outputs.cpp == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -116,7 +116,7 @@ jobs:
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON
       - name: Build
         run: cmake --build build
-      # Includes the server integration test against a throw-away PostgreSQL 16 + PostGIS
+      # Includes the server integration test against a throw-away PostgreSQL 18 + PostGIS
       # cluster (server/tests/pg_fixture.sh) and the signed-package upload checks.
       - name: Test
         run: ctest --test-dir build --output-on-failure --output-junit "$GITHUB_WORKSPACE/test-results/cpp.xml"
@@ -135,7 +135,7 @@ jobs:
     name: C++ coverage
     needs: [changes, clang-tidy]
     if: needs.changes.outputs.cpp == 'true' && github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     outputs:
       html-url: ${{ steps.html.outputs.artifact-url }}
@@ -200,7 +200,7 @@ jobs:
     name: Web build and tests
     needs: changes
     if: needs.changes.outputs.web == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     outputs:
       html-url: ${{ steps.html.outputs.artifact-url }}
@@ -280,7 +280,7 @@ jobs:
     name: Fuzz C++
     needs: cpp
     if: needs.cpp.result == 'success'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -296,7 +296,7 @@ jobs:
     name: Test report
     if: always()
     needs: [changes, clang-tidy, cpp, coverage, fuzz, web]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -385,7 +385,7 @@ jobs:
       !contains(needs.*.result, 'cancelled') &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     continue-on-error: true
     permissions:

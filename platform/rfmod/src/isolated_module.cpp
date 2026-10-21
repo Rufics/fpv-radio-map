@@ -200,7 +200,7 @@ std::optional<json> IsolatedModule::handleBufferedMessages(std::string_view type
         } else if (t == "cb") {
             answerCallback(msg);
         } else if (t == type && (type == "ready" || msg.value("id", -1LL) == id)) {
-            return msg;
+            return std::make_optional(std::move(msg));
         } else {
             throw ModuleError("protocol", manifest_.id + ": unexpected worker message " + t);
         }

@@ -728,7 +728,9 @@ TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {
     EXPECT_TRUE(has(r.body["reasons"], "text", "on a leg that does not exist"));
     EXPECT_TRUE(has(r.body["reasons"], "text", "leg is not a number"));
     for (const auto& reason : r.body["reasons"]) {
-        if (reason.value("text", "") == "unknown severity") EXPECT_EQ(reason["severity"], "info");
+        if (reason.value("text", "") == "unknown severity") {
+            EXPECT_EQ(reason["severity"], "info");
+        }
     }
     EXPECT_EQ(r.body["modules"]["test.probe"], json({{"probe", true}}));
     EXPECT_EQ(r.body["battery"]["source"], "test.probe");

@@ -106,6 +106,7 @@ public:
 
     // The request thread pool: a request is queued until a thread takes it, then busy.
     void enqueued() { queued_.fetch_add(1); }
+    void rejected() { queued_.fetch_sub(1); }
     void started() {
         queued_.fetch_sub(1);
         busy_.fetch_add(1);

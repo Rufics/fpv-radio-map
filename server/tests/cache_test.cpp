@@ -17,7 +17,7 @@ public:
         const auto it = rows.find(hash);
         if (it == rows.end()) return std::nullopt;
         it->second.lastHit = ++tick;
-        return it->second.result;
+        return std::make_optional(it->second.result);
     }
     void put(const std::string& hash, const std::string&, const json& result, std::size_t bytes) override {
         rows[hash] = {result, bytes, ++tick};

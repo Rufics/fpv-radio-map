@@ -36,14 +36,17 @@ class CountingTaskQueue final : public httplib::TaskQueue {
 public:
     CountingTaskQueue(std::size_t threads, HttpMetrics& metrics) : pool_(threads), metrics_(metrics) {}
 
-    // httplib 0.14 (Ubuntu 24.04) declares enqueue without a result.
-    void enqueue(std::function<void()> fn) override {
+    // Counted as queued before the pool can start it; a request the pool turns away (it does
+    // so only while shutting down) leaves the queue again.
+    bool enqueue(std::function<void()> fn) override {
         metrics_.enqueued();
-        pool_.enqueue([this, fn = std::move(fn)] {
+        const bool accepted = pool_.enqueue([this, fn = std::move(fn)] {
             metrics_.started();
             const Served served{metrics_};
             fn();
         });
+        if (!accepted) metrics_.rejected();
+        return accepted;
     }
     void shutdown() override { pool_.shutdown(); }
 
@@ -283,7 +286,7 @@ void Application::loadCacheSettings() const {
     const auto stored = store_.db->tx([](pqxx::work& w) -> std::optional<json> {
         const auto r = w.exec("select value::text from settings where key = 'cache.limits'");
         if (r.empty()) return std::nullopt;
-        return json::parse(r[0][0].as<std::string>());
+        return std::make_optional(json::parse(r[0][0].as<std::string>()));
     });
     if (!stored) return;
     if (stored->contains("demBlocksBytes")) terrain_.blocks->setLimit(stored->at("demBlocksBytes").get<std::size_t>());
@@ -972,8 +975,9 @@ void Application::AdminApi::putAdminCache(const Req& req, Res& res) const {
     const json stored = {{"demBlocksBytes", demLimit}, {"resultMemoryBytes", l.memoryBytes},
                          {"resultTableRows", l.tableRows}, {"resultTableBytes", l.tableBytes}};
     app.store_.db->tx([&stored](pqxx::work& w) {
-        w.exec_params("insert into settings(key, value) values ('cache.limits', $1::jsonb) "
-                      "on conflict (key) do update set value = excluded.value", stored.dump());
+        w.exec("insert into settings(key, value) values ('cache.limits', $1::jsonb) "
+               "on conflict (key) do update set value = excluded.value",
+               pqxx::params{stored.dump()});
     });
     sendJson(res, 200, app.cacheTiers());
 }

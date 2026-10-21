@@ -115,19 +115,19 @@ std::optional<json> legReason(const json& request, const Leg& leg, const std::ve
                               const LinkResult& r, const Settings& set) {
     const std::string legName = leg.from.label + " → " + leg.to.label;
     if (r.legUnreachable[leg.index]) {
-        return reason(kId, "blocked",
-                      "Leg " + legName + ": no height up to " + fixed(set.maxAgl, 0) + " m AGL clears " +
-                          fixed(set.fraction * 100.0, 0) + " % of the " + set.kind + " Fresnel zone.");
+        return std::make_optional(reason(kId, "blocked",
+                                         "Leg " + legName + ": no height up to " + fixed(set.maxAgl, 0) + " m AGL clears " +
+                                             fixed(set.fraction * 100.0, 0) + " % of the " + set.kind + " Fresnel zone."));
     }
     const double planned = lowestPlanned(samples, leg.index);
     if (!anyBelowRequired(r.points, leg.index)) return std::nullopt;
     const double need = std::ceil(r.legNeed[leg.index] * 10.0) / 10.0;  // display and patch at 0.1 m, rounded up
     const json fix = leg.isReturn ? json(nullptr) : raiseLegFix(request, leg, legName, planned, need);
-    return reason(kId, "warn",
-                  "Leg " + legName + ": " + fixed(set.fraction * 100.0, 0) + " % of the " + set.kind +
-                      " Fresnel zone is clear only from " + fixed(need, 1) + " m AGL; planned " +
-                      fixed(planned, 1) + " m.",
-                  fix);
+    return std::make_optional(reason(kId, "warn",
+                                     "Leg " + legName + ": " + fixed(set.fraction * 100.0, 0) + " % of the " + set.kind +
+                                         " Fresnel zone is clear only from " + fixed(need, 1) + " m AGL; planned " +
+                                         fixed(planned, 1) + " m.",
+                                     fix));
 }
 
 }  // namespace

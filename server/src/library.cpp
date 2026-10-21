@@ -20,13 +20,13 @@ void storeVersion(pqxx::work& w, const std::string& kind, const std::string& id,
     const std::string verified = pqxx::to_string(doc.at("verified").get<bool>());
     const std::string next = pqxx::to_string(version);
     const std::string body = doc.dump();
-    w.exec_params(
+    w.exec(
         "update library_items set version = $3, verified = $4, doc = $5::jsonb, updated_at = now(), updated_by = $6 "
         "where kind = $1 and id = $2",
-        kind, id, next, verified, body, by);
-    w.exec_params(
+        pqxx::params{kind, id, next, verified, body, by});
+    w.exec(
         "insert into library_history(kind, id, version, verified, doc, changed_by) values ($1, $2, $3, $4, $5::jsonb, $6)",
-        kind, id, next, verified, body, by);
+        pqxx::params{kind, id, next, verified, body, by});
 }
 }  // namespace
 
@@ -34,7 +34,7 @@ std::vector<json> Library::list(const std::string& kind) const {
     checkKind(kind);
     return db_.tx([&kind](pqxx::work& w) {
         std::vector<json> out;
-        for (const auto& r : w.exec_params("select doc::text from library_items where kind = $1 order by id", kind)) {
+        for (const auto& r : w.exec("select doc::text from library_items where kind = $1 order by id", pqxx::params{kind})) {
             out.push_back(json::parse(r[0].as<std::string>()));
         }
         return out;
@@ -44,9 +44,9 @@ std::vector<json> Library::list(const std::string& kind) const {
 std::optional<json> Library::get(const std::string& kind, const std::string& id) const {
     checkKind(kind);
     return db_.tx([&kind, &id](pqxx::work& w) -> std::optional<json> {
-        const auto r = w.exec_params("select doc::text from library_items where kind = $1 and id = $2", kind, id);
+        const auto r = w.exec("select doc::text from library_items where kind = $1 and id = $2", pqxx::params{kind, id});
         if (r.empty()) return std::nullopt;
-        return json::parse(r[0][0].as<std::string>());
+        return std::make_optional(json::parse(r[0][0].as<std::string>()));
     });
 }
 
@@ -54,10 +54,10 @@ std::vector<json> Library::history(const std::string& kind, const std::string& i
     checkKind(kind);
     return db_.tx([&kind, &id](pqxx::work& w) {
         std::vector<json> out;
-        for (const auto& r : w.exec_params(
+        for (const auto& r : w.exec(
                  "select version, verified, doc::text, extract(epoch from changed_at)::float8, changed_by "
                  "from library_history where kind = $1 and id = $2 order by version",
-                 kind, id)) {
+                 pqxx::params{kind, id})) {
             const auto t = std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(r[3].as<double>()));
             out.push_back({{"version", r[0].as<int>()},
                            {"verified", r[1].as<bool>()},
@@ -77,16 +77,16 @@ json Library::add(const std::string& kind, json doc, const std::string& by) {
     const std::string id = doc.at("id").get<std::string>();
     const std::string verified = pqxx::to_string(doc.at("verified").get<bool>());
     db_.tx([&kind, &id, &verified, &doc, &by](pqxx::work& w) {
-        if (const auto r = w.exec_params(
+        if (const auto r = w.exec(
                 "insert into library_items(kind, id, version, verified, doc, updated_by) values ($1, $2, 1, $3, $4::jsonb, "
                 "$5) on conflict do nothing returning id",
-                kind, id, verified, doc.dump(), by);
+                pqxx::params{kind, id, verified, doc.dump(), by});
             r.empty()) {
             throw HttpError(409, kind + "/" + id + " exists; edit it with PUT instead");
         }
-        w.exec_params(
+        w.exec(
             "insert into library_history(kind, id, version, verified, doc, changed_by) values ($1, $2, 1, $3, $4::jsonb, $5)",
-            kind, id, verified, doc.dump(), by);
+            pqxx::params{kind, id, verified, doc.dump(), by});
     });
     return doc;
 }
@@ -100,7 +100,8 @@ json Library::update(const std::string& kind, const std::string& id, json doc, c
     }
     const int edited = doc.at("version").get<int>();
     return db_.tx([this, &kind, &id, edited, &doc, &by](pqxx::work& w) {
-        const auto cur = w.exec_params("select version from library_items where kind = $1 and id = $2 for update", kind, id);
+        const auto cur =
+            w.exec("select version from library_items where kind = $1 and id = $2 for update", pqxx::params{kind, id});
         if (cur.empty()) throw HttpError(404, kind + "/" + id + " does not exist; add it with POST");
         const int current = cur[0][0].as<int>();
         if (edited != current) {
@@ -144,7 +145,7 @@ void Library::seedFile(const std::string& kind, const std::filesystem::path& fil
     const std::string sha = Secrets::hex(Secrets::sha256(content.str()));
     // Only the first start imports a file: later edits or deletions by the admin must stick.
     if (const bool done = db_.tx([&name](pqxx::work& w) {
-            return !w.exec_params("select 1 from seeds_applied where name = $1", name).empty();
+            return !w.exec("select 1 from seeds_applied where name = $1", pqxx::params{name}).empty();
         });
         done) {
         return;
@@ -168,7 +169,7 @@ void Library::seedFile(const std::string& kind, const std::filesystem::path& fil
         }
     }
     db_.tx([&name, &sha](pqxx::work& w) {
-        w.exec_params("insert into seeds_applied(name, sha256) values ($1, $2) on conflict do nothing", name, sha);
+        w.exec("insert into seeds_applied(name, sha256) values ($1, $2) on conflict do nothing", pqxx::params{name, sha});
     });
     const std::string skippedNote = skipped > 0 ? std::format(", {} skipped", skipped) : "";
     log.push_back(std::format("seeded {} {} from {} (unverified){}", added, kind, file.string(), skippedNote));
