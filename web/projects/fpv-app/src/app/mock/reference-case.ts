@@ -111,7 +111,13 @@ export function tierFor(timeUtc: string | undefined, h = horizon()): ForecastTie
   return 'none';
 }
 
-export function weatherAt(timeUtc: string | undefined, stale: boolean): WeatherPoint {
+/**
+ * Forecast for a time, and for a place when `at` is given. Without a place it is the reference
+ * value at the pilot (what route results carry). With one, the wind freshens and veers towards
+ * the north-east, it cools with height and rain sets in east of the ridge, so the weather along a
+ * route changes the way a real forecast does.
+ */
+export function weatherAt(timeUtc: string | undefined, stale: boolean, at?: { lat: number; lon: number }): WeatherPoint {
   const h = horizon();
   const tier = tierFor(timeUtc, h);
   const valid = timeUtc ?? new Date().toISOString();
@@ -119,20 +125,38 @@ export function weatherAt(timeUtc: string | undefined, stale: boolean): WeatherP
     return { model: 'ISA standard atmosphere', tier, validUtc: valid, temperatureC: 15, pressureHpa: 1013.25, effectiveEarthFactor: 4 / 3, airDensityKgM3: 1.225, refractivityGradientPerKm: -39.2 };
   }
   const runUtc = stale ? new Date(Date.now() - 6.2 * 3600e3).toISOString() : h.runUtc;
-  return {
+  const base: WeatherPoint = {
     model: tier === 'hourly' ? 'ICON-D2 + GFS (Open-Meteo, self-hosted)' : 'ECMWF IFS open data (long-range)',
     runUtc,
     validUtc: valid,
     tier,
     temperatureC: 4.2,
     pressureHpa: 1009.6,
-    relativeHumidity: 0.81,
+    relativeHumidity: 81,
     windSpeedMps: 7.4,
     windFromDeg: 292,
     refractivityGradientPerKm: -41.7,
     effectiveEarthFactor: 1.3617,
     airDensityKgM3: 1.18312,
     stale,
+  };
+  return at ? { ...base, ...localWeather(at, valid) } : base;
+}
+
+/** How the mock weather differs from the pilot's at another place and hour. */
+function localWeather(at: { lat: number; lon: number }, validUtc: string): Partial<WeatherPoint> {
+  const { x, y } = toLocal(at.lat, at.lon);
+  const hours = (new Date(validUtc).getTime() - Date.now()) / 3600e3;
+  const swing = Math.sin(hours / 3);
+  const round = (v: number, d: number) => Number(v.toFixed(d));
+  const ground = elevation(at.lat, at.lon);
+  return {
+    windSpeedMps: round(Math.max(0.5, 7.4 + 0.35 * x + 0.25 * y + 1.2 * swing), 1),
+    windFromDeg: round((((292 + 3 * y - 2 * x) % 360) + 360) % 360, 0),
+    temperatureC: round(4.2 - 0.0065 * (ground - elevation(PILOT.lat, PILOT.lon)) - 0.8 * swing, 1),
+    precipitationMmPerHour: round(Math.max(0, 0.25 * (x - 1.5) + 0.3 * swing), 1),
+    relativeHumidity: round(Math.min(100, 81 + 2 * y), 0),
+    surfaceElevationM: round(ground, 0),
   };
 }
 

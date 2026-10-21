@@ -33,6 +33,12 @@ export * from './lib/charts/link-view';
 // tools
 export * from './lib/tools/geo';
 export * from './lib/tools/route-tool';
+// weather along the route
+export * from './lib/weather/wind';
+export * from './lib/weather/route-timeline';
+export * from './lib/weather/route-weather';
+export * from './lib/weather/weather-scale';
+export * from './lib/weather/route-weather-layer';
 // state + API client
 export * from './lib/state/api-client';
 export * from './lib/state/credential-store';

@@ -42,3 +42,13 @@ export function polylineLengthM(points: LatLon[]): number {
 export function midpoint(a: LatLon, b: LatLon): LatLon {
   return interpolate(a, b, 0.5);
 }
+
+/** Initial great-circle bearing from `a` to `b`, degrees clockwise from north, 0 to 360. */
+export function initialBearingDeg(a: LatLon, b: LatLon): number {
+  const p1 = rad(a.lat);
+  const p2 = rad(b.lat);
+  const dl = rad(b.lon - a.lon);
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}

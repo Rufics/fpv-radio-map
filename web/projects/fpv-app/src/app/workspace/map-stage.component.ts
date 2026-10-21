@@ -32,21 +32,28 @@ import {
 } from '@rfmap/ui-kit';
 import { FpvWorkspace, LINK_LETTER, LegRowVm, endsAtTurnBack } from '../core/fpv-workspace.service';
 import { CompareService } from '../core/fpv-core';
+import { RouteWeatherService } from '../core/route-weather.service';
+import { RouteWeatherMapComponent } from './route-weather-map.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
   selector: 'fpv-map-stage',
   host: { '(document:keydown.escape)': 'cancelPlacing()' },
-  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent],
+  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
-      <rf-map-view class="map" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
+      <rf-map-view class="map" [class.weather-mode]="weatherShown()" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
         <div class="overlay top-right">
           <div class="map-actions">
             <rf-base-switcher />
             <button type="button" class="rf-btn rf-btn--sm map-btn" [attr.aria-expanded]="ws.layersOpen()" (click)="ws.layersOpen.set(!ws.layersOpen())">
               <span aria-hidden="true">◫</span> Layers
             </button>
+            @if (hasRoute()) {
+              <button type="button" class="rf-btn rf-btn--sm map-btn" [class.is-on]="ws.weatherMode()" [attr.aria-pressed]="ws.weatherMode()" (click)="ws.weatherMode.set(!ws.weatherMode())">
+                <span aria-hidden="true">☁</span> Weather
+              </button>
+            }
           </div>
           @if (ws.layersOpen()) {
             <rf-layer-panel
@@ -93,6 +100,7 @@ import { CompareService } from '../core/fpv-core';
         } @else if (ws.editingRoute()) {
           <div class="overlay hint" role="status">Drag a point to move it · coverage is from before the edit</div>
         }
+        <fpv-route-weather-map [compact]="compact()" />
         <rf-slot-host class="overlay slot" name="map.overlays" />
       </rf-map-view>
       @if (dim()) {
@@ -103,10 +111,13 @@ import { CompareService } from '../core/fpv-core';
   styles: `
     :host { position: relative; display: block; overflow: hidden; }
     .map { position: absolute; inset: 0; }
+    /* weather mode shows the weather, not the link results: the leg result labels step aside */
+    .map.weather-mode ::ng-deep .rf-leg-label { display: none; }
     .overlay { position: absolute; z-index: 3; }
     .top-right { top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-height: calc(100% - 32px); }
     .map-actions { display: flex; gap: 8px; align-items: center; }
     .map-btn { background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); }
+    .map-btn.is-on { border-color: var(--rf-ok); color: var(--rf-ok-text); background: var(--rf-ok-bg); }
     .delta-scale { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #FF6B5B, #8A96A5 50%, #35D0BA); }
     .delta-keys { display: flex; justify-content: space-between; font-size: 11px; }
     .legend { width: 240px; padding: 10px 12px; border-radius: var(--rf-radius-lg); background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); display: flex; flex-direction: column; gap: 8px; font-size: 12px; color: var(--rf-text-2); }
@@ -147,6 +158,7 @@ export class MapStageComponent {
   private readonly missingData = new MissingDataLayer();
   private readonly routeDelta = new RouteDeltaLayer();
   protected readonly cmp = inject(CompareService);
+  private readonly wx = inject(RouteWeatherService);
   private readonly weather: WeatherLayer[] = [];
   private tags: Marker[] = [];
   private readonly ready = signal(false);
@@ -157,6 +169,12 @@ export class MapStageComponent {
     () => this.interactiveEdit() && this.ws.store.canEdit() && !this.ws.store.preview() && !this.ws.store.busy(),
   );
   protected readonly dim = computed(() => !this.ws.mission() && !this.ws.placing());
+  protected readonly hasRoute = computed(() => (this.ws.mission()?.waypoints.length ?? 0) > 0);
+  /** The route coloured by the weather; until then (or in a fix preview, which draws its own route) the leg labels stay */
+  protected readonly weatherShown = computed(() => {
+    const route = this.wx.route();
+    return this.ws.weatherMode() && !this.ws.store.preview() && route !== null && route.colourable;
+  });
   protected readonly routeDeltaShown = computed(() => !!this.cmp.result()?.links?.[this.cmp.link()]?.points?.length && !this.ws.store.preview());
   protected readonly droneAgl = computed(() => this.ws.mission()?.coverage?.droneAglM ?? 120);
   protected readonly showHeatLegend = computed(() => !!this.ws.store.coverage()[this.ws.heatLink()] && this.layers.isVisible('results-coverage'));

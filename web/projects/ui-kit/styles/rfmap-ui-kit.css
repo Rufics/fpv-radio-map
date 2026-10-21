@@ -502,6 +502,33 @@ code {
   border-color: var(--rf-warn);
   color: var(--rf-warn-text);
 }
+/* weather tag above a route point (fpv weather on the map) */
+.rf-wx-tag {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--rf-surface-1);
+  border: 1px solid var(--rf-border);
+  color: var(--rf-text);
+  font-family: var(--rf-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+.rf-wx-tag--compact {
+  padding: 2px 6px;
+  font-size: 10px;
+}
+.rf-wx-tag.is-notable {
+  border-color: var(--rf-warn-border);
+  background: var(--rf-warn-bg);
+  color: var(--rf-warn-text);
+}
+.rf-wx-tag.is-strong {
+  border-color: var(--rf-blocked-border);
+  background: var(--rf-blocked-bg);
+  color: var(--rf-blocked-text);
+}
 .rf-leg-label {
   padding: 3px 8px;
   border-radius: 6px;

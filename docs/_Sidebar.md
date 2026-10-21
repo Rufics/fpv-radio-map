@@ -13,6 +13,7 @@
 - [Building map data](admin/tiles-builder.md)
 - [How map layers reach the browser](admin/map-layers.md)
 - [How the tiles builder generates map data](admin/map-generation.md)
+- [How the weather forecast reaches the pilot](admin/weather-data.md)
 
 **Extending it**
 

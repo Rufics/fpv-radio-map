@@ -34,7 +34,19 @@ export type RfNumberKind =
   /** fraction 0..1 to whole percent: "62 %" */
   | 'pct'
   /** frequency in Hz to MHz with no decimals unless needed */
-  | 'mhz';
+  | 'mhz'
+  /** air temperature, whole degrees: "4 °C" */
+  | 'degc'
+  /** wind speed, 1 decimal: "7.4 m/s" */
+  | 'mps'
+  /** wind along the track, 1 decimal, explicit sign: "+3.1 m/s" tailwind, "−5.4 m/s" headwind */
+  | 'mps+'
+  /** precipitation rate, 1 decimal: "0.6 mm/h" */
+  | 'mmh'
+  /** pressure, whole hectopascals: "1010 hPa" */
+  | 'hpa'
+  /** air density, 3 decimals: "1.183 kg/m³" */
+  | 'kgm3';
 
 interface KindSpec {
   decimals: number;
@@ -56,6 +68,12 @@ const SPECS: Record<RfNumberKind, KindSpec> = {
   n2: { decimals: 2, unit: '', scale: 1, signed: false },
   pct: { decimals: 0, unit: '%', scale: 100, signed: false },
   mhz: { decimals: 0, unit: 'MHz', scale: 1e-6, signed: false },
+  degc: { decimals: 0, unit: '°C', scale: 1, signed: false },
+  mps: { decimals: 1, unit: 'm/s', scale: 1, signed: false },
+  'mps+': { decimals: 1, unit: 'm/s', scale: 1, signed: true },
+  mmh: { decimals: 1, unit: 'mm/h', scale: 1, signed: false },
+  hpa: { decimals: 0, unit: 'hPa', scale: 1, signed: false },
+  kgm3: { decimals: 3, unit: 'kg/m³', scale: 1, signed: false },
 };
 
 export interface FormatOptions {
