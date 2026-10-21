@@ -22,7 +22,17 @@ std::size_t utf8Length(std::string_view s, std::size_t i) {
     else if (lead >= 0xE0 && lead <= 0xEF) n = 3;
     else if (lead >= 0xF0 && lead <= 0xF4) n = 4;
     if (n == 0 || i + n > s.size()) return 0;
-    for (std::size_t k = 1; k < n; ++k) {
+    if (n == 1) return 1;
+    // The second byte's range also rules out overlong forms, surrogates and code points past U+10FFFF.
+    const auto second = static_cast<unsigned char>(s[i + 1]);
+    unsigned char low = 0x80;
+    unsigned char high = 0xBF;
+    if (lead == 0xE0) low = 0xA0;
+    else if (lead == 0xED) high = 0x9F;
+    else if (lead == 0xF0) low = 0x90;
+    else if (lead == 0xF4) high = 0x8F;
+    if (second < low || second > high) return 0;
+    for (std::size_t k = 2; k < n; ++k) {
         if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80) return 0;
     }
     return n;

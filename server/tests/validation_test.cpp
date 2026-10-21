@@ -209,6 +209,12 @@ TEST(FlightLogFileName, KeepsWholeUtf8CharactersWithinTheLimit) {
     // Invalid bytes are dropped, so the name is always valid JSON text.
     EXPECT_EQ(FlightLogService::cleanFileName("bad\xff\xc3.bbl"), "bad.bbl");
     EXPECT_NO_THROW(static_cast<void>(json(FlightLogService::cleanFileName("\xe2\x82")).dump()));
+    // Overlong forms, surrogates and code points past U+10FFFF are not UTF-8 either.
+    for (const char* bad : {"\xe0\x80\xaf", "\xed\xa0\x80", "\xf0\x80\x80\xaf", "\xf4\x90\x80\x80", "\xc0\xaf"}) {
+        const std::string name = FlightLogService::cleanFileName(std::string("a") + bad + ".bbl");
+        EXPECT_NO_THROW(static_cast<void>(json(name).dump())) << name;
+    }
+    EXPECT_EQ(FlightLogService::cleanFileName("\xf0\x9f\x9b\xb8.bbl"), "\xf0\x9f\x9b\xb8.bbl");
     // 70 Cyrillic letters are 140 bytes: the cut lands between characters, never inside one.
     std::string cyrillic;
     for (int i = 0; i < 70; ++i) cyrillic += "\xd0\xbb";
