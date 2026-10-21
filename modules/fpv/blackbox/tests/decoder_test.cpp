@@ -46,6 +46,7 @@ LogHeader headerOf(const std::vector<std::pair<std::string, std::string>>& lines
 FrameDefinition definition(const std::string& encodings) {
     const auto codes = LogHeader::splitIntegers(encodings);
     std::vector<std::string> names;
+    names.reserve(codes.size());
     for (std::size_t i = 0; i < codes.size(); ++i) names.push_back("f" + std::to_string(i));
     FrameDefinition def;
     def.setNames(names);
@@ -127,7 +128,7 @@ TEST(FieldReader, Tag8_8SVBGroupsConsecutiveFields) {
 
 TEST(FieldReader, Tag2_3SVariableAndNeg14Bit) {
     // 5-5-4 bits: v0 = -16, v1 = 15, v2 = -8 → ss 10000 01111 1000.
-    const std::vector<std::uint8_t> s554 = {0x40 | (0x10 << 1) | (0x0F >> 4), ((0x0F & 0x0F) << 4) | 0x08};
+    const std::vector<std::uint8_t> s554 = {0x40 | (0x10 << 1) | (0x0F >> 4), (0x0F << 4) | 0x08};
     EXPECT_EQ(readFields(s554, "10,10,10"), (std::vector<std::int64_t>{-16, 15, -8}));
     // 8-7-7 bits: v0 = 200 - 256 = -56 (0xC8), v1 = -64 (0x40), v2 = 63.
     const std::vector<std::uint8_t> s877 = {0x80 | (0xC8 >> 2), ((0xC8 & 3) << 6) | (0x40 >> 1), ((0x40 & 1) << 7) | 63};
