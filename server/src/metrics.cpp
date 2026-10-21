@@ -63,7 +63,7 @@ PoolStats HttpMetrics::pool(int threads) const {
 
 void HttpMetrics::write(PrometheusText& out) const {
     std::lock_guard lock(mutex_);
-    out.family("rfmap_http_requests_total", "counter", "Answered requests by rate class, method and status.");
+    out.family("rfmap_http_requests_total", "counter", "Requests a route answered, by rate class, method and status.");
     for (const auto& [key, count] : requests_) {
         const auto& [rateClass, method, status] = key;
         out.sample("rfmap_http_requests_total", static_cast<double>(count),
