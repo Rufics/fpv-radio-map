@@ -32,7 +32,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-REVISION = re.compile(r"[0-9a-f]{7,64}")
+# A full commit hash: SHA-1 or SHA-256.
+REVISION = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 # Characters a Sonar inclusion pattern and a properties value can carry without escaping.
 SAFE_PATH = re.compile(r"[A-Za-z0-9_./@+-]{1,512}")
 MAX_FILES = 500
@@ -148,6 +149,23 @@ class ScopePlanner:
         return ""
 
 
+class CommitHash:
+    """A full commit hash taken from the command line. It is parsed as a number and written out
+    again, so what reaches git is hexadecimal digits only, whatever text came in."""
+
+    SHA1_DIGITS = 40
+    SHA256_DIGITS = 64
+
+    def __init__(self, text):
+        if not REVISION.fullmatch(text):
+            raise ValueError(f"a revision must be a full commit hash, got {text!r}")
+        self._digits = self.SHA1_DIGITS if len(text) == self.SHA1_DIGITS else self.SHA256_DIGITS
+        self._value = int(text, 16)
+
+    def __str__(self):
+        return format(self._value, f"0{self._digits}x")
+
+
 class GitChanges:
     """The files that a pull request adds or modifies, read from git."""
 
@@ -155,15 +173,13 @@ class GitChanges:
         self._root = root
 
     def between(self, base, head):
-        for revision in (base, head):
-            if not REVISION.fullmatch(revision):
-                raise ValueError(f"a revision must be a commit hash, got {revision!r}")
+        commits = f"{CommitHash(base)}...{CommitHash(head)}"
         git = shutil.which("git")
         if git is None:
             message = "git is not installed"
             raise FileNotFoundError(message)
         # Deleted files are left out: there is nothing of them to scan.
-        command = [git, "diff", "--name-only", "--diff-filter=d", "-z", f"{base}...{head}", "--"]
+        command = [git, "diff", "--name-only", "--diff-filter=d", "-z", commits, "--"]
         done = subprocess.run(command, cwd=self._root, check=True, capture_output=True,
                               encoding="utf-8", errors="surrogateescape",
                               timeout=GIT_TIMEOUT_SECONDS)
@@ -243,8 +259,8 @@ class Command:
         parser = argparse.ArgumentParser(description="Decide the scope of a SonarQube Cloud analysis.")
         parser.add_argument("--settings", required=True, help="the project's Sonar settings file")
         parser.add_argument("--output", required=True, help="settings file to write for the scanner")
-        parser.add_argument("--base", default="", help="commit the pull request is compared with; empty for all")
-        parser.add_argument("--head", default="", help="last commit of the pull request")
+        parser.add_argument("--base", default="", help="full hash of the commit compared with; empty for all")
+        parser.add_argument("--head", default="", help="full hash of the last commit of the pull request")
         return parser
 
     def run(self, argv):

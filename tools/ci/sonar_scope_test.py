@@ -8,7 +8,8 @@ from pathlib import Path
 from unittest import mock
 
 import sonar_scope
-from sonar_scope import Areas, ChangeClassifier, Command, GitChanges, Scope, ScopePlanner, ScopeSettings, StepOutputs
+from sonar_scope import (Areas, ChangeClassifier, CommitHash, Command, GitChanges, Scope, ScopePlanner,
+                         ScopeSettings, StepOutputs)
 
 BASE = "a" * 40
 HEAD = "b" * 40
@@ -140,7 +141,7 @@ class GitChangesTest(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout="web/a.ts\0core/b.cpp\0", stderr="")
 
         with mock.patch.object(sonar_scope.subprocess, "run", run), \
-                mock.patch.object(sonar_scope.shutil, "which", lambda name: "/usr/bin/git"):
+                mock.patch.object(sonar_scope.shutil, "which", return_value="/usr/bin/git"):
             files = GitChanges(Path("/repo")).between(BASE, HEAD)
         self.assertEqual(files, ["web/a.ts", "core/b.cpp"])
         self.assertIn(f"{BASE}...{HEAD}", calls[0])
@@ -152,17 +153,24 @@ class GitChangesTest(unittest.TestCase):
             return subprocess.CompletedProcess(command, 0, stdout=raw.decode(kwargs["encoding"], kwargs["errors"]))
 
         with mock.patch.object(sonar_scope.subprocess, "run", run), \
-                mock.patch.object(sonar_scope.shutil, "which", lambda name: "/usr/bin/git"):
+                mock.patch.object(sonar_scope.shutil, "which", return_value="/usr/bin/git"):
             files = GitChanges(Path("/repo")).between(BASE, HEAD)
         self.assertTrue(ScopePlanner().plan(files).is_full)
 
     def test_refuses_anything_but_commit_hashes(self):
-        with self.assertRaises(ValueError):
-            GitChanges().between("--output=x", HEAD)
+        changes = GitChanges()
+        for revision in ("--output=x", "abc1234", "A" * 40):
+            with self.subTest(revision), self.assertRaises(ValueError):
+                changes.between(revision, HEAD)
+
+    def test_commit_hash_is_written_back_unchanged(self):
+        for text in ("0" * 39 + "1", "f" * 64):
+            self.assertEqual(str(CommitHash(text)), text)
 
     def test_needs_git(self):
-        with mock.patch.object(sonar_scope.shutil, "which", lambda name: None), self.assertRaises(FileNotFoundError):
-            GitChanges().between(BASE, HEAD)
+        changes = GitChanges()
+        with mock.patch.object(sonar_scope.shutil, "which", return_value=None), self.assertRaises(FileNotFoundError):
+            changes.between(BASE, HEAD)
 
 
 class FakeChanges:
