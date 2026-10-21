@@ -53,8 +53,10 @@ class BoxEnumParserTest(unittest.TestCase):
 
     def test_refuses_an_enum_without_the_arm_box(self):
         parser = BoxEnumParser()
-        with self.assertRaisesRegex(ValueError, "no boxId_e"):
+        with self.assertRaisesRegex(ValueError, "does not start with BOXARM"):
             parser.parse("typedef enum { BOXANGLE } boxId_e;")
+        with self.assertRaisesRegex(ValueError, "does not start with BOXARM"):
+            parser.parse("typedef enum {\n    // BOXARM moved\n    BOXANGLE,\n} boxId_e;")
 
     def test_refuses_an_explicit_value_that_leaves_a_hole(self):
         parser = BoxEnumParser()

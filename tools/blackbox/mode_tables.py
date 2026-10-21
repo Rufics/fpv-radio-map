@@ -53,7 +53,7 @@ class BoxEnumParser:
 
     def parse(self, text):
         match = self._ENUM.search(text)
-        if not match or "BOXARM" not in match.group("body"):
+        if not match:
             raise ValueError("no boxId_e enum in the header")
         names = []
         for entry in self._entries(match.group("body")):
@@ -68,6 +68,8 @@ class BoxEnumParser:
                     raise ValueError(f"{parsed.group('name')} = {value} leaves a hole in boxId_e")
                 names.append(parsed.group("name"))
             # NAME = OTHER_NAME is an alias (BOXID_FLIGHTMODE_LAST, CHECKBOX_ITEM_COUNT): no new value.
+        if not names or names[0] != "BOXARM":
+            raise ValueError("boxId_e does not start with BOXARM, the arm bit every release logs as bit 0")
         return [name for name in names if name != "CHECKBOX_ITEM_COUNT"]
 
     @staticmethod
