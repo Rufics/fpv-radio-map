@@ -12,6 +12,7 @@ add_library(rfmap_server_lib STATIC
   src/command_line.cpp
   src/common.cpp
   src/security.cpp
+  src/pin_gate.cpp
   src/config.cpp
   src/database.cpp
   src/auth.cpp

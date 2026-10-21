@@ -66,7 +66,13 @@
     "pinMaxAttempts": 5,
     "pinLockoutMinutes": 15,
     // interactive | moderate | sensitive (libsodium argon2id limits)
-    "argon2Cost": "moderate"
+    "argon2Cost": "moderate",
+    // PIN checks running at once, waiting for a slot, and how long they wait (0 = automatic for
+    // the first two). Past that a link open answers 503 with Retry-After, and the rest of the
+    // server keeps its request threads.
+    "pinConcurrency": 0,
+    "pinQueue": 0,
+    "pinWaitMs": 2000
   },
   // Token buckets per client address and class.
   "rateLimits": {

@@ -112,8 +112,9 @@ long long secondsUntil(TimePoint until, TimePoint now) {
 }
 }  // namespace
 
-AuthService::AuthService(IAuthStore& store, const PinHasher& pins, const IClock& clock, Settings settings)
-    : store_(store), pins_(pins), clock_(clock), settings_(settings) {}
+AuthService::AuthService(IAuthStore& store, const PinHasher& pins, PinGate& gate, const IClock& clock,
+                         Settings settings)
+    : store_(store), pins_(pins), gate_(gate), clock_(clock), settings_(settings) {}
 
 AuthService::OwnerKey AuthService::newOwnerKey() {
     OwnerKey k;
@@ -144,7 +145,7 @@ AuthService::CreatedLink AuthService::createLink(const std::string& missionId, c
     out.record.linkId = Secrets::randomToken(12);
     out.record.missionId = missionId;
     out.record.tokenHash = Secrets::sha256(out.token);
-    out.record.pinHash = pins_.hash(pin);
+    out.record.pinHash = gate_.run([this, pin] { return pins_.hash(pin); });
     out.record.role = role;
     out.record.label = label;
     out.record.createdAt = clock_.now();
@@ -178,7 +179,8 @@ AuthService::Opened AuthService::openLink(const std::string& token, const std::s
         const auto s = secondsUntil(*link->lockedUntil, now);
         throw HttpError(429, "too many wrong PINs; the link is paused", {{"retryAfterS", s}});
     }
-    if (!pins_.verify(link->pinHash, pin)) {
+    // After the pause check, so a paused link costs no hashing slot.
+    if (!gate_.run([this, &link, &pin] { return pins_.verify(link->pinHash, pin); })) {
         const FailureOutcome f = store_.recordFailure(link->linkId, settings_.maxAttempts, settings_.lockout, now);
         if (f.lockedUntil) {
             const auto s = secondsUntil(*f.lockedUntil, now);

@@ -10,6 +10,7 @@
 #include <shared_mutex>
 #include <sstream>
 #include <string_view>
+#include <thread>
 
 namespace rfmap {
 
@@ -141,11 +142,11 @@ const char* moduleFileType(std::string_view ext) {
     return "application/octet-stream";
 }
 
-/// Answers an HttpError as JSON {message, ...body}, with Retry-After on 429.
+/// Answers an HttpError as JSON {message, ...body}, with Retry-After on 429 and 503.
 void sendHttpError(Res& res, const HttpError& e) {
     json b = e.body();
     b["message"] = e.what();
-    if (e.status() == 429 && b.contains("retryAfterS")) {
+    if ((e.status() == 429 || e.status() == 503) && b.contains("retryAfterS")) {
         res.set_header("Retry-After", std::to_string(b["retryAfterS"].get<long long>()));
     }
     sendJson(res, e.status(), b);
@@ -178,8 +179,9 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
 
     store_.authStore = std::make_unique<PgAuthStore>(*store_.db);
     store_.pins = std::make_unique<PinHasher>(PinHasher::costFromName(config_.auth.argon2Cost));
+    store_.pinGate = makePinGate();
     store_.auth = std::make_unique<AuthService>(
-        *store_.authStore, *store_.pins, clock_,
+        *store_.authStore, *store_.pins, *store_.pinGate, clock_,
         AuthService::Settings{config_.auth.pinMaxAttempts, std::chrono::minutes(config_.auth.pinLockoutMinutes),
                               std::chrono::hours(config_.auth.sessionTtlHours)});
     store_.missions = std::make_unique<MissionStore>(*store_.db);
@@ -481,6 +483,18 @@ void Application::dispatch(const std::string& rateClass, const Run& run, const R
     // A non-std exception reaches the server's exception handler set in routes().
 }
 
+std::unique_ptr<PinGate> Application::makePinGate() {
+    auto gate = std::make_unique<PinGate>(
+        PinGate::limitsFor(config_.auth, config_.server.threads, std::thread::hardware_concurrency()));
+    const PinGate::Limits& l = gate->limits();
+    log_.info("startup",
+              std::format("PIN checks: {} at once, {} waiting up to {} ms", l.concurrency, l.queue, l.wait.count()));
+    if (l.concurrency + l.queue >= config_.server.threads) {
+        log_.warn("startup", "auth.pinConcurrency + auth.pinQueue leave no server thread free during a PIN storm");
+    }
+    return gate;
+}
+
 void Application::internalError(const Req& req, Res& res, std::string_view what) {
     log_.error("http", std::format("{} {}: {}", req.method, redacted(req.path), what));
     sendJson(res, 500, {{"message", "internal error"}});
@@ -517,7 +531,7 @@ void Application::routes() {
         if (res.body.empty()) sendJson(res, res.status, {{"message", httplib::status_message(res.status)}});
     });
 
-    // Every handler runs inside dispatch: rate limit, uniform JSON errors, Retry-After on 429.
+    // Every handler runs inside dispatch: rate limit, uniform JSON errors, Retry-After on 429 and 503.
     const std::string api = "/api/v1";
     const std::string mission = api + R"(/missions/([A-Za-z0-9_-]+))";
     const std::string library = api + R"(/library/([a-z-]+))";

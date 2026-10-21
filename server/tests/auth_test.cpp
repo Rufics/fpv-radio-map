@@ -39,7 +39,8 @@ protected:
     FakeClock clock;
     MemoryAuthStore store;
     PinHasher pins{PinHasher::Cost::Interactive};
-    AuthService auth{store, pins, clock, {5, std::chrono::minutes(15), std::chrono::hours(24)}};
+    PinGate gate{{2, 2, std::chrono::milliseconds(2000)}};
+    AuthService auth{store, pins, gate, clock, {5, std::chrono::minutes(15), std::chrono::hours(24)}};
     AuthService::OwnerKey owner;
 };
 
