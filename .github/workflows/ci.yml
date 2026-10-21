@@ -51,7 +51,7 @@ jobs:
               .github/workflows/pr-title.yml|.github/workflows/wiki.yml|tools/wiki/*|tools/app-icons/*|.githooks/*) ;;
               .github/workflows/ci-report.yml|.github/CODEOWNERS|.github/pull_request_template.md) ;;
               tools/ci/clang_tidy.py|.clang-tidy) cpp=true ;;
-              .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*) ;;
+              .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*|tools/blackbox/*) ;;
               .dockerignore|.gitignore) ;;
               .github/workflows/fuzz.yml) ;;
               .github/workflows/sonar.yml|sonar-project.properties|.github/actions/sonar-*) ;;
@@ -305,6 +305,8 @@ jobs:
           sparse-checkout: |
             tools/ci
             tools/perf
+            tools/blackbox
+            modules/fpv/blackbox/src
       # The CI tools' own tests; their results go into the report like every other suite.
       - name: Test the report builder
         run: >-
@@ -315,6 +317,11 @@ jobs:
         run: >-
           python3 -I tools/ci/unittest_junit.py --start tools/perf --name tools/perf
           --output "$RUNNER_TEMP/ci-data/tests/python-perf.xml"
+      - name: Test the Blackbox mode table generator
+        if: success() || failure()
+        run: >-
+          python3 -I tools/ci/unittest_junit.py --start tools/blackbox --name tools/blackbox
+          --output "$RUNNER_TEMP/ci-data/tests/python-blackbox.xml"
       # For ci-report.yml, which builds the report of a fork's pull request from the artifacts.
       - if: success() || failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -323,6 +330,7 @@ jobs:
           path: |
             ${{ runner.temp }}/ci-data/tests/python-ci.xml
             ${{ runner.temp }}/ci-data/tests/python-perf.xml
+            ${{ runner.temp }}/ci-data/tests/python-blackbox.xml
           if-no-files-found: ignore
           retention-days: 7
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
