@@ -1,8 +1,23 @@
 #include "rfflightlog/processor.hpp"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace rfflightlog {
+
+namespace {
+
+/// Samples a decoder thinned to a low rate are further apart than the default gap: allow three sample periods.
+double gapFor(const json& entry, double defaultGapS) {
+    const auto stats = entry.find("stats");
+    if (stats == entry.end() || !stats->is_object()) return defaultGapS;
+    const auto hz = stats->find("sampleHz");
+    if (hz == stats->end() || !hz->is_number()) return defaultGapS;
+    const double sampleHz = hz->get<double>();
+    return sampleHz > 0.0 ? std::max(defaultGapS, 3.0 / sampleHz) : defaultGapS;
+}
+
+}  // namespace
 
 json ProcessedFlight::summaryJson() const {
     json out = {{"index", log.index}, {"status", log.status}, {"durationS", log.durationS},
@@ -40,6 +55,7 @@ ProcessedFlight FlightLogProcessor::processOne(const json& entry, const ProcessO
     f.log = FlightLog::fromJson(entry);
     TimelineBuilder::Options timelineOptions;
     timelineOptions.hz = options.timelineHz;
+    timelineOptions.maxGapS = gapFor(entry, timelineOptions.maxGapS);
     f.timeline = TimelineBuilder(timelineOptions).build(f.log);
     f.bands = ModeBandBuilder().build(f.log);
     f.summary = SummaryBuilder().build(f.log, f.timeline, f.bands);

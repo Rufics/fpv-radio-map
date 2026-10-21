@@ -328,6 +328,7 @@ void StoryBuilder::addLogEvents(const FlightLog& log, std::vector<StoryEvent>& o
 }
 
 void StoryBuilder::place(const Timeline& timeline, std::vector<StoryEvent>& events) {
+    if (timeline.samples.channel("lat") == nullptr || timeline.samples.channel("lon") == nullptr) return;
     for (StoryEvent& e : events) {
         // Where the craft was last seen, when the GPS has no position at that very moment.
         for (std::size_t i = timeline.indexAt(e.t) + 1; i-- > 0;) {

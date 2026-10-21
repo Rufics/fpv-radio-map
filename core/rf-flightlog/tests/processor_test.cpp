@@ -50,6 +50,16 @@ TEST(FlightLogProcessor, RejectsWhatItCannotProcess) {
     EXPECT_THROW((void)processor.process(test::FlightFixture().build(), fast), std::invalid_argument);
 }
 
+TEST(FlightLogProcessor, BridgesTheGapsOfALogThinnedToALowRate) {
+    test::FlightFixture fixture;
+    fixture.seriesHz = 0.5;
+    json doc = fixture.build();
+    const auto voltageAt = [](const ProcessedFlight& f) { return f.timeline.at("voltageV", f.timeline.indexAt(1.0)); };
+    EXPECT_FALSE(hasValue(voltageAt(FlightLogProcessor().process(doc, {}).at(0))));
+    doc["logs"][0]["stats"]["sampleHz"] = 0.5;
+    EXPECT_TRUE(hasValue(voltageAt(FlightLogProcessor().process(doc, {}).at(0))));
+}
+
 // A normalized document of a real flight, when given: FLIGHTLOG_NORMALIZED_JSON names the file
 // (fpv.blackbox's answer for a log), so a real log can be checked without committing it.
 TEST(FlightLogProcessor, RealFlightFromTheEnvironment) {
