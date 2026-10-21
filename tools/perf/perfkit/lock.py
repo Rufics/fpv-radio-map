@@ -51,7 +51,7 @@ class LockFile:
         items = {key: {"version": str(entry.version), "sha256": entry.sha256}
                  for key, entry in sorted(entries.items())}
         text = json.dumps({"format": LOCK_FORMAT, "items": items}, indent=2) + "\n"
-        self.path.write_text(text, encoding="utf-8")
+        self.path.write_text(text, encoding="utf-8", newline="\n")
 
 
 class LockComparer:

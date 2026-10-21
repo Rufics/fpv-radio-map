@@ -2,7 +2,9 @@
 
 Tooling for the load and performance tests of the C++ code (core, platform, FPV modules and the
 server). So far there are the terrain dataset builder and the catalog of descriptions and
-extensions; the runs, benchmarks, k6 scenarios and reports follow. Nothing here runs in CI yet.
+extensions; the runs, benchmarks, k6 scenarios and reports follow. CI runs only the unit tests of
+these tools, which include a `catalog check` of the repository catalog; the perf runs themselves
+are not part of CI.
 
 ## Catalog (`perf.py`)
 
