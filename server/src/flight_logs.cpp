@@ -13,6 +13,21 @@ namespace {
 
 constexpr std::size_t kMaxFileName = 120;
 
+/// Bytes of the valid UTF-8 character at `i`, or 0 when the bytes there are not one.
+std::size_t utf8Length(std::string_view s, std::size_t i) {
+    const auto lead = static_cast<unsigned char>(s[i]);
+    std::size_t n = 0;
+    if (lead < 0x80) n = 1;
+    else if (lead >= 0xC2 && lead <= 0xDF) n = 2;
+    else if (lead >= 0xE0 && lead <= 0xEF) n = 3;
+    else if (lead >= 0xF0 && lead <= 0xF4) n = 4;
+    if (n == 0 || i + n > s.size()) return 0;
+    for (std::size_t k = 1; k < n; ++k) {
+        if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80) return 0;
+    }
+    return n;
+}
+
 std::optional<std::string> startedAtOf(const json& entry) {
     if (entry.contains("startedAt") && entry.at("startedAt").is_string()) return entry.at("startedAt").get<std::string>();
     return std::nullopt;
@@ -90,11 +105,19 @@ FlightLogService::FlightLogService(ModuleRunner& modules, const SchemaRegistry& 
 std::string FlightLogService::cleanFileName(const std::string& name) {
     const std::size_t slash = name.find_last_of("/\\");
     std::string base = slash == std::string::npos ? name : name.substr(slash + 1);
+    // Keeps whole UTF-8 characters only, so the name stays valid JSON however it was sent or cut.
     std::string out;
-    for (const char c : base) {
-        if (static_cast<unsigned char>(c) >= 0x20 && c != 0x7f) out += c;
+    for (std::size_t i = 0; i < base.size();) {
+        const std::size_t n = utf8Length(base, i);
+        if (n == 0) {
+            ++i;
+            continue;
+        }
+        const auto c = static_cast<unsigned char>(base[i]);
+        if (out.size() + n > kMaxFileName) break;
+        if (n > 1 || (c >= 0x20 && c != 0x7f)) out.append(base, i, n);
+        i += n;
     }
-    if (out.size() > kMaxFileName) out.resize(kMaxFileName);
     return out.empty() ? "flight.log" : out;
 }
 

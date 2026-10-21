@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "flight_logs.hpp"
 #include "schemas.hpp"
 #include "test_support.hpp"
 
@@ -199,4 +200,19 @@ TEST(TimeTest, LongFractionDoesNotOverflowTheStack) {
     const auto t = parseIsoUtc("2026-10-18T14:00:00." + std::string(200000, '1') + "Z");
     ASSERT_TRUE(t);
     EXPECT_EQ(isoUtc(*t), "2026-10-18T14:00:00Z");
+}
+
+TEST(FlightLogFileName, KeepsWholeUtf8CharactersWithinTheLimit) {
+    EXPECT_EQ(FlightLogService::cleanFileName("C:\\logs/LOG00007.BFL"), "LOG00007.BFL");
+    EXPECT_EQ(FlightLogService::cleanFileName("a\tb\x7f.bbl"), "ab.bbl");
+    EXPECT_EQ(FlightLogService::cleanFileName(""), "flight.log");
+    // Invalid bytes are dropped, so the name is always valid JSON text.
+    EXPECT_EQ(FlightLogService::cleanFileName("bad\xff\xc3.bbl"), "bad.bbl");
+    EXPECT_NO_THROW(static_cast<void>(json(FlightLogService::cleanFileName("\xe2\x82")).dump()));
+    // 70 Cyrillic letters are 140 bytes: the cut lands between characters, never inside one.
+    std::string cyrillic;
+    for (int i = 0; i < 70; ++i) cyrillic += "\xd0\xbb";
+    const std::string cut = FlightLogService::cleanFileName("x" + cyrillic);
+    EXPECT_EQ(cut.size(), 119u);
+    EXPECT_NO_THROW(static_cast<void>(json(cut).dump()));
 }
