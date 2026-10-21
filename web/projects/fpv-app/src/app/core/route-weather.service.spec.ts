@@ -127,6 +127,26 @@ describe('RouteWeatherService', () => {
     expect(wx.route()).not.toBeNull();
   });
 
+  it('asks for no more forecasts once weather mode is switched off mid-load', async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const spy = vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockImplementation(async () => {
+      await gate;
+      return { tier: 'hourly', temperatureC: 3 };
+    });
+    store.newMission(exampleMission());
+    TestBed.tick();
+    await MockApiHarness.wait(500);
+    const asked = spy.mock.calls.length;
+    expect(asked).toBeGreaterThan(0);
+    TestBed.inject(FpvWorkspace).weatherMode.set(false);
+    TestBed.tick();
+    release();
+    await MockApiHarness.wait(500);
+    expect(spy.mock.calls.length).toBe(asked);
+    expect(wx.status()).toBe('idle');
+  });
+
   it('rates the temperature by both ends of its range', async () => {
     let calls = 0;
     vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockImplementation(async () => ({ tier: 'hourly', temperatureC: calls++ === 0 ? 20 : 28 }));
@@ -175,6 +195,18 @@ describe('route weather helpers', () => {
     const out = await new LimitedRunner(2).run([1, 2, 3, 4, 5], job);
     expect(peak).toBe(2);
     expect(out.map((r) => (r.status === 'fulfilled' ? r.value : 'x'))).toEqual([2, 4, 'x', 8, 10]);
+  });
+
+  it('starts no more jobs once stopped', async () => {
+    const started: number[] = [];
+    const job = async (n: number) => {
+      started.push(n);
+      await Promise.resolve();
+      return n;
+    };
+    const out = await new LimitedRunner(2).run([1, 2, 3, 4, 5], job, () => started.length >= 2);
+    expect(started).toEqual([1, 2]);
+    expect(out.filter((r) => r.status === 'rejected')).toHaveLength(3);
   });
 
   it('builds the stops, departure and samples of a mission', () => {

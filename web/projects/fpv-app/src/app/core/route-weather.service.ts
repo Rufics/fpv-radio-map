@@ -122,11 +122,11 @@ export class ForecastCache {
   }
 }
 
-/** Runs async jobs with at most `limit` of them in flight. */
+/** Runs async jobs with at most `limit` of them in flight; once `stopped()` says so, the rest are not started. */
 export class LimitedRunner {
   constructor(private readonly limit: number) {}
 
-  async run<T, R>(items: readonly T[], job: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  async run<T, R>(items: readonly T[], job: (item: T) => Promise<R>, stopped: () => boolean = () => false): Promise<PromiseSettledResult<R>[]> {
     const out = new Array<PromiseSettledResult<R>>(items.length);
     let next = 0;
     // each worker takes the next item as soon as its last one settles
@@ -134,7 +134,7 @@ export class LimitedRunner {
       if (next >= items.length) return Promise.resolve();
       const i = next++;
       return Promise.resolve()
-        .then(() => job(items[i]))
+        .then(() => (stopped() ? Promise.reject(new Error('Stopped')) : job(items[i])))
         .then(
           (value) => (out[i] = { status: 'fulfilled', value }),
           (reason: unknown) => (out[i] = { status: 'rejected', reason }),
@@ -307,7 +307,7 @@ export class RouteWeatherService {
     const gen = this.generation;
     this.error.set(null);
     const points = MissionTimelineBuilder.samplePoints(t);
-    const settled = await this.runner.run(points, (p) => this.cache.get(p.lat, p.lon, p.etaMs));
+    const settled = await this.runner.run(points, (p) => this.cache.get(p.lat, p.lon, p.etaMs), () => gen !== this.generation);
     if (gen !== this.generation) return;
     const failed = settled.find((s): s is PromiseRejectedResult => s.status === 'rejected');
     if (failed && settled.every((s) => s.status === 'rejected')) {
