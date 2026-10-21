@@ -280,7 +280,7 @@ pinned by tag and by the digest of its multi-arch index, read from the registry 
 | Image | Tag |
 |---|---|
 | `ubuntu` | `26.04` (build and runtime of rfmap-server; it matches the GDAL 3.12, libpqxx 7.10 and cpp-httplib 0.26 the code is tested with in CI) |
-| `node` | `24-bookworm-slim` (client build) |
+| `node` | `24-trixie-slim` (client build, Debian 13) |
 | `nginx` | `1.28-alpine` |
 | `postgis/postgis` | `16-3.5` |
 | `ghcr.io/open-meteo/open-meteo` | `1.7.0` |
@@ -295,6 +295,6 @@ To update a compose image by hand, resolve the tag's current digest yourself, fo
 `docker buildx imagetools inspect postgis/postgis:16-3.5`, replace the digest, and restart.
 
 The server image and an API smoke test (missions, share link and PIN, `/calc/route`, module
-upload) were run against these pins on 2026-10-17. The web image could not be built then
-because Docker Hub rate-limited the pull, and the Open-Meteo image could not be pulled through
-the test network. Build and check both once in your environment.
+upload) were run against these pins on 2026-10-17. The web image was built on
+`node:24-trixie-slim` and served the client on 2026-10-21. The Open-Meteo image could not be
+pulled through the test network; build and check it once in your environment.

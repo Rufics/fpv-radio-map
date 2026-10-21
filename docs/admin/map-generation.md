@@ -236,7 +236,7 @@ flowchart TB
 | Tool | Used for |
 |---|---|
 | Planetiler 0.10.2 (Java 21) | basemap |
-| GDAL 3.8 (`gdalbuildvrt`, `gdal_translate`, `gdalwarp`, `gdaldem`, `gdal_contour`, `ogr2ogr`, `gdaladdo`, Python bindings) | DEM, land cover, hillshade, contours, satellite rasters, COG validation |
+| GDAL 3.12 (`gdalbuildvrt`, `gdal_translate`, `gdalwarp`, `gdaldem`, `gdal_contour`, `ogr2ogr`, `gdaladdo`, Python bindings) | DEM, land cover, hillshade, contours, satellite rasters, COG validation |
 | go-pmtiles 1.31.0 | MBTiles to PMTiles, `verify` |
 | curl | downloads with resume and retries |
 | Python 3 (`rfmap_tiles`) | the steps, XYZ tile downloads, input checks, records and manifest |

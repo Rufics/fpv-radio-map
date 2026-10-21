@@ -66,13 +66,13 @@ Directory layout: the data directory (`--data`, default `$RFMAP_DATA` or the cur
 
 | | version |
 |---|---|
-| base | `ubuntu:24.04@sha256:ac3a3d13…1594` |
-| Ubuntu packages | snapshot `20261015T000000Z`: gdal-bin / python3-gdal `3.8.4+dfsg-3ubuntu3`, openjdk-21-jre-headless `21.0.12.1+1-1~24.04.4`, curl, git, python3, sqlite3 (exact versions) |
+| base | `ubuntu:26.04@sha256:c098726d…b944` |
+| Ubuntu packages | snapshot `20261015T000000Z`: gdal-bin / python3-gdal `3.12.2+dfsg-1build2`, openjdk-21-jre-headless `21.0.12.1+1-1~26.04.4`, python3 `3.14`, curl, git, sqlite3 (exact versions) |
 | Planetiler | 0.10.2 (sha256 checked) |
 | go-pmtiles | 1.31.0 (sha256 checked, amd64/arm64) |
 | glyphs | protomaps/basemaps-assets @ `028c18f7…` (Noto Sans, SIL OFL 1.1) |
 
-**Upgrading pinned tools:** change the `ARG`s and the sha256 values, then rebuild and run `tests/smoke.sh`. The Ubuntu snapshot date controls which package versions exist. Pick a newer date and copy the versions from `apt-cache policy` inside `ubuntu:24.04` after `apt-get update --snapshot <date>`.
+**Upgrading pinned tools:** change the `ARG`s and the sha256 values, then rebuild and run `tests/smoke.sh`. The Ubuntu snapshot date controls which package versions exist. Pick a newer date and copy the versions from `apt-cache policy` inside `ubuntu:26.04` after `apt-get update --snapshot <date>`.
 
 Behind a TLS-intercepting proxy, build with `--secret id=extra_ca,src=/path/ca.crt`. The certificate is used only during the build and is not left in the image.
 
