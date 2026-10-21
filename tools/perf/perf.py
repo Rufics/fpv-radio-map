@@ -4,15 +4,19 @@
     python3 -I tools/perf/perf.py [--catalog-dir DIR] list [--kind KIND]
     python3 -I tools/perf/perf.py [--catalog-dir DIR] catalog check
     python3 -I tools/perf/perf.py [--catalog-dir DIR] catalog lock
+    python3 -I tools/perf/perf.py [--catalog-dir DIR] run --suite micro [--only ID] [--repetitions N]
+        [--build-dir DIR] [--results-dir DIR] [--window N] [--no-gate]
 
 The catalog is one folder (default: tools/perf) with fixtures/, personas/, scenarios/ and
 extensions/{collectors,reporters,benchmarks}/, one subfolder with a manifest.json per item.
 `list` shows what was found. `catalog check` validates every manifest against its schema, checks
 that referenced items and files exist, and that catalog.lock.json matches the catalog, so no item
 changed without a new version. `catalog lock` rewrites catalog.lock.json after versions were
-raised.
+raised. `run` builds and runs a suite, records it in the history and compares it with the
+baseline (README.md, "Micro suite").
 
-The exit code is 0 on success, 1 when the catalog has problems, 2 on a usage error.
+The exit code is 0 on success, 1 when the catalog has problems, a run fails or a gated measurement
+regressed, 2 on a usage error.
 """
 import sys
 from pathlib import Path

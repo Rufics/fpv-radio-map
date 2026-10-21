@@ -1,4 +1,17 @@
 {
   "format": 1,
-  "items": {}
+  "items": {
+    "benchmark/result-cache": {
+      "version": "1.0.0",
+      "sha256": "2ffb8858724b5851628a18fed04c2246970fc6e4a0adcc26aac3c320f0c64ada"
+    },
+    "benchmark/rf-core": {
+      "version": "1.0.0",
+      "sha256": "c1e83eb38ac5f1f783d216136ef6a0312161cc11d4ba2ad1753aec4f8ae1db83"
+    },
+    "collector/google-benchmark": {
+      "version": "1.0.0",
+      "sha256": "92b683f0e6e528674a29f270ceebf0f1253c4a24775836bcd9ea32422fb05f15"
+    }
+  }
 }

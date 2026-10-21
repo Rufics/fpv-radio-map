@@ -55,6 +55,19 @@ class PerfCliTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("does not exist", errors)
 
+    def test_run_stops_before_building(self):
+        results = ["--results-dir", str(self.root / "results")]
+        code, _, errors = self.run_cli("run", "--suite", "micro", "--repetitions", "0", *results)
+        self.assertEqual((code, errors.strip()), (2, "error: --repetitions must be at least 1"))
+        code, _, errors = self.run_cli("run", "--suite", "micro", "--only", "nope", *results)
+        self.assertEqual(code, 1)
+        self.assertIn("no benchmark nope", errors)
+        (self.root / "personas" / "empty").mkdir()
+        code, _, errors = self.run_cli("run", "--suite", "micro", *results)
+        self.assertEqual(code, 1)
+        self.assertIn("personas/empty: no manifest.json", errors)
+        self.assertFalse((self.root / "results").exists())
+
     def test_repository_catalog_is_consistent(self):
         output, errors = io.StringIO(), io.StringIO()
         self.assertEqual(cli.PerfCli(output=output, errors=errors).main(["catalog", "check"]), 0, errors.getvalue())

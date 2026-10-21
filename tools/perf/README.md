@@ -1,8 +1,9 @@
 # Performance tools
 
 Tooling for the load and performance tests of the C++ code (core, platform, FPV modules and the
-server). So far there are the terrain dataset builder and the catalog of descriptions and
-extensions; the runs, benchmarks, k6 scenarios and reports follow. CI runs only the unit tests of
+server). So far there are the terrain dataset builder, the catalog of descriptions and
+extensions, and the micro suite (Google Benchmark) with its history and baseline; the k6
+scenarios, monitoring and reports follow. CI runs only the unit tests of
 these tools, which include a `catalog check` of the repository catalog; the perf runs themselves
 are not part of CI.
 
@@ -43,7 +44,58 @@ results are only compared between runs with the same major versions. After a cha
 changed a little, patch: the numbers do not change) and run `catalog lock`. It refuses while an
 item changed without a higher version.
 
-Exit codes: 0 on success, 1 when the catalog has problems, 2 on a usage error.
+Exit codes: 0 on success, 1 when the catalog has problems or a run regressed, 2 on a usage error.
+
+## Micro suite (`perf.py run --suite micro`)
+
+Google Benchmark binaries for the hot C++ code, one `benchmark` extension per component:
+
+| benchmark | what it measures |
+|---|---|
+| `rf-core` | Fresnel integrals, knife edge, free-space loss, geodesics, path geometry and Bullington diffraction for 3, 12 and 50 km profiles at 30 m |
+| `result-cache` | input hashing, memory hits from 1 to 8 threads, promotion from the table tier, eviction |
+
+```bash
+sudo apt-get install libbenchmark-dev     # plus the packages of .github/actions/cpp-deps
+python3 -I tools/perf/perf.py run --suite micro [--only rf-core] [--repetitions 10]
+```
+
+`run` configures a Release build in `build-perf/` with `RFMAP_BUILD_BENCHMARKS=ON`, builds the
+benchmark targets and runs each binary with repetitions. The collector the benchmark names
+(`google-benchmark` by default) keeps one aggregate per benchmark (`compare.stat`, the median by
+default). The table on stdout lists the gated metric of every benchmark, worst first; the tools'
+own output goes to stderr.
+
+A benchmark folder holds `manifest.json` (`target`, `links`, `repetitions`, `compare`), a
+`CMakeLists.txt` that only calls `rfmap_perf_benchmark()` and the `*.cpp` sources. The target name
+and the libraries come from the manifest; `RFMAP_PERF_CATALOG_DIR` points CMake at the catalog in
+use, so `--catalog-dir` works for benchmarks too.
+
+Each run gets a folder `tools/perf/results/<UTC time>/` (`--results-dir` to move it; it is not
+committed):
+
+| file | content |
+|---|---|
+| `environment.json` | git commit and dirty flag, CPU model, cores, memory, kernel, OS, cgroup limits, CPU governor, CMake build type, compiler and flags, and what Google Benchmark saw (CPU MHz, caches, load) |
+| `events.json` | start and end of every phase (the run, the build, each benchmark); the reports draw them as bands on every chart |
+| `results.json` | every measurement with its baseline, change and verdict |
+| `raw/` | the binaries' JSON |
+
+All runs also go into `results/history.sqlite`.
+
+**Baseline and gate.** A measurement is compared with the median of its last 10 values
+(`--window`) from earlier runs on the same host, with the same dataset and the same major version
+of the benchmark and the collector. The host is a fingerprint of the CPU model, the number of
+CPUs, the memory and the cgroup limits, so a recreated VM of the same type continues the history.
+A change worse than `compare.maxRegressionPct` (5 % by default) is a regression and `run` exits 1;
+`--no-gate` reports it but exits 0. With fewer than 3 earlier values there is no verdict yet.
+
+Notes:
+
+- Shared VMs are noisy: one repetition can take twice as long as the next. Compare on a quiet,
+  dedicated machine with a fixed CPU governor, and keep `repetitions` at 10.
+- Ubuntu's `libbenchmark` reports that it "was built as DEBUG". That concerns the library's own
+  timing loop, not the code under test, which is built in Release.
 
 ## Terrain dataset (`dataset.py`)
 
