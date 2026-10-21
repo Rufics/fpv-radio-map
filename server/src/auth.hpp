@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.hpp"
+#include "pin_gate.hpp"
 #include "security.hpp"
 
 #include <map>
@@ -107,7 +108,8 @@ public:
         std::chrono::seconds sessionTtl{7 * 24 * 3600};
     };
 
-    AuthService(IAuthStore& store, const PinHasher& pins, const IClock& clock, Settings settings);
+    /// Every PIN hash and check passes through `gate`, so PIN work cannot take every request thread.
+    AuthService(IAuthStore& store, const PinHasher& pins, PinGate& gate, const IClock& clock, Settings settings);
 
     struct OwnerKey {
         std::string plain;  ///< returned to the creator once
@@ -131,7 +133,8 @@ public:
         std::string missionId;
         Role role;
     };
-    /// 401 wrong PIN (body: triesLeft), 404 unknown token, 410 revoked or expired, 429 paused (body: retryAfterS).
+    /// 401 wrong PIN (body: triesLeft), 404 unknown token, 410 revoked or expired, 429 paused (body: retryAfterS),
+    /// 503 too many PIN checks running (body: retryAfterS; the attempt is not counted).
     Opened openLink(const std::string& token, const std::string& pin);
     /// The link behind a token, before the PIN: 404 unknown, 410 revoked or expired. Changes nothing.
     LinkRecord peekLink(const std::string& token);
@@ -147,6 +150,7 @@ public:
 private:
     IAuthStore& store_;
     const PinHasher& pins_;
+    PinGate& gate_;
     const IClock& clock_;
     Settings settings_;
 };

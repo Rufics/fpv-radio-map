@@ -254,6 +254,13 @@ paths:
           content:
             application/json:
               schema: { type: object, properties: { message: { type: string }, retryAfterS: { type: integer } } }
+        '503':
+          description: >-
+            The server is checking as many PINs as it allows at once; try again after Retry-After.
+            The attempt is not counted as a wrong PIN.
+          content:
+            application/json:
+              schema: { type: object, properties: { message: { type: string }, retryAfterS: { type: integer } } }
 
   /calc/path:
     post:

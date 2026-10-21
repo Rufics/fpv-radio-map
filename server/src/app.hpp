@@ -87,6 +87,7 @@ private:
         std::unique_ptr<SchemaRegistry> schemas;
         std::unique_ptr<PgAuthStore> authStore;
         std::unique_ptr<PinHasher> pins;
+        std::unique_ptr<PinGate> pinGate;
         std::unique_ptr<AuthService> auth;
         std::unique_ptr<MissionStore> missions;
         std::unique_ptr<Library> library;

@@ -102,6 +102,12 @@ public:
         int pinMaxAttempts = 5;
         int pinLockoutMinutes = 15;
         std::string argon2Cost = "moderate";
+        /// PIN hashes running at once (0 = automatic, see PinGate::limitsFor).
+        int pinConcurrency = 0;
+        /// Requests that may wait for a hashing slot (0 = as many as run at once).
+        int pinQueue = 0;
+        /// How long a waiting request waits before it gets 503; 0 turns it away at once.
+        int pinWaitMs = 2000;
     };
     Auth auth;
 

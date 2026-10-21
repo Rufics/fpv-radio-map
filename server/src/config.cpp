@@ -38,8 +38,8 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "weather",
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
-        "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "rateLimits", "perMinute", "burst", "coverage",
-        "maxCells", "maxJobs", "keepMinutes", "map"});
+        "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
+        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "map"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -171,6 +171,9 @@ Config Config::fromJson(json doc) {
     read(a, "pinMaxAttempts", c.auth.pinMaxAttempts);
     read(a, "pinLockoutMinutes", c.auth.pinLockoutMinutes);
     read(a, "argon2Cost", c.auth.argon2Cost);
+    read(a, "pinConcurrency", c.auth.pinConcurrency);
+    read(a, "pinQueue", c.auth.pinQueue);
+    read(a, "pinWaitMs", c.auth.pinWaitMs);
 
     if (doc.contains("rateLimits") && doc.at("rateLimits").is_object()) {
         for (const auto& [k, v] : doc.at("rateLimits").items()) {
@@ -186,6 +189,9 @@ Config Config::fromJson(json doc) {
 
     if (c.server.port <= 0 || c.server.port > 65535) throw std::invalid_argument("server.port out of range");
     if (c.auth.pinMaxAttempts < 1) throw std::invalid_argument("auth.pinMaxAttempts must be >= 1");
+    if (c.auth.pinConcurrency < 0 || c.auth.pinQueue < 0 || c.auth.pinWaitMs < 0) {
+        throw std::invalid_argument("auth.pinConcurrency, auth.pinQueue and auth.pinWaitMs must be >= 0");
+    }
     if (c.data.demStatedErrorM.has_value() && !(*c.data.demStatedErrorM >= 0.0)) {
         throw std::invalid_argument("data.demStatedErrorM must be >= 0");
     }
