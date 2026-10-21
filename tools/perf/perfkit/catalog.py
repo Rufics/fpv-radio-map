@@ -125,7 +125,8 @@ class ContentHasher:
     @staticmethod
     def files(folder: Path) -> list[Path]:
         found = []
-        for path in sorted(folder.rglob("*")):
+        # Sorted by the POSIX form: Path order ignores case on Windows, so the hash would differ.
+        for path in sorted(folder.rglob("*"), key=lambda found_path: found_path.relative_to(folder).as_posix()):
             relative = path.relative_to(folder)
             if any(part in _IGNORED_DIRS for part in relative.parts):
                 continue

@@ -185,6 +185,14 @@ class ContentHasherTest(CatalogTestCase):
         self.assertNotEqual(ContentHasher.folder(folder), changed)
 
 
+    def test_files_are_ordered_by_posix_path_on_every_os(self):
+        folder = self.sample.root / "fixtures/warsaw-points"
+        (folder / "B.json").write_text("{}", encoding="utf-8")
+        (folder / "a.json").write_text("{}", encoding="utf-8")
+        names = [path.name for path in ContentHasher.files(folder)]
+        self.assertEqual(names, ["B.json", "a.json", "manifest.json", "points.json"])
+
+
 class FieldPathTest(unittest.TestCase):
     def test_paths(self):
         data = {"a": [{"b": 1}, {"b": 2}, {"c": 3}], "d": {"x": "1", "y": "2"}, "e": "s"}
