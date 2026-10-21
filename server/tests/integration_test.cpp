@@ -1047,6 +1047,12 @@ TEST_F(Integration, FlightLogsDecodeImportReplayAndCompareWithThePlan) {
     EXPECT_EQ(p["source"]["fileName"], "LOG00001.BFL");
     ASSERT_EQ(p["flights"].size(), 1u);
     EXPECT_EQ(p["flights"][0]["schema"], "flightview/v1");
+    // The probe sees only the first 64 KiB; the decode still reads every log in the file.
+    std::string many;
+    while (many.size() <= 64 * 1024) many += bytes;
+    const auto longer = post("/flightlogs/decode?fileName=LOG00002.BFL", many);
+    ASSERT_EQ(longer->status, 200) << longer->body;
+    EXPECT_EQ(json::parse(longer->body)["flights"].size(), many.size() / bytes.size());
     EXPECT_EQ(post("/flightlogs/decode", "PK\x03\x04 not a log")->status, 422);
     EXPECT_EQ(post("/flightlogs/decode", "")->status, 400);
 

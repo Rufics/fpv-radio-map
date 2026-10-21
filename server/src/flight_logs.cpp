@@ -14,6 +14,8 @@ namespace rfmap {
 namespace {
 
 constexpr std::size_t kMaxFileName = 120;
+/// What a decoder sees to tell whether a file is its format: only the full decode gets every byte.
+constexpr std::size_t kProbeBytes = 65'536;
 
 /// Bytes of the valid UTF-8 character at `i`, or 0 when the bytes there are not one.
 std::size_t utf8Length(std::string_view s, std::size_t i) {
@@ -184,7 +186,7 @@ FlightLogService::Decoded FlightLogService::decode(const std::string& bytes, con
         throw HttpError(413, std::format("the file is {} bytes; this server takes up to {}", bytes.size(), limits_.maxBytes));
     }
     const auto* data = reinterpret_cast<const std::uint8_t*>(bytes.data());
-    const json request = {{"file", rfmod::toBase64(data, bytes.size())}, {"fileName", fileName}};
+    const json question = {{"file", rfmod::toBase64(data, std::min(bytes.size(), kProbeBytes))}, {"fileName", fileName}};
     const std::shared_lock gate(modules_.gate());
     const rfmod::ModuleRegistry* registry = modules_.registry();
     const std::vector<rfmod::IModuleInstance*> decoders =
@@ -193,8 +195,8 @@ FlightLogService::Decoded FlightLogService::decode(const std::string& bytes, con
     json tried = json::array();
     for (rfmod::IModuleInstance* d : decoders) {
         tried.push_back(d->manifest().id);
-        if (!probe(*d, request)) continue;
-        json document = decodeWith(*d, request);
+        if (!probe(*d, question)) continue;
+        json document = decodeWith(*d, {{"file", rfmod::toBase64(data, bytes.size())}, {"fileName", fileName}});
         if (const auto problems = schemas_.check("flightlog", document); !problems.empty()) {
             throw HttpError(502, d->manifest().id + " answered a document that does not match the flightlog schema: " +
                                      problems.front().pointer + " " + problems.front().message,

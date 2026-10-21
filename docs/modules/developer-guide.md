@@ -217,13 +217,13 @@ replay, the story and plan against fact, the same way for every format. A decode
 isolated (section 8), even when it is signed with the owner key, because it parses files that
 users upload.
 
-Both methods take `{ "file": "<base64 of the whole file>", "fileName": "LOG00007.BFL" }`.
+Both methods take `{ "file": "<base64>", "fileName": "LOG00007.BFL" }`.
 
-- `flightlog.probe` answers `{ "match": true|false, "format": "...", ... }` and must be cheap:
-  look at the first bytes, not the whole file. The server asks each installed decoder in turn
-  and uses the first that matches.
-- `flightlog.decode` answers the normalized document, one entry in `logs` per flight in the
-  file. A flight with no data (only a header, an unsupported firmware) is still an entry, with
+- `flightlog.probe` gets only the first 64 KiB of the file and answers
+  `{ "match": true|false, "format": "...", ... }`. Tell the format from those bytes. The server
+  asks each installed decoder in turn and uses the first that matches.
+- `flightlog.decode` gets the whole file and answers the normalized document, one entry in
+  `logs` per flight in the file. A flight with no data (only a header, an unsupported firmware) is still an entry, with
   its `status` and a `notes` entry that says why and what to do. Read the format as the
   firmware writes it, per version, and say in `firmware.supported` when a version is outside
   what you know. Never guess a field you could not read: leave it out, so the UI shows "not
