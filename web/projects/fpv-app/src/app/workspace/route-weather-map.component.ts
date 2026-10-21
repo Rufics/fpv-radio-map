@@ -135,7 +135,7 @@ export class RouteWeatherMapComponent {
   /** Shown, with forecasts on the route to colour it by. */
   protected readonly active = computed(() => {
     const route = this.wx.route();
-    return this.shown() && route !== null && !route.empty;
+    return this.shown() && route !== null && route.colourable;
   });
 
 

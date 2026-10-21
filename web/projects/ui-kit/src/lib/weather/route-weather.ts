@@ -60,6 +60,11 @@ export class RouteWeather {
     return this.covered.length === 0;
   }
 
+  /** Enough forecast to colour the route: a piece needs a forecast at both of its ends. */
+  get colourable(): boolean {
+    return this.covered.length >= 2;
+  }
+
   /** The forecast of the sample nearest to `alongM`, for its model, run and tier. */
   nearestForecast(alongM: number): WeatherPoint | null {
     let best: WeatherPoint | null = null;

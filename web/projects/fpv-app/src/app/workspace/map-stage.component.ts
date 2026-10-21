@@ -173,7 +173,7 @@ export class MapStageComponent {
   /** The route coloured by the weather; until then (or in a fix preview, which draws its own route) the leg labels stay */
   protected readonly weatherShown = computed(() => {
     const route = this.wx.route();
-    return this.ws.weatherMode() && !this.ws.store.preview() && route !== null && !route.empty;
+    return this.ws.weatherMode() && !this.ws.store.preview() && route !== null && route.colourable;
   });
   protected readonly routeDeltaShown = computed(() => !!this.cmp.result()?.links?.[this.cmp.link()]?.points?.length && !this.ws.store.preview());
   protected readonly droneAgl = computed(() => this.ws.mission()?.coverage?.droneAglM ?? 120);

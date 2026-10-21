@@ -39,7 +39,7 @@ export class RouteColoursComponent {
   /** Forecasts on the route to colour it by. */
   protected readonly coloured = computed(() => {
     const route = this.wx.route();
-    return route !== null && !route.empty;
+    return route !== null && route.colourable;
   });
 
   /** Why the route is not coloured yet. */

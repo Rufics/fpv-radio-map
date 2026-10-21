@@ -119,10 +119,20 @@ describe('RouteWeather', () => {
     expect(rw.nearestForecast(0)?.model).toBe('Open-Meteo icon_d2');
   });
 
+  it('colours the route only with a forecast at two samples or more', () => {
+    const pts = timeline().samples(1000, 3);
+    const one = pts.map((p, i) => ({ point: p, weather: i === 0 ? { tier: 'hourly' as const, temperatureC: 4 } : { tier: 'none' as const } }));
+    expect(new RouteWeather(timeline(), one).empty).toBe(false);
+    expect(new RouteWeather(timeline(), one).colourable).toBe(false);
+    const two = pts.map((p, i) => ({ point: p, weather: i < 2 ? { tier: 'hourly' as const, temperatureC: 4 } : { tier: 'none' as const } }));
+    expect(new RouteWeather(timeline(), two).colourable).toBe(true);
+  });
+
   it('leaves out samples beyond the forecast and makes nothing up', () => {
     const pts = timeline().samples(1000, 3);
     const rw = new RouteWeather(timeline(), pts.map((p) => ({ point: p, weather: { tier: 'none', model: 'none' } })));
     expect(rw.empty).toBe(true);
+    expect(rw.colourable).toBe(false);
     expect(rw.readingAt(100)).toBeNull();
     expect(rw.strongestHeadwind()).toBeNull();
     expect(rw.max('temperatureC')).toBeNull();
