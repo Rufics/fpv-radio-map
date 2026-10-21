@@ -1,0 +1,28 @@
+# The web part of the SonarQube Cloud analysis (.github/workflows/sonar.yml): the unit tests of
+# both Angular projects with coverage, merged into one LCOV report with repository-relative paths.
+name: SonarQube Cloud web coverage
+description: Runs the ui-kit and fpv-app unit tests with coverage and writes sonar-reports/web.lcov.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+    - name: Install dependencies
+      shell: bash
+      working-directory: web
+      run: npm ci --ignore-scripts --no-audit --no-fund
+    - name: Test with coverage
+      shell: bash
+      working-directory: web
+      run: |
+        npm run sync-schemas
+        npm run ng -- test ui-kit --watch=false --coverage --coverage-reporters=lcovonly
+        npm run ng -- test fpv-app --watch=false --coverage --coverage-reporters=lcovonly
+    - name: Merge coverage
+      shell: bash
+      run: >-
+        python3 -I tools/ci/sonar_lcov.py --base web --output sonar-reports/web.lcov
+        web/coverage/ui-kit/lcov.info web/coverage/fpv-app/lcov.info

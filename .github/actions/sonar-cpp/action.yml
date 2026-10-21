@@ -1,0 +1,36 @@
+# The C++ part of the SonarQube Cloud analysis (.github/workflows/sonar.yml). One instrumented
+# build gives both the compile database the analyser reads (build-sonar/compile_commands.json) and
+# the coverage, filtered like the coverage job in ci.yml.
+name: SonarQube Cloud C++ coverage
+description: Builds and tests the C++ code with coverage and writes sonar-reports/cpp-coverage.xml.
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/cpp-deps
+      with:
+        extra: gcovr
+    - name: Configure
+      shell: bash
+      run: >-
+        cmake -S . -B build-sonar -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON -DRFMAP_COVERAGE=ON
+    - name: Build
+      shell: bash
+      run: cmake --build build-sonar
+    - name: Test
+      shell: bash
+      run: ctest --test-dir build-sonar --output-on-failure
+    # Branch coverage counts only the decisions in the source: the hidden exception paths the
+    # compiler adds to every call that may throw, and branches no code can reach, are left out,
+    # or they would dominate the branch count without saying anything about the tests.
+    - name: Coverage report
+      shell: bash
+      run: |
+        mkdir -p sonar-reports
+        gcovr --root . -j "$(nproc)" \
+          --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
+          --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' \
+          --exclude '.*/tests/.*' \
+          --exclude-throw-branches --exclude-unreachable-branches \
+          --sonarqube sonar-reports/cpp-coverage.xml \
+          build-sonar
