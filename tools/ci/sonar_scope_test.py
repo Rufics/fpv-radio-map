@@ -59,6 +59,7 @@ class ScopePlannerTest(unittest.TestCase):
         self.assertIn("core/a.hpp", scope.files)
         self.assertIn("**/*.cpp", scope.files)
         self.assertIn("**/*.hpp", scope.files)
+        self.assertIn("**/tests/**/*.cpp", scope.tests)
 
     def test_changed_tests_are_collected(self):
         scope = ScopePlanner().plan(["core/rf-core/tests/a_test.cpp", "tools/ci/x_test.py", "web/a.spec.ts",

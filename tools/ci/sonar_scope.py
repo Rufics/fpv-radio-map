@@ -57,8 +57,9 @@ class ChangeClassifier:
     HEADER_SUFFIXES = (".h", ".hh", ".hpp", ".hxx", ".inl")
     CPP_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".cmake", *HEADER_SUFFIXES)
     # The C/C++ analyser reads a header only through the sources that include it, so a changed
-    # header brings every C/C++ file into the scan.
+    # header brings every C/C++ file into the scan, the C/C++ tests included.
     C_FAMILY_PATTERNS = tuple(f"**/*{suffix}" for suffix in (".c", ".cc", ".cpp", ".cxx", *HEADER_SUFFIXES))
+    C_FAMILY_TEST_PATTERNS = tuple(f"**/tests/{pattern}" for pattern in C_FAMILY_PATTERNS)
     CPP_NAMES = ("CMakeLists.txt", ".clang-tidy")
     CPP_FOLDERS = ("core/", "platform/", "modules/", "server/", "examples/", "fuzz/", "schemas/", "data/",
                    ".github/actions/cpp-deps/", ".github/actions/fuzz/")
@@ -132,6 +133,7 @@ class ScopePlanner:
         reason = f"{len(files)} changed file(s)"
         if any(self._classifier.is_header(path) for path in files):
             files += self._classifier.C_FAMILY_PATTERNS
+            tests += self._classifier.C_FAMILY_TEST_PATTERNS
             reason += " and every C/C++ file, for the changed headers"
         return Scope(areas, files, reason, tests)
 

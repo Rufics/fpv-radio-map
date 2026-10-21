@@ -38,10 +38,10 @@ and sorts the changed files into three parts:
 Only the parts that changed are built and tested. The scanner gets `sonar.inclusions` set to the
 changed files and `sonar.test.inclusions` set to the changed test files, so a web-only pull
 request runs neither the C++ build nor the Python tests. The C/C++ analyser reads a header only
-through the sources that include it, so a changed header adds every C/C++ file to the scan. For a
-part that is skipped the scope also switches its coverage report off, and without the C++ part the
-C/C++ analyser is turned off (`sonar.c.file.suffixes=-` and so on), since it would need the
-compile database of the skipped build.
+through the sources that include it, so a changed header adds every C/C++ file, tests included, to
+the scan. For a part that is skipped the scope also switches its coverage report off, and without
+the C++ part the C/C++ analyser is turned off (`sonar.c.file.suffixes=-` and so on), since it would
+need the compile database of the skipped build.
 
 The job and the scan always run, so the `SonarQube Cloud analysis` check and the quality gate
 report on every analysed pull request and a required check never waits for a run that does not
