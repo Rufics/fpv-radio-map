@@ -142,9 +142,12 @@ class ScenarioSuiteTest(StandTestCase):
             loaded.set()
             return True
 
+        def record_down(_stand):
+            done_at_down.append(loaded.is_set())
+
         with patch.object(Stand, "server_pid", side_effect=PerfError("the stand's server is not running")), \
                 patch.object(Stand, "load", slow_load), \
-                patch.object(Stand, "down", lambda _stand: done_at_down.append(loaded.is_set())), \
+                patch.object(Stand, "down", record_down), \
                 self.assertRaisesRegex(PerfError, "server is not running"):
             suite.profile(regressions, self.run_dir, profiles)
         self.assertEqual(done_at_down, [True], "the load finished before the stand went down")
