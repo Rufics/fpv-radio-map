@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Type } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MissionStore, RouteTimeline, RouteWeather, provideMapView } from '@rfmap/ui-kit';
+import { MissionStore, RfmapApiClient, RouteTimeline, RouteWeather, provideMapView } from '@rfmap/ui-kit';
 import { FpvDataService } from '../core/fpv-data.service';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { HourlyWeather, MissionTimelineBuilder, RouteWeatherService } from '../core/route-weather.service';
@@ -66,11 +66,26 @@ describe('weather views', () => {
     // a refresh asks again for the hours around each ETA too
     const hourly = vi.spyOn(wx, 'hourly');
     b.refresh();
+    // no calm verdict while the forecast is reloading
+    expect(b.verdict().tone).toBe('none');
     await loaded();
     TestBed.tick();
     expect(hourly).toHaveBeenCalledTimes(5);
     b.close();
     expect(ws.briefingOpen()).toBe(false);
+  });
+
+  it('briefing: never calm without a forecast to judge by', async () => {
+    const vm = () => vmOf<{ verdict: () => { title: string; tone: string } }>(WeatherBriefingComponent);
+    const spy = vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockRejectedValue(new Error('down'));
+    store.newMission(exampleMission());
+    TestBed.tick();
+    for (let i = 0; i < 100 && wx.status() !== 'error'; i++) await MockApiHarness.wait(100);
+    expect(vm().verdict()).toEqual({ title: 'The forecast could not be loaded', tone: 'warn' });
+    spy.mockRestore();
+    store.update((m) => ({ ...m, time: { mode: 'planned', utc: new Date(Date.now() + 40 * 86400e3).toISOString() } }));
+    await loaded();
+    expect(vm().verdict().title).toBe('No forecast covers this flight time');
   });
 
   it('sparkline: scales to the hours it has and marks the ETA', () => {

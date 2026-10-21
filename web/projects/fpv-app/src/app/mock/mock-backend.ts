@@ -5,7 +5,7 @@
  * Shared-link demo: /m/v/demo-view (PIN 246810), /m/e/demo-edit (PIN 135790), /m/v/demo-revoked.
  * Scenarios: add ?scenario=missing-elevation | module-failed | stale-forecast to the page URL.
  */
-import { HttpErrorResponse, HttpHeaders, HttpRequest, HttpResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders, HttpParams, HttpRequest, HttpResponse } from '@angular/common/http';
 import { fpvCoreMock } from './fpv-core-mock';
 import {
   CacheLimit,
@@ -119,7 +119,7 @@ export class MockBackend {
     r('GET', /^\/library\/([a-z-]+)\/([^/]+)$/, (_req, m) => this.libraryItem(m[1] as LibraryKind, m[2]));
     r('PUT', /^\/library\/([a-z-]+)\/([^/]+)$/, (req, m) => this.admin(req, () => this.saveLibrary(m[1] as LibraryKind, m[2], req.body)));
     r('GET', /^\/weather\/horizon$/, () => this.ok(horizon()));
-    r('GET', /^\/weather\/point$/, (req) => this.ok(weatherAt(req.params.get('timeUtc') ?? undefined, this.scenario() === 'stale-forecast', { lat: Number(req.params.get('lat')), lon: Number(req.params.get('lon')) })));
+    r('GET', /^\/weather\/point$/, (req) => this.ok(weatherAt(req.params.get('timeUtc') ?? undefined, this.scenario() === 'stale-forecast', MockBackend.placeOf(req.params))));
     r('GET', /^\/modules$/, () => this.ok(this.modules));
     r('PUT', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.setModule(decodeURIComponent(m[1]), req.body as { enabled?: boolean })));
     r('DELETE', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.removeModule(decodeURIComponent(m[1]))));
@@ -469,6 +469,13 @@ export class MockBackend {
       { name: 'Self-test', ok: isZip, detail: isZip ? 'Conformance tests 48 / 48 on reference cases' : 'not run' },
     ];
     return this.ok({ ok: checks.every((c) => c.ok), checks });
+  }
+
+  /** The place a request names, or none when lat or lon is missing (the pilot's reference weather). */
+  private static placeOf(params: HttpParams): { lat: number; lon: number } | undefined {
+    const lat = Number(params.get('lat') ?? Number.NaN);
+    const lon = Number(params.get('lon') ?? Number.NaN);
+    return Number.isFinite(lat) && Number.isFinite(lon) ? { lat, lon } : undefined;
   }
 
   private putCache(body: CacheLimit[]): HttpResponse<unknown> {

@@ -84,7 +84,9 @@ export class RouteWeather {
     if (this.empty) return null;
     const point = this.timeline.pointAt(alongM);
     const after = this.covered.findIndex((s) => s.point.alongM >= point.alongM);
-    if (after <= 0) return this.reading(point, this.covered[Math.max(after, 0)].weather);
+    // before the first forecast or past the last one, the nearest one holds
+    if (after === 0) return this.reading(point, this.covered[0].weather);
+    if (after < 0) return this.reading(point, this.covered[this.covered.length - 1].weather);
     const a = this.covered[after - 1];
     const b = this.covered[after];
     const span = b.point.alongM - a.point.alongM;
@@ -150,6 +152,7 @@ export class RouteWeather {
     const out: WeatherPoint = { ...(t < 0.5 ? a : b) };
     for (const f of NUMERIC_FIELDS) out[f] = RouteWeather.lerp(a[f], b[f], t);
     if (a.windFromDeg !== undefined && b.windFromDeg !== undefined) out.windFromDeg = Wind.lerpDeg(a.windFromDeg, b.windFromDeg, t);
+    else out.windFromDeg = a.windFromDeg ?? b.windFromDeg;
     return out;
   }
 

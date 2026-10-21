@@ -140,6 +140,19 @@ describe('RouteWeather', () => {
     const mid = rw.readingAt((pts[1].alongM + pts[2].alongM) / 2)!;
     expect(mid.temperatureC).toBe(4);
     expect(mid.windFromDeg).toBe(0);
+    // nearer the sample without a direction, the other's direction still holds
+    expect(rw.readingAt(pts[1].alongM + 1)!.windFromDeg).toBe(0);
+  });
+
+  it('holds the last forecast past the end of the covered samples', () => {
+    const t = timeline();
+    const pts = t.samples(1000, 4);
+    const rw = new RouteWeather(t, [
+      { point: pts[0], weather: forecast({ temperatureC: 1 }) },
+      { point: pts[1], weather: forecast({ temperatureC: 2 }) },
+      { point: pts[3], weather: { tier: 'none' } },
+    ]);
+    expect(rw.readingAt(t.lengthM)!.temperatureC).toBe(2);
   });
 });
 

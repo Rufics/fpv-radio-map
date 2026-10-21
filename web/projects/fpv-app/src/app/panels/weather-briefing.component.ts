@@ -53,6 +53,13 @@ interface BriefingCardVm {
   hoursLoaded: boolean;
 }
 
+/** What the briefing says while it has no forecast to judge by: never a calm verdict. */
+const NO_VERDICT = {
+  loading: { title: 'Loading the forecast…', tone: 'none' },
+  error: { title: 'The forecast could not be loaded', tone: 'warn' },
+  noForecast: { title: 'No forecast covers this flight time', tone: 'warn' },
+};
+
 const VERDICT: Record<WeatherLevel, { title: string; tone: string }> = {
   calm: { title: 'Calm weather on the route', tone: 'ok' },
   notable: { title: 'Flyable with caution', tone: 'warn' },
@@ -172,6 +179,11 @@ export class WeatherBriefingComponent {
   });
 
   protected readonly verdict = computed(() => {
+    const status = this.wx.status();
+    if (status === 'loading') return NO_VERDICT.loading;
+    if (status === 'error') return NO_VERDICT.error;
+    const route = this.wx.route();
+    if (!route || route.empty) return NO_VERDICT.noForecast;
     const levels = this.wx.summary().map((s) => s.level);
     if (levels.includes('strong')) return VERDICT.strong;
     return levels.includes('notable') ? VERDICT.notable : VERDICT.calm;
