@@ -43,7 +43,7 @@ export class MockFlights {
   static headerOnly(fileName: string): FlightView {
     return {
       schema: 'flightview/v1',
-      index: 0,
+      index: 1,
       status: 'header-only',
       durationS: 0,
       firmware: { name: 'Betaflight', version: '4.5.1', supported: true },
@@ -156,7 +156,7 @@ export class MockFlights {
     };
     return {
       schema: 'flightview/v1',
-      index: 0,
+      index: 1,
       status: 'ok',
       durationS,
       firmware: { name: 'Betaflight', version: '4.5.1', revision: '77d01ba3b', target: 'STM32F7X2', supported: true },

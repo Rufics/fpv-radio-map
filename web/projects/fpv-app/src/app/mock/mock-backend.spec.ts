@@ -176,6 +176,7 @@ describe('MockBackend through the API client', () => {
 
     const preview = await settle(api.decodeFlightLog(created.missionId, big, 'LOG00007.BFL'));
     expect(preview.flights[0].status).toBe('ok');
+    expect(preview.flights[0].index).toBe(1);
     expect(preview.flights[0].story.length).toBeGreaterThan(0);
     const headerOnly = await settle(api.decodeFlightLog(null, new Blob(['H Product:Blackbox']), 'btfl_016.bbl'));
     expect(headerOnly.flights[0].status).toBe('header-only');

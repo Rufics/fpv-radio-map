@@ -94,6 +94,7 @@ export interface FlightFirmware {
 /** A logbook row: GET /missions/{id}/flightlogs, and each flight of an import. */
 export interface FlightLogRow {
   id?: string;
+  /** The flight's number in its file, from 1 */
   index: number;
   status: 'ok' | 'partial' | 'header-only' | 'unsupported';
   durationS: number;

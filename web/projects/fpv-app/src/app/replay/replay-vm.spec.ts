@@ -6,7 +6,7 @@ import { ReplayVm } from './replay-vm';
 
 function row(p: Partial<FlightLogRow> = {}, summary: Partial<FlightLogRow['summary']> = {}): FlightLogRow {
   return {
-    index: 0,
+    index: 1,
     status: 'ok',
     durationS: 462,
     firmware: { name: 'Betaflight', version: '4.5.1', supported: true },

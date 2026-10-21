@@ -1231,7 +1231,7 @@ components:
       required: [index, status, durationS, firmware, summary, bands, warnings]
       properties:
         id: { type: string, description: 'Only for a flight kept in a mission' }
-        index: { type: integer, description: 'Flight number in the file, from 0' }
+        index: { type: integer, minimum: 1, description: 'Flight number in the file, from 1' }
         status: { enum: [ok, partial, header-only, unsupported] }
         durationS: { type: number }
         firmware: { type: object, properties: { name: { type: string }, version: { type: string }, revision: { type: string }, target: { type: string }, supported: { type: boolean } } }

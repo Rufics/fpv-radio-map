@@ -50,14 +50,14 @@ const MAX_BYTES = 64 * 1024 * 1024;
             @for (v of f.preview!.flights; track v.index; let vi = $index) {
               @if (v.status === 'header-only' || v.status === 'unsupported') {
                 <div class="rf-card rf-card--warn note">
-                  <b>Flight {{ v.index + 1 }} has no flight data</b>
+                  <b>Flight {{ v.index }} has no flight data</b>
                   @for (n of v.notes; track n.code) {<span>{{ n.message }}{{ n.fix ? ' ' + n.fix : '' }}</span>}
                 </div>
               } @else {
                 <label class="opt">
                   <input type="radio" name="flight" [checked]="isChosen(fi, vi)" (change)="choice.set({ file: fi, flight: vi })" />
                   <span class="opt-main">
-                    <b>Flight {{ v.index + 1 }} · {{ time(v) }}</b>
+                    <b>Flight {{ v.index }} · {{ time(v) }}</b>
                     <span class="rf-mono">{{ line(v) }} · {{ v.channels['gps'] && v.summary.distanceM !== undefined ? 'GPS' : 'no GPS track' }}</span>
                   </span>
                   @for (w of v.warnings; track $index) {<span class="chip">{{ w }}</span>}
@@ -78,7 +78,7 @@ const MAX_BYTES = 64 * 1024 * 1024;
       <div class="actions">
         <button type="button" class="rf-btn rf-btn--secondary" (click)="close()">Cancel</button>
         <button type="button" class="rf-btn rf-btn--primary" (click)="replayChosen()" [disabled]="!chosenView() || busy()">
-          {{ busy() ? 'Saving…' : 'Replay flight ' + ((chosenView()?.index ?? 0) + 1) }}
+          {{ busy() ? 'Saving…' : 'Replay flight ' + (chosenView()?.index ?? 1) }}
         </button>
       </div>
     </section>

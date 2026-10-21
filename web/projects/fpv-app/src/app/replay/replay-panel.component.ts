@@ -96,7 +96,7 @@ import { ReplayVm } from './replay-vm';
             <li [class.sel]="r.id === replay.view()?.id">
               <button type="button" class="row" (click)="openRow(r)" [disabled]="!!reason(r)">
                 <span class="when">{{ started(r) }}</span>
-                <span class="file">{{ r.fileName }}{{ r.index > 0 ? ' · flight ' + (r.index + 1) : '' }}</span>
+                <span class="file">{{ r.fileName }}{{ r.index > 1 ? ' · flight ' + r.index : '' }}</span>
                 @if (reason(r); as why) {
                   <span class="muted">{{ why }}</span>
                 } @else {

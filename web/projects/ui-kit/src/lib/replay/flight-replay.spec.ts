@@ -5,7 +5,7 @@ import { ReplayFormat, ReplayTimeline, TrackScale } from './flight-replay';
 function view(channels: FlightTimeline['channels'] = {}): FlightView {
   return {
     schema: 'flightview/v1',
-    index: 0,
+    index: 1,
     status: 'ok',
     durationS: 4,
     firmware: { name: 'Betaflight', version: '4.5.1', supported: true },
