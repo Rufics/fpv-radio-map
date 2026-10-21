@@ -118,15 +118,17 @@ class MicroSuite:
     def profile(self, regressions: Sequence[Comparison], run_dir: Path, profiles: ProfileRunner) -> list[Profile]:
         """Runs each regressed benchmark once more, alone and for a few seconds, under the profilers."""
         benchmarks = {item.key: item for item in self.benchmarks()}
-        targets: dict[str, ProfileTarget] = {}
+        # Two binaries can each have a benchmark of the same name: the target names the benchmark item too.
+        targets: dict[tuple[str, str], ProfileTarget] = {}
         for comparison in regressions:
-            item = benchmarks.get(comparison.measurement.source)
-            name = comparison.measurement.name
-            if item is None or name in targets:
+            source, name = comparison.measurement.source, comparison.measurement.name
+            item = benchmarks.get(source)
+            if item is None or (source, name) in targets:
                 continue
             binary = str(self._build.bin_dir / item.manifest["target"])
-            targets[name] = ProfileTarget(name, (binary, f"--benchmark_filter=^{re.escape(name)}$",
-                                                 "--benchmark_repetitions=1", f"--benchmark_min_time={PROFILE_S}s"))
+            targets[(source, name)] = ProfileTarget(f"{item.id}/{name}", (
+                binary, f"--benchmark_filter=^{re.escape(name)}$", "--benchmark_repetitions=1",
+                f"--benchmark_min_time={PROFILE_S}s"))
         return profiles.profile(list(targets.values()), run_dir)
 
     def run(self, item: Item, out_dir: Path) -> Path:

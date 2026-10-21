@@ -90,12 +90,17 @@ class MicroSuiteTest(CollectorTestCase):
         profiles = TargetsOnly()
         gone = comparison("BM_Gone", 9.0)
         other = replace(gone, measurement=replace(gone.measurement, source="benchmark/gone"))
-        regressions = [comparison("BM_Path/100", 20.0), comparison("BM_Path/100", 10.0), other]
+        path = comparison("BM_Path/100", 20.0)
+        cached = replace(path, measurement=replace(path.measurement, source="benchmark/result-cache"))
+        regressions = [path, comparison("BM_Path/100", 10.0), other, cached]
         self.suite().profile(regressions, self.root / "run", profiles)
-        (target,) = profiles.targets
-        self.assertEqual(target.name, "BM_Path/100")
-        self.assertEqual(target.command, (str(self.build.bin_dir / "bench_rf_core"), "--benchmark_filter=^BM_Path/100$",
-                                          "--benchmark_repetitions=1", "--benchmark_min_time=5s"))
+        core, cache = profiles.targets
+        self.assertEqual(core.name, "rf-core/BM_Path/100")
+        self.assertEqual(core.command, (str(self.build.bin_dir / "bench_rf_core"), "--benchmark_filter=^BM_Path/100$",
+                                        "--benchmark_repetitions=1", "--benchmark_min_time=5s"))
+        # The same name in another binary is profiled too, into files of its own.
+        self.assertEqual(cache.command[0], str(self.build.bin_dir / "bench_result_cache"))
+        self.assertEqual((core.file_name, cache.file_name), ("rf-core-BM_Path-100", "result-cache-BM_Path-100"))
 
     def test_unknown_benchmark(self):
         suite = self.suite(only=("nope", "rf-core"))
