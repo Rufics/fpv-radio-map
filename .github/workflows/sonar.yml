@@ -6,6 +6,11 @@
 # get, so their runs skip it; ci.yml still tests them. The token is passed to the scanner step
 # only, never to the steps that build and run the pull request's code. Without the secret the
 # analysis is skipped instead of failing, so the workflow is harmless until the setup is done.
+#
+# A pull request builds, tests and scans only what it changes (tools/ci/sonar_scope.py): a
+# web-only change skips the C++ build and the Python tests, and the scanner reads only the changed
+# files. Pushes to main and manual runs analyse everything. The job always runs to the scan, so
+# its check and the SonarQube Cloud quality gate report on every analysed pull request.
 name: SonarQube Cloud
 
 on:
@@ -61,59 +66,30 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: ./.github/actions/cpp-deps
-        with:
-          extra: gcovr python3-coverage
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: web/package-lock.json
 
-      # C++: one instrumented build gives both the compile database the analyser reads and the
-      # coverage, filtered like the coverage job in ci.yml.
-      - name: Configure C++
+      # 1. Scope: which parts this run builds and which files it scans. Rewrites
+      #    sonar-project.properties in this checkout with the scope appended.
+      - name: Scope
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
         run: >-
-          cmake -S . -B build-sonar -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON -DRFMAP_COVERAGE=ON
-      - name: Build C++
-        run: cmake --build build-sonar
-      - name: Test C++
-        run: ctest --test-dir build-sonar --output-on-failure
-      # Branch coverage counts only the decisions in the source: the hidden exception paths
-      # the compiler adds to every call that may throw, and branches no code can reach, are left
-      # out, or they would dominate the branch count without saying anything about the tests.
+          python3 -I tools/ci/sonar_scope.py --settings sonar-project.properties
+          --output sonar-project.properties --base "$BASE" --head "$HEAD"
+
+      # 2. Coverage of each part in scope, one composite action per part.
       - name: C++ coverage
-        run: |
-          mkdir -p sonar-reports
-          gcovr --root . -j "$(nproc)" \
-            --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
-            --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' \
-            --exclude '.*/tests/.*' \
-            --exclude-throw-branches --exclude-unreachable-branches \
-            --sonarqube sonar-reports/cpp-coverage.xml \
-            build-sonar
-
+        if: steps.scope.outputs.cpp == 'true'
+        uses: ./.github/actions/sonar-cpp
       - name: Python coverage
-        run: |
-          python3 -I -m coverage run --branch --source=tools/ci --omit='*_test.py' \
-            -m unittest discover -s tools/ci -p '*_test.py'
-          python3 -I -m coverage xml -o sonar-reports/python-coverage.xml
-
-      - name: Install web dependencies
-        working-directory: web
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        if: steps.scope.outputs.python == 'true'
+        uses: ./.github/actions/sonar-python
       - name: Web coverage
-        working-directory: web
-        run: |
-          npm run sync-schemas
-          npm run ng -- test ui-kit --watch=false --coverage --coverage-reporters=lcovonly
-          npm run ng -- test fpv-app --watch=false --coverage --coverage-reporters=lcovonly
-      - name: Merge web coverage
-        run: >-
-          python3 -I tools/ci/sonar_lcov.py --base web --output sonar-reports/web.lcov
-          web/coverage/ui-kit/lcov.info web/coverage/fpv-app/lcov.info
+        if: steps.scope.outputs.web == 'true'
+        uses: ./.github/actions/sonar-web
 
+      # 3. Scan: the only step that gets the token.
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
