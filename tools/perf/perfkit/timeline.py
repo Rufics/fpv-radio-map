@@ -44,6 +44,12 @@ class Timeline:
             event.finished = self._clock()
             event.outcome = event.outcome or "ok"
 
+    def record(self, name: str, kind: str, started: str, finished: str, **attributes) -> Event:
+        """An event whose times another tool measured, such as a load stage inside k6."""
+        event = Event(name, kind, started, finished, "ok", attributes)
+        self._events.append(event)
+        return event
+
     def events(self) -> list[Event]:
         return list(self._events)
 

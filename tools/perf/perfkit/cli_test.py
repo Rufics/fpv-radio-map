@@ -68,6 +68,14 @@ class PerfCliTest(unittest.TestCase):
         self.assertIn("personas/empty: no manifest.json", errors)
         self.assertFalse((self.root / "results").exists())
 
+    def test_scenario_needs_a_checked_dataset(self):
+        code, _, errors = self.run_cli("run", "--scenario", "peak")
+        self.assertEqual(code, 1)
+        self.assertIn("--scenario needs --dataset", errors)
+        code, _, errors = self.run_cli("run", "--scenario", "peak", "--dataset", str(self.root / "none"))
+        self.assertEqual(code, 1)
+        self.assertIn("perf-dataset.json is missing", errors)
+
     def test_repository_catalog_is_consistent(self):
         output, errors = io.StringIO(), io.StringIO()
         self.assertEqual(cli.PerfCli(output=output, errors=errors).main(["catalog", "check"]), 0, errors.getvalue())

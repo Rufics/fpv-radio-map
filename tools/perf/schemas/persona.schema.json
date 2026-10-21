@@ -7,7 +7,8 @@
     "group": "description",
     "references": [
       { "path": "fixtures[]", "kind": "fixture" },
-      { "path": "steps[].body", "kind": "fixture", "withFile": true }
+      { "path": "steps[].body", "kind": "fixture", "withFile": true },
+      { "path": "setup.missions", "kind": "fixture", "withFile": true }
     ]
   },
   "type": "object",
@@ -37,11 +38,21 @@
         "max": { "type": "number", "minimum": 0 }
       }
     },
-    "setup": { "type": "object", "description": "Data the orchestrator creates before the run, for example links with PINs." },
+    "setup": {
+      "type": "object",
+      "description": "Missions the orchestrator creates before the run; with link-pin auth each gets a share link with a PIN.",
+      "required": ["missions"],
+      "additionalProperties": false,
+      "properties": {
+        "missions": { "$ref": "#/$defs/fixtureFile" },
+        "count": { "type": "integer", "minimum": 1, "maximum": 200 }
+      }
+    },
     "steps": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/step" } },
     "checks": { "type": "array", "items": { "type": "object", "required": ["name"] } }
   },
   "$defs": {
+    "fixtureFile": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*:[A-Za-z0-9_][A-Za-z0-9_./-]*\\.json$" },
     "step": {
       "type": "object",
       "required": ["name", "weight", "method", "path"],
@@ -54,17 +65,19 @@
         "body": {
           "type": ["string", "object"],
           "pattern": "^[a-z0-9][a-z0-9-]*:[A-Za-z0-9_][A-Za-z0-9_./-]*$",
-          "description": "Inline JSON, or FIXTURE:FILE from a fixture."
+          "description": "Inline JSON, or FIXTURE:FILE from a fixture; a file holding an array sends one element per request, in turn."
         },
         "expect": { "type": "integer", "minimum": 100, "maximum": 599 },
         "maxPerLink": { "type": "integer", "minimum": 1 },
         "poll": {
           "type": "object",
-          "required": ["path", "untilField", "timeoutS"],
+          "required": ["path", "untilField", "pending", "timeoutS"],
           "additionalProperties": false,
           "properties": {
             "path": { "type": "string", "pattern": "^/" },
             "untilField": { "type": "string", "minLength": 1 },
+            "pending": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Values of untilField that mean: ask again." },
+            "intervalS": { "type": "number", "exclusiveMinimum": 0 },
             "timeoutS": { "type": "number", "exclusiveMinimum": 0 }
           }
         }

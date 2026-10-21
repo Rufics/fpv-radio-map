@@ -73,6 +73,14 @@ class MicroSuite:
         collectors = {self.collector(item).key: self.collector(item) for item in benchmarks}
         return benchmarks + list(collectors.values())
 
+    @staticmethod
+    def environment() -> dict:
+        return {}
+
+    @staticmethod
+    def problems() -> list[str]:
+        return []
+
     def execute(self, timeline: Timeline, run_dir: Path) -> list[Collected]:
         benchmarks = self.benchmarks()
         if not benchmarks:

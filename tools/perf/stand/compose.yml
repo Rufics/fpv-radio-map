@@ -1,0 +1,59 @@
+# The perf stand: PostGIS and rfmap-server with the perf configuration, and k6 to load it.
+# perf.py starts it before a scenario and removes it after, with its database, so every run
+# starts from the same state (README.md, "HTTP scenarios"). To look at it by hand:
+#   RFMAP_PERF_DATA=<dataset>/out RFMAP_PERF_ADMIN_TOKEN=<token> RFMAP_PERF_RUN_DIR=/tmp/run \
+#     docker compose -f tools/perf/stand/compose.yml up -d
+#
+# CPU and memory limits make runs on different machines comparable; they are recorded with
+# every run. Images are pinned by digest, read from the registries on 2026-10-21.
+
+name: rfmap-perf
+
+services:
+  postgis:
+    image: postgis/postgis:16-3.5@sha256:94146ac37bc61e2322f88016056c5920729cb8c64c8542ed590af8fc2abdac07
+    environment:
+      POSTGRES_DB: rfmap
+      POSTGRES_USER: rfmap
+      # The stand's database is reachable only from its own network and lives for one run.
+      POSTGRES_PASSWORD: perf
+    cpus: ${RFMAP_PERF_DB_CPUS:-2}
+    mem_limit: ${RFMAP_PERF_DB_MEMORY:-2g}
+    healthcheck:
+      # Over TCP: while the image initialises the database, its temporary server listens on the
+      # socket only, and a socket check would let rfmap-server start too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U rfmap -d rfmap"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  rfmap-server:
+    build:
+      context: ../../..
+      dockerfile: deploy/server.Dockerfile
+    image: ${RFMAP_PERF_SERVER_IMAGE:-rfmap-server:perf}
+    depends_on:
+      postgis:
+        condition: service_healthy
+    environment:
+      RFMAP_DATABASE_URL: postgresql://rfmap:perf@postgis:5432/rfmap
+      RFMAP_ADMIN_TOKEN: ${RFMAP_PERF_ADMIN_TOKEN:?perf.py sets the admin token}
+    volumes:
+      - ./server.perf.json:/etc/rfmap/rfmap.json:ro
+      - ${RFMAP_PERF_DATA:?perf.py passes the dataset folder}:/data:ro
+    ports:
+      - "127.0.0.1:${RFMAP_PERF_PORT:-18080}:8080"
+    cpus: ${RFMAP_PERF_SERVER_CPUS:-4}
+    mem_limit: ${RFMAP_PERF_SERVER_MEMORY:-4g}
+
+  # Started by perf.py with `run`, once the server is ready and the set-up is done.
+  k6:
+    image: grafana/k6:1.0.0@sha256:f21270290d702cbf0a7d6ba5d7ed100b63bcb233b558b885ed787547b3488279
+    profiles: [load]
+    depends_on: [rfmap-server]
+    # The caller's user, so k6 can write its summary into the run folder.
+    user: ${RFMAP_PERF_USER:-12345:12345}
+    volumes:
+      - ../k6:/scripts:ro
+      - ${RFMAP_PERF_RUN_DIR:?perf.py passes the run folder}:/run/perf
+    cpus: ${RFMAP_PERF_K6_CPUS:-2}

@@ -30,7 +30,8 @@ class SampleCatalog:
                  "body": "link-setups:control.json"},
                 {"name": "coverage", "weight": 1, "method": "POST", "path": "/calc/coverage",
                  "body": {"inline": True},
-                 "poll": {"path": "/jobs/{{response.jobId}}", "untilField": "state", "timeoutS": 120}},
+                 "poll": {"path": "/jobs/{{response.jobId}}", "untilField": "state", "pending": ["queued", "running"],
+                          "timeoutS": 120}},
             ]})
         self.write("scenarios/peak", {
             "kind": "scenario", "id": "peak", "version": "1.0.0",

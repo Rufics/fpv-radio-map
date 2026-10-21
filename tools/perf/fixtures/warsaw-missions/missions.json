@@ -1,0 +1,2137 @@
+[
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 01",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.19735,
+   "lon": 20.88396,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.2836,
+    "lon": 21.0668,
+    "aglM": 60
+   },
+   {
+    "lat": 52.13298,
+    "lon": 20.89999,
+    "aglM": 120
+   },
+   {
+    "lat": 52.31908,
+    "lon": 21.16528,
+    "aglM": 90
+   },
+   {
+    "lat": 52.17185,
+    "lon": 21.16989,
+    "aglM": 120
+   },
+   {
+    "lat": 52.14121,
+    "lon": 21.11053,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 02",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.29204,
+   "lon": 20.95422,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.20314,
+    "lon": 21.0907,
+    "aglM": 120
+   },
+   {
+    "lat": 52.23681,
+    "lon": 20.90987,
+    "aglM": 60
+   },
+   {
+    "lat": 52.14687,
+    "lon": 20.91929,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 03",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.23868,
+   "lon": 21.04825,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.19146,
+    "lon": 21.04125,
+    "aglM": 60
+   },
+   {
+    "lat": 52.15438,
+    "lon": 21.0174,
+    "aglM": 120
+   },
+   {
+    "lat": 52.33142,
+    "lon": 21.0279,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 04",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.19695,
+   "lon": 20.87395,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.20007,
+    "lon": 20.95145,
+    "aglM": 60
+   },
+   {
+    "lat": 52.23088,
+    "lon": 21.16745,
+    "aglM": 60
+   },
+   {
+    "lat": 52.18754,
+    "lon": 21.06228,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 05",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.15784,
+   "lon": 21.16884,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.27269,
+    "lon": 20.91957,
+    "aglM": 120
+   },
+   {
+    "lat": 52.26741,
+    "lon": 21.0324,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 06",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.3274,
+   "lon": 20.96465,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.20748,
+    "lon": 21.12768,
+    "aglM": 60
+   },
+   {
+    "lat": 52.19008,
+    "lon": 21.02194,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 07",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.21886,
+   "lon": 20.93949,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.18059,
+    "lon": 21.01481,
+    "aglM": 120
+   },
+   {
+    "lat": 52.14528,
+    "lon": 20.87353,
+    "aglM": 60
+   },
+   {
+    "lat": 52.31102,
+    "lon": 20.85491,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 08",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.32434,
+   "lon": 21.06065,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.27724,
+    "lon": 20.98621,
+    "aglM": 120
+   },
+   {
+    "lat": 52.1644,
+    "lon": 21.08292,
+    "aglM": 120
+   },
+   {
+    "lat": 52.2272,
+    "lon": 20.99736,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 09",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.22107,
+   "lon": 20.90947,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.208,
+    "lon": 21.08899,
+    "aglM": 120
+   },
+   {
+    "lat": 52.29231,
+    "lon": 21.12591,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 10",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.14844,
+   "lon": 21.16154,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.15623,
+    "lon": 21.01872,
+    "aglM": 120
+   },
+   {
+    "lat": 52.22273,
+    "lon": 21.16749,
+    "aglM": 60
+   },
+   {
+    "lat": 52.21127,
+    "lon": 21.05819,
+    "aglM": 120
+   },
+   {
+    "lat": 52.22824,
+    "lon": 21.05048,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 11",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.32983,
+   "lon": 20.85091,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.26253,
+    "lon": 21.07434,
+    "aglM": 60
+   },
+   {
+    "lat": 52.30245,
+    "lon": 21.04359,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 12",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.20545,
+   "lon": 20.95206,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.23028,
+    "lon": 21.10134,
+    "aglM": 120
+   },
+   {
+    "lat": 52.18248,
+    "lon": 21.17667,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 13",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.28358,
+   "lon": 20.99202,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.233,
+    "lon": 21.07026,
+    "aglM": 120
+   },
+   {
+    "lat": 52.31806,
+    "lon": 20.86329,
+    "aglM": 120
+   },
+   {
+    "lat": 52.29061,
+    "lon": 20.84253,
+    "aglM": 90
+   },
+   {
+    "lat": 52.15633,
+    "lon": 21.02686,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 14",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.12758,
+   "lon": 20.89272,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.14865,
+    "lon": 21.11086,
+    "aglM": 120
+   },
+   {
+    "lat": 52.23681,
+    "lon": 20.96601,
+    "aglM": 90
+   },
+   {
+    "lat": 52.22659,
+    "lon": 21.15854,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 15",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.25463,
+   "lon": 21.011,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.27432,
+    "lon": 21.07694,
+    "aglM": 90
+   },
+   {
+    "lat": 52.16427,
+    "lon": 21.00816,
+    "aglM": 60
+   },
+   {
+    "lat": 52.17352,
+    "lon": 21.14678,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 16",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.17015,
+   "lon": 21.11133,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.17464,
+    "lon": 21.15672,
+    "aglM": 60
+   },
+   {
+    "lat": 52.27947,
+    "lon": 20.98638,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 17",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.30858,
+   "lon": 21.07386,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.2729,
+    "lon": 20.98509,
+    "aglM": 60
+   },
+   {
+    "lat": 52.16364,
+    "lon": 21.02398,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 18",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.21008,
+   "lon": 20.88847,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.2564,
+    "lon": 20.95615,
+    "aglM": 90
+   },
+   {
+    "lat": 52.25137,
+    "lon": 21.02604,
+    "aglM": 90
+   },
+   {
+    "lat": 52.22625,
+    "lon": 21.04381,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 19",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.17847,
+   "lon": 20.99839,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.15712,
+    "lon": 21.04257,
+    "aglM": 60
+   },
+   {
+    "lat": 52.31542,
+    "lon": 21.15928,
+    "aglM": 90
+   },
+   {
+    "lat": 52.21857,
+    "lon": 20.93124,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 20",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.26571,
+   "lon": 21.1359,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.15618,
+    "lon": 20.94036,
+    "aglM": 90
+   },
+   {
+    "lat": 52.27757,
+    "lon": 21.09633,
+    "aglM": 90
+   },
+   {
+    "lat": 52.1985,
+    "lon": 20.89234,
+    "aglM": 120
+   },
+   {
+    "lat": 52.22007,
+    "lon": 21.16414,
+    "aglM": 120
+   },
+   {
+    "lat": 52.26112,
+    "lon": 21.0999,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 21",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.32283,
+   "lon": 21.14694,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.2482,
+    "lon": 21.13776,
+    "aglM": 120
+   },
+   {
+    "lat": 52.1771,
+    "lon": 21.04111,
+    "aglM": 120
+   },
+   {
+    "lat": 52.25119,
+    "lon": 21.04039,
+    "aglM": 120
+   },
+   {
+    "lat": 52.13116,
+    "lon": 20.93774,
+    "aglM": 90
+   },
+   {
+    "lat": 52.20278,
+    "lon": 21.1574,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 22",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.32944,
+   "lon": 21.13326,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.31702,
+    "lon": 21.03944,
+    "aglM": 120
+   },
+   {
+    "lat": 52.27596,
+    "lon": 20.85569,
+    "aglM": 60
+   },
+   {
+    "lat": 52.19156,
+    "lon": 21.03863,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 23",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.12991,
+   "lon": 21.16523,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.18827,
+    "lon": 20.94563,
+    "aglM": 120
+   },
+   {
+    "lat": 52.16487,
+    "lon": 21.09817,
+    "aglM": 60
+   },
+   {
+    "lat": 52.27907,
+    "lon": 21.13515,
+    "aglM": 90
+   },
+   {
+    "lat": 52.22669,
+    "lon": 20.88112,
+    "aglM": 60
+   },
+   {
+    "lat": 52.14212,
+    "lon": 20.91642,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 24",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.18721,
+   "lon": 20.92494,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.3174,
+    "lon": 21.12066,
+    "aglM": 90
+   },
+   {
+    "lat": 52.23669,
+    "lon": 21.05977,
+    "aglM": 120
+   },
+   {
+    "lat": 52.19995,
+    "lon": 21.02174,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 25",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.16835,
+   "lon": 21.01248,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.2998,
+    "lon": 20.873,
+    "aglM": 120
+   },
+   {
+    "lat": 52.16271,
+    "lon": 21.05828,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 26",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.22267,
+   "lon": 20.91104,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.25724,
+    "lon": 20.98745,
+    "aglM": 90
+   },
+   {
+    "lat": 52.32253,
+    "lon": 20.86207,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 27",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.18666,
+   "lon": 20.92719,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.13639,
+    "lon": 21.13424,
+    "aglM": 60
+   },
+   {
+    "lat": 52.22532,
+    "lon": 21.14615,
+    "aglM": 60
+   },
+   {
+    "lat": 52.17413,
+    "lon": 20.98541,
+    "aglM": 60
+   },
+   {
+    "lat": 52.16128,
+    "lon": 21.00796,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 28",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.20997,
+   "lon": 21.13548,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.29377,
+    "lon": 21.1421,
+    "aglM": 120
+   },
+   {
+    "lat": 52.29117,
+    "lon": 20.87178,
+    "aglM": 120
+   },
+   {
+    "lat": 52.32388,
+    "lon": 20.91722,
+    "aglM": 120
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 29",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.17837,
+   "lon": 21.17837,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.31535,
+    "lon": 21.11041,
+    "aglM": 60
+   },
+   {
+    "lat": 52.31603,
+    "lon": 21.04777,
+    "aglM": 60
+   },
+   {
+    "lat": 52.1401,
+    "lon": 21.07344,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 30",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.18636,
+   "lon": 20.85349,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.30883,
+    "lon": 20.87187,
+    "aglM": 120
+   },
+   {
+    "lat": 52.20859,
+    "lon": 21.04152,
+    "aglM": 60
+   },
+   {
+    "lat": 52.19561,
+    "lon": 20.86977,
+    "aglM": 60
+   },
+   {
+    "lat": 52.26552,
+    "lon": 20.92462,
+    "aglM": 90
+   },
+   {
+    "lat": 52.32616,
+    "lon": 20.97603,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 31",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.16654,
+   "lon": 21.06173,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.19544,
+    "lon": 21.10843,
+    "aglM": 90
+   },
+   {
+    "lat": 52.30313,
+    "lon": 20.93054,
+    "aglM": 120
+   },
+   {
+    "lat": 52.3077,
+    "lon": 20.86404,
+    "aglM": 60
+   },
+   {
+    "lat": 52.14047,
+    "lon": 20.98628,
+    "aglM": 90
+   },
+   {
+    "lat": 52.32224,
+    "lon": 21.16852,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 32",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.21787,
+   "lon": 20.9217,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.13851,
+    "lon": 20.98801,
+    "aglM": 60
+   },
+   {
+    "lat": 52.32011,
+    "lon": 21.00727,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 33",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.18617,
+   "lon": 21.04277,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.24526,
+    "lon": 20.89193,
+    "aglM": 60
+   },
+   {
+    "lat": 52.12897,
+    "lon": 20.91164,
+    "aglM": 90
+   },
+   {
+    "lat": 52.15285,
+    "lon": 21.04345,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 34",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.2519,
+   "lon": 21.06872,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.25827,
+    "lon": 20.95814,
+    "aglM": 120
+   },
+   {
+    "lat": 52.32453,
+    "lon": 21.00547,
+    "aglM": 120
+   },
+   {
+    "lat": 52.18176,
+    "lon": 20.93991,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 35",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.33158,
+   "lon": 21.10578,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.14725,
+    "lon": 21.16683,
+    "aglM": 120
+   },
+   {
+    "lat": 52.17254,
+    "lon": 21.05567,
+    "aglM": 60
+   },
+   {
+    "lat": 52.32499,
+    "lon": 20.96718,
+    "aglM": 120
+   },
+   {
+    "lat": 52.22519,
+    "lon": 21.13406,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 36",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.24196,
+   "lon": 21.06921,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.29067,
+    "lon": 20.84653,
+    "aglM": 120
+   },
+   {
+    "lat": 52.24807,
+    "lon": 20.92049,
+    "aglM": 90
+   },
+   {
+    "lat": 52.28442,
+    "lon": 20.96598,
+    "aglM": 120
+   },
+   {
+    "lat": 52.24036,
+    "lon": 20.8874,
+    "aglM": 90
+   },
+   {
+    "lat": 52.3161,
+    "lon": 20.92069,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 37",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.28555,
+   "lon": 20.98061,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.2675,
+    "lon": 20.90129,
+    "aglM": 90
+   },
+   {
+    "lat": 52.24244,
+    "lon": 20.90631,
+    "aglM": 120
+   },
+   {
+    "lat": 52.24808,
+    "lon": 21.13399,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 38",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.16432,
+   "lon": 20.86325,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.21668,
+    "lon": 20.91669,
+    "aglM": 90
+   },
+   {
+    "lat": 52.32504,
+    "lon": 21.00992,
+    "aglM": 90
+   },
+   {
+    "lat": 52.13512,
+    "lon": 20.8708,
+    "aglM": 120
+   },
+   {
+    "lat": 52.27538,
+    "lon": 21.05868,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 39",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.27002,
+   "lon": 21.10834,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.29897,
+    "lon": 20.84571,
+    "aglM": 90
+   },
+   {
+    "lat": 52.26678,
+    "lon": 21.13777,
+    "aglM": 120
+   },
+   {
+    "lat": 52.29732,
+    "lon": 21.17622,
+    "aglM": 90
+   },
+   {
+    "lat": 52.25631,
+    "lon": 20.94965,
+    "aglM": 60
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ },
+ {
+  "schema": "mission/v1",
+  "name": "Perf mission 40",
+  "time": {
+   "mode": "now"
+  },
+  "pilot": {
+   "lat": 52.25753,
+   "lon": 21.06536,
+   "aglM": 1.5
+  },
+  "waypoints": [
+   {
+    "lat": 52.21411,
+    "lon": 20.93694,
+    "aglM": 60
+   },
+   {
+    "lat": 52.23069,
+    "lon": 20.94001,
+    "aglM": 90
+   },
+   {
+    "lat": 52.13921,
+    "lon": 20.93551,
+    "aglM": 90
+   },
+   {
+    "lat": 52.13897,
+    "lon": 20.97833,
+    "aglM": 90
+   }
+  ],
+  "returnToPilot": true,
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both",
+  "coverage": {
+   "radiusM": 1500,
+   "cellM": 100,
+   "droneAglM": 80
+  }
+ }
+]

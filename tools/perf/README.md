@@ -97,6 +97,71 @@ Notes:
 - Ubuntu's `libbenchmark` reports that it "was built as DEBUG". That concerns the library's own
   timing loop, not the code under test, which is built in Release.
 
+## HTTP scenarios (`perf.py run --scenario ID`)
+
+A scenario puts load on the real server through its HTTP API. The stand is a Docker Compose project
+`rfmap-perf` from `stand/compose.yml`: PostGIS, the server built from `deploy/` with
+`stand/server.perf.json`, and k6 (`grafana/k6:1.0.0`, pinned by digest) running `k6/runner.js`.
+
+```bash
+python3 -I tools/perf/dataset.py build --out ../rfmap-perf-data     # once, see "Terrain dataset"
+python3 -I tools/perf/perf.py run --scenario smoke --dataset ../rfmap-perf-data
+```
+
+| scenario | load |
+|---|---|
+| `smoke` | 4 requests per second for 60 s; a quick check that every persona works |
+| `peak` | warm-up at 5 rps, ramp to 30 rps, 5 minutes at 30 rps, ramp down |
+
+A scenario mixes **personas** by weight. A persona is what one kind of user does: its auth
+(`link-pin`, `mission-owner` or none), weighted steps with method, path, body and expected status,
+and an optional `setup` that creates missions from a fixture before the load starts.
+
+| persona | does |
+|---|---|
+| `link-editor` | edits a mission through its link: calc-path, calc-route, reads the mission |
+| `viewer` | opens a shared link: reads the mission, lists radios, health |
+| `coverage-planner` | starts a coverage job as the mission owner and polls it until it is done |
+| `mission-creator` | creates missions without an account |
+
+Fixtures hold request bodies made from the Warsaw dataset with a fixed seed: `warsaw-paths`
+(400 calc-path bodies) and `warsaw-missions` (40 missions with a coverage grid). A step whose
+body is an array file sends its elements in turn.
+
+What `run --scenario` does:
+
+1. checks the dataset against its manifest (`--dataset`, the `--out` of `dataset.py`);
+2. builds the server image (`--no-build` uses `--server-image` as it is) and starts the stand with
+   a fresh database on `127.0.0.1:18080` (`--port`), waiting for `/health`;
+3. creates the personas' missions and links, then writes `plan.json`: one k6 scenario per persona
+   with its share of the arrival rate, the bodies and the credentials;
+4. runs k6; `k6-summary.json` gives p50, p95, p99, rps and the error rate of the whole run and of
+   each `persona/step`, and the p95 of coverage jobs;
+5. saves the server log to `raw/rfmap-server.log` and stops the stand (`--keep-stand` leaves it
+   running).
+
+The run folder and the baseline work as in the micro suite. `events.json` also has the stand's
+phases and every load stage (warm-up, ramp, plateau), placed by the time k6 started. The dataset
+key is `terrain-<hash of the dataset manifest>` and the personas and fixtures count as involved
+items, so a new major version of either starts a new baseline. `environment.json` also has the
+server's settings, the PostgreSQL version, settings and database size, and the containers'
+limits.
+
+Limits of the stand's containers come from the caller's environment:
+
+| variable | default |
+|---|---|
+| `RFMAP_PERF_SERVER_CPUS`, `RFMAP_PERF_SERVER_MEMORY` | `4`, `4g` |
+| `RFMAP_PERF_DB_CPUS`, `RFMAP_PERF_DB_MEMORY` | `2`, `2g` |
+| `RFMAP_PERF_K6_CPUS` | `2` |
+
+Notes:
+
+- The stand's server config has metrics on, no weather, very high rate limits and the production
+  password hashing cost, so the load measures the server and not its limiter.
+- Behind a proxy, Docker needs the proxy for pulls and builds; with Docker Hub rate limits, a
+  registry mirror in `/etc/docker/daemon.json` helps.
+
 ## Terrain dataset (`dataset.py`)
 
 Load tests must run against the same terrain every time, or results of different builds cannot

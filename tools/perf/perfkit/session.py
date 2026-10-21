@@ -35,10 +35,12 @@ class Collected:
     collection: Collection
     gate_metrics: frozenset[str]
     limit_pct: float
+    related: tuple[Item, ...] = ()
 
     @property
     def involved(self) -> dict[str, str]:
-        return {self.source.key: str(self.source.version), self.collector.key: str(self.collector.version)}
+        items = (self.source, self.collector, *self.related)
+        return {item.key: str(item.version) for item in items}
 
 
 class Suite(Protocol):
@@ -48,6 +50,10 @@ class Suite(Protocol):
     def items(self) -> list[Item]: ...
 
     def execute(self, timeline: Timeline, run_dir: Path) -> list[Collected]: ...
+
+    def environment(self) -> dict[str, Any]: ...
+
+    def problems(self) -> list[str]: ...
 
 
 @dataclass(frozen=True)
@@ -75,7 +81,7 @@ class RunSession:
         finally:
             # Also after a failure, so it is clear which phase broke and when.
             self._write_json(run_dir / "events.json", timeline.to_json())
-        environment = self._environment.snapshot()
+        environment = {**self._environment.snapshot(), **suite.environment()}
         for entry in collected:
             environment.setdefault("tools", {}).update(entry.collection.context)
         record = RunRecord(run_dir.name, suite.name, timeline.events()[0].started, timeline.events()[0].finished,
@@ -90,8 +96,10 @@ class RunSession:
             history.close()
         self._write(run_dir, record, timeline, comparisons)
         ConsoleTable(self._output).print(run_dir, comparisons)
+        for problem in suite.problems():
+            print(f"problem: {problem}", file=self._output)
         failed = [c for c in comparisons if c.gated and c.verdict is Verdict.REGRESSION]
-        return 1 if failed and self._settings.gate else 0
+        return 1 if (failed and self._settings.gate) or suite.problems() else 0
 
     def _run_dir(self) -> Path:
         stamp = self._clock().replace("-", "").replace(":", "").split(".")[0] + "Z"

@@ -1,0 +1,8902 @@
+[
+ {
+  "from": {
+   "lat": 52.23954,
+   "lon": 20.97116,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32917,
+   "lon": 20.97775,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25855,
+   "lon": 20.92,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21051,
+   "lon": 21.14777,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13044,
+   "lon": 21.07115,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2567,
+   "lon": 20.88187,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21111,
+   "lon": 20.87814,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18023,
+   "lon": 20.90163,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.15822,
+   "lon": 21.1699,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13808,
+   "lon": 21.07956,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27852,
+   "lon": 20.92675,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28081,
+   "lon": 20.84565,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24816,
+   "lon": 20.96483,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14857,
+   "lon": 20.8762,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29319,
+   "lon": 20.87032,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24322,
+   "lon": 21.03285,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.25911,
+   "lon": 21.11375,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21427,
+   "lon": 20.91,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.12982,
+   "lon": 20.95231,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2678,
+   "lon": 21.05844,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.28667,
+   "lon": 21.04296,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27168,
+   "lon": 21.01913,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.28005,
+   "lon": 20.95126,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19163,
+   "lon": 20.90111,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.23553,
+   "lon": 21.1518,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23355,
+   "lon": 21.08441,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25208,
+   "lon": 21.02912,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26495,
+   "lon": 20.91449,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29483,
+   "lon": 20.84318,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17173,
+   "lon": 20.89216,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27588,
+   "lon": 21.12153,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23172,
+   "lon": 20.89957,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.19071,
+   "lon": 21.13578,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22587,
+   "lon": 21.01307,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32272,
+   "lon": 20.99317,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15883,
+   "lon": 20.92554,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18445,
+   "lon": 20.89238,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25791,
+   "lon": 20.87181,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22176,
+   "lon": 21.06137,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27844,
+   "lon": 20.95149,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.17059,
+   "lon": 21.06782,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26175,
+   "lon": 21.01597,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.12758,
+   "lon": 21.13887,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1572,
+   "lon": 21.06997,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25739,
+   "lon": 20.91003,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13604,
+   "lon": 20.865,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1753,
+   "lon": 21.03418,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28538,
+   "lon": 21.10037,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.24933,
+   "lon": 21.11085,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24136,
+   "lon": 21.03543,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19495,
+   "lon": 20.92842,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29048,
+   "lon": 21.12221,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17968,
+   "lon": 20.85457,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16667,
+   "lon": 21.16346,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27551,
+   "lon": 21.17713,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.12849,
+   "lon": 21.05011,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.20533,
+   "lon": 20.86601,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15194,
+   "lon": 21.10902,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32967,
+   "lon": 21.13751,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25192,
+   "lon": 20.93125,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22603,
+   "lon": 21.07984,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.279,
+   "lon": 20.9851,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13021,
+   "lon": 21.05674,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21582,
+   "lon": 20.89231,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.22598,
+   "lon": 21.0517,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15063,
+   "lon": 20.89209,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21562,
+   "lon": 20.95087,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30797,
+   "lon": 20.92053,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20735,
+   "lon": 20.9867,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15782,
+   "lon": 21.08232,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21508,
+   "lon": 21.02328,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2609,
+   "lon": 21.13575,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.14957,
+   "lon": 20.88145,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26589,
+   "lon": 20.9723,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18126,
+   "lon": 21.02838,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14534,
+   "lon": 21.02934,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23598,
+   "lon": 21.06938,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23004,
+   "lon": 21.03373,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24082,
+   "lon": 20.85101,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25779,
+   "lon": 20.88832,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.1322,
+   "lon": 20.97591,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15222,
+   "lon": 20.99428,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27394,
+   "lon": 21.11382,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19685,
+   "lon": 21.07071,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.14939,
+   "lon": 20.98818,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1869,
+   "lon": 20.93289,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23817,
+   "lon": 20.91441,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30165,
+   "lon": 21.10926,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.32135,
+   "lon": 21.04617,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28135,
+   "lon": 20.93306,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.308,
+   "lon": 21.14872,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24623,
+   "lon": 20.86731,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30391,
+   "lon": 20.93367,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26498,
+   "lon": 21.04076,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13849,
+   "lon": 20.96122,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20858,
+   "lon": 20.98901,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.20677,
+   "lon": 20.9285,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24371,
+   "lon": 20.92847,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13133,
+   "lon": 20.92387,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29394,
+   "lon": 20.84208,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25987,
+   "lon": 20.9029,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28603,
+   "lon": 20.871,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32663,
+   "lon": 20.94714,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22134,
+   "lon": 21.06428,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.31993,
+   "lon": 20.95937,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1477,
+   "lon": 20.957,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27351,
+   "lon": 20.98705,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32042,
+   "lon": 21.00073,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.28478,
+   "lon": 21.16166,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20999,
+   "lon": 21.06796,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24956,
+   "lon": 20.97704,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23806,
+   "lon": 21.12904,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.22223,
+   "lon": 21.09309,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32684,
+   "lon": 20.96256,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2583,
+   "lon": 21.13111,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14323,
+   "lon": 20.86279,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.33207,
+   "lon": 21.08534,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13239,
+   "lon": 20.96905,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16262,
+   "lon": 20.97114,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14609,
+   "lon": 21.15872,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.14243,
+   "lon": 21.05415,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17877,
+   "lon": 21.11546,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2577,
+   "lon": 21.1687,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13502,
+   "lon": 21.07309,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13904,
+   "lon": 20.89007,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30754,
+   "lon": 20.84349,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25304,
+   "lon": 20.89854,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16527,
+   "lon": 21.1446,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21965,
+   "lon": 20.96581,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27848,
+   "lon": 21.06543,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23837,
+   "lon": 21.02361,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2286,
+   "lon": 21.10845,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.14386,
+   "lon": 21.09655,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29793,
+   "lon": 20.8889,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19499,
+   "lon": 21.13535,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17663,
+   "lon": 21.02993,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.154,
+   "lon": 21.05753,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13046,
+   "lon": 21.03981,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13483,
+   "lon": 21.15962,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26134,
+   "lon": 20.98665,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18205,
+   "lon": 21.01687,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27055,
+   "lon": 21.01973,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17853,
+   "lon": 20.98202,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17118,
+   "lon": 21.0061,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.14546,
+   "lon": 20.92643,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24989,
+   "lon": 20.91228,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23454,
+   "lon": 21.14218,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25172,
+   "lon": 20.94065,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22784,
+   "lon": 20.87278,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14688,
+   "lon": 21.00433,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.14048,
+   "lon": 20.95235,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13028,
+   "lon": 21.14979,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.33064,
+   "lon": 20.94995,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.33226,
+   "lon": 21.16827,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22747,
+   "lon": 20.93618,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16637,
+   "lon": 21.16359,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15394,
+   "lon": 20.96656,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28355,
+   "lon": 21.1385,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2111,
+   "lon": 21.11615,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26322,
+   "lon": 21.02555,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.32826,
+   "lon": 20.8416,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31434,
+   "lon": 20.99118,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22632,
+   "lon": 20.96051,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25131,
+   "lon": 20.8511,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15845,
+   "lon": 21.00804,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28925,
+   "lon": 21.07943,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30109,
+   "lon": 21.14259,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21459,
+   "lon": 21.08521,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.14379,
+   "lon": 20.86648,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21971,
+   "lon": 20.9021,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16178,
+   "lon": 21.13795,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27634,
+   "lon": 21.01787,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31216,
+   "lon": 20.91292,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25411,
+   "lon": 20.88886,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29614,
+   "lon": 20.97147,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17431,
+   "lon": 20.84449,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.33284,
+   "lon": 21.1372,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2859,
+   "lon": 21.12326,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27763,
+   "lon": 21.17166,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.224,
+   "lon": 21.02055,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.33217,
+   "lon": 21.15357,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24324,
+   "lon": 21.08756,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15361,
+   "lon": 21.05453,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22029,
+   "lon": 20.84348,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.15061,
+   "lon": 20.92444,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18289,
+   "lon": 20.91335,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24872,
+   "lon": 20.97019,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17568,
+   "lon": 21.02514,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26611,
+   "lon": 21.05111,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32172,
+   "lon": 20.93017,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32555,
+   "lon": 21.09264,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.3134,
+   "lon": 20.90184,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.15433,
+   "lon": 20.93015,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23664,
+   "lon": 20.95067,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26619,
+   "lon": 21.08783,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17502,
+   "lon": 21.03539,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30184,
+   "lon": 20.88987,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18812,
+   "lon": 20.95978,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21338,
+   "lon": 20.85107,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21188,
+   "lon": 20.85863,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.26243,
+   "lon": 21.12288,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29394,
+   "lon": 21.05251,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32159,
+   "lon": 21.07287,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32418,
+   "lon": 20.92952,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13711,
+   "lon": 21.03732,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1819,
+   "lon": 20.89071,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18385,
+   "lon": 20.97714,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14387,
+   "lon": 20.86028,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.13761,
+   "lon": 20.88721,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18117,
+   "lon": 20.92908,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15301,
+   "lon": 21.11972,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24043,
+   "lon": 21.00687,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21361,
+   "lon": 20.87914,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14704,
+   "lon": 21.15584,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23394,
+   "lon": 21.07782,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16055,
+   "lon": 20.92335,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21871,
+   "lon": 20.93261,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.3082,
+   "lon": 21.08848,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20231,
+   "lon": 21.04565,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22029,
+   "lon": 20.94438,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30993,
+   "lon": 21.00188,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23962,
+   "lon": 20.94914,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25039,
+   "lon": 21.04466,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26415,
+   "lon": 20.91149,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21328,
+   "lon": 20.90437,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16203,
+   "lon": 21.15307,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27104,
+   "lon": 20.95006,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15996,
+   "lon": 20.95223,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18342,
+   "lon": 21.01644,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30143,
+   "lon": 21.11967,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23178,
+   "lon": 20.92985,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16965,
+   "lon": 20.91187,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.32272,
+   "lon": 21.03638,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15824,
+   "lon": 21.16943,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18391,
+   "lon": 20.90999,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26764,
+   "lon": 21.05372,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.3252,
+   "lon": 20.9446,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32197,
+   "lon": 20.90345,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17456,
+   "lon": 21.05379,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25568,
+   "lon": 20.98013,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21411,
+   "lon": 20.9826,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27851,
+   "lon": 21.09262,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32619,
+   "lon": 21.17111,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14793,
+   "lon": 20.92405,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31553,
+   "lon": 20.91127,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14754,
+   "lon": 21.14996,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2117,
+   "lon": 21.04686,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28377,
+   "lon": 21.17383,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.22386,
+   "lon": 20.88839,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.33239,
+   "lon": 21.08259,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25499,
+   "lon": 21.15875,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19782,
+   "lon": 20.94357,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2387,
+   "lon": 20.87213,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32761,
+   "lon": 20.91143,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1639,
+   "lon": 21.11116,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13659,
+   "lon": 21.06557,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.31117,
+   "lon": 21.16291,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27937,
+   "lon": 21.0677,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1575,
+   "lon": 21.08351,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22904,
+   "lon": 21.07905,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29527,
+   "lon": 21.06152,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31539,
+   "lon": 20.97548,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.12777,
+   "lon": 21.07532,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24578,
+   "lon": 20.89482,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.25683,
+   "lon": 21.15751,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15147,
+   "lon": 20.91859,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1875,
+   "lon": 21.07878,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14462,
+   "lon": 20.96491,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22898,
+   "lon": 21.12536,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30764,
+   "lon": 21.08971,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21794,
+   "lon": 21.10067,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14321,
+   "lon": 20.94134,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.32089,
+   "lon": 20.88499,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18285,
+   "lon": 21.10106,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26317,
+   "lon": 21.14081,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27181,
+   "lon": 21.07279,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30321,
+   "lon": 20.88927,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18006,
+   "lon": 21.01088,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25398,
+   "lon": 20.95972,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20097,
+   "lon": 21.00684,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.31841,
+   "lon": 20.91051,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31882,
+   "lon": 20.90713,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.33073,
+   "lon": 21.05839,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20992,
+   "lon": 21.02558,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18115,
+   "lon": 20.90477,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29447,
+   "lon": 20.95155,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.168,
+   "lon": 20.89474,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1988,
+   "lon": 21.10828,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.26467,
+   "lon": 20.93041,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21035,
+   "lon": 21.10684,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21387,
+   "lon": 21.08585,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24554,
+   "lon": 20.99676,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29051,
+   "lon": 21.15153,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29424,
+   "lon": 21.03373,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30541,
+   "lon": 21.15102,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30551,
+   "lon": 21.00585,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.25276,
+   "lon": 21.11855,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32837,
+   "lon": 21.07559,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2826,
+   "lon": 21.09038,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2065,
+   "lon": 21.08644,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32295,
+   "lon": 20.97173,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20546,
+   "lon": 20.97769,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29413,
+   "lon": 20.87851,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29849,
+   "lon": 21.10945,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.32987,
+   "lon": 21.09725,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2072,
+   "lon": 21.15801,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16747,
+   "lon": 21.16001,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2833,
+   "lon": 21.13166,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26816,
+   "lon": 21.16873,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19364,
+   "lon": 21.11586,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25162,
+   "lon": 21.09246,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22955,
+   "lon": 21.04573,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21262,
+   "lon": 20.99838,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21491,
+   "lon": 21.0698,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13178,
+   "lon": 21.03734,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31296,
+   "lon": 20.87325,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27608,
+   "lon": 20.8699,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29925,
+   "lon": 21.11334,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22703,
+   "lon": 21.03811,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2264,
+   "lon": 20.96661,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.1662,
+   "lon": 20.94051,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27926,
+   "lon": 21.1657,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29535,
+   "lon": 21.08155,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16732,
+   "lon": 21.13986,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20783,
+   "lon": 21.09655,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31866,
+   "lon": 21.15599,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20251,
+   "lon": 21.00278,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17411,
+   "lon": 21.13042,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.30556,
+   "lon": 21.06886,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16101,
+   "lon": 20.85056,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15228,
+   "lon": 21.08002,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2106,
+   "lon": 20.956,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23459,
+   "lon": 21.12564,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29171,
+   "lon": 21.09627,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25251,
+   "lon": 21.08521,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23768,
+   "lon": 21.10724,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.22516,
+   "lon": 21.13476,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16998,
+   "lon": 20.87529,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20844,
+   "lon": 21.01589,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23569,
+   "lon": 21.00095,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32482,
+   "lon": 21.07155,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27001,
+   "lon": 20.96266,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31351,
+   "lon": 21.01509,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25024,
+   "lon": 20.91677,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.24606,
+   "lon": 20.9167,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30941,
+   "lon": 21.13114,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.3197,
+   "lon": 21.10724,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17909,
+   "lon": 21.08675,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31813,
+   "lon": 21.10555,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14989,
+   "lon": 21.08387,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29301,
+   "lon": 20.97307,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17394,
+   "lon": 20.95851,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.32185,
+   "lon": 21.04857,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23376,
+   "lon": 20.96538,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24358,
+   "lon": 20.98988,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2271,
+   "lon": 20.87568,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22552,
+   "lon": 20.89266,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16449,
+   "lon": 21.1496,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27845,
+   "lon": 20.8865,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25374,
+   "lon": 21.14495,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.32455,
+   "lon": 21.15017,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28536,
+   "lon": 20.84834,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20984,
+   "lon": 20.88058,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.33153,
+   "lon": 21.0295,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23324,
+   "lon": 21.10559,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13571,
+   "lon": 20.97743,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.232,
+   "lon": 20.98209,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25755,
+   "lon": 20.8564,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.2637,
+   "lon": 20.89601,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17112,
+   "lon": 20.88177,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16798,
+   "lon": 21.04308,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26858,
+   "lon": 21.09121,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31256,
+   "lon": 21.05003,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14482,
+   "lon": 21.1087,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13517,
+   "lon": 21.01367,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32978,
+   "lon": 20.8824,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.20096,
+   "lon": 20.98252,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20295,
+   "lon": 21.01034,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18152,
+   "lon": 20.87035,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20827,
+   "lon": 21.0652,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16853,
+   "lon": 21.01688,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29672,
+   "lon": 20.91241,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13197,
+   "lon": 21.07569,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18163,
+   "lon": 21.13642,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.30301,
+   "lon": 20.8626,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.33014,
+   "lon": 21.02868,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18071,
+   "lon": 21.04942,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26539,
+   "lon": 20.95853,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21283,
+   "lon": 20.99066,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30466,
+   "lon": 21.16557,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18415,
+   "lon": 20.99157,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13155,
+   "lon": 21.08695,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.16056,
+   "lon": 21.07676,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14331,
+   "lon": 20.88096,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25325,
+   "lon": 20.94407,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19702,
+   "lon": 20.95444,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20512,
+   "lon": 21.12856,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21936,
+   "lon": 20.95863,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.33279,
+   "lon": 20.85163,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29098,
+   "lon": 20.98101,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.19202,
+   "lon": 21.05096,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19104,
+   "lon": 20.89417,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31947,
+   "lon": 20.91259,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26869,
+   "lon": 20.93952,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24275,
+   "lon": 20.98606,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17767,
+   "lon": 21.07842,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15242,
+   "lon": 21.17787,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23506,
+   "lon": 21.06355,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.20673,
+   "lon": 20.98579,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31138,
+   "lon": 21.17654,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21704,
+   "lon": 20.92716,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13854,
+   "lon": 20.90075,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29151,
+   "lon": 20.98956,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27291,
+   "lon": 20.95283,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1458,
+   "lon": 20.87918,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22625,
+   "lon": 21.104,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.31949,
+   "lon": 21.10646,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16845,
+   "lon": 21.03029,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32806,
+   "lon": 20.9039,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22243,
+   "lon": 20.88742,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16957,
+   "lon": 21.09921,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29482,
+   "lon": 21.1172,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31643,
+   "lon": 21.08195,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22911,
+   "lon": 20.88751,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.14529,
+   "lon": 21.15266,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25064,
+   "lon": 21.14025,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20471,
+   "lon": 20.85539,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2196,
+   "lon": 20.9181,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.28094,
+   "lon": 21.10116,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18058,
+   "lon": 21.05358,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.28372,
+   "lon": 21.0208,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21646,
+   "lon": 21.16064,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.31474,
+   "lon": 21.07102,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2655,
+   "lon": 21.16018,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27012,
+   "lon": 21.16267,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16082,
+   "lon": 21.17688,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13991,
+   "lon": 20.87518,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30922,
+   "lon": 20.9738,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17388,
+   "lon": 21.08998,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13309,
+   "lon": 21.05059,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.26875,
+   "lon": 21.02375,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23632,
+   "lon": 20.98922,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25333,
+   "lon": 21.11069,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31144,
+   "lon": 21.09374,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17751,
+   "lon": 21.15542,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31367,
+   "lon": 21.14966,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31048,
+   "lon": 20.96174,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24716,
+   "lon": 21.09356,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.27369,
+   "lon": 21.09523,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22856,
+   "lon": 21.07859,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21113,
+   "lon": 20.96635,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25782,
+   "lon": 21.15867,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.3141,
+   "lon": 20.85621,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18105,
+   "lon": 20.96447,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19469,
+   "lon": 21.0193,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25208,
+   "lon": 21.13515,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.20898,
+   "lon": 20.94562,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2008,
+   "lon": 21.14891,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27942,
+   "lon": 21.06029,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17798,
+   "lon": 21.06166,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25043,
+   "lon": 21.08722,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26121,
+   "lon": 21.1142,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27697,
+   "lon": 20.87761,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21312,
+   "lon": 20.89809,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21983,
+   "lon": 21.09708,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26244,
+   "lon": 21.09489,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32129,
+   "lon": 21.00693,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17197,
+   "lon": 20.99656,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15687,
+   "lon": 20.99097,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26925,
+   "lon": 21.13035,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16322,
+   "lon": 20.89654,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21271,
+   "lon": 20.99685,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.15614,
+   "lon": 21.04044,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1331,
+   "lon": 20.98054,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23063,
+   "lon": 21.03752,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21739,
+   "lon": 21.16699,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13094,
+   "lon": 21.04699,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25355,
+   "lon": 20.89993,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25494,
+   "lon": 20.8416,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23966,
+   "lon": 21.05191,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.20377,
+   "lon": 20.96929,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.33156,
+   "lon": 20.89237,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21666,
+   "lon": 21.04991,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14264,
+   "lon": 21.01291,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32172,
+   "lon": 20.93309,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1958,
+   "lon": 20.85655,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19836,
+   "lon": 20.97884,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.33306,
+   "lon": 21.00628,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21992,
+   "lon": 20.88617,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2457,
+   "lon": 20.84804,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2229,
+   "lon": 20.91736,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23292,
+   "lon": 21.16102,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21482,
+   "lon": 20.88334,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.3159,
+   "lon": 20.93615,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.28761,
+   "lon": 21.09714,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20404,
+   "lon": 21.14013,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.28017,
+   "lon": 21.06487,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30187,
+   "lon": 20.96099,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27816,
+   "lon": 20.98294,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24461,
+   "lon": 20.87795,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26052,
+   "lon": 20.94546,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13113,
+   "lon": 21.05624,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13893,
+   "lon": 20.95762,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24112,
+   "lon": 21.04205,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.22278,
+   "lon": 21.00379,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.3206,
+   "lon": 21.04894,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29767,
+   "lon": 21.15173,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26359,
+   "lon": 21.12165,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26181,
+   "lon": 21.14188,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2273,
+   "lon": 21.05028,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32219,
+   "lon": 20.98387,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31968,
+   "lon": 20.84567,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.26781,
+   "lon": 20.93639,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21094,
+   "lon": 21.07347,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29125,
+   "lon": 21.15179,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1332,
+   "lon": 20.84771,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18107,
+   "lon": 21.16201,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19779,
+   "lon": 21.02188,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18513,
+   "lon": 21.01436,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29992,
+   "lon": 21.06723,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.17191,
+   "lon": 20.93671,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25521,
+   "lon": 20.91805,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13735,
+   "lon": 20.90374,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19091,
+   "lon": 20.99222,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22788,
+   "lon": 21.00775,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13792,
+   "lon": 21.09347,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17049,
+   "lon": 20.87209,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28325,
+   "lon": 21.03249,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.13565,
+   "lon": 21.03955,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27798,
+   "lon": 21.15551,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22615,
+   "lon": 21.0091,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16438,
+   "lon": 21.0838,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24806,
+   "lon": 21.13542,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13246,
+   "lon": 21.05576,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26885,
+   "lon": 20.98161,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21792,
+   "lon": 21.16663,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.22952,
+   "lon": 20.89863,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14637,
+   "lon": 21.12416,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.28974,
+   "lon": 21.0417,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2127,
+   "lon": 20.93606,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23128,
+   "lon": 20.95253,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19911,
+   "lon": 20.95375,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18886,
+   "lon": 21.01642,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24002,
+   "lon": 21.00932,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.26716,
+   "lon": 20.88051,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32053,
+   "lon": 20.91112,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.33043,
+   "lon": 20.92194,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30883,
+   "lon": 20.99404,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1386,
+   "lon": 21.08333,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15636,
+   "lon": 20.9009,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20356,
+   "lon": 20.85007,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28454,
+   "lon": 21.06888,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.26294,
+   "lon": 20.86921,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32671,
+   "lon": 21.04584,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18797,
+   "lon": 21.12477,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1979,
+   "lon": 21.03569,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17043,
+   "lon": 20.93747,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20181,
+   "lon": 21.00664,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22915,
+   "lon": 20.88787,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31773,
+   "lon": 20.94746,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.23545,
+   "lon": 20.86906,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25233,
+   "lon": 20.9652,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19449,
+   "lon": 21.08227,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14515,
+   "lon": 21.02065,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1278,
+   "lon": 21.0607,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17257,
+   "lon": 21.09527,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19387,
+   "lon": 21.0398,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26738,
+   "lon": 21.02011,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.24331,
+   "lon": 20.90086,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29045,
+   "lon": 21.02345,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25892,
+   "lon": 21.03667,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21143,
+   "lon": 21.07895,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.33206,
+   "lon": 20.88081,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28345,
+   "lon": 20.92776,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26414,
+   "lon": 21.13516,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15483,
+   "lon": 20.98583,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.18966,
+   "lon": 21.12061,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22741,
+   "lon": 21.00853,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16582,
+   "lon": 20.95608,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30243,
+   "lon": 20.91363,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2377,
+   "lon": 20.9628,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28481,
+   "lon": 20.93061,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21705,
+   "lon": 21.11208,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19077,
+   "lon": 20.93481,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.16015,
+   "lon": 21.06891,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25522,
+   "lon": 20.91917,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.14767,
+   "lon": 20.84692,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25537,
+   "lon": 20.96209,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31342,
+   "lon": 20.85592,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32558,
+   "lon": 20.98931,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16161,
+   "lon": 21.13285,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2549,
+   "lon": 20.85672,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.12941,
+   "lon": 20.92451,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27664,
+   "lon": 21.07146,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22805,
+   "lon": 20.91006,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.29868,
+   "lon": 21.16406,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18428,
+   "lon": 20.98947,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27255,
+   "lon": 21.17395,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17636,
+   "lon": 21.09914,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2615,
+   "lon": 20.88496,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.32777,
+   "lon": 20.87366,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23822,
+   "lon": 21.15395,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19308,
+   "lon": 20.86584,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18666,
+   "lon": 20.88932,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1964,
+   "lon": 21.02437,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16912,
+   "lon": 20.93166,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.33159,
+   "lon": 21.02259,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25866,
+   "lon": 21.03094,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.28939,
+   "lon": 20.89748,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21363,
+   "lon": 21.03012,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32582,
+   "lon": 21.15088,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15887,
+   "lon": 20.90143,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32874,
+   "lon": 21.01052,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19871,
+   "lon": 20.95882,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32547,
+   "lon": 20.91339,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23592,
+   "lon": 21.15441,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.30774,
+   "lon": 20.86998,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25236,
+   "lon": 21.12319,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22697,
+   "lon": 21.06052,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19467,
+   "lon": 21.02273,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.16723,
+   "lon": 21.01664,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20145,
+   "lon": 20.87936,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15037,
+   "lon": 21.12627,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.12861,
+   "lon": 21.03104,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.18351,
+   "lon": 20.95111,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31225,
+   "lon": 20.99643,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26128,
+   "lon": 21.1459,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27587,
+   "lon": 20.92975,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23306,
+   "lon": 21.12426,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30334,
+   "lon": 21.07776,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29259,
+   "lon": 21.02062,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23286,
+   "lon": 21.05158,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.29952,
+   "lon": 21.16641,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17008,
+   "lon": 20.89281,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21369,
+   "lon": 20.90039,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18348,
+   "lon": 21.13652,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31984,
+   "lon": 21.08856,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22306,
+   "lon": 20.8546,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29603,
+   "lon": 20.88667,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.2659,
+   "lon": 21.12273,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.1364,
+   "lon": 21.09105,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14439,
+   "lon": 21.10121,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30984,
+   "lon": 20.9687,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28028,
+   "lon": 21.16043,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19537,
+   "lon": 21.0608,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19147,
+   "lon": 20.978,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21564,
+   "lon": 21.04559,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14293,
+   "lon": 21.13464,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.1352,
+   "lon": 20.87752,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.3227,
+   "lon": 21.15964,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15613,
+   "lon": 20.85126,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17774,
+   "lon": 21.16569,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29181,
+   "lon": 21.0525,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24511,
+   "lon": 21.01728,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32197,
+   "lon": 21.15233,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15247,
+   "lon": 20.99211,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.3327,
+   "lon": 21.13247,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1531,
+   "lon": 21.11371,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18545,
+   "lon": 20.93416,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30536,
+   "lon": 21.10864,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27234,
+   "lon": 20.85825,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22016,
+   "lon": 20.98094,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2965,
+   "lon": 20.8499,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.153,
+   "lon": 21.02444,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21601,
+   "lon": 20.89984,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.33167,
+   "lon": 21.0621,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30441,
+   "lon": 20.99308,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13907,
+   "lon": 21.07023,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.31328,
+   "lon": 20.94739,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20166,
+   "lon": 21.07186,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25827,
+   "lon": 20.8836,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32599,
+   "lon": 20.97765,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.14525,
+   "lon": 20.88282,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22607,
+   "lon": 20.99799,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30524,
+   "lon": 21.04286,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16718,
+   "lon": 20.91111,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32865,
+   "lon": 20.95661,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18822,
+   "lon": 21.12955,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26189,
+   "lon": 20.89665,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28514,
+   "lon": 21.03165,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.20872,
+   "lon": 21.03397,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28645,
+   "lon": 20.93654,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.1552,
+   "lon": 20.85717,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22785,
+   "lon": 20.89454,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.20129,
+   "lon": 21.16882,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21061,
+   "lon": 21.00767,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18666,
+   "lon": 21.1174,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21498,
+   "lon": 20.91043,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.28617,
+   "lon": 20.9403,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27103,
+   "lon": 20.94622,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30203,
+   "lon": 20.85384,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.24247,
+   "lon": 21.12258,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29303,
+   "lon": 21.17583,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27796,
+   "lon": 21.13698,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17456,
+   "lon": 20.92582,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.17757,
+   "lon": 21.11517,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.30143,
+   "lon": 21.1568,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26871,
+   "lon": 20.86543,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29857,
+   "lon": 20.94435,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18886,
+   "lon": 21.00088,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.14898,
+   "lon": 20.99939,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28908,
+   "lon": 20.86149,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27554,
+   "lon": 21.15636,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.32736,
+   "lon": 20.93782,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.29337,
+   "lon": 20.97279,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1622,
+   "lon": 21.13497,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.28687,
+   "lon": 20.92243,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30472,
+   "lon": 20.92093,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29982,
+   "lon": 20.93409,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28512,
+   "lon": 21.10352,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32559,
+   "lon": 20.88014,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21834,
+   "lon": 20.85014,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.19588,
+   "lon": 20.87338,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.3264,
+   "lon": 21.05212,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.32107,
+   "lon": 21.06264,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13696,
+   "lon": 21.10753,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2269,
+   "lon": 20.92857,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.19259,
+   "lon": 21.02463,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22191,
+   "lon": 20.85967,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.3146,
+   "lon": 21.12616,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.21769,
+   "lon": 20.94878,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26173,
+   "lon": 21.06958,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24903,
+   "lon": 20.97907,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.30598,
+   "lon": 20.99193,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19087,
+   "lon": 20.99728,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14416,
+   "lon": 20.94407,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.22633,
+   "lon": 21.01562,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.20301,
+   "lon": 20.93158,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.30401,
+   "lon": 20.92957,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13281,
+   "lon": 20.91723,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15469,
+   "lon": 21.1564,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14355,
+   "lon": 20.96901,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.27232,
+   "lon": 21.0268,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.26993,
+   "lon": 20.88407,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24073,
+   "lon": 21.10639,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14198,
+   "lon": 20.95234,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.15969,
+   "lon": 20.89303,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.21349,
+   "lon": 21.03987,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25952,
+   "lon": 21.05068,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.12967,
+   "lon": 20.91362,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24224,
+   "lon": 21.10401,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1439,
+   "lon": 21.03022,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.14123,
+   "lon": 21.16056,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28342,
+   "lon": 21.13083,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.27039,
+   "lon": 21.13216,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.27631,
+   "lon": 21.12672,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13268,
+   "lon": 21.16915,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.12831,
+   "lon": 21.07667,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.17929,
+   "lon": 21.11036,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16436,
+   "lon": 20.879,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.14629,
+   "lon": 20.99343,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25736,
+   "lon": 20.8452,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.26015,
+   "lon": 21.06647,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16937,
+   "lon": 21.12902,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.30865,
+   "lon": 21.11312,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1991,
+   "lon": 20.97064,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.25335,
+   "lon": 20.96836,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16183,
+   "lon": 20.97272,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19395,
+   "lon": 20.9234,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13552,
+   "lon": 21.08291,
+   "aglM": 60
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.31445,
+   "lon": 20.85716,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13904,
+   "lon": 21.11915,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.13357,
+   "lon": 21.0001,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23011,
+   "lon": 21.0515,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26839,
+   "lon": 21.17712,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.23667,
+   "lon": 20.93136,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.14053,
+   "lon": 20.97873,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28713,
+   "lon": 20.87737,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.2211,
+   "lon": 21.02088,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13751,
+   "lon": 20.9799,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26917,
+   "lon": 20.9859,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14553,
+   "lon": 20.8487,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24347,
+   "lon": 21.15101,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.33088,
+   "lon": 21.15558,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.23067,
+   "lon": 21.07232,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15296,
+   "lon": 21.02524,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.19901,
+   "lon": 21.08518,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.16608,
+   "lon": 20.96084,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.15571,
+   "lon": 20.97577,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.13254,
+   "lon": 21.04662,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.26253,
+   "lon": 21.09915,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28589,
+   "lon": 21.08051,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.19716,
+   "lon": 20.93707,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.22188,
+   "lon": 21.1143,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.13337,
+   "lon": 20.97955,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31577,
+   "lon": 20.95672,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24324,
+   "lon": 20.89925,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.1332,
+   "lon": 21.0146,
+   "aglM": 60
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.2671,
+   "lon": 20.90229,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.14898,
+   "lon": 20.8703,
+   "aglM": 30
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.18433,
+   "lon": 20.86628,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.15892,
+   "lon": 21.0719,
+   "aglM": 30
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ },
+ {
+  "from": {
+   "lat": 52.2693,
+   "lon": 20.87636,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.31959,
+   "lon": 21.07591,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.24466,
+   "lon": 21.11503,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.25736,
+   "lon": 21.07799,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.29671,
+   "lon": 21.17456,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.18606,
+   "lon": 20.88751,
+   "aglM": 120
+  },
+  "kind": "control",
+  "link": {
+   "radio": "elrs-915-50hz",
+   "txPowerDbm": 27,
+   "groundAntenna": "truerc-x-air-900",
+   "airAntenna": "truerc-x-air-900",
+   "requiredMarginDb": 10
+  }
+ },
+ {
+  "from": {
+   "lat": 52.21196,
+   "lon": 21.09545,
+   "aglM": 1.5
+  },
+  "to": {
+   "lat": 52.28183,
+   "lon": 20.85226,
+   "aglM": 120
+  },
+  "links": {
+   "control": {
+    "radio": "elrs-915-50hz",
+    "txPowerDbm": 27,
+    "groundAntenna": "truerc-x-air-900",
+    "airAntenna": "truerc-x-air-900",
+    "requiredMarginDb": 10
+   },
+   "video": {
+    "radio": "dji-o4-video",
+    "txPowerDbm": 28.5,
+    "groundAntenna": "dji-goggles-3-5g8",
+    "airAntenna": "dji-o4-air-unit-5g8",
+    "requiredMarginDb": 6
+   }
+  },
+  "evaluate": "both"
+ }
+]

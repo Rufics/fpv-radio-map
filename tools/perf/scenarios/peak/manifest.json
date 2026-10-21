@@ -1,0 +1,66 @@
+{
+  "kind": "scenario",
+  "id": "peak",
+  "version": "1.0.0",
+  "description": "A busy evening: warm-up, a ramp to the peak rate, a five-minute plateau and the ramp down.",
+  "personas": [
+    {
+      "id": "link-editor",
+      "weight": 60
+    },
+    {
+      "id": "viewer",
+      "weight": 30
+    },
+    {
+      "id": "mission-creator",
+      "weight": 9
+    },
+    {
+      "id": "coverage-planner",
+      "weight": 1
+    }
+  ],
+  "load": {
+    "type": "ramping-arrival-rate",
+    "stages": [
+      {
+        "name": "warm-up",
+        "durationS": 60,
+        "targetRps": 5
+      },
+      {
+        "name": "ramp",
+        "durationS": 120,
+        "targetRps": 30
+      },
+      {
+        "name": "plateau",
+        "durationS": 300,
+        "targetRps": 30
+      },
+      {
+        "name": "ramp-down",
+        "durationS": 60,
+        "targetRps": 0
+      }
+    ]
+  },
+  "collectors": [
+    "k6-summary"
+  ],
+  "thresholds": {
+    "http_req_failed": "rate<0.01",
+    "http_req_duration{step:calc-path}": "p(95)<2000"
+  },
+  "compare": {
+    "metrics": [
+      "p95",
+      "p99",
+      "rps",
+      "error_rate"
+    ],
+    "window": 10,
+    "maxRegressionPct": 5
+  }
+}

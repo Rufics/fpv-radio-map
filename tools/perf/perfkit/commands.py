@@ -1,6 +1,8 @@
-"""Runs the external tools (cmake, the benchmark binaries) with fixed argument lists, no shell."""
+"""Runs the external tools (cmake, docker, the benchmark binaries) with fixed argument lists,
+never through a shell."""
 import subprocess  # nosec B404: argument lists only, never a shell
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO
 
@@ -16,11 +18,25 @@ class CommandRunner:
     def __init__(self, log: TextIO = sys.stderr):
         self._log = log
 
-    def run(self, args: list[str], cwd: Path | None = None) -> None:
+    def run(self, args: list[str], cwd: Path | None = None, env: Mapping[str, str] | None = None,
+            allowed: tuple[int, ...] = (0,)) -> int:
+        """Runs `args`; returns its exit code, which must be one of `allowed`."""
         print("+ " + " ".join(args), file=self._log, flush=True)
         try:
-            subprocess.run(args, cwd=cwd, check=True, stdout=sys.stderr)  # nosec B603
+            done = subprocess.run(args, cwd=cwd, env=env, check=False, stdout=sys.stderr)  # nosec B603
+        except FileNotFoundError as error:
+            raise PerfError(f"{args[0]} is not installed") from error
+        if done.returncode not in allowed:
+            raise PerfError(f"{Path(args[0]).name} failed with exit code {done.returncode}")
+        return done.returncode
+
+    def capture(self, args: list[str], env: Mapping[str, str] | None = None) -> str:
+        """Runs `args` and returns what it printed; a failure is a PerfError."""
+        try:
+            done = subprocess.run(args, env=env, check=True, capture_output=True, text=True)  # nosec B603
         except FileNotFoundError as error:
             raise PerfError(f"{args[0]} is not installed") from error
         except subprocess.CalledProcessError as error:
-            raise PerfError(f"{Path(args[0]).name} failed with exit code {error.returncode}") from error
+            raise PerfError(f"{Path(args[0]).name} failed with exit code {error.returncode}: "
+                            f"{error.stderr.strip()[-500:]}") from error
+        return done.stdout

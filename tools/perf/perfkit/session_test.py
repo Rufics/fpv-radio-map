@@ -38,6 +38,12 @@ class FakeSuite:
     def items(self):
         return [self._source, self._collector]
 
+    def environment(self):
+        return {"server": {"threads": 16}}
+
+    def problems(self):
+        return []
+
     def execute(self, timeline, run_dir):
         with timeline.phase("benchmark/rf-core", "benchmark"):
             if self.fail:

@@ -12,6 +12,42 @@
     "collector/google-benchmark": {
       "version": "1.0.0",
       "sha256": "92b683f0e6e528674a29f270ceebf0f1253c4a24775836bcd9ea32422fb05f15"
+    },
+    "collector/k6-summary": {
+      "version": "1.0.0",
+      "sha256": "2173746e609a8643a51d4ba57d2a8d42d9a35ada95f49522b776e4fc060d3960"
+    },
+    "fixture/warsaw-missions": {
+      "version": "1.0.0",
+      "sha256": "67b191e3b7ecbae745a89aa1a25f1bb43a4fb9caee0ff7d442356ff893c58136"
+    },
+    "fixture/warsaw-paths": {
+      "version": "1.0.0",
+      "sha256": "4fcd06bf2c5939b35b5dd6dbcae925d6732c3d079ab0b7d9a399c8d7af1a8cd4"
+    },
+    "persona/coverage-planner": {
+      "version": "1.0.0",
+      "sha256": "80aa12628c4cfa1956b2eab075e1ede28a97ec9568ec27d4c4adee8300a45b7a"
+    },
+    "persona/link-editor": {
+      "version": "1.0.0",
+      "sha256": "351d967d421f9a5db4ef5ad57fce049a0274e6b94265d0ccbdac69caad5302ce"
+    },
+    "persona/mission-creator": {
+      "version": "1.0.0",
+      "sha256": "af13cbe7aa662b6e40e6165eb75dafbdf9a0b16ee16b6353e2b66ced334c4d45"
+    },
+    "persona/viewer": {
+      "version": "1.0.0",
+      "sha256": "cc0d7e1893348f8671561776360edad031ec6d4aa7f3016cc6ac5ba54a203260"
+    },
+    "scenario/peak": {
+      "version": "1.0.0",
+      "sha256": "f5cc3ca2fd624120b1c1988b55aec979946c3869daf5a910b5d8eb4b465e6b61"
+    },
+    "scenario/smoke": {
+      "version": "1.0.0",
+      "sha256": "75f51fcc13e2acce45386df3a40637c21988b11551cc978e9565f903154b134b"
     }
   }
 }
