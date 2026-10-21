@@ -82,6 +82,47 @@ describe('RouteWeatherService', () => {
     expect(wx.usedInCalculation()).toBe(false);
   });
 
+  it('moves "now" on when a mission flown now changes', async () => {
+    store.newMission(exampleMission());
+    await loaded();
+    const before = wx.timeline()!.departureMs;
+    vi.setSystemTime(Date.now() + 2 * 3600e3);
+    store.update((m) => ({ ...m }));
+    TestBed.tick();
+    const after = wx.timeline()!.departureMs;
+    expect(after - before).toBeGreaterThanOrEqual(2 * 3600e3 - 60e3);
+    expect(after % 60e3).toBe(0);
+  });
+
+  it('drops a load overtaken by a route change', async () => {
+    const answer: WeatherPoint = { tier: 'hourly', temperatureC: 3 };
+    let release: (w: WeatherPoint) => void = () => undefined;
+    const gate = new Promise<WeatherPoint>((resolve) => (release = resolve));
+    const spy = vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockReturnValue(gate);
+    store.newMission(exampleMission());
+    TestBed.tick();
+    await MockApiHarness.wait(500);
+    expect(spy).toHaveBeenCalled();
+    store.update((m) => ({ ...m, waypoints: m.waypoints.slice(0, -1) }));
+    TestBed.tick();
+    release(answer);
+    await MockApiHarness.wait(100);
+    expect(wx.status()).toBe('loading');
+    expect(wx.route()).toBeNull();
+    spy.mockRestore();
+    await loaded();
+    expect(wx.status()).toBe('ready');
+    expect(wx.route()).not.toBeNull();
+  });
+
+  it('rates the temperature by both ends of its range', async () => {
+    let calls = 0;
+    vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockImplementation(async () => ({ tier: 'hourly', temperatureC: calls++ === 0 ? 20 : 28 }));
+    store.newMission(exampleMission());
+    await loaded();
+    expect(wx.summary().find((s) => s.key === 'temperature')?.level).toBe('notable');
+  });
+
   it('gives the hours around a point for the briefing', async () => {
     store.newMission(exampleMission());
     await loaded();

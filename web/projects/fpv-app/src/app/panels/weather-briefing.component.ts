@@ -67,7 +67,7 @@ const VERDICT: Record<WeatherLevel, { title: string; tone: string }> = {
     <section #panel class="briefing" role="dialog" aria-modal="true" aria-labelledby="briefing-title" tabindex="-1">
       <div class="top">
         <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="close()">← Back to map</button>
-        <button type="button" class="rf-btn rf-btn--sm rf-btn--muted" (click)="wx.refresh()">Refresh forecast</button>
+        <button type="button" class="rf-btn rf-btn--sm rf-btn--muted" (click)="refresh()">Refresh forecast</button>
       </div>
       <div class="title">
         <h2 id="briefing-title">Weather briefing · {{ ws.mission()?.name }}</h2>
@@ -195,6 +195,12 @@ export class WeatherBriefingComponent {
         for (const k of points) void this.loadHours(k);
       });
     });
+  }
+
+  /** Fresh forecasts for the route and for the hours around each ETA. */
+  protected refresh(): void {
+    this.hourly.set(new Map());
+    this.wx.refresh();
   }
 
   protected close(): void {

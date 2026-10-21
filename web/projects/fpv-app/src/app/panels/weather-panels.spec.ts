@@ -1,6 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Type } from '@angular/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MissionStore, RouteTimeline, RouteWeather, provideMapView } from '@rfmap/ui-kit';
 import { FpvDataService } from '../core/fpv-data.service';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
@@ -55,7 +55,7 @@ describe('weather views', () => {
     await loaded();
     const ws = TestBed.inject(FpvWorkspace);
     ws.briefingOpen.set(true);
-    const b = vmOf<{ verdict: () => { title: string; tone: string }; cards: () => { key: { name: string }; rows: { label: string }[]; spark: unknown; hoursLoaded: boolean }[]; subtitle: () => string; close: () => void }>(WeatherBriefingComponent);
+    const b = vmOf<{ verdict: () => { title: string; tone: string }; cards: () => { key: { name: string }; rows: { label: string }[]; spark: unknown; hoursLoaded: boolean }[]; subtitle: () => string; refresh: () => void; close: () => void }>(WeatherBriefingComponent);
     expect(['ok', 'warn', 'blocked']).toContain(b.verdict().tone);
     expect(b.cards().map((c) => c.key.name)).toEqual(['A', 'WP1', 'WP2', 'B', 'A']);
     expect(b.cards()[0].rows.map((r) => r.label)).toContain('Air density');
@@ -63,6 +63,12 @@ describe('weather views', () => {
     TestBed.tick();
     for (let i = 0; i < 50 && !b.cards().every((c) => c.hoursLoaded); i++) await MockApiHarness.wait(100);
     expect(b.cards().every((c) => c.spark !== null)).toBe(true);
+    // a refresh asks again for the hours around each ETA too
+    const hourly = vi.spyOn(wx, 'hourly');
+    b.refresh();
+    await loaded();
+    TestBed.tick();
+    expect(hourly).toHaveBeenCalledTimes(5);
     b.close();
     expect(ws.briefingOpen()).toBe(false);
   });

@@ -81,6 +81,11 @@ export class FlightClock {
   static day(ms: number): string {
     return new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
   }
+
+  /** The present to the minute, so a route asked twice within a minute keeps its forecast key. */
+  static now(): number {
+    return Math.floor(Date.now() / 60e3) * 60e3;
+  }
 }
 
 /**
@@ -139,8 +144,18 @@ export class MissionTimelineBuilder {
     return stops;
   }
 
+  /** True when the mission has no planned time and is flown now. */
+  static flownNow(m: Mission): boolean {
+    return !MissionTimelineBuilder.plannedUtc(m);
+  }
+
   static departureMs(m: Mission, nowMs: number): number {
-    return m.time.mode === 'planned' && m.time.utc ? new Date(m.time.utc).getTime() : nowMs;
+    const utc = MissionTimelineBuilder.plannedUtc(m);
+    return utc ? new Date(utc).getTime() : nowMs;
+  }
+
+  private static plannedUtc(m: Mission): string | undefined {
+    return m.time.mode === 'planned' ? m.time.utc : undefined;
   }
 
   /** Samples between the route points plus the points themselves, in route order. */
@@ -162,7 +177,7 @@ export class RouteWeatherService {
   private readonly ws = inject(FpvWorkspace);
   private readonly cache = new ForecastCache((lat, lon, t) => this.api.weatherPoint(lat, lon, t));
   private readonly runner = new LimitedRunner(PARALLEL);
-  private readonly nowMs = signal(Date.now());
+  private readonly nowMs = signal(FlightClock.now());
   private readonly loaded = signal<{ key: string; samples: WeatherSample[] } | null>(null);
   private timer: ReturnType<typeof setTimeout> | null = null;
   private generation = 0;
@@ -227,6 +242,11 @@ export class RouteWeatherService {
   });
 
   constructor() {
+    // a mission flown now starts now: move "now" on whenever such a mission changes
+    effect(() => {
+      const m = this.ws.mission();
+      if (m && MissionTimelineBuilder.flownNow(m)) untracked(() => this.nowMs.set(FlightClock.now()));
+    });
     effect(() => {
       const key = this.key();
       untracked(() => this.schedule(key));
@@ -238,7 +258,7 @@ export class RouteWeatherService {
   refresh(): void {
     this.cache.clear();
     this.loaded.set(null);
-    this.nowMs.set(Date.now());
+    this.nowMs.set(FlightClock.now());
     this.schedule(this.key());
   }
 
@@ -263,12 +283,14 @@ export class RouteWeatherService {
   private cancel(): void {
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
+    // a load still in flight is for an older route: drop its answer
+    this.generation++;
   }
 
   private async load(key: string): Promise<void> {
     const t = this.timeline();
     if (!t || key !== this.key()) return;
-    const gen = ++this.generation;
+    const gen = this.generation;
     this.error.set(null);
     const points = MissionTimelineBuilder.samplePoints(t);
     const settled = await this.runner.run(points, (p) => this.cache.get(p.lat, p.lon, p.etaMs));
@@ -328,7 +350,8 @@ export class RouteWeatherService {
     const hi = r.max('temperatureC');
     if (lo === null || hi === null) return null;
     const text = Math.round(lo) === Math.round(hi) ? `Temperature ${RfFormat.format(lo, 'degc')} along the flight` : `Temperature ${RfFormat.format(lo, 'degc')} to ${RfFormat.format(hi, 'degc')} along the flight`;
-    return { key: 'temperature', text, level: WeatherScale.level('temperature', lo) };
+    const level = RouteWeatherService.worst([WeatherScale.level('temperature', lo), WeatherScale.level('temperature', hi)]);
+    return { key: 'temperature', text, level };
   }
 
   private static worst(levels: WeatherLevel[]): WeatherLevel {
