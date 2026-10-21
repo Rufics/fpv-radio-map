@@ -1,8 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ApiError, CredentialStore, Job, RfmapApiClient } from '@rfmap/ui-kit';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+import { ApiError, CredentialStore, Job, RFMAP_API_BASE, RfmapApiClient, WeatherPoint } from '@rfmap/ui-kit';
 import { MockApiHarness } from '../tests/mock-api-harness';
-import { LIBRARY, exampleMission } from './reference-case';
+import { LIBRARY, exampleMission, weatherAt } from './reference-case';
 
 /** The dev mock backend, walked through with the app's own API client, keeps to the contract. */
 describe('MockBackend through the API client', () => {
@@ -103,6 +105,12 @@ describe('MockBackend through the API client', () => {
     const profile = await settle(api.elevationProfile({ lat: 48.54, lon: 35.2 }, { lat: 48.56, lon: 35.23 }));
     expect(profile).toBeTruthy();
     expect(await settle(api.weatherPoint(48.5, 35.2))).toBeTruthy();
+    // without a place the mock answers with the reference weather at the pilot
+    const http = TestBed.inject(HttpClient);
+    const base = TestBed.inject(RFMAP_API_BASE);
+    const nowhere = await settle(firstValueFrom(http.get<WeatherPoint>(`${base}/weather/point`)));
+    const reference = weatherAt(undefined, false);
+    expect([nowhere.windSpeedMps, nowhere.windFromDeg, nowhere.temperatureC]).toEqual([reference.windSpeedMps, reference.windFromDeg, reference.temperatureC]);
     expect(await settle(api.weatherHorizon())).toBeTruthy();
     expect((await settle(api.mapConfig())).zoom).toBe(12);
     expect((await rejection(api.elevationProfile({ lat: Number.NaN, lon: 1 }, { lat: 1, lon: 1 }))).status).toBe(400);

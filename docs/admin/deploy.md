@@ -186,6 +186,9 @@ Settings you will most likely touch:
 
 ## 4. Open-Meteo
 
+[How the weather forecast reaches the pilot](weather-data.md) follows a forecast from these
+containers to the app, with diagrams.
+
 rfmap-server asks for these hourly variables at the pilot's location: `temperature_2m`,
 `relative_humidity_2m`, `surface_pressure`, `precipitation`, `wind_speed_10m`,
 `wind_direction_10m`, and `temperature`, `relative_humidity` and `geopotential_height` at

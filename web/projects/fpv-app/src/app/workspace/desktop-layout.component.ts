@@ -5,13 +5,14 @@ import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { PlanPanelComponent } from '../panels/plan-panel.component';
 import { RadioSetupComponent } from '../panels/radio-setup.component';
 import { ShareDialogComponent } from '../panels/share-dialog.component';
+import { WeatherBriefingComponent } from '../panels/weather-briefing.component';
 import { WhyDrawerComponent } from '../panels/why-drawer.component';
 import { MapStageComponent } from './map-stage.component';
 
 /** Layout A (laptop/desktop): header, 380 px side panel, map, bottom drawer. */
 @Component({
   selector: 'fpv-desktop-layout',
-  imports: [PillComponent, SlotHostComponent, PlanPanelComponent, MapStageComponent, WhyDrawerComponent, ShareDialogComponent, RadioSetupComponent, RouterLink],
+  imports: [PillComponent, SlotHostComponent, PlanPanelComponent, MapStageComponent, WhyDrawerComponent, ShareDialogComponent, RadioSetupComponent, WeatherBriefingComponent, RouterLink],
   template: `
     <header class="bar">
       @if (ws.mission(); as m) {
@@ -48,6 +49,9 @@ import { MapStageComponent } from './map-stage.component';
         }
         @if (ws.radioSetup()) {
           <fpv-radio-setup />
+        }
+        @if (ws.briefingOpen() && ws.mission()) {
+          <fpv-weather-briefing />
         }
       </main>
     </div>

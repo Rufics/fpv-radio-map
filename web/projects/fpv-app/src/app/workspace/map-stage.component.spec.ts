@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Position } from 'geojson';
 import { Mission, MissionStore, RouteDrawing, RouteResult, provideMapView } from '@rfmap/ui-kit';
 import { coverageGrid, exampleMission, fixAltitude, fixTurnBack, routeResult } from '../mock/reference-case';
+import { FpvWorkspace } from '../core/fpv-workspace.service';
+import { RouteWeatherService } from '../core/route-weather.service';
 import { MockApiHarness } from '../tests/mock-api-harness';
 import { MapStageComponent } from './map-stage.component';
 
@@ -36,6 +38,23 @@ describe('MapStageComponent drawing', () => {
   });
 
   afterEach(() => MockApiHarness.tearDown());
+
+  it('sets the leg labels aside once the route is coloured by the weather, but not in a fix preview', async () => {
+    const ws = TestBed.inject(FpvWorkspace);
+    const wx = TestBed.inject(RouteWeatherService);
+    const shown = () => (fixture.componentInstance as unknown as { weatherShown: () => boolean }).weatherShown();
+    const m = exampleMission();
+    show(m, null);
+    expect(shown()).toBe(false);
+    ws.weatherMode.set(true);
+    TestBed.tick();
+    // still loading: the route keeps its link colours and labels
+    expect(shown()).toBe(false);
+    for (let i = 0; i < 100 && wx.status() !== 'ready'; i++) await MockApiHarness.wait(100);
+    expect(shown()).toBe(true);
+    store.preview.set({ fix: { id: 'x' }, before: m, after: m });
+    expect(shown()).toBe(false);
+  });
 
   it('draws nothing without a mission', () => {
     expect(drawing()).toEqual({ pilot: null, waypoints: [], legs: [] });

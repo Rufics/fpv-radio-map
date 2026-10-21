@@ -16,13 +16,14 @@ import { exampleMissionFor } from '../core/example-mission';
 import { MissionTimeComponent } from './mission-time.component';
 import { PreviewPanelComponent } from './preview-panel.component';
 import { StateCardsComponent } from './state-cards.component';
+import { WeatherCardComponent } from './weather-card.component';
 import { ComparePanelComponent } from './compare-panel.component';
 import { CompareService } from '../core/fpv-core';
 
 /** Side panel of layout A: new mission, links, radios, time, route, calculate, results. */
 @Component({
   selector: 'fpv-plan-panel',
-  imports: [SegmentedComponent, JobProgressComponent, SlotHostComponent, StepperComponent, MissionTimeComponent, PreviewPanelComponent, StateCardsComponent, RfNumComponent, ComparePanelComponent],
+  imports: [SegmentedComponent, JobProgressComponent, SlotHostComponent, StepperComponent, MissionTimeComponent, PreviewPanelComponent, StateCardsComponent, RfNumComponent, ComparePanelComponent, WeatherCardComponent],
   template: `
     @if (!ws.mission()) {
       @if (ws.placing() === 'pilot') {
@@ -62,6 +63,10 @@ import { CompareService } from '../core/fpv-core';
       </div>
 
       <fpv-mission-time [editable]="canEdit" />
+
+      @if (ws.weatherMode() && m.waypoints.length) {
+        <fpv-weather-card />
+      }
 
       <div class="section-head">
         <span class="rf-eyebrow">Route · {{ ws.routeLengthText() }}</span>

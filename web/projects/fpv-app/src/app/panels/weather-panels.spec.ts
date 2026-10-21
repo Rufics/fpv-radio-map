@@ -1,0 +1,139 @@
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { Type } from '@angular/core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MissionStore, RfmapApiClient, RouteTimeline, RouteWeather, provideMapView } from '@rfmap/ui-kit';
+import { FpvDataService } from '../core/fpv-data.service';
+import { FpvWorkspace } from '../core/fpv-workspace.service';
+import { HourlyWeather, MissionTimelineBuilder, RouteWeatherService } from '../core/route-weather.service';
+import { exampleMission } from '../mock/reference-case';
+import { MockApiHarness } from '../tests/mock-api-harness';
+import { WeatherRibbon } from '../workspace/route-weather-map.component';
+import { WeatherBriefingComponent, WindSparkline } from './weather-briefing.component';
+import { WeatherCardComponent } from './weather-card.component';
+
+/** View models of the weather card, the briefing and the map ribbon, with the dev mock behind them (templates not rendered). */
+describe('weather views', () => {
+  let store: MissionStore;
+  let wx: RouteWeatherService;
+
+  function vmOf<T>(component: Type<unknown>): T {
+    const fixture: ComponentFixture<unknown> = TestBed.createComponent(component);
+    return fixture.componentInstance as T;
+  }
+
+  async function loaded(): Promise<void> {
+    TestBed.tick();
+    for (let i = 0; i < 100 && wx.status() !== 'ready'; i++) await MockApiHarness.wait(100);
+  }
+
+  beforeEach(async () => {
+    MockApiHarness.setUp();
+    TestBed.configureTestingModule({ providers: [provideMapView()] });
+    for (const c of [WeatherCardComponent, WeatherBriefingComponent]) TestBed.overrideComponent(c, { set: { template: '', imports: [] } });
+    store = TestBed.inject(MissionStore);
+    await MockApiHarness.settle(TestBed.inject(FpvDataService).load());
+    wx = TestBed.inject(RouteWeatherService);
+    TestBed.inject(FpvWorkspace).weatherMode.set(true);
+  });
+
+  afterEach(() => MockApiHarness.tearDown());
+
+  it('card: launch weather, humidity and how arrival times are made', async () => {
+    store.newMission(exampleMission());
+    await loaded();
+    const card = vmOf<{ launch: () => { name: string } | null; humidity: () => string; speedText: () => string; isReturn: () => boolean; short: (t: string) => string }>(WeatherCardComponent);
+    expect(card.launch()?.name).toBe('A');
+    expect(card.humidity()).toMatch(/^ · \d+% RH$/);
+    expect(card.speedText()).toContain('10-inch recon quad');
+    expect(card.isReturn()).toBe(true);
+    expect(card.short('7.4 m/s')).toBe('7.4');
+    store.update((m) => ({ ...m, drone: undefined }));
+    expect(card.speedText()).toContain('assumed');
+  });
+
+  it('briefing: verdict, a card per route point with its rows, and the hours around the ETA', async () => {
+    store.newMission(exampleMission());
+    await loaded();
+    const ws = TestBed.inject(FpvWorkspace);
+    ws.briefingOpen.set(true);
+    const b = vmOf<{ verdict: () => { title: string; tone: string }; cards: () => { key: { name: string }; rows: { label: string }[]; spark: unknown; hoursLoaded: boolean }[]; subtitle: () => string; refresh: () => void; close: () => void }>(WeatherBriefingComponent);
+    expect(['ok', 'warn', 'blocked']).toContain(b.verdict().tone);
+    expect(b.cards().map((c) => c.key.name)).toEqual(['A', 'WP1', 'WP2', 'B', 'A']);
+    expect(b.cards()[0].rows.map((r) => r.label)).toContain('Air density');
+    expect(b.subtitle()).toContain('5 route points');
+    TestBed.tick();
+    for (let i = 0; i < 50 && !b.cards().every((c) => c.hoursLoaded); i++) await MockApiHarness.wait(100);
+    expect(b.cards().every((c) => c.spark !== null)).toBe(true);
+    // a refresh asks again for the hours around each ETA too
+    const hourly = vi.spyOn(wx, 'hourly');
+    b.refresh();
+    // no calm verdict while the forecast is reloading
+    expect(b.verdict().tone).toBe('none');
+    await loaded();
+    TestBed.tick();
+    expect(hourly).toHaveBeenCalledTimes(5);
+    b.close();
+    expect(ws.briefingOpen()).toBe(false);
+  });
+
+  it('briefing: drops hours asked for before a refresh', async () => {
+    store.newMission(exampleMission());
+    await loaded();
+    TestBed.inject(FpvWorkspace).briefingOpen.set(true);
+    let release: (h: HourlyWeather[]) => void = () => undefined;
+    const old = new Promise<HourlyWeather[]>((resolve) => (release = resolve));
+    const spy = vi.spyOn(wx, 'hourly').mockReturnValue(old);
+    const b = vmOf<{ cards: () => { hoursLoaded: boolean }[]; refresh: () => void }>(WeatherBriefingComponent);
+    TestBed.tick();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+    b.refresh();
+    release([]);
+    await MockApiHarness.wait(0);
+    expect(b.cards().some((c) => c.hoursLoaded)).toBe(false);
+    await loaded();
+    TestBed.tick();
+    for (let i = 0; i < 50 && !b.cards().every((c) => c.hoursLoaded); i++) await MockApiHarness.wait(100);
+    expect(b.cards().every((c) => c.hoursLoaded)).toBe(true);
+  });
+
+  it('briefing: never calm without a forecast to judge by', async () => {
+    const vm = () => vmOf<{ verdict: () => { title: string; tone: string } }>(WeatherBriefingComponent);
+    const spy = vi.spyOn(TestBed.inject(RfmapApiClient), 'weatherPoint').mockRejectedValue(new Error('down'));
+    store.newMission(exampleMission());
+    TestBed.tick();
+    for (let i = 0; i < 100 && wx.status() !== 'error'; i++) await MockApiHarness.wait(100);
+    expect(vm().verdict()).toEqual({ title: 'The forecast could not be loaded', tone: 'warn' });
+    spy.mockRestore();
+    store.update((m) => ({ ...m, time: { mode: 'planned', utc: new Date(Date.now() + 40 * 86400e3).toISOString() } }));
+    await loaded();
+    expect(vm().verdict().title).toBe('No forecast covers this flight time');
+  });
+
+  it('sparkline: scales to the hours it has and marks the ETA', () => {
+    const t0 = Date.UTC(2026, 9, 21, 10);
+    const hours: HourlyWeather[] = [0, 1, 2].map((i) => ({ timeMs: t0 + i * 3600e3, weather: i === 1 ? null : { windSpeedMps: 4 + i } }));
+    const s = new WindSparkline(hours);
+    expect(s.points().split(' ')).toHaveLength(2);
+    expect(s.xOf(t0 + 3600e3)).toBe(90);
+    expect(s.xOf(t0 - 1)).toBeNull();
+    expect(s.label()).toContain('peak 6.0 m/s');
+    expect(new WindSparkline([]).label()).toBe('');
+    expect(new WindSparkline([]).xOf(t0)).toBeNull();
+  });
+
+  it('ribbon: coloured pieces broken at every route point', async () => {
+    const m = exampleMission();
+    store.newMission(m);
+    await loaded();
+    const t = wx.timeline()!;
+    const segs = new WeatherRibbon(t, wx.route()!).segments('headwind');
+    expect(segs.length).toBeGreaterThanOrEqual(wx.route()!.readings().length - 1);
+    expect(segs.every((s) => /^#[0-9A-F]{6}$/i.test(s.color))).toBe(true);
+    // a piece never spans a waypoint: each lies on one leg
+    const wp1 = t.keyPoints()[1];
+    expect(segs.some((s) => Math.abs(s.to.lat - wp1.lat) < 1e-9 && Math.abs(s.to.lon - wp1.lon) < 1e-9)).toBe(true);
+    const empty = new WeatherRibbon(new RouteTimeline(MissionTimelineBuilder.stops(m), 0, 10), new RouteWeather(t, []));
+    expect(empty.segments('wind')).toEqual([]);
+  });
+});
