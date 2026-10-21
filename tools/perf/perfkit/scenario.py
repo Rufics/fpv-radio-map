@@ -151,6 +151,8 @@ class ScenarioSuite:
 
         One profile of the server whatever regressed: the set-up and k6 of this second load go
         into profile/ of the run, so they do not replace the measured run's files."""
+        if not regressions:
+            return []
         settings = self.scenario.manifest.get("profile", {})
         warm_up = float(settings.get("warmUpS", DEFAULT_PROFILE_WARM_UP_S))
         duration = float(settings.get("durationS", DEFAULT_PROFILE_S))

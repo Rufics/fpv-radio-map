@@ -11,6 +11,7 @@ from perfkit.errors import PerfError
 from perfkit.google_benchmark_test import TOOL_DIR
 from perfkit.k6_summary_test import summary
 from perfkit.micro_test import TargetsOnly
+from perfkit.profile_test import comparison
 from perfkit.scenario import Dataset, ScenarioSuite
 from perfkit.stand import Stand, StandSettings
 from perfkit.stand_test import FakeRunner, StandTestCase
@@ -107,7 +108,7 @@ class ScenarioSuiteTest(StandTestCase):
 
     def test_a_regression_profiles_the_server_under_the_peak_load(self):
         profiles = TargetsOnly()
-        self.suite("peak").profile([], self.run_dir, profiles)
+        self.suite("peak").profile([comparison("all", 20.0)], self.run_dir, profiles)
         (target,) = profiles.targets
         self.assertEqual((target.name, target.pid, target.duration_s), ("rfmap-server", 4242, 30.0))
         plan = json.loads((self.run_dir / "profile" / "plan.json").read_text(encoding="utf-8"))
@@ -118,11 +119,16 @@ class ScenarioSuiteTest(StandTestCase):
         self.assertFalse((self.run_dir / "k6-summary.json").exists())
         self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
 
+    def test_no_regression_needs_no_profile(self):
+        profiles = TargetsOnly()
+        self.assertEqual(self.suite().profile([], self.run_dir, profiles), [])
+        self.assertEqual((profiles.targets, self.runner.runs), ([], []))
+
     def test_a_failed_profile_load_is_an_error(self):
         self.runner.k6_code = 1
         suite, profiles = self.suite(), TargetsOnly()
         with self.assertRaisesRegex(PerfError, "exit 1"):
-            suite.profile([], self.run_dir, profiles)
+            suite.profile([comparison("all", 20.0)], self.run_dir, profiles)
         self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
 
     def test_items_and_thresholds(self):
