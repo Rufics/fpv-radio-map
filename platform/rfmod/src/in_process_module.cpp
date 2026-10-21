@@ -1,4 +1,5 @@
 #include "rfmod/abi.h"
+#include "rfmod/entry_point.hpp"
 #include "rfmod/host.hpp"
 
 #include <dlfcn.h>
@@ -62,8 +63,7 @@ struct InProcessModule::Library {
     }
 
     [[nodiscard]] rfmod_get_module_fn entry() const {
-        // POSIX guarantees a function symbol's address round-trips through dlsym's void*.
-        return reinterpret_cast<rfmod_get_module_fn>(dlsym(handle.get(), RFMOD_ENTRY_SYMBOL));
+        return EntryPoint::find(handle.get());
     }
 };
 
