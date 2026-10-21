@@ -39,8 +39,8 @@ class SyntheticLog {
 public:
     static constexpr std::int32_t kVbatRef = 1680;
 
-    explicit SyntheticLog(std::string firmware = "Betaflight 4.5.1 (77d01ba3b) STM32F7X2",
-                          std::vector<std::pair<std::string, std::string>> extraHeader = {},
+    explicit SyntheticLog(const std::string& firmware = "Betaflight 4.5.1 (77d01ba3b) STM32F7X2",
+                          const std::vector<std::pair<std::string, std::string>>& extraHeader = {},
                           bool withCurrent = true)
         : withCurrent_(withCurrent) {
         w_.text(BlackboxFile::kProductLine);

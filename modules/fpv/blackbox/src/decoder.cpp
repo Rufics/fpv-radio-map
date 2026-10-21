@@ -81,7 +81,8 @@ json BlackboxDecoder::probe(std::span<const std::uint8_t> data) const {
         ByteReader reader(data.subspan(first.begin, first.end - first.begin));
         const LogHeader header = LogHeader::read(reader);
         const FirmwareInfo& fw = header.firmware();
-        out["firmware"] = fw.version() ? fw.name() + " " + fw.version()->str() : fw.name();
+        const auto& version = fw.version();
+        out["firmware"] = version ? fw.name() + " " + version->str() : fw.name();
     }
     return out;
 }

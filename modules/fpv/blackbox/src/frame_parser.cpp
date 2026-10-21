@@ -202,12 +202,12 @@ void FrameParser::commitIntra(const MainPosition& pos) {
     }
     // Too far from the last good frame: wait for a second I frame that agrees with this one.
     candidate_ = pos;
-    if (mainValid_) gapFromUs_ = last_->timeUs;
+    if (mainValid_ && last_) gapFromUs_ = last_->timeUs;
     mainValid_ = false;
 }
 
 void FrameParser::commitInter(const MainPosition& pos) {
-    if (!mainValid_) return;  // a P frame cannot resynchronise the stream
+    if (!mainValid_ || !last_) return;  // a P frame cannot resynchronise the stream
     if (!plausible(*last_, pos)) {
         gapFromUs_ = last_->timeUs;
         mainValid_ = false;

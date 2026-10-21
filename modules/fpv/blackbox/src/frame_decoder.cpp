@@ -16,6 +16,7 @@ std::uint32_t littleEndian(ByteReader& in, unsigned bytes) {
 }  // namespace
 
 std::int32_t FieldReader::signExtend(std::uint32_t value, unsigned bits) {
+    if (bits == 0) return 0;
     const std::uint32_t mask = bits >= 32 ? 0xFFFFFFFFu : (1u << bits) - 1u;
     value &= mask;
     const std::uint32_t sign = 1u << (bits - 1);

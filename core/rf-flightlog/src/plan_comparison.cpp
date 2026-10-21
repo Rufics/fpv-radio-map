@@ -178,39 +178,42 @@ json PlanComparison::legsJson(const RoutePlan& plan, const Track& track) {
 json PlanComparison::findings(const RoutePlan& plan, const FlightSummary& summary, const Track& track,
                               const Timeline& timeline) const {
     json out = json::array();
-    if (summary.distanceM && plan.lengthM() > 0.0) {
-        const double pct = (*summary.distanceM - plan.lengthM()) / plan.lengthM() * 100.0;
-        out.push_back(finding(std::abs(pct) > 25.0 ? "warn" : "info",
-                              "Flew " + km(*summary.distanceM) + " against " + km(plan.lengthM()) + " planned (" +
-                                  (pct >= 0 ? "+" : "") + fixed(pct, 0) + " %)."));
-    }
-    if (summary.usedWh && plan.neededWh && *plan.neededWh > 0.0) {
-        const double pct = *summary.usedWh / *plan.neededWh * 100.0;
-        out.push_back(finding(pct > 110.0 ? "warn" : "info", "Used " + fixed(*summary.usedWh, 1) + " Wh against " +
-                                                                 fixed(*plan.neededWh, 1) + " Wh planned (" + fixed(pct, 0) + " %)."));
-    } else if (plan.neededWh && !summary.usedWh) {
-        out.push_back(finding("info", "The log has no current sensor, so energy cannot be compared with the plan."));
-    }
-    if (track.worst) {
-        const double d = track.offRouteM[*track.worst];
-        const PlannedLeg& leg = plan.legs[track.worstLeg];
-        out.push_back(finding(d > options_.offRouteWarnM ? "warn" : "info",
-                              "Furthest off the route: " + fixed(d, 0) + " m, on the leg " + leg.from + " → " + leg.to +
-                                  " at " + fixed(timeline.samples.t[*track.worst], 0) + " s."));
-    } else {
-        out.push_back(finding("info", "The log has no GPS track while armed, so the route cannot be compared."));
-    }
+    if (summary.distanceM && plan.lengthM() > 0.0) out.push_back(distanceFinding(plan, *summary.distanceM));
+    if (plan.neededWh && (!summary.usedWh || *plan.neededWh > 0.0)) out.push_back(energyFinding(*plan.neededWh, summary.usedWh));
+    out.push_back(routeFinding(plan, track, timeline));
     for (std::size_t i = 0; i < plan.legs.size(); ++i) {
-        const PlannedLeg& p = plan.legs[i];
-        const LegFact& f = track.legs[i];
-        if (!p.controlMarginDb || !f.minLinkPct) continue;
-        if (*p.controlMarginDb >= 6.0 && *f.minLinkPct < 30.0) {
-            out.push_back(finding("warn", "Leg " + p.from + " → " + p.to + ": planned " + fixed(*p.controlMarginDb, 0) +
-                                              " dB of control margin, but the link fell to " + fixed(*f.minLinkPct, 0) +
-                                              " %. Check antennas, obstacles and the radio settings."));
-        }
+        if (auto f = legFinding(plan.legs[i], track.legs[i])) out.push_back(std::move(*f));
     }
     return out;
+}
+
+json PlanComparison::distanceFinding(const RoutePlan& plan, double flownM) {
+    const double pct = (flownM - plan.lengthM()) / plan.lengthM() * 100.0;
+    return finding(std::abs(pct) > 25.0 ? "warn" : "info", "Flew " + km(flownM) + " against " + km(plan.lengthM()) +
+                                                               " planned (" + (pct >= 0 ? "+" : "") + fixed(pct, 0) + " %).");
+}
+
+json PlanComparison::energyFinding(double neededWh, std::optional<double> usedWh) {
+    if (!usedWh) return finding("info", "The log has no current sensor, so energy cannot be compared with the plan.");
+    const double pct = *usedWh / neededWh * 100.0;
+    return finding(pct > 110.0 ? "warn" : "info", "Used " + fixed(*usedWh, 1) + " Wh against " + fixed(neededWh, 1) +
+                                                      " Wh planned (" + fixed(pct, 0) + " %).");
+}
+
+json PlanComparison::routeFinding(const RoutePlan& plan, const Track& track, const Timeline& timeline) const {
+    if (!track.worst) return finding("info", "The log has no GPS track while armed, so the route cannot be compared.");
+    const double d = track.offRouteM[*track.worst];
+    const PlannedLeg& leg = plan.legs[track.worstLeg];
+    return finding(d > options_.offRouteWarnM ? "warn" : "info",
+                   "Furthest off the route: " + fixed(d, 0) + " m, on the leg " + leg.from + " → " + leg.to + " at " +
+                       fixed(timeline.samples.t[*track.worst], 0) + " s.");
+}
+
+std::optional<json> PlanComparison::legFinding(const PlannedLeg& p, const LegFact& f) {
+    if (!p.controlMarginDb || !f.minLinkPct || *p.controlMarginDb < 6.0 || *f.minLinkPct >= 30.0) return std::nullopt;
+    return finding("warn", "Leg " + p.from + " → " + p.to + ": planned " + fixed(*p.controlMarginDb, 0) +
+                               " dB of control margin, but the link fell to " + fixed(*f.minLinkPct, 0) +
+                               " %. Check antennas, obstacles and the radio settings.");
 }
 
 json PlanComparison::compare(const RoutePlan& plan, const Timeline& timeline, const FlightSummary& summary) const {

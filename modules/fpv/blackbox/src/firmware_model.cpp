@@ -31,10 +31,11 @@ const std::vector<ModeTable>& ModeTable::all() {
 }
 
 const ModeTable* ModeTable::forFirmware(const FirmwareInfo& firmware) {
-    if (!firmware.betaflightAtLeast(kV3_1)) return nullptr;
+    const auto& version = firmware.version();
+    if (!version || !firmware.betaflightAtLeast(kV3_1)) return nullptr;
     const ModeTable* chosen = nullptr;
     for (const ModeTable& table : all()) {
-        if (table.since() <= *firmware.version()) chosen = &table;
+        if (table.since() <= *version) chosen = &table;
     }
     return chosen;
 }

@@ -4,6 +4,7 @@
 #include <cmath>
 #include <format>
 #include <map>
+#include <ranges>
 
 namespace rfflightlog {
 namespace {
@@ -67,8 +68,8 @@ std::optional<double> smallestValue(const std::vector<double>* v) {
 
 std::optional<double> lastValue(const std::vector<double>* v) {
     if (v == nullptr) return std::nullopt;
-    for (auto it = v->rbegin(); it != v->rend(); ++it) {
-        if (hasValue(*it)) return *it;
+    for (const double x : std::views::reverse(*v)) {
+        if (hasValue(x)) return x;
     }
     return std::nullopt;
 }

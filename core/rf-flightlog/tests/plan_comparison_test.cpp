@@ -67,21 +67,26 @@ TEST(RoutePlan, ReadsTheMissionAndItsResult) {
     EXPECT_EQ(out.legs[1].to, "Pilot");
     EXPECT_NEAR(out.legs[0].lengthM, 500.0, 2.0);
     EXPECT_NEAR(out.lengthM(), 1000.0, 4.0);
-    EXPECT_DOUBLE_EQ(*out.legs[0].controlMarginDb, 12.0);
+    EXPECT_DOUBLE_EQ(out.legs[0].controlMarginDb.value_or(0.0), 12.0);
     EXPECT_FALSE(out.legs[1].controlMarginDb.has_value());
     EXPECT_FALSE(out.legs[0].videoMarginDb.has_value());
-    EXPECT_DOUBLE_EQ(*out.neededWh, 2.0);
+    EXPECT_DOUBLE_EQ(out.neededWh.value_or(0.0), 2.0);
     EXPECT_FALSE(RoutePlan::fromMission(mission(0, false), std::nullopt).neededWh.has_value());
 }
 
 TEST(RouteGeometry, MeasuresTheDistanceToTheNearestLeg) {
     const RouteGeometry route({{50.0, 30.0}, {50.0, 30.01}, {50.01, 30.01}});
-    const auto onFirst = route.nearest(50.0009, 30.005);
-    ASSERT_TRUE(onFirst.has_value());
-    EXPECT_EQ(onFirst->leg, 0u);
-    EXPECT_NEAR(onFirst->distanceM, 100.0, 1.0);
-    const auto onSecond = route.nearest(50.005, 30.0115);
-    EXPECT_EQ(onSecond->leg, 1u);
+    if (const auto onFirst = route.nearest(50.0009, 30.005)) {
+        EXPECT_EQ(onFirst->leg, 0u);
+        EXPECT_NEAR(onFirst->distanceM, 100.0, 1.0);
+    } else {
+        ADD_FAILURE() << "no leg near the first point";
+    }
+    if (const auto onSecond = route.nearest(50.005, 30.0115)) {
+        EXPECT_EQ(onSecond->leg, 1u);
+    } else {
+        ADD_FAILURE() << "no leg near the second point";
+    }
     EXPECT_FALSE(RouteGeometry({{50.0, 30.0}}).nearest(50.0, 30.0).has_value());
 }
 

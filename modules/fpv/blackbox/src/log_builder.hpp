@@ -99,6 +99,8 @@ private:
     [[nodiscard]] json gpsJson() const;
     [[nodiscard]] json statesJson() const;
     [[nodiscard]] json eventsJson() const;
+    [[nodiscard]] json homesJson() const;
+    [[nodiscard]] json statsJson(const ParseStats& stats) const;
     [[nodiscard]] json notesJson(const ParseStats& stats) const;
     void addSensorNotes(json& notes) const;
     void addGpsNotes(json& notes) const;

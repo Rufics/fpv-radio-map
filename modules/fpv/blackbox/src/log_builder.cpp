@@ -142,8 +142,9 @@ void NormalizedLogBuilder::onGpsFrame(std::span<const std::int64_t> values, std:
     s.sats = field(values, gpsFields_.sats);
     if (model_.unitsKnown()) {
         // GPS_altitude was unsigned before 4.5 but carried a signed altitude: read it as int32.
-        if (const auto alt = field(values, gpsFields_.alt)) {
-            s.alt = static_cast<std::int32_t>(static_cast<std::int64_t>(*alt)) / *model_.gpsAltitudeDivisor();
+        const auto alt = field(values, gpsFields_.alt);
+        if (const auto divisor = model_.gpsAltitudeDivisor(); alt && divisor) {
+            s.alt = static_cast<std::int32_t>(static_cast<std::int64_t>(*alt)) / *divisor;
         }
         s.speed = divided(field(values, gpsFields_.speed), kSpeedDivisor);
         s.course = divided(field(values, gpsFields_.course), kCourseDivisor);
@@ -249,7 +250,7 @@ double NormalizedLogBuilder::seconds(std::int64_t timeUs) const {
 json NormalizedLogBuilder::firmwareJson() const {
     const FirmwareInfo& fw = model_.firmware();
     json out = {{"name", fw.name()}, {"supported", model_.unitsKnown()}};
-    if (fw.version()) out["version"] = fw.version()->str();
+    if (const auto& version = fw.version()) out["version"] = version->str();
     if (!fw.revision().empty()) out["revision"] = fw.revision();
     if (!fw.target().empty()) out["target"] = fw.target();
     if (!fw.board().empty()) out["board"] = fw.board();
@@ -404,10 +405,11 @@ json NormalizedLogBuilder::notesJson(const ParseStats& stats) const {
     }
     if (!model_.unitsKnown()) {
         const FirmwareInfo& fw = model_.firmware();
+        const auto& version = fw.version();
         notes.push_back(note("firmware-units-unknown", "warn",
                              std::format("{}{} logs are read for the GPS track only: battery, altitude, link and modes use units "
                                          "this decoder does not know for that firmware.",
-                                         fw.name(), fw.version() ? " " + fw.version()->str() : std::string())));
+                                         fw.name(), version ? " " + version->str() : std::string())));
     }
     if (gaps_ > 0) {
         notes.push_back(note("corrupt-frames", "warn",
@@ -463,8 +465,9 @@ json NormalizedLogBuilder::finish(const ParseStats& stats, int index, std::pair<
     if (stats.firstTimeUs && stats.lastTimeUs) {
         log["durationS"] = static_cast<double>(*stats.lastTimeUs - *stats.firstTimeUs) / 1e6;
     }
-    if (const auto cells = header_.integers("vbatcellvoltage"); cells.size() >= 3 && model_.voltageDivisor()) {
-        const double d = *model_.voltageDivisor();
+    const auto divisor = model_.voltageDivisor();
+    if (const auto cells = header_.integers("vbatcellvoltage"); cells.size() >= 3 && divisor) {
+        const double d = *divisor;
         log["battery"] = {{"cellMinV", static_cast<double>(cells[0]) / d},
                           {"cellWarnV", static_cast<double>(cells[1]) / d},
                           {"cellMaxV", static_cast<double>(cells[2]) / d}};
@@ -472,28 +475,34 @@ json NormalizedLogBuilder::finish(const ParseStats& stats, int index, std::pair<
     if (const std::string protocol = model_.radioProtocol(); !protocol.empty()) log["radio"] = {{"protocol", protocol}};
     if (!timeUs_.empty()) log["series"] = seriesJson();
     if (!gps_.empty()) log["gps"] = gpsJson();
-    if (!homes_.empty()) {
-        json homes = json::array();
-        for (const auto& [t, home] : homes_) {
-            json h = home;
-            h["t"] = seconds(t);
-            homes.push_back(std::move(h));
-        }
-        log["homes"] = std::move(homes);
-    }
+    if (!homes_.empty()) log["homes"] = homesJson();
     if (!states_.empty()) log["states"] = statesJson();
     if (!events_.empty()) log["events"] = eventsJson();
+    log["stats"] = statsJson(stats);
+    return log;
+}
 
+json NormalizedLogBuilder::homesJson() const {
+    json homes = json::array();
+    for (const auto& [t, home] : homes_) {
+        json h = home;
+        h["t"] = seconds(t);
+        homes.push_back(std::move(h));
+    }
+    return homes;
+}
+
+json NormalizedLogBuilder::statsJson(const ParseStats& stats) const {
     json frames = json::object();
     for (const auto& [marker, count] : stats.frames) frames[std::string(1, marker)] = count;
-    log["stats"] = {{"frames", std::move(frames)}, {"corruptFrames", stats.corruptFrames}, {"sampleHz", options_.sampleHz}};
+    json out = {{"frames", std::move(frames)}, {"corruptFrames", stats.corruptFrames}, {"sampleHz", options_.sampleHz}};
     if (stats.firstTimeUs && stats.lastTimeUs && *stats.lastTimeUs > *stats.firstTimeUs) {
         const auto mainFrames = stats.frames.contains('I') ? stats.frames.at('I') : 0;
         const auto interFrames = stats.frames.contains('P') ? stats.frames.at('P') : 0;
-        log["stats"]["loggedHz"] =
+        out["loggedHz"] =
             static_cast<double>(mainFrames + interFrames) / (static_cast<double>(*stats.lastTimeUs - *stats.firstTimeUs) / 1e6);
     }
-    return log;
+    return out;
 }
 
 }  // namespace fpv::blackbox

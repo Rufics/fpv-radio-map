@@ -245,7 +245,7 @@ void TimelineBuilder::addAltitude(const FlightLog& log, Timeline& out) {
     const std::vector<double>* msl = out.samples.channel("altMslM");
     if (msl == nullptr) return;
     double base = kNoValue;
-    if (!log.homes.empty() && log.homes.front().altM.has_value()) base = *log.homes.front().altM;
+    if (!log.homes.empty()) base = log.homes.front().altM.value_or(kNoValue);
     for (std::size_t i = 0; !hasValue(base) && i < log.gps.size(); ++i) {
         if (log.gps.usable(i)) base = log.gps.altM[i];
     }

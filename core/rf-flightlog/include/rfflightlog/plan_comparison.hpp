@@ -84,6 +84,10 @@ private:
     [[nodiscard]] json findings(const RoutePlan& plan, const FlightSummary& summary, const Track& track,
                                 const Timeline& timeline) const;
     static json legsJson(const RoutePlan& plan, const Track& track);
+    static json distanceFinding(const RoutePlan& plan, double flownM);
+    static json energyFinding(double neededWh, std::optional<double> usedWh);
+    [[nodiscard]] json routeFinding(const RoutePlan& plan, const Track& track, const Timeline& timeline) const;
+    static std::optional<json> legFinding(const PlannedLeg& p, const LegFact& f);
     Options options_;
 };
 
