@@ -25,8 +25,7 @@ std::optional<long long> parseInteger(std::string_view text) {
         text.remove_prefix(2);
         base = 16;
     }
-    const auto* end = text.data() + text.size();
-    const auto [ptr, ec] = std::from_chars(text.data(), end, value, base);
+    const auto [ptr, ec] = std::from_chars(text.data(), text.data() + text.size(), value, base);
     if (ec != std::errc() || ptr == text.data()) return std::nullopt;
     return value;
 }
