@@ -181,6 +181,13 @@ paths:
                     properties: { token: { type: string } }
         '403': { description: Wrong or missing owner key (checked before the body) }
         '422': { description: Role or PIN invalid (PIN is exactly 6 digits) }
+        '503':
+          description: >-
+            The server is hashing as many PINs as it allows at once; nothing was created. Try again
+            after Retry-After.
+          content:
+            application/json:
+              schema: { type: object, properties: { message: { type: string }, retryAfterS: { type: integer } } }
 
   /missions/{missionId}/links/{linkId}:
     delete:
