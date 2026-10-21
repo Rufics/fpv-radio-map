@@ -196,6 +196,9 @@ describe('MockBackend through the API client', () => {
     await settle(api.deleteFlightLog(created.missionId, id));
     expect(await settle(api.listFlightLogs(created.missionId))).toEqual([]);
     expect((await rejection(api.getFlightLog(created.missionId, id))).status).toBe(404);
+    const other = await settle(api.createMission(exampleMission()));
+    creds.setSession(created.missionId, other.session);
+    expect((await rejection(api.listFlightLogs(created.missionId))).status).toBe(403);
     creds.setSession(created.missionId, null);
     expect((await rejection(api.listFlightLogs(created.missionId))).status).toBe(401);
   });

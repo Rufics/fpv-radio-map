@@ -218,7 +218,8 @@ export class MockBackend {
     const s = this.missions.get(id);
     const sess = this.sessionOf(req);
     if (!s) throw this.error(404, 'No such mission');
-    if (sess?.missionId !== id) throw this.error(401, 'Session required');
+    if (!sess) throw this.error(401, 'Session required');
+    if (sess.missionId !== id) throw this.error(403, 'this session is for another mission');
     if (edit && sess.role !== 'edit') throw this.error(403, 'this is a read-only link');
     return fn(s);
   }

@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import {
   ApiError,
   FlightLogRow,
@@ -61,6 +61,25 @@ export class FlightReplay {
   private frame: number | null = null;
   private lastFrameMs = 0;
 
+  constructor() {
+    // Another mission opened: the flights on screen belong to the one before.
+    let shown = this.store.missionId();
+    effect(() => {
+      const id = this.store.missionId();
+      if (id === shown) return;
+      shown = id;
+      untracked(() => this.clear());
+    });
+  }
+
+  private clear(): void {
+    this.pause();
+    this.view.set(null);
+    this.logbook.set([]);
+    this.selected.set(null);
+    this.error.set(null);
+  }
+
   /** Switches the workspace; replay opens the import dialog when the mission has no flights yet. */
   async setMode(mode: WorkspaceMode): Promise<void> {
     this.mode.set(mode);
@@ -69,7 +88,10 @@ export class FlightReplay {
       return;
     }
     await this.refresh();
+    // The user may have switched again while the logbook loaded.
+    if (this.mode() !== mode) return;
     if (!this.view() && this.logbook().length > 0) await this.open(this.logbook()[0].id ?? '');
+    if (this.mode() !== mode) return;
     if (!this.view() && this.logbook().length === 0) this.importOpen.set(true);
   }
 

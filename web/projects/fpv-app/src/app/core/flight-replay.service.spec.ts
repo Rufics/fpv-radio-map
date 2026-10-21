@@ -10,6 +10,7 @@ describe('FlightReplay', () => {
   let replay: FlightReplay;
   let flight: FlightView;
   let rows: FlightLogRow[];
+  const missionId = signal<string | null>('m1');
   const api = {
     listFlightLogs: vi.fn(async () => rows),
     getFlightLog: vi.fn(async (_m: string, id: string) => ({ ...flight, id })),
@@ -19,10 +20,11 @@ describe('FlightReplay', () => {
   beforeEach(() => {
     flight = MockFlights.flight('a.bbl', null);
     rows = [];
+    missionId.set('m1');
     TestBed.configureTestingModule({
       providers: [
         { provide: RfmapApiClient, useValue: api },
-        { provide: MissionStore, useValue: { missionId: signal('m1'), canEdit: signal(true) } },
+        { provide: MissionStore, useValue: { missionId, canEdit: signal(true) } },
       ],
     });
     replay = TestBed.inject(FlightReplay);
@@ -90,6 +92,24 @@ describe('FlightReplay', () => {
     expect(replay.t()).toBe(0);
     replay.toggle();
     expect(replay.playing()).toBe(false);
+  });
+
+  it('stays on the mode chosen last when an earlier switch is still loading', async () => {
+    rows = [MockFlights.row({ ...flight, id: 'f1' })];
+    const first = replay.setMode('replay');
+    await replay.setMode('plan');
+    await first;
+    expect(replay.mode()).toBe('plan');
+    expect(api.getFlightLog).not.toHaveBeenCalled();
+  });
+
+  it('drops the flights of the mission before when another one opens', () => {
+    replay.show(flight);
+    replay.logbook.set([MockFlights.row({ ...flight, id: 'f1' })]);
+    missionId.set('m2');
+    TestBed.tick();
+    expect(replay.view()).toBeNull();
+    expect(replay.logbook()).toEqual([]);
   });
 
   it('clears the flight on screen when it is deleted', async () => {

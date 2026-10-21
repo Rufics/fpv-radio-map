@@ -42,6 +42,7 @@ describe('ReplayVm', () => {
       row({ status: 'header-only' }, { armedS: 0 }),
     ]);
     expect(totals.map((t) => t.value)).toEqual(['2', '1 h 4 m', '1.50 km', '1']);
+    expect(ReplayVm.totals([row({}, { armedS: 3590 })])[1].value).toBe('1 h 0 m');
     expect(totals[3]).toMatchObject({ label: 'flight with a failsafe', tone: 'warn' });
     expect(ReplayVm.emptyReason(row({ status: 'header-only' }))).toBe('No flight data, header only');
     expect(ReplayVm.emptyReason(row({ status: 'unsupported' }))).toBe('Format not supported');
@@ -54,6 +55,8 @@ describe('ReplayVm', () => {
     const tiles = ReplayVm.readout(view, tl.reading(tl.end / 2));
     expect(tiles.map((t) => t.label)).toEqual(['From home', 'Ground speed', 'Altitude', 'Battery', 'Link quality', 'GPS', 'Mode']);
     expect(tiles.find((t) => t.label === 'GPS')?.value).toBe('15 sats');
+    const gap = ReplayVm.readout(view, { ...tl.reading(0), values: { linkQualityPct: null, rssiPct: 80 } });
+    expect(gap.find((t) => t.label === 'Link quality')?.value).toBe('–');
   });
 
   it('writes plan against fact in each unit', () => {

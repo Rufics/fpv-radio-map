@@ -55,7 +55,9 @@ export class ReplayVm {
   /** The read-out at the replay time (design 01 tiles). */
   static readout(view: FlightView, r: ReplayReading): KeyValueVm[] {
     const v = r.values;
-    const link = v.linkQualityPct ?? v.rssiPct;
+    // One channel for the value and its name: a gap in link quality is a gap, not the RSSI.
+    const linkKey = v.linkQualityPct === undefined ? 'rssiPct' : 'linkQualityPct';
+    const link = v[linkKey];
     const out: KeyValueVm[] = [];
     if (view.channels['gps']) {
       out.push({ label: 'From home', value: ReplayFormat.distance(v.homeDistM) });
@@ -72,7 +74,7 @@ export class ReplayVm {
       });
     }
     if (link !== undefined) {
-      out.push({ label: v.linkQualityPct === undefined ? 'RSSI' : 'Link quality', value: ReplayFormat.fixed(link, 0, '%'), tone: link !== null && link < LOW_LINK_PCT ? 'warn' : undefined });
+      out.push({ label: linkKey === 'rssiPct' ? 'RSSI' : 'Link quality', value: ReplayFormat.fixed(link, 0, '%'), tone: link !== null && link < LOW_LINK_PCT ? 'warn' : undefined });
     }
     if (v.sats !== undefined) out.push({ label: 'GPS', value: v.sats === null ? 'no fix' : `${Math.round(v.sats)} sats` });
     if (r.band) {
@@ -87,8 +89,9 @@ export class ReplayVm {
     const air = flights.reduce((a, r) => a + (r.summary.armedS || 0), 0);
     const km = flights.reduce((a, r) => a + (r.summary.distanceM ?? 0), 0);
     const failsafes = rows.filter((r) => r.warnings.some((w) => w.startsWith('Failsafe'))).length;
-    const h = Math.floor(air / 3600);
-    const m = Math.round((air % 3600) / 60);
+    const minutes = Math.round(air / 60);
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
     return [
       { label: flights.length === 1 ? 'flight' : 'flights', value: String(flights.length) },
       { label: 'in the air', value: h > 0 ? `${h} h ${m} m` : `${m} m` },
