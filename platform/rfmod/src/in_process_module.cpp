@@ -1,5 +1,4 @@
 #include "rfmod/abi.h"
-#include "rfmod/entry_point.hpp"
 #include "rfmod/host.hpp"
 
 #include <dlfcn.h>
@@ -63,7 +62,10 @@ struct InProcessModule::Library {
     }
 
     [[nodiscard]] rfmod_get_module_fn entry() const {
-        return EntryPoint::find(handle.get());
+        // POSIX guarantees a function symbol's address round-trips through dlsym's void*, and
+        // reinterpret_cast is the C++ cast for it: static_cast does not compile, and clang-tidy
+        // rejects std::bit_cast and memcpy (bugprone-bitwise-pointer-cast).
+        return reinterpret_cast<rfmod_get_module_fn>(dlsym(handle.get(), RFMOD_ENTRY_SYMBOL));  // NOSONAR(cpp:S3630)
     }
 };
 
