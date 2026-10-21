@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://rfmap.local/schemas/flightlog.schema.json",
+  "title": "Flight log",
+  "description": "The one normalized flight log every flightlog.decoder module answers with, whatever the source format (Betaflight Blackbox, DJI, ...). Units are SI unless the name says otherwise (...Pct, ...Deg, ...Dbm). Times are seconds from the first main sample of the log. Arrays of one block have the same length; null marks a sample that has no value.",
+  "type": "object",
+  "required": ["schema", "source", "logs"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "flightlog/v1" },
+    "source": {
+      "type": "object",
+      "required": ["decoder", "decoderVersion", "format", "bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "decoder": { "type": "string", "maxLength": 128, "description": "Module id of the decoder" },
+        "decoderVersion": { "type": "string", "maxLength": 128 },
+        "format": { "type": "string", "maxLength": 64, "description": "For example betaflight-blackbox" },
+        "fileName": { "type": "string", "maxLength": 255 },
+        "bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "logs": {
+      "type": "array",
+      "maxItems": 256,
+      "description": "One entry per recording in the file, in file order. A Blackbox file holds one per arming when the flight controller appends.",
+      "items": { "$ref": "#/$defs/log" }
+    }
+  },
+  "$defs": {
+    "nullableNumbers": { "type": "array", "items": { "type": ["number", "null"] } },
+    "numbers": { "type": "array", "items": { "type": "number" } },
+    "note": {
+      "type": "object",
+      "required": ["code", "severity", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9-]*$" },
+        "severity": { "enum": ["info", "warn", "blocked"] },
+        "message": { "type": "string", "maxLength": 600 },
+        "fix": { "type": "string", "maxLength": 600, "description": "What the pilot can change so the next log has it" }
+      }
+    },
+    "firmware": {
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "maxLength": 64, "description": "Betaflight, INAV, Cleanflight, DJI, ..." },
+        "version": { "type": "string", "maxLength": 64 },
+        "revision": { "type": "string", "maxLength": 64 },
+        "target": { "type": "string", "maxLength": 64 },
+        "board": { "type": "string", "maxLength": 128 },
+        "buildDate": { "type": "string", "maxLength": 64 },
+        "supported": { "type": "boolean", "description": "False when the decoder knows the format but not the units of this firmware" }
+      }
+    },
+    "log": {
+      "type": "object",
+      "required": ["index", "status", "firmware", "channels", "notes"],
+      "additionalProperties": false,
+      "properties": {
+        "index": { "type": "integer", "minimum": 1 },
+        "status": {
+          "enum": ["ok", "partial", "header-only", "unsupported"],
+          "description": "partial: decoded with gaps or unknown units; header-only: no frames after the header; unsupported: listed but not decoded"
+        },
+        "byteRange": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "minItems": 2, "maxItems": 2 },
+        "firmware": { "$ref": "#/$defs/firmware" },
+        "craft": { "type": "string", "maxLength": 128 },
+        "startedAt": { "type": "string", "format": "date-time", "description": "Wall clock of the first sample when the log carries one" },
+        "durationS": { "type": "number", "minimum": 0 },
+        "channels": {
+          "type": "object",
+          "description": "Which data the log carries. A missing channel is false.",
+          "additionalProperties": { "type": "boolean" },
+          "properties": {
+            "gps": { "type": "boolean" },
+            "voltage": { "type": "boolean" },
+            "current": { "type": "boolean" },
+            "baroAltitude": { "type": "boolean" },
+            "rssi": { "type": "boolean" },
+            "linkQuality": { "type": "boolean" },
+            "rssiDbm": { "type": "boolean" },
+            "throttle": { "type": "boolean" },
+            "modes": { "type": "boolean" }
+          }
+        },
+        "battery": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cellMinV": { "type": "number" },
+            "cellWarnV": { "type": "number" },
+            "cellMaxV": { "type": "number" }
+          }
+        },
+        "radio": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": { "type": "string", "maxLength": 32, "description": "Serial receiver protocol, for example CRSF" }
+          }
+        },
+        "series": {
+          "type": "object",
+          "required": ["t"],
+          "description": "Main loop samples, thinned to the decoder's sample rate",
+          "additionalProperties": false,
+          "properties": {
+            "t": { "$ref": "#/$defs/numbers" },
+            "voltageV": { "$ref": "#/$defs/nullableNumbers" },
+            "currentA": { "$ref": "#/$defs/nullableNumbers" },
+            "baroAltM": { "$ref": "#/$defs/nullableNumbers", "description": "Barometric height above the arming point" },
+            "rssiPct": { "$ref": "#/$defs/nullableNumbers" },
+            "linkQualityPct": { "$ref": "#/$defs/nullableNumbers" },
+            "rssiDbm": { "$ref": "#/$defs/nullableNumbers" },
+            "throttlePct": { "$ref": "#/$defs/nullableNumbers" }
+          }
+        },
+        "gps": {
+          "type": "object",
+          "required": ["t", "lat", "lon", "fix"],
+          "description": "One sample per GPS solution the log carries",
+          "additionalProperties": false,
+          "properties": {
+            "t": { "$ref": "#/$defs/numbers" },
+            "lat": { "$ref": "#/$defs/nullableNumbers" },
+            "lon": { "$ref": "#/$defs/nullableNumbers" },
+            "altM": { "$ref": "#/$defs/nullableNumbers", "description": "Above mean sea level" },
+            "speedMps": { "$ref": "#/$defs/nullableNumbers" },
+            "courseDeg": { "$ref": "#/$defs/nullableNumbers" },
+            "sats": { "$ref": "#/$defs/nullableNumbers" },
+            "fix": { "type": "array", "items": { "type": "boolean" }, "description": "False for a sample taken without a 3D fix" }
+          }
+        },
+        "homes": {
+          "type": "array",
+          "description": "Home points the flight controller set, in time order",
+          "items": {
+            "type": "object",
+            "required": ["t", "lat", "lon"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "type": "number" },
+              "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+              "lon": { "type": "number", "minimum": -180, "maximum": 180 },
+              "altM": { "type": "number" }
+            }
+          }
+        },
+        "states": {
+          "type": "array",
+          "description": "Flight controller state, one entry per change",
+          "items": {
+            "type": "object",
+            "required": ["t"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "type": "number" },
+              "armed": { "type": "boolean" },
+              "modes": { "type": "array", "items": { "type": "string", "maxLength": 32 }, "description": "Active mode switches (Betaflight box names: ANGLE, HORIZON, GPSRESCUE, ...)" },
+              "failsafe": { "type": "string", "maxLength": 32, "description": "Failsafe phase: IDLE, RX_LOSS_DETECTED, LANDING, LANDED, RX_LOSS_MONITORING, RX_LOSS_RECOVERED, GPS_RESCUE, ..." },
+              "rxSignal": { "type": "boolean" },
+              "rxValid": { "type": "boolean" },
+              "gpsFix": { "type": "boolean" },
+              "gpsHomeSet": { "type": "boolean" }
+            }
+          }
+        },
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["t", "type"],
+            "additionalProperties": false,
+            "properties": {
+              "t": { "type": "number" },
+              "type": { "enum": ["sync-beep", "disarm", "logging-paused", "gap", "log-end", "inflight-adjustment", "time-rollover"] },
+              "reason": { "type": "string", "maxLength": 64, "description": "disarm: ARMING_DISABLED, FAILSAFE, THROTTLE_TIMEOUT, STICKS, SWITCH, CRASH_PROTECTION, RUNAWAY_TAKEOFF, GPS_RESCUE, SERIAL_COMMAND, LANDING, CRASHFLIP, LAUNCH_ABORT; gap: corrupt or missing" },
+              "durationS": { "type": "number", "minimum": 0 },
+              "function": { "type": "integer" },
+              "value": { "type": "number" }
+            }
+          }
+        },
+        "notes": { "type": "array", "items": { "$ref": "#/$defs/note" } },
+        "stats": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "frames": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } },
+            "corruptFrames": { "type": "integer", "minimum": 0 },
+            "loggedHz": { "type": "number", "minimum": 0 },
+            "sampleHz": { "type": "number", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}
