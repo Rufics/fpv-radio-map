@@ -72,6 +72,7 @@ private:
     std::condition_variable freed_;
     int active_ = 0;
     int waiting_ = 0;
+    int handedOver_ = 0;  ///< slots a leaving caller passed to queued callers, not yet taken
     std::uint64_t rejected_ = 0;
 };
 

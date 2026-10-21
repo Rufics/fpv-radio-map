@@ -26,23 +26,34 @@ PinGate::Permit::~Permit() {
 
 PinGate::Permit PinGate::enter() {
     std::unique_lock lock(mutex_);
-    if (active_ < limits_.concurrency) {
+    // A newcomer takes a free slot only when nobody queues; otherwise it queues behind them.
+    if (active_ < limits_.concurrency && waiting_ == 0) {
         ++active_;
         return Permit(*this);
     }
     if (waiting_ >= limits_.queue) reject();
     ++waiting_;
-    const bool admitted = freed_.wait_for(lock, limits_.wait, [this] { return active_ < limits_.concurrency; });
+    const bool admitted = freed_.wait_for(
+        lock, limits_.wait, [this] { return handedOver_ > 0 || active_ < limits_.concurrency; });
     --waiting_;
     if (!admitted) reject();
-    ++active_;
+    if (handedOver_ > 0) {
+        --handedOver_;  // the slot was kept counted for us
+    } else {
+        ++active_;
+    }
     return Permit(*this);
 }
 
 void PinGate::leave() {
     {
         std::lock_guard lock(mutex_);
-        --active_;
+        // Hand the slot to a queued caller instead of freeing it, so a newcomer cannot take it first.
+        if (waiting_ > handedOver_) {
+            ++handedOver_;
+        } else {
+            --active_;
+        }
     }
     freed_.notify_one();
 }

@@ -104,6 +104,26 @@ TEST_F(GateTest, SlotFreedWhileWaitingAdmitsTheWaiter) {
     EXPECT_EQ(gate.stats().rejected, 0u);
 }
 
+TEST_F(GateTest, FreedSlotGoesToTheQueueNotToANewcomer) {
+    PinGate gate({1, 1, 300ms});
+    std::optional<PinGate::Permit> held(gate.enter());
+    std::atomic<bool> admitted{false};
+    std::atomic<bool> done{false};
+    std::jthread waiter([&gate, &admitted, &done] {
+        const PinGate::Permit p = gate.enter();
+        admitted = true;
+        while (!done) std::this_thread::yield();
+    });
+    awaitWaiting(gate, 1);
+    held.reset();
+    // The slot is the waiter's whether or not it has woken yet: the newcomer gets 503.
+    EXPECT_EQ(expectBusy(gate), 1);
+    done = true;
+    waiter.join();
+    EXPECT_TRUE(admitted);
+    EXPECT_EQ(gate.stats().active, 0);
+}
+
 TEST_F(GateTest, FullQueueIsTurnedAwayAtOnce) {
     PinGate gate({1, 1, 10s});
     std::optional<PinGate::Permit> held(gate.enter());
