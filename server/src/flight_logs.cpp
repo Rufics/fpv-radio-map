@@ -90,8 +90,11 @@ std::optional<std::vector<std::string>> FlightLogStore::add(const std::string& m
                       -> std::optional<std::vector<std::string>> {
         // Imports into one mission take turns, so two of them cannot both pass the limit.
         w.exec("select 1 from missions where id = $1 for update", pqxx::params{missionId});
-        const int stored = w.exec("select count(*) from flight_logs where mission_id = $1", pqxx::params{missionId})[0][0].as<int>();
-        if (stored + countNew(w, missionId, sha256, flights) > maxPerMission) return std::nullopt;
+        if (const int stored =
+                w.exec("select count(*) from flight_logs where mission_id = $1", pqxx::params{missionId})[0][0].as<int>();
+            stored + countNew(w, missionId, sha256, flights) > maxPerMission) {
+            return std::nullopt;
+        }
         std::vector<std::string> ids;
         ids.reserve(flights.size());
         for (const NewFlight& f : flights) ids.push_back(insert(w, {missionId, fileName, sha256, decoder}, f));

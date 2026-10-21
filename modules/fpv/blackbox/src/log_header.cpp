@@ -18,32 +18,39 @@ std::string_view trim(std::string_view s) {
     return s;
 }
 
-/// Bytes of the well-formed UTF-8 sequence at the start of `s` (RFC 3629), 0 when there is none.
-std::size_t sequenceLength(std::string_view s) {
-    const auto lead = static_cast<unsigned>(static_cast<unsigned char>(s.front()));
-    if (lead < 0x80u) return 1;
-    // The second byte's range narrows after E0, ED, F0 and F4: no overlong forms, surrogates or
-    // code points above U+10FFFF.
-    std::size_t n = 0;
+/// The length a UTF-8 lead byte announces and the range its second byte must fall in (RFC 3629).
+struct Utf8Lead {
+    std::size_t length = 0;  ///< 0 when the byte starts no sequence
     unsigned low = 0x80u;
     unsigned high = 0xBFu;
-    if (lead >= 0xC2u && lead <= 0xDFu) {
-        n = 2;
-    } else if (lead >= 0xE0u && lead <= 0xEFu) {
-        n = 3;
-        low = lead == 0xE0u ? 0xA0u : low;
-        high = lead == 0xEDu ? 0x9Fu : high;
-    } else if (lead >= 0xF0u && lead <= 0xF4u) {
-        n = 4;
-        low = lead == 0xF0u ? 0x90u : low;
-        high = lead == 0xF4u ? 0x8Fu : high;
+};
+
+Utf8Lead leadOf(unsigned lead) {
+    // The second byte's range narrows after E0, ED, F0 and F4: no overlong forms, surrogates or
+    // code points above U+10FFFF.
+    if (lead >= 0xC2u && lead <= 0xDFu) return {2};
+    if (lead >= 0xE0u && lead <= 0xEFu) {
+        return {3, lead == 0xE0u ? 0xA0u : 0x80u, lead == 0xEDu ? 0x9Fu : 0xBFu};
     }
-    if (n == 0 || s.size() < n) return 0;
-    for (std::size_t k = 1; k < n; ++k) {
+    if (lead >= 0xF0u && lead <= 0xF4u) {
+        return {4, lead == 0xF0u ? 0x90u : 0x80u, lead == 0xF4u ? 0x8Fu : 0xBFu};
+    }
+    return {};
+}
+
+/// Bytes of the well-formed UTF-8 sequence at the start of `s`, 0 when there is none.
+std::size_t sequenceLength(std::string_view s) {
+    const auto first = static_cast<unsigned>(static_cast<unsigned char>(s.front()));
+    if (first < 0x80u) return 1;
+    const Utf8Lead lead = leadOf(first);
+    if (lead.length == 0 || s.size() < lead.length) return 0;
+    for (std::size_t k = 1; k < lead.length; ++k) {
         const auto b = static_cast<unsigned>(static_cast<unsigned char>(s[k]));
-        if (b < (k == 1 ? low : 0x80u) || b > (k == 1 ? high : 0xBFu)) return 0;
+        const unsigned low = k == 1 ? lead.low : 0x80u;
+        const unsigned high = k == 1 ? lead.high : 0xBFu;
+        if (b < low || b > high) return 0;
     }
-    return n;
+    return lead.length;
 }
 
 /// Header text as valid UTF-8, so it can go into JSON: a byte that starts no well-formed

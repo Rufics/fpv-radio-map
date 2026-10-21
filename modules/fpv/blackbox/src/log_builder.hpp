@@ -150,8 +150,12 @@ private:
     std::optional<std::int64_t> originUs_;
     std::optional<std::int64_t> lastKeptUs_;
     bool keepNext_ = false;
-    bool samplesTruncated_ = false;
-    bool recordsTruncated_ = false;
+    /// Which records were cut short at the limits of BuildOptions.
+    struct Truncated {
+        bool samples = false;
+        bool records = false;
+    };
+    Truncated truncated_;
     std::vector<std::int64_t> timeUs_;
     /// The main-frame channels kept for the series, one value per kept sample.
     struct Columns {

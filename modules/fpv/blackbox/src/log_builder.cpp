@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstddef>
 #include <format>
 #include <limits>
 
@@ -36,7 +37,10 @@ std::optional<double> coordinate(std::optional<std::int64_t> raw, double limit) 
 /// At most kMaxCraftBytes of UTF-8 text, cut between characters.
 std::string shortened(const std::string& text) {
     std::size_t n = std::min(text.size(), kMaxCraftBytes);
-    while (n > 0 && n < text.size() && (static_cast<unsigned char>(text[n]) & 0xC0u) == 0x80u) --n;
+    const auto continues = [&text](std::size_t i) {
+        return (static_cast<std::byte>(text[i]) & std::byte{0xC0}) == std::byte{0x80};
+    };
+    while (n > 0 && n < text.size() && continues(n)) --n;
     return text.substr(0, n);
 }
 
@@ -124,7 +128,7 @@ void NormalizedLogBuilder::onMainFrame(std::span<const std::int64_t> values, std
     if (!originUs_.has_value()) originUs_ = timeUs;
     if (lastKeptUs_.has_value() && !keepNext_ && timeUs - *lastKeptUs_ < intervalUs_) return;
     if (timeUs_.size() >= options_.maxSamples) {
-        samplesTruncated_ = true;
+        truncated_.samples = true;
         return;
     }
     lastKeptUs_ = timeUs;
@@ -222,13 +226,13 @@ void NormalizedLogBuilder::pushState(State s) {
 
 bool NormalizedLogBuilder::full(std::size_t size, std::size_t limit) {
     if (size < limit) return false;
-    recordsTruncated_ = true;
+    truncated_.records = true;
     return true;
 }
 
 void NormalizedLogBuilder::addEvent(std::int64_t timeUs, json body) {
     if (full(events_.size(), options_.maxEvents)) return;
-    events_.push_back({timeUs, std::move(body)});
+    events_.emplace_back(timeUs, std::move(body));
 }
 
 void NormalizedLogBuilder::onEvent(const LogEvent& event) {
@@ -452,11 +456,11 @@ json NormalizedLogBuilder::notesJson(const ParseStats& stats) const {
         notes.push_back(note("log-truncated", "info",
                              "The log stops without its end marker: power was cut or the storage filled before logging ended."));
     }
-    if (samplesTruncated_) {
+    if (truncated_.samples) {
         notes.push_back(note("samples-truncated", "warn",
                              std::format("Only the first {} samples are kept; the rest of the log is not shown.", options_.maxSamples)));
     }
-    if (recordsTruncated_) {
+    if (truncated_.records) {
         notes.push_back(note("records-truncated", "warn",
                              std::format("The log holds more GPS fixes, events or state changes than are kept ({} GPS "
                                          "fixes, {} of the others); the later ones are not shown.",
@@ -484,7 +488,7 @@ std::optional<std::string> NormalizedLogBuilder::startedAt() const {
 std::string NormalizedLogBuilder::status(const ParseStats& stats) const {
     if (stats.unsupportedEncoding.has_value() || stats.unsupportedPredictor.has_value()) return "unsupported";
     if (timeUs_.empty() && gps_.empty()) return "header-only";
-    if (stats.corruptFrames > 0 || !model_.unitsKnown() || samplesTruncated_ || recordsTruncated_) return "partial";
+    if (stats.corruptFrames > 0 || !model_.unitsKnown() || truncated_.samples || truncated_.records) return "partial";
     return "ok";
 }
 

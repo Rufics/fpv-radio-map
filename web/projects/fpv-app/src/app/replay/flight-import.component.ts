@@ -266,8 +266,8 @@ export class FlightImportComponent {
       try {
         const result = await this.api.importFlightLog(missionId, f.file, f.file.name);
         if (i === chosenFile) chosen = result;
-      } catch (failure) {
-        return { chosen, failure };
+      } catch (error_) {
+        return { chosen, failure: error_ };
       }
     }
     return { chosen };
