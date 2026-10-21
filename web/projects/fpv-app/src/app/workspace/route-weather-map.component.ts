@@ -79,17 +79,16 @@ export class WeatherRibbon {
   selector: 'fpv-route-weather-map',
   imports: [RouteColoursComponent],
   template: `
-    @if (shown()) {
-      @if (compact()) {
-        <div class="keys" role="group" [attr.aria-label]="'Route coloured by ' + title()">
-          <b>{{ title() }}</b>
-          @for (k of legend(); track k.label) {
-            <span><i [style.background]="k.color"></i>{{ k.label }}</span>
-          }
-        </div>
-      } @else {
-        <fpv-route-colours class="metric" role="group" aria-label="Route colours in weather mode" />
-      }
+    @if (shown() && !compact()) {
+      <fpv-route-colours class="metric" role="group" aria-label="Route colours in weather mode" />
+    }
+    @if (active() && compact()) {
+      <div class="keys" role="group" [attr.aria-label]="'Route coloured by ' + title()">
+        <b>{{ title() }}</b>
+        @for (k of legend(); track k.label) {
+          <span><i [style.background]="k.color"></i>{{ k.label }}</span>
+        }
+      </div>
     }
     @if (active()) {
       @if (hover(); as h) {
@@ -120,7 +119,7 @@ export class RouteWeatherMapComponent {
   private readonly wx = inject(RouteWeatherService);
   private readonly layers = inject(LayerRegistry);
   private readonly ctx = inject(MapContext);
-  /** Phone: the metric picker sits in the weather card, the map keeps a one-line legend and short tags; tap instead of hover */
+  /** Phone: the metric picker sits in the weather card (which also says why the route is not coloured), the map keeps a one-line legend and short tags; tap instead of hover */
   readonly compact = input(false);
 
   protected readonly hover = signal<RouteHover | null>(null);
