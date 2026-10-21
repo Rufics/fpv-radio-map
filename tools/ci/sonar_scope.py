@@ -12,10 +12,11 @@ sorted into parts:
 - python: Python files;
 - web: the Angular workspace and the JSON schemas it copies in.
 
-Only the changed parts are built and tested, and only the changed files are scanned. A change to
-the analysis itself (the Sonar settings, the workflow, this script), a file name that a Sonar
-pattern or a properties file cannot carry, too many files, or no file left to scan falls back
-to the full analysis.
+Only the changed parts are built and tested, and only the changed files are scanned. A changed
+C/C++ header adds every C/C++ file to the scan, since the analyser reads headers only through the
+sources that include them. A change to the analysis itself (the Sonar settings, the workflow, this
+script), a file name that a Sonar pattern or a properties file cannot carry, too many files, or no
+file left to scan falls back to the full analysis.
 
 The settings file given is copied to --output with the scope appended; CI writes it over
 sonar-project.properties in its checkout, so the scanner reads it as usual. On GitHub Actions the
@@ -50,7 +51,11 @@ class Areas:
 class ChangeClassifier:
     """Sorts changed paths into the parts they affect, and spots changes that need everything."""
 
-    CPP_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl", ".cmake")
+    HEADER_SUFFIXES = (".h", ".hh", ".hpp", ".hxx", ".inl")
+    CPP_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".cmake", *HEADER_SUFFIXES)
+    # The C/C++ analyser reads a header only through the sources that include it, so a changed
+    # header brings every C/C++ file into the scan.
+    C_FAMILY_PATTERNS = tuple(f"**/*{suffix}" for suffix in (".c", ".cc", ".cpp", ".cxx", *HEADER_SUFFIXES))
     CPP_NAMES = ("CMakeLists.txt", ".clang-tidy")
     CPP_FOLDERS = ("core/", "platform/", "modules/", "server/", "examples/", "fuzz/", "schemas/", "data/",
                    ".github/actions/cpp-deps/", ".github/actions/fuzz/")
@@ -60,6 +65,9 @@ class ChangeClassifier:
 
     def needs_everything(self, path):
         return path in self.ANALYSIS_FILES
+
+    def is_header(self, path):
+        return path.endswith(self.HEADER_SUFFIXES)
 
     def areas(self, path):
         found = set()
@@ -108,7 +116,11 @@ class ScopePlanner:
         areas = set()
         for path in files:
             areas |= self._classifier.areas(path)
-        return Scope(areas, files, f"{len(files)} changed file(s)")
+        reason = f"{len(files)} changed file(s)"
+        if any(self._classifier.is_header(path) for path in files):
+            files += self._classifier.C_FAMILY_PATTERNS
+            reason += " and every C/C++ file, for the changed headers"
+        return Scope(areas, files, reason)
 
     def _full_reason(self, files):
         if not files:
@@ -140,8 +152,10 @@ class GitChanges:
             raise FileNotFoundError(message)
         # Deleted files are left out: there is nothing of them to scan.
         command = [git, "diff", "--name-only", "--diff-filter=d", "-z", f"{base}...{head}", "--"]
-        done = subprocess.run(command, cwd=self._root, check=True, capture_output=True, text=True,
+        done = subprocess.run(command, cwd=self._root, check=True, capture_output=True,
+                              encoding="utf-8", errors="surrogateescape",
                               timeout=GIT_TIMEOUT_SECONDS)
+        # A name that is not UTF-8 survives decoding and then fails SAFE_PATH: a full analysis.
         return [path for path in done.stdout.split("\0") if path]
 
 

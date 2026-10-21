@@ -36,7 +36,9 @@ and sorts the changed files into three parts:
 | Web | `web/`, `schemas/` | `npm ci` and the Angular unit tests with coverage |
 
 Only the parts that changed are built and tested, and the scanner gets `sonar.inclusions` set to the
-changed files, so a web-only pull request runs neither the C++ build nor the Python tests. For a
+changed files, so a web-only pull request runs neither the C++ build nor the Python tests. The
+C/C++ analyser reads a header only through the sources that include it, so a changed header adds
+every C/C++ file to the scan. For a
 part that is skipped the scope also switches its coverage report off, and without the C++ part the
 C/C++ analyser is turned off (`sonar.c.file.suffixes=-` and so on), since it would need the
 compile database of the skipped build.

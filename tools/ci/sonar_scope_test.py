@@ -52,6 +52,16 @@ class ScopePlannerTest(unittest.TestCase):
         scope = ScopePlanner().plan(["core/a.cpp", "tools/ci/x.py", "deploy/nginx.conf"])
         self.assertEqual(scope.areas, {Areas.CPP, Areas.PYTHON})
 
+    def test_changed_header_scans_every_cpp_file(self):
+        scope = ScopePlanner().plan(["core/a.hpp", "web/a.ts"])
+        self.assertFalse(scope.is_full)
+        self.assertIn("core/a.hpp", scope.files)
+        self.assertIn("**/*.cpp", scope.files)
+        self.assertIn("**/*.hpp", scope.files)
+
+    def test_changed_source_alone_scans_only_itself(self):
+        self.assertEqual(ScopePlanner().plan(["core/a.cpp"]).files, ("core/a.cpp",))
+
     def test_falls_back_to_the_full_analysis(self):
         cases = {
             "nothing": [],
@@ -59,6 +69,7 @@ class ScopePlannerTest(unittest.TestCase):
             "unsafe name": ["web/a b.ts"],
             "comma": ["web/a,b.ts"],
             "wildcard": ["web/*.ts"],
+            "not utf-8": ["web/a\udcff.ts"],
         }
         for name, files in cases.items():
             with self.subTest(name):
@@ -120,6 +131,16 @@ class GitChangesTest(unittest.TestCase):
         self.assertEqual(files, ["web/a.ts", "core/b.cpp"])
         self.assertIn(f"{BASE}...{HEAD}", calls[0])
         self.assertIn("--diff-filter=d", calls[0])
+
+    def test_keeps_names_that_are_not_utf8(self):
+        def run(command, **kwargs):
+            raw = b"web/a\xff.ts\0"
+            return subprocess.CompletedProcess(command, 0, stdout=raw.decode(kwargs["encoding"], kwargs["errors"]))
+
+        with mock.patch.object(sonar_scope.subprocess, "run", run), \
+                mock.patch.object(sonar_scope.shutil, "which", lambda name: "/usr/bin/git"):
+            files = GitChanges(Path("/repo")).between(BASE, HEAD)
+        self.assertTrue(ScopePlanner().plan(files).is_full)
 
     def test_refuses_anything_but_commit_hashes(self):
         with self.assertRaises(ValueError):
