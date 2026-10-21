@@ -138,6 +138,7 @@ flowchart LR
 | [`server`](server) | HTTP API, PostGIS storage, raster access, weather, result cache |
 | [`web`](web) | `@rfmap/ui-kit` and the FPV app |
 | [`tools/tiles-builder`](tools/tiles-builder) | Builds the DEM COG, hillshade, contours, basemap and satellite PMTiles |
+| [`tools/perf`](tools/perf) | Performance and load test tooling: the fixed terrain dataset for load tests |
 | [`deploy`](deploy) | Docker Compose: PostGIS, Open-Meteo, server, web |
 | [`examples/modules/body-shadow`](examples/modules/body-shadow) | A small example module to start from |
 

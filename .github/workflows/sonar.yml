@@ -98,6 +98,8 @@ jobs:
         run: |
           python3 -I -m coverage run --branch --source=tools/ci --omit='*_test.py' \
             -m unittest discover -s tools/ci -p '*_test.py'
+          python3 -I -m coverage run --append --branch --source=tools/perf --omit='*_test.py' \
+            -m unittest discover -s tools/perf -p '*_test.py'
           python3 -I -m coverage xml -o sonar-reports/python-coverage.xml
 
       - name: Install web dependencies
