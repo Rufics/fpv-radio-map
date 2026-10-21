@@ -131,6 +131,19 @@ describe('FlightImportComponent', () => {
     expect(vm.busy()).toBe(false);
   });
 
+  it('saves the files one after another and refreshes the logbook when one of them fails', async () => {
+    vm.add([file('a.bbl'), file('b.bbl'), file('c.bbl')]);
+    await settled();
+    // a.bbl is saved, b.bbl is refused, c.bbl is not sent
+    const save = api.importFlightLog.getMockImplementation()!;
+    api.importFlightLog.mockImplementationOnce(save).mockRejectedValueOnce(new Error('a mission keeps up to 200 flights'));
+    await vm.replayChosen();
+    expect(api.importFlightLog.mock.calls.map((c) => c[2])).toEqual(['a.bbl', 'b.bbl']);
+    expect(api.listFlightLogs).toHaveBeenCalledTimes(1);
+    expect(vm.error()).toBe('a mission keeps up to 200 flights');
+    expect(replay.importOpen()).toBe(true);
+  });
+
   it('leaves the screen alone when the dialog closed or the mission changed while saving', async () => {
     vm.add([file('a.bbl')]);
     await settled();

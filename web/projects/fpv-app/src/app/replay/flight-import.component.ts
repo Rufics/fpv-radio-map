@@ -18,6 +18,8 @@ interface Choice {
 
 const MAX_BYTES = 64 * 1024 * 1024;
 
+type ImportedFile = Awaited<ReturnType<RfmapApiClient['importFlightLog']>>;
+
 /**
  * Open a flight log (design 12): drop or choose files, see every flight in them and why a file has
  * none, pick the flight to replay, and keep the flights in the mission's logbook or only look.
@@ -233,9 +235,11 @@ export class FlightImportComponent {
     try {
       const keep = await this.keepAll(c.file);
       if (gone()) return;
+      // Files saved before a failed one are in the logbook too.
       await this.replay.refresh();
       if (gone()) return;
-      const row = keep?.flights.find((r) => r.index === view.index);
+      if (keep.failure !== undefined) throw keep.failure;
+      const row = keep.chosen?.flights.find((r) => r.index === view.index);
       if (row?.id) await this.replay.open(row.id);
       else this.replay.show(view);
       this.close();
@@ -246,14 +250,25 @@ export class FlightImportComponent {
     }
   }
 
-  /** Imports every readable file; answers the import of `chosenFile`. */
-  private async keepAll(chosenFile: number) {
+  /**
+   * Imports the readable files one after another, as the mission's flight limit counts them,
+   * and stops at the first that fails. Answers the import of `chosenFile` and that failure.
+   */
+  private async keepAll(chosenFile: number): Promise<{ chosen: ImportedFile | null; failure?: unknown }> {
     const missionId = this.store.missionId();
-    if (!missionId) return null;
+    let chosen: ImportedFile | null = null;
+    if (!missionId) return { chosen };
     const kept = this.files()
       .map((f, i) => ({ f, i }))
       .filter(({ f }) => f.state === 'done' && this.replayable(f).length > 0);
-    const results = await Promise.all(kept.map(({ f }) => this.api.importFlightLog(missionId, f.file, f.file.name)));
-    return results[kept.findIndex(({ i }) => i === chosenFile)] ?? null;
+    for (const { f, i } of kept) {
+      try {
+        const result = await this.api.importFlightLog(missionId, f.file, f.file.name);
+        if (i === chosenFile) chosen = result;
+      } catch (failure) {
+        return { chosen, failure };
+      }
+    }
+    return { chosen };
   }
 }
