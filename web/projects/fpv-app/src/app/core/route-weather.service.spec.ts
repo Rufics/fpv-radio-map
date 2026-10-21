@@ -146,7 +146,7 @@ describe('RouteWeatherService', () => {
     TestBed.tick();
     release();
     await MockApiHarness.wait(500);
-    expect(spy.mock.calls.length).toBe(asked);
+    expect(spy.mock.calls).toHaveLength(asked);
     expect(wx.status()).toBe('idle');
   });
 
