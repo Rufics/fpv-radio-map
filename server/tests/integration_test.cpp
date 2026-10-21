@@ -135,6 +135,7 @@ protected:
         json cfg = {{"server", {{"listen", "127.0.0.1"}, {"threads", 8}}},
                     {"database", {{"url", url}, {"poolSize", 4}}},
                     {"admin", {{"token", "integration-admin-token-0123456789"}}},
+                    {"metrics", {{"enabled", true}}},
                     {"data",
                      {{"dem", (env->dir / "dem.cog.tif").string()},
                       {"demStatedErrorM", 4.0},
@@ -684,6 +685,27 @@ TEST_F(Integration, AdminCacheLimitsAndClear) {
     const auto after = call("GET", "/admin/cache", nullptr, admin());
     EXPECT_EQ(after.body[1]["entries"], 0);
     EXPECT_EQ(after.body[2]["entries"], 0);
+}
+
+TEST_F(Integration, MetricsForPrometheus) {
+    EXPECT_EQ(call("GET", "/admin/metrics", nullptr, bearer("wrong")).status, 401);
+    ASSERT_EQ(call("GET", "/health").status, 200);
+    const auto r = call("GET", "/admin/metrics", nullptr, admin());
+    ASSERT_EQ(r.status, 200);
+    EXPECT_EQ(r.headers.find("Content-Type")->second, "text/plain; version=0.0.4; charset=utf-8");
+    const std::string text = r.body.get<std::string>();
+    for (const char* part : {"rfmap_http_requests_total{class=\"default\",method=\"GET\",status=\"200\"}",
+                             "rfmap_http_requests_total{class=\"admin\",method=\"GET\",status=\"401\"}",
+                             "rfmap_pool_threads{pool=\"http\"} 8\n",
+                             "rfmap_pool_threads{pool=\"job-cells\"} 4\n", "rfmap_db_pool_connections 4\n",
+                             "rfmap_cache_limit_bytes{tier=\"dem-blocks\"}", "rfmap_jobs_started_total"}) {
+        EXPECT_NE(text.find(part), std::string::npos) << part << "\n" << text;
+    }
+    // The scrape's own thread is busy; the thread of the call before may not have returned yet.
+    const std::string busy = "rfmap_pool_busy_threads{pool=\"http\"} ";
+    const auto at = text.find(busy);
+    ASSERT_NE(at, std::string::npos) << text;
+    EXPECT_GE(std::stoi(text.substr(at + busy.size())), 1) << text;
 }
 
 TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {

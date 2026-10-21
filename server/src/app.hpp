@@ -9,6 +9,7 @@
 #include "jobs.hpp"
 #include "library.hpp"
 #include "logger.hpp"
+#include "metrics.hpp"
 #include "missions.hpp"
 #include "module_runner.hpp"
 #include "pg_auth_store.hpp"
@@ -70,6 +71,8 @@ private:
     std::unique_ptr<PinGate> makePinGate();
     void loadCacheSettings() const;
     [[nodiscard]] json cacheTiers() const;
+    /// The Prometheus text of GET /admin/metrics.
+    [[nodiscard]] std::string metricsText();
     json moduleList(bool admin);
     json mapConfig() const;
 
@@ -132,6 +135,8 @@ private:
     std::unique_ptr<Calculator> calc_;
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
+    HttpMetrics httpMetrics_;  ///< before http_: its request threads report here until they stop
+    double startTimeSeconds_ = 0.0;
     std::unique_ptr<httplib::Server> http_;
     BundleGrants grants_;  ///< signs the UI bundle URLs of alpha modules
 };

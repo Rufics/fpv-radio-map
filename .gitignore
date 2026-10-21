@@ -26,3 +26,5 @@ test-scratch/
 .rfmod-test-*/
 wiki/
 __pycache__/
+# Perf runs and their history (tools/perf/README.md).
+/tools/perf/results/

@@ -1,0 +1,3 @@
+# The perf catalog lock (tools/perf/catalog.lock.json) hashes the bytes of every catalog file, so
+# git must not convert line endings there; otherwise a Windows checkout would hash differently.
+tools/perf/** -text

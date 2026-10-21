@@ -1,0 +1,12 @@
+{
+  "kind": "fixture",
+  "id": "warsaw-missions",
+  "version": "1.1.0",
+  "description": "40 missions inside the Warsaw dataset: 2-5 waypoints, control and video links, a 1.5 km coverage grid at 100 m, all inside the dataset bbox.",
+  "files": {
+    "missions": "missions.json"
+  },
+  "requiresDataset": {
+    "insideBbox": true
+  }
+}

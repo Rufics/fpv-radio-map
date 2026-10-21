@@ -69,6 +69,8 @@ public:
         std::size_t misses;
     };
     [[nodiscard]] TableStats tableStats() const;
+    /// Hits and misses of the table tier without asking the table for its size.
+    [[nodiscard]] CacheStats tableCounts() const;
 
 private:
     LruCache<std::string, std::string> memory_;  ///< serialised JSON, so the size is exact

@@ -39,7 +39,7 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
-        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "map"});
+        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "map", "metrics", "enabled"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -126,6 +126,7 @@ Config Config::fromJson(json doc) {
     read(db, "poolSize", c.database.poolSize);
 
     read(doc.value("admin", json::object()), "token", c.adminToken);
+    read(doc.value("metrics", json::object()), "enabled", c.metrics.enabled);
 
     const json& d = doc.value("data", json::object());
     readPath(d, "dem", c.data.dem);

@@ -705,6 +705,32 @@ paths:
       responses:
         '204': { description: Cleared }
 
+  /admin/metrics:
+    get:
+      tags: [admin]
+      security: [{ admin: [] }]
+      summary: Internal counters in the Prometheus text format; off unless `metrics.enabled` is set.
+      description: >-
+        For a Prometheus scrape with the admin token as bearer credentials. Families:
+        `rfmap_http_requests_total` and `rfmap_http_request_duration_seconds` (by rate class,
+        method and status), `rfmap_pool_*` (threads, busy, queued and completed tasks of the
+        `http`, `job-runners` and `job-cells` pools), `rfmap_db_pool_*` (connections, idle,
+        waiting callers, leases, wait time, reconnects), `rfmap_jobs` and
+        `rfmap_jobs_started_total`, `rfmap_cache_*` (hits, misses, evictions, entries, bytes per
+        tier), `rfmap_build_info`, `rfmap_process_start_time_seconds` and, on Linux,
+        `rfmap_process_*` (CPU seconds, resident and virtual memory, threads, open file
+        descriptors). Nothing in it queries the database.
+      responses:
+        '200':
+          description: The metrics
+          content:
+            text/plain:
+              schema: { type: string }
+        '404': { description: Metrics are off in the server configuration }
+        '401': { description: Admin token missing or wrong }
+        '403': { description: The admin API is off (no admin token in the configuration) }
+        '429': { description: Rate limit of the admin class exceeded }
+
 components:
   securitySchemes:
     session: { type: http, scheme: bearer }

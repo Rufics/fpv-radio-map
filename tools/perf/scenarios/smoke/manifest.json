@@ -1,0 +1,50 @@
+{
+  "kind": "scenario",
+  "id": "smoke",
+  "version": "1.2.0",
+  "description": "Every persona at a low constant rate for one minute: checks that the stand, the set-up and the steps work.",
+  "personas": [
+    {
+      "id": "link-editor",
+      "weight": 50
+    },
+    {
+      "id": "viewer",
+      "weight": 35
+    },
+    {
+      "id": "mission-creator",
+      "weight": 10
+    },
+    {
+      "id": "coverage-planner",
+      "weight": 5
+    }
+  ],
+  "load": {
+    "type": "constant-arrival-rate",
+    "stages": [
+      {
+        "name": "steady",
+        "durationS": 60,
+        "targetRps": 4
+      }
+    ]
+  },
+  "collectors": [
+    "k6-summary",
+    "prometheus",
+    "sanitizer"
+  ],
+  "thresholds": {
+    "http_req_failed": "rate<0.01"
+  },
+  "compare": {
+    "metrics": [
+      "p95",
+      "error_rate"
+    ],
+    "window": 10,
+    "maxRegressionPct": 5
+  }
+}

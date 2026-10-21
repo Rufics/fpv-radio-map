@@ -183,6 +183,7 @@ Settings you will most likely touch:
 | `coverage.maxCells`, `coverage.threads` | 250000, 4 | Larger grids are refused with 422. |
 | `cache.*` | 256 MB DEM blocks, 64 MB results in memory, 20000 rows / 1 GB results table | Also changeable at run time under **Admin → Cache** (`PUT /api/v1/admin/cache`). Changes made there are stored and survive a restart. |
 | `weather.metaUrl` | empty | The synced model's `meta.json`. With it, results give the forecast run time (`runUtc`). |
+| `metrics.enabled` | `false` | Serves `GET /api/v1/admin/metrics` in the Prometheus text format, behind the admin token: request rates and durations, the request, job and cell thread pools, the database pool, the caches, and the process's CPU time, memory, threads and open files. Scrape it with the admin token as bearer credentials. |
 | `map` | — | Merged over the map sources `GET /api/v1/config/map` returns. Attribution comes from `manifest.json` next to the DEM. |
 
 ## 4. Open-Meteo

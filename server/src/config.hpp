@@ -50,6 +50,13 @@ public:
 
     std::string adminToken;  ///< empty = admin API disabled
 
+    /// GET /api/v1/admin/metrics: the server's internal counters for Prometheus, behind the
+    /// admin token. Off by default; the perf stand turns it on.
+    struct Metrics {
+        bool enabled = false;
+    };
+    Metrics metrics;
+
     struct Data {
         std::filesystem::path dem;
         std::filesystem::path landcover;

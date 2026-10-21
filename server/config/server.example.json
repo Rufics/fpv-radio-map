@@ -23,6 +23,10 @@
     // Empty disables the admin API.
     "token": ""
   },
+  "metrics": {
+    // GET /api/v1/admin/metrics for Prometheus, behind the admin token. Off unless needed.
+    "enabled": false
+  },
   "data": {
     "dem": "/data/dem.cog.tif",
     "landcover": "/data/landcover.cog.tif",

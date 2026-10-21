@@ -1,5 +1,8 @@
 #pragma once
 
+#include "metrics.hpp"
+
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <functional>
@@ -43,6 +46,11 @@ public:
 
     [[nodiscard]] int size() const { return static_cast<int>(workers_.size()); }
 
+    [[nodiscard]] PoolStats stats() {
+        std::lock_guard lock(mutex_);
+        return {size(), tasks_.size(), busy_.load(), completed_.load()};
+    }
+
 private:
     void loop(const std::stop_token& stop) {
         while (true) {
@@ -51,15 +59,20 @@ private:
             if (std::unique_lock lock(mutex_); wake_.wait(lock, stop, [this] { return !tasks_.empty(); })) {
                 task = std::move(tasks_.front());
                 tasks_.pop_front();
+                busy_.fetch_add(1);
             } else {
                 return;
             }
-            task();
+            task();  // a packaged_task: it keeps its exception for the future and does not throw
+            busy_.fetch_sub(1);
+            completed_.fetch_add(1);
         }
     }
 
     std::deque<std::function<void()>> tasks_;
     std::mutex mutex_;
+    std::atomic<int> busy_{0};
+    std::atomic<std::uint64_t> completed_{0};
     std::condition_variable_any wake_;  // NOSONAR(cpp:S8467): only the _any variant can wait on a stop_token
     /// Declared last: destroyed first, so the workers stop before the queue they use goes.
     std::vector<std::jthread> workers_;

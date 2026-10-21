@@ -1,0 +1,36 @@
+{
+  "kind": "persona",
+  "id": "coverage-planner",
+  "version": "1.0.0",
+  "description": "A mission owner who starts a coverage grid and polls the job until it is done.",
+  "fixtures": [
+    "warsaw-missions"
+  ],
+  "auth": {
+    "type": "mission-owner"
+  },
+  "setup": {
+    "missions": "warsaw-missions:missions.json",
+    "count": 4
+  },
+  "steps": [
+    {
+      "name": "calc-coverage",
+      "weight": 1,
+      "method": "POST",
+      "path": "/calc/coverage",
+      "body": "warsaw-missions:missions.json",
+      "expect": 202,
+      "poll": {
+        "path": "/jobs/{{response.jobId}}",
+        "untilField": "state",
+        "pending": [
+          "queued",
+          "running"
+        ],
+        "intervalS": 1,
+        "timeoutS": 300
+      }
+    }
+  ]
+}

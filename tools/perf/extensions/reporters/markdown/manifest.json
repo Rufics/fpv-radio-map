@@ -1,0 +1,7 @@
+{
+  "kind": "reporter",
+  "id": "markdown",
+  "version": "1.2.0",
+  "description": "summary.md: the verdict and the gated measurements of a run in GitHub Markdown, to paste into a pull request.",
+  "entry": "reporter.py:MarkdownReporter"
+}

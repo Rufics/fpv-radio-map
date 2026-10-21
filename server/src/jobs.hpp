@@ -26,6 +26,7 @@ public:
     /// The part's grid; HttpError 409 while it is still running.
     [[nodiscard]] json grid(const std::string& missionId, const std::string& jobId, const std::string& link);
     [[nodiscard]] std::size_t running() const;
+    [[nodiscard]] JobStats stats();
 
 private:
     struct Part {
@@ -58,6 +59,7 @@ private:
     Logger& log_;
     mutable std::mutex mutex_;
     std::map<std::string, std::shared_ptr<Job>, std::less<>> jobs_;
+    std::uint64_t started_ = 0;  ///< guarded by mutex_
     ThreadPool cells_;
     ThreadPool runners_;  ///< declared last: destroyed first, so running jobs finish before the cell pool goes
 };

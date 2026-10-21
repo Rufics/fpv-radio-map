@@ -1,0 +1,12 @@
+{
+  "kind": "fixture",
+  "id": "warsaw-paths",
+  "version": "1.0.0",
+  "description": "400 point-to-point requests inside the Warsaw dataset, ground to 30-120 m; every fourth asks for both links.",
+  "files": {
+    "paths": "paths.json"
+  },
+  "requiresDataset": {
+    "insideBbox": true
+  }
+}

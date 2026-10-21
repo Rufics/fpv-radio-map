@@ -1,0 +1,17 @@
+# Added to compose.yml by `perf.py run --sanitize`: the server built with ASan, LSan and UBSan,
+# writing its reports into the run folder (raw/sanitizer/). perf.py stops the server gracefully
+# after the load, so LeakSanitizer reports what was still allocated at exit.
+services:
+  rfmap-server:
+    build:
+      context: ../../..
+      dockerfile: tools/perf/stand/server-sanitize.Dockerfile
+    environment:
+      ASAN_OPTIONS: detect_leaks=1:log_path=/sanitizer/asan:abort_on_error=0:halt_on_error=1:detect_stack_use_after_return=1:strict_string_checks=1:external_symbolizer_path=/usr/bin/addr2line
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=0:log_path=/sanitizer/ubsan
+    volumes:
+      - ${RFMAP_PERF_SANITIZER_DIR:?perf.py passes the sanitizer folder}:/sanitizer
+    # LeakSanitizer stops the threads with ptrace at exit.
+    cap_add: [SYS_PTRACE]
+    stop_grace_period: 60s
+    mem_limit: ${RFMAP_PERF_SERVER_MEMORY:-8g}

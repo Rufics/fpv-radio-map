@@ -1,0 +1,61 @@
+{
+  "kind": "scenario",
+  "id": "auth-storm",
+  "version": "1.0.0",
+  "description": "A burst of link opens and PIN guesses next to normal viewers: argon2id saturates the CPU, and the viewers' latency shows what that costs everybody else.",
+  "personas": [
+    {
+      "id": "link-opener",
+      "weight": 40
+    },
+    {
+      "id": "pin-guesser",
+      "weight": 30
+    },
+    {
+      "id": "viewer",
+      "weight": 30
+    }
+  ],
+  "load": {
+    "type": "ramping-arrival-rate",
+    "stages": [
+      {
+        "name": "calm",
+        "durationS": 30,
+        "targetRps": 4
+      },
+      {
+        "name": "storm-ramp",
+        "durationS": 30,
+        "targetRps": 20
+      },
+      {
+        "name": "storm",
+        "durationS": 120,
+        "targetRps": 20
+      },
+      {
+        "name": "recovery",
+        "durationS": 60,
+        "targetRps": 4
+      }
+    ]
+  },
+  "collectors": [
+    "k6-summary",
+    "prometheus",
+    "sanitizer"
+  ],
+  "thresholds": {
+    "http_req_failed": "rate<0.05"
+  },
+  "compare": {
+    "metrics": [
+      "p95",
+      "error_rate"
+    ],
+    "window": 10,
+    "maxRegressionPct": 10
+  }
+}

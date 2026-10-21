@@ -1,0 +1,14 @@
+{
+  "kind": "profiler",
+  "id": "flamegraph",
+  "version": "1.0.0",
+  "description": "Samples the call stacks with Linux perf and draws them with inferno: flamegraph-NAME.svg (interactive) and NAME.folded (for inferno-diff-folded) in raw/.",
+  "entry": "profiler.py:FlamegraphProfiler",
+  "options": {
+    "frequencyHz": 99,
+    "callGraph": "dwarf",
+    "perf": "perf",
+    "collapse": "inferno-collapse-perf",
+    "flamegraph": "inferno-flamegraph"
+  }
+}

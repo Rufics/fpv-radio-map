@@ -1,0 +1,22 @@
+{
+  "kind": "persona",
+  "id": "mission-creator",
+  "version": "1.0.0",
+  "description": "A new user who creates a mission without signing in.",
+  "fixtures": [
+    "warsaw-missions"
+  ],
+  "auth": {
+    "type": "none"
+  },
+  "steps": [
+    {
+      "name": "create-mission",
+      "weight": 1,
+      "method": "POST",
+      "path": "/missions",
+      "body": "warsaw-missions:missions.json",
+      "expect": 201
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "benchmark",
+  "id": "result-cache",
+  "version": "1.0.0",
+  "description": "The server's result cache: input hashing, memory hits from 1 to 8 threads, promotion from the table tier and eviction.",
+  "target": "bench_result_cache",
+  "links": ["rfmap_server_lib"],
+  "repetitions": 10,
+  "compare": { "metric": "real_time", "stat": "median", "maxRegressionPct": 5 }
+}

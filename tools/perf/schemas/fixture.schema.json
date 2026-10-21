@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fixture.schema.json",
+  "title": "Fixture: shared data that personas send to the server",
+  "x-perfkit": {
+    "folder": "fixtures",
+    "group": "description",
+    "files": [{ "path": "files.*" }]
+  },
+  "type": "object",
+  "required": ["kind", "id", "version", "files"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "fixture" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/version" },
+    "description": { "$ref": "common.schema.json#/$defs/description" },
+    "files": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_./-]*\\.json$" },
+      "description": "Name to file in the fixture's folder."
+    },
+    "requiresDataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "insideBbox": { "type": "boolean" } }
+    }
+  }
+}

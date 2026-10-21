@@ -1,0 +1,43 @@
+{
+  "kind": "persona",
+  "id": "link-editor",
+  "version": "1.0.0",
+  "description": "A pilot who opened a share link with edit rights and moves points: mostly path checks, sometimes the whole route.",
+  "fixtures": [
+    "warsaw-paths",
+    "warsaw-missions"
+  ],
+  "auth": {
+    "type": "link-pin",
+    "role": "edit"
+  },
+  "setup": {
+    "missions": "warsaw-missions:missions.json",
+    "count": 8
+  },
+  "steps": [
+    {
+      "name": "calc-path",
+      "weight": 8,
+      "method": "POST",
+      "path": "/calc/path",
+      "body": "warsaw-paths:paths.json",
+      "expect": 200
+    },
+    {
+      "name": "calc-route",
+      "weight": 2,
+      "method": "POST",
+      "path": "/calc/route",
+      "body": "warsaw-missions:missions.json",
+      "expect": 200
+    },
+    {
+      "name": "get-mission",
+      "weight": 1,
+      "method": "GET",
+      "path": "/missions/{{missionId}}",
+      "expect": 200
+    }
+  ]
+}

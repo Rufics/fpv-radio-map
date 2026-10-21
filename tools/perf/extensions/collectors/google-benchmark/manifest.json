@@ -1,0 +1,13 @@
+{
+  "kind": "collector",
+  "id": "google-benchmark",
+  "version": "1.0.0",
+  "description": "Reads the JSON a Google Benchmark binary writes with repetitions: one aggregate (the benchmark's compare.stat) per benchmark.",
+  "entry": "collector.py:GoogleBenchmarkCollector",
+  "metrics": [
+    { "name": "real_time", "unit": "ns", "better": "lower" },
+    { "name": "cpu_time", "unit": "ns", "better": "lower" },
+    { "name": "items_per_second", "unit": "1/s", "better": "higher" },
+    { "name": "bytes_per_second", "unit": "B/s", "better": "higher" }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "kind": "collector",
+  "id": "sanitizer",
+  "version": "1.0.0",
+  "description": "Counts the reports of a server built with ASan, LSan and UBSan (perf.py run --sanitize): memory errors, leaked bytes at exit and undefined behaviour. Any finding fails the run.",
+  "entry": "collector.py:SanitizerCollector",
+  "needs": ["sanitizer"],
+  "metrics": [
+    { "name": "errors", "unit": "reports", "better": "lower", "failAbove": 0 },
+    { "name": "leaked_bytes", "unit": "B", "better": "lower", "failAbove": 0 },
+    { "name": "leaked_allocations", "unit": "allocations", "better": "lower", "failAbove": 0 }
+  ]
+}
