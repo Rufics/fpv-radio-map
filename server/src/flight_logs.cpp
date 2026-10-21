@@ -4,8 +4,10 @@
 
 #include <rfmod/crypto.hpp>
 
+#include <algorithm>
 #include <format>
 #include <mutex>
+#include <set>
 #include <stdexcept>
 
 namespace rfmap {
@@ -47,10 +49,20 @@ std::optional<std::string> startedAtOf(const json& entry) {
 
 // ---- store ----
 
-std::vector<std::string> FlightLogStore::add(const std::string& missionId, const std::string& fileName,
-                                             const std::string& sha256, const std::string& decoder,
-                                             const std::vector<NewFlight>& flights) {
-    return db_.tx([&](pqxx::work& w) {
+std::optional<std::vector<std::string>> FlightLogStore::add(const std::string& missionId, const std::string& fileName,
+                                                            const std::string& sha256, const std::string& decoder,
+                                                            const std::vector<NewFlight>& flights, int maxPerMission) {
+    return db_.tx([&](pqxx::work& w) -> std::optional<std::vector<std::string>> {
+        // Imports into one mission take turns, so two of them cannot both pass the limit.
+        w.exec("select 1 from missions where id = $1 for update", pqxx::params{missionId});
+        const int stored = w.exec("select count(*) from flight_logs where mission_id = $1", pqxx::params{missionId})[0][0].as<int>();
+        std::set<int> known;
+        for (const auto& r : w.exec("select log_index from flight_logs where mission_id = $1 and file_sha256 = $2",
+                                    pqxx::params{missionId, sha256})) {
+            known.insert(r[0].as<int>());
+        }
+        const auto added = std::ranges::count_if(flights, [&known](const NewFlight& f) { return !known.contains(f.index); });
+        if (stored + added > maxPerMission) return std::nullopt;
         std::vector<std::string> ids;
         for (const NewFlight& f : flights) {
             const auto r = w.exec(
@@ -91,12 +103,6 @@ std::optional<FlightLogStore::Stored> FlightLogStore::get(const std::string& mis
                               pqxx::params{missionId, id});
         if (r.empty()) return std::nullopt;
         return Stored{id, r[0][0].as<std::string>(), r[0][1].as<std::string>(), json::parse(r[0][2].as<std::string>())};
-    });
-}
-
-int FlightLogStore::count(const std::string& missionId) const {
-    return db_.tx([&missionId](pqxx::work& w) {
-        return w.exec("select count(*) from flight_logs where mission_id = $1", pqxx::params{missionId})[0][0].as<int>();
     });
 }
 
@@ -161,8 +167,13 @@ json FlightLogService::invoke(rfmod::IModuleInstance& decoder, const std::string
 }
 
 bool FlightLogService::probe(rfmod::IModuleInstance& decoder, const json& request) {
-    const json answer = invoke(decoder, "flightlog.probe", request);
-    return answer.is_object() && answer.value("match", false);
+    // A decoder that fails on a file it was only asked about does not stop the others from trying it.
+    try {
+        const json answer = decoder.invoke("flightlog.probe", request);
+        return answer.is_object() && answer.value("match", false);
+    } catch (const rfmod::ModuleError&) {
+        return false;
+    }
 }
 
 FlightLogService::Decoded FlightLogService::decode(const std::string& bytes, const std::string& fileName) const {
@@ -210,9 +221,6 @@ json FlightLogService::import(const std::string& missionId, const std::string& b
     const std::string name = cleanFileName(fileName);
     const Decoded d = decode(bytes, name);
     const auto processed = processor_.process(d.document, options());
-    if (store_->count(missionId) + static_cast<int>(processed.size()) > limits_.maxPerMission) {
-        throw HttpError(409, std::format("a mission keeps up to {} flights; delete some first", limits_.maxPerMission));
-    }
     std::vector<FlightLogStore::NewFlight> rows;
     for (std::size_t i = 0; i < processed.size(); ++i) {
         const json& entry = d.document.at("logs").at(i);
@@ -220,7 +228,11 @@ json FlightLogService::import(const std::string& missionId, const std::string& b
                         processed[i].summaryJson()});
     }
     const std::string sha = rfmod::Sha256::hex({reinterpret_cast<const std::uint8_t*>(bytes.data()), bytes.size()});
-    const std::vector<std::string> ids = store_->add(missionId, name, sha, d.decoder, rows);
+    const auto added = store_->add(missionId, name, sha, d.decoder, rows, limits_.maxPerMission);
+    if (!added.has_value()) {
+        throw HttpError(409, std::format("a mission keeps up to {} flights; delete some first", limits_.maxPerMission));
+    }
+    const std::vector<std::string>& ids = *added;
     json flights = json::array();
     for (std::size_t i = 0; i < ids.size(); ++i) {
         json row = rows[i].summary;

@@ -35,12 +35,13 @@ public:
     };
 
     /// Adds the flights of one file. A flight imported before (same file bytes and index) is
-    /// kept, and its id returned again.
-    std::vector<std::string> add(const std::string& missionId, const std::string& fileName, const std::string& sha256,
-                                 const std::string& decoder, const std::vector<NewFlight>& flights);
+    /// kept, and its id returned again. Stores nothing and answers nullopt when the flights new
+    /// to the mission would take it past maxPerMission.
+    std::optional<std::vector<std::string>> add(const std::string& missionId, const std::string& fileName,
+                                                const std::string& sha256, const std::string& decoder,
+                                                const std::vector<NewFlight>& flights, int maxPerMission);
     [[nodiscard]] json list(const std::string& missionId) const;  ///< logbook rows, newest first
     [[nodiscard]] std::optional<Stored> get(const std::string& missionId, const std::string& id) const;
-    [[nodiscard]] int count(const std::string& missionId) const;
     bool remove(const std::string& missionId, const std::string& id);
 
 private:
