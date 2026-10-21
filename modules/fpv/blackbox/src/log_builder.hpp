@@ -24,6 +24,7 @@ using json = nlohmann::json;
 struct BuildOptions {
     double sampleHz = 50.0;           ///< main loop samples kept per second
     std::size_t maxSamples = 360000;  ///< two hours at 50 Hz; later samples are dropped with a note
+    std::size_t maxEvents = 20000;    ///< events, state changes and homes each; later ones are dropped with a note
 };
 
 /// One series of the normalized log; NaN is a sample without a value (null in JSON).
@@ -118,6 +119,9 @@ private:
     [[nodiscard]] std::optional<double> throttlePct(std::span<const std::int64_t> values) const;
     void applyModes(State& s, std::uint32_t mask) const;
     void pushState(State s);
+    void addEvent(std::int64_t timeUs, json body);
+    /// True, and the log marked as cut short, when a list already holds `limit` records.
+    bool full(std::size_t size, std::size_t limit);
 
     [[nodiscard]] double seconds(std::int64_t timeUs) const;
     [[nodiscard]] json firmwareJson() const;
@@ -147,6 +151,7 @@ private:
     std::optional<std::int64_t> lastKeptUs_;
     bool keepNext_ = false;
     bool samplesTruncated_ = false;
+    bool recordsTruncated_ = false;
     std::vector<std::int64_t> timeUs_;
     /// The main-frame channels kept for the series, one value per kept sample.
     struct Columns {

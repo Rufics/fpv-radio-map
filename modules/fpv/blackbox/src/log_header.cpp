@@ -193,17 +193,21 @@ std::optional<std::size_t> FrameDefinition::indexOf(std::string_view name) const
 FrameSchedule::FrameSchedule(std::uint32_t iInterval, std::uint32_t pNum, std::uint32_t pDenom)
     : iInterval_(std::max<std::uint32_t>(iInterval, 1)),
       pNum_(std::max<std::uint32_t>(pNum, 1)),
-      pDenom_(std::max<std::uint32_t>(pDenom, 1)) {}
+      pDenom_(std::max<std::uint32_t>(pDenom, 1)) {
+    // The pattern repeats every I interval and its position 0 (the I frame) is always logged, so
+    // the run of unlogged iterations from each position is counted once, from the end.
+    unloggedFrom_.assign(iInterval_, 0);
+    for (std::uint32_t p = iInterval_ - 1; p > 0; --p) {
+        if (!logged(p)) unloggedFrom_[p] = 1 + (p + 1 < iInterval_ ? unloggedFrom_[p + 1] : 0);
+    }
+}
 
 bool FrameSchedule::logged(std::uint32_t iteration) const {
     return ((iteration % iInterval_) + pNum_ - 1) % pDenom_ < pNum_;
 }
 
 std::uint32_t FrameSchedule::skippedAfter(std::uint32_t last) const {
-    std::uint32_t skipped = 0;
-    // The pattern repeats every I interval, so the next logged iteration is never further away.
-    for (std::uint32_t i = last + 1; !logged(i) && skipped < iInterval_; ++i) ++skipped;
-    return skipped;
+    return unloggedFrom_[(last + 1) % iInterval_];
 }
 
 LogHeader LogHeader::read(ByteReader& reader) {

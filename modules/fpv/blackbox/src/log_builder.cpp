@@ -145,6 +145,7 @@ void NormalizedLogBuilder::onMainFrame(std::span<const std::int64_t> values, std
 }
 
 void NormalizedLogBuilder::onGpsFrame(std::span<const std::int64_t> values, std::int64_t timeUs) {
+    if (full(gps_.size(), options_.maxSamples)) return;
     GpsSample s;
     s.timeUs = timeUs;
     s.lat = coordinate(integerField(values, gpsFields_.lat), 90.0);
@@ -180,6 +181,7 @@ void NormalizedLogBuilder::onHomeFrame(std::span<const std::int64_t> values, std
         home["altM"] = static_cast<std::int32_t>(values[2]) / 10.0;
     }
     if (!homes_.empty() && homes_.back().second == home) return;
+    if (full(homes_.size(), options_.maxEvents)) return;
     homes_.emplace_back(timeUs, std::move(home));
 }
 
@@ -214,20 +216,31 @@ void NormalizedLogBuilder::onSlowFrame(std::span<const std::int64_t> values, std
 void NormalizedLogBuilder::pushState(State s) {
     state_ = s;
     if (!states_.empty() && states_.back().sameAs(s)) return;
+    if (full(states_.size(), options_.maxEvents)) return;
     states_.push_back(std::move(s));
+}
+
+bool NormalizedLogBuilder::full(std::size_t size, std::size_t limit) {
+    if (size < limit) return false;
+    recordsTruncated_ = true;
+    return true;
+}
+
+void NormalizedLogBuilder::addEvent(std::int64_t timeUs, json body) {
+    if (full(events_.size(), options_.maxEvents)) return;
+    events_.push_back({timeUs, std::move(body)});
 }
 
 void NormalizedLogBuilder::onEvent(const LogEvent& event) {
     switch (event.type) {
     case kEventSyncBeep:
-        events_.push_back({event.timeUs, {{"type", "sync-beep"}}});
+        addEvent(event.timeUs, {{"type", "sync-beep"}});
         break;
     case kEventDisarm:
-        events_.push_back({event.timeUs, {{"type", "disarm"}, {"reason", FirmwareModel::disarmReason(event.value)}}});
+        addEvent(event.timeUs, {{"type", "disarm"}, {"reason", FirmwareModel::disarmReason(event.value)}});
         break;
     case kEventInflightAdjustment:
-        events_.push_back({event.timeUs,
-                           {{"type", "inflight-adjustment"}, {"function", event.function}, {"value", event.adjustment}}});
+        addEvent(event.timeUs, {{"type", "inflight-adjustment"}, {"function", event.function}, {"value", event.adjustment}});
         break;
     case kEventFlightMode: {
         State s = state_;
@@ -237,7 +250,7 @@ void NormalizedLogBuilder::onEvent(const LogEvent& event) {
         break;
     }
     case kEventLogEnd:
-        events_.push_back({event.timeUs, {{"type", "log-end"}}});
+        addEvent(event.timeUs, {{"type", "log-end"}});
         break;
     default:
         break;  // LOGGING_RESUME arrives as a gap
@@ -248,13 +261,12 @@ void NormalizedLogBuilder::onGap(std::int64_t fromUs, std::int64_t toUs, GapCaus
     const double duration = static_cast<double>(std::max<std::int64_t>(toUs - fromUs, 0)) / 1e6;
     keepNext_ = true;
     if (cause == GapCause::Paused) {
-        events_.push_back({fromUs, {{"type", "logging-paused"}, {"durationS", duration}}});
+        addEvent(fromUs, {{"type", "logging-paused"}, {"durationS", duration}});
         return;
     }
     ++gaps_;
     lostS_ += duration;
-    events_.push_back(
-        {fromUs, {{"type", "gap"}, {"reason", cause == GapCause::Corrupt ? "corrupt" : "missing"}, {"durationS", duration}}});
+    addEvent(fromUs, {{"type", "gap"}, {"reason", cause == GapCause::Corrupt ? "corrupt" : "missing"}, {"durationS", duration}});
 }
 
 double NormalizedLogBuilder::seconds(std::int64_t timeUs) const {
@@ -444,6 +456,12 @@ json NormalizedLogBuilder::notesJson(const ParseStats& stats) const {
         notes.push_back(note("samples-truncated", "warn",
                              std::format("Only the first {} samples are kept; the rest of the log is not shown.", options_.maxSamples)));
     }
+    if (recordsTruncated_) {
+        notes.push_back(note("records-truncated", "warn",
+                             std::format("The log holds more GPS fixes, events or state changes than are kept ({} GPS "
+                                         "fixes, {} of the others); the later ones are not shown.",
+                                         options_.maxSamples, options_.maxEvents)));
+    }
     addSensorNotes(notes);
     addGpsNotes(notes);
     addLinkNotes(notes);
@@ -466,7 +484,7 @@ std::optional<std::string> NormalizedLogBuilder::startedAt() const {
 std::string NormalizedLogBuilder::status(const ParseStats& stats) const {
     if (stats.unsupportedEncoding.has_value() || stats.unsupportedPredictor.has_value()) return "unsupported";
     if (timeUs_.empty() && gps_.empty()) return "header-only";
-    if (stats.corruptFrames > 0 || !model_.unitsKnown() || samplesTruncated_) return "partial";
+    if (stats.corruptFrames > 0 || !model_.unitsKnown() || samplesTruncated_ || recordsTruncated_) return "partial";
     return "ok";
 }
 

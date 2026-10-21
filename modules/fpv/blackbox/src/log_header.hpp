@@ -92,7 +92,7 @@ private:
 /// firmware wrote "P interval:num/denom" and logged num of every denom iterations).
 class FrameSchedule {
 public:
-    FrameSchedule() = default;
+    FrameSchedule() : FrameSchedule(32, 1, 1) {}
     FrameSchedule(std::uint32_t iInterval, std::uint32_t pNum, std::uint32_t pDenom);
     [[nodiscard]] bool logged(std::uint32_t iteration) const;
     /// Iterations after `last` that are not logged, up to the next logged one.
@@ -102,6 +102,7 @@ private:
     std::uint32_t iInterval_ = 32;
     std::uint32_t pNum_ = 1;
     std::uint32_t pDenom_ = 1;
+    std::vector<std::uint32_t> unloggedFrom_;  ///< per position in the I interval
 };
 
 class LogHeader {

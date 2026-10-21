@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -181,6 +182,19 @@ TEST(FrameSchedule, ModernAndLegacyIntervals) {
 
     const LogHeader header = headerOf({{"I interval", "102"}, {"P interval", "2"}});
     EXPECT_EQ(header.schedule().skippedAfter(2), 1u);
+    EXPECT_EQ(FrameSchedule().skippedAfter(7), 0u);
+}
+
+TEST(FrameSchedule, SkipsMatchTheIterationsThatAreNotLogged) {
+    for (const auto& [i, num, denom] : {std::array<std::uint32_t, 3>{102, 1, 2}, {32, 1, 4}, {32, 3, 7}, {1, 1, 1}, {65535, 1, 65535},
+                                         {10, 5, 4}}) {
+        const FrameSchedule s(i, num, denom);
+        for (std::uint32_t last = 0; last < 2 * i + 3; last += std::max<std::uint32_t>(1, i / 50)) {
+            std::uint32_t expected = 0;
+            while (!s.logged(last + 1 + expected)) ++expected;
+            EXPECT_EQ(s.skippedAfter(last), expected) << i << " " << num << "/" << denom << " after " << last;
+        }
+    }
 }
 
 TEST(FirmwareInfo, ReadsTheRevisionLine) {
@@ -311,7 +325,30 @@ TEST(LogHeader, ReplacesBytesThatAreNotUtf8) {
                                   {"Board \xC0\xAF", "x"}});
     EXPECT_EQ(h.value("Craft name"), "Bad\uFFFD(\uFFFD \u20AC \U0001F681 \uFFFD\uFFFD\uFFFD");
     EXPECT_EQ(h.value("Board \uFFFD\uFFFD"), "x");
-    EXPECT_NO_THROW((void)json(*h.value("Craft name")).dump());
+    EXPECT_NO_THROW((void)json(h.value("Craft name").value_or("")).dump());
+}
+
+TEST(BlackboxDecoder, KeepsABoundedNumberOfGpsFixesEventsAndStates) {
+    SyntheticLog log;
+    log.slow(0b11, 0b111, 0);
+    log.fly(0.05);
+    for (int i = 0; i < 3; ++i) {
+        log.home(485001652 + i * 1000, 352007737);
+        log.gps({12, 485001652 + i * 1000, 352007737, 1192, 0, 0});
+        log.flightMode(i % 2 == 0 ? 0b1u : 0b11u, 0b11);
+        log.disarm(4);
+    }
+    log.end();
+    BuildOptions o;
+    o.maxSamples = 1;
+    o.maxEvents = 2;
+    const json l = BlackboxDecoder("fpv.blackbox", "1.0.0").decode(log.bytes(), "test.bbl", o).at("logs").at(0);
+    EXPECT_EQ(l.at("status"), "partial");
+    EXPECT_TRUE(hasNote(l, "records-truncated")) << l.at("notes").dump();
+    EXPECT_EQ(l.at("events").size(), 2u);
+    EXPECT_EQ(l.at("homes").size(), 2u);
+    EXPECT_EQ(l.at("states").size(), 2u);
+    EXPECT_EQ(l.at("gps").at("t").size(), 1u) << l.at("gps").dump();
 }
 
 TEST(BlackboxDecoder, HeaderOnlyLog) {
