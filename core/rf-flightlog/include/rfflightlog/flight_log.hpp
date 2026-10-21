@@ -11,6 +11,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfflightlog {
@@ -22,17 +23,14 @@ inline constexpr double kNoValue = std::numeric_limits<double>::quiet_NaN();
 inline bool hasValue(double v) { return !std::isnan(v); }
 
 /// Samples on one time base; channels hold NaN where the log has no value.
-class SampledChannels {
-public:
+struct SampledChannels {
     std::vector<double> t;
+    std::map<std::string, std::vector<double>, std::less<>> byName;
 
-    [[nodiscard]] const std::vector<double>* channel(const std::string& name) const;
-    [[nodiscard]] bool has(const std::string& name) const { return channel(name) != nullptr; }
-    void set(const std::string& name, std::vector<double> values) { channels_[name] = std::move(values); }
-    [[nodiscard]] const std::map<std::string, std::vector<double>>& all() const { return channels_; }
-
-private:
-    std::map<std::string, std::vector<double>> channels_;
+    [[nodiscard]] const std::vector<double>* channel(std::string_view name) const;
+    [[nodiscard]] bool has(std::string_view name) const { return channel(name) != nullptr; }
+    void set(const std::string& name, std::vector<double> values) { byName[name] = std::move(values); }
+    [[nodiscard]] const std::map<std::string, std::vector<double>, std::less<>>& all() const { return byName; }
 };
 
 struct GpsFix {

@@ -32,7 +32,7 @@ json optionalJson(const std::optional<double>& v) { return v ? json(std::round(*
 json row(const char* metric, const char* label, const char* unit, const std::optional<double>& plan,
          const std::optional<double>& fact) {
     json r = {{"metric", metric}, {"label", label}, {"unit", unit}, {"plan", optionalJson(plan)}, {"fact", optionalJson(fact)}};
-    if (plan && fact && *plan != 0.0) r["deltaPct"] = std::round((*fact - *plan) / *plan * 1000.0) / 10.0;
+    if (plan.has_value() && fact.has_value() && *plan != 0.0) r["deltaPct"] = std::round((*fact - *plan) / *plan * 1000.0) / 10.0;
     return r;
 }
 
@@ -44,7 +44,7 @@ RoutePlan RoutePlan::fromMission(const json& mission, const std::optional<json>&
     RoutePlan plan;
     const json& pilot = mission.at("pilot");
     const auto point = [](const json& p) { return rfcore::GeoPoint{p.at("lat").get<double>(), p.at("lon").get<double>()}; };
-    std::vector<std::string> names = {pointLabel(pilot, "Pilot")};
+    std::vector names{pointLabel(pilot, "Pilot")};
     plan.points.push_back(point(pilot));
     const json& wps = mission.at("waypoints");
     for (std::size_t i = 0; i < wps.size(); ++i) {
@@ -118,8 +118,9 @@ PlanComparison::Track PlanComparison::follow(const RoutePlan& plan, const Timeli
     for (std::size_t i = 0; i < timeline.size(); ++i) {
         const double lat = timeline.at("lat", i);
         const double lon = timeline.at("lon", i);
-        const double armed = timeline.at("armed", i);
-        if (!hasValue(lat) || !hasValue(lon) || (hasValue(armed) && armed < 0.5)) continue;
+        if (const double armed = timeline.at("armed", i); !hasValue(lat) || !hasValue(lon) || (hasValue(armed) && armed < 0.5)) {
+            continue;
+        }
         const auto near = route.nearest(lat, lon);
         if (!near) continue;
         track.offRouteM[i] = near->distanceM;
@@ -127,7 +128,7 @@ PlanComparison::Track PlanComparison::follow(const RoutePlan& plan, const Timeli
         leg.seconds += step;
         leg.maxOffRouteM = std::max(leg.maxOffRouteM, near->distanceM);
         if (const double q = timeline.at(link, i); hasValue(q)) leg.minLinkPct = std::min(q, leg.minLinkPct.value_or(q));
-        if (!track.worst || near->distanceM > track.offRouteM[*track.worst]) {
+        if (!track.worst.has_value() || near->distanceM > track.offRouteM[*track.worst]) {
             track.worst = i;
             track.worstLeg = near->leg;
         }
@@ -138,13 +139,13 @@ PlanComparison::Track PlanComparison::follow(const RoutePlan& plan, const Timeli
 json PlanComparison::rows(const RoutePlan& plan, const FlightSummary& summary, const Track& track) const {
     std::optional<double> plannedMargin;
     for (const PlannedLeg& l : plan.legs) {
-        if (l.controlMarginDb) plannedMargin = std::min(*l.controlMarginDb, plannedMargin.value_or(*l.controlMarginDb));
+        if (l.controlMarginDb.has_value()) plannedMargin = std::min(*l.controlMarginDb, plannedMargin.value_or(*l.controlMarginDb));
     }
     std::optional<double> planWhKm;
     std::optional<double> factWhKm;
-    if (plan.neededWh && plan.lengthM() > 0.0) planWhKm = *plan.neededWh / (plan.lengthM() / 1000.0);
-    if (summary.usedWh && summary.distanceM && *summary.distanceM > 0.0) factWhKm = *summary.usedWh / (*summary.distanceM / 1000.0);
-    const std::optional<double> offRoute = track.worst ? std::optional(track.offRouteM[*track.worst]) : std::nullopt;
+    if (plan.neededWh.has_value() && plan.lengthM() > 0.0) planWhKm = *plan.neededWh / (plan.lengthM() / 1000.0);
+    if (summary.usedWh.has_value() && summary.distanceM.has_value() && *summary.distanceM > 0.0) factWhKm = *summary.usedWh / (*summary.distanceM / 1000.0);
+    const std::optional<double> offRoute = track.worst.has_value() ? std::optional(track.offRouteM[*track.worst]) : std::nullopt;
     json out = json::array();
     out.push_back(row("distance", "Distance", "m", plan.lengthM(), summary.distanceM));
     out.push_back(row("energy", "Energy", "Wh", plan.neededWh, summary.usedWh));
@@ -178,8 +179,8 @@ json PlanComparison::legsJson(const RoutePlan& plan, const Track& track) {
 json PlanComparison::findings(const RoutePlan& plan, const FlightSummary& summary, const Track& track,
                               const Timeline& timeline) const {
     json out = json::array();
-    if (summary.distanceM && plan.lengthM() > 0.0) out.push_back(distanceFinding(plan, *summary.distanceM));
-    if (plan.neededWh && (!summary.usedWh || *plan.neededWh > 0.0)) out.push_back(energyFinding(*plan.neededWh, summary.usedWh));
+    if (summary.distanceM.has_value() && plan.lengthM() > 0.0) out.push_back(distanceFinding(plan, *summary.distanceM));
+    if (plan.neededWh.has_value() && (!summary.usedWh.has_value() || *plan.neededWh > 0.0)) out.push_back(energyFinding(*plan.neededWh, summary.usedWh));
     out.push_back(routeFinding(plan, track, timeline));
     for (std::size_t i = 0; i < plan.legs.size(); ++i) {
         if (auto f = legFinding(plan.legs[i], track.legs[i])) out.push_back(std::move(*f));
@@ -194,14 +195,14 @@ json PlanComparison::distanceFinding(const RoutePlan& plan, double flownM) {
 }
 
 json PlanComparison::energyFinding(double neededWh, std::optional<double> usedWh) {
-    if (!usedWh) return finding("info", "The log has no current sensor, so energy cannot be compared with the plan.");
+    if (!usedWh.has_value()) return finding("info", "The log has no current sensor, so energy cannot be compared with the plan.");
     const double pct = *usedWh / neededWh * 100.0;
     return finding(pct > 110.0 ? "warn" : "info", "Used " + fixed(*usedWh, 1) + " Wh against " + fixed(neededWh, 1) +
                                                       " Wh planned (" + fixed(pct, 0) + " %).");
 }
 
 json PlanComparison::routeFinding(const RoutePlan& plan, const Track& track, const Timeline& timeline) const {
-    if (!track.worst) return finding("info", "The log has no GPS track while armed, so the route cannot be compared.");
+    if (!track.worst.has_value()) return finding("info", "The log has no GPS track while armed, so the route cannot be compared.");
     const double d = track.offRouteM[*track.worst];
     const PlannedLeg& leg = plan.legs[track.worstLeg];
     return finding(d > options_.offRouteWarnM ? "warn" : "info",
@@ -210,7 +211,7 @@ json PlanComparison::routeFinding(const RoutePlan& plan, const Track& track, con
 }
 
 std::optional<json> PlanComparison::legFinding(const PlannedLeg& p, const LegFact& f) {
-    if (!p.controlMarginDb || !f.minLinkPct || *p.controlMarginDb < 6.0 || *f.minLinkPct >= 30.0) return std::nullopt;
+    if (!p.controlMarginDb.has_value() || !f.minLinkPct.has_value() || *p.controlMarginDb < 6.0 || *f.minLinkPct >= 30.0) return std::nullopt;
     return finding("warn", "Leg " + p.from + " → " + p.to + ": planned " + fixed(*p.controlMarginDb, 0) +
                                " dB of control margin, but the link fell to " + fixed(*f.minLinkPct, 0) +
                                " %. Check antennas, obstacles and the radio settings.");
@@ -224,7 +225,7 @@ json PlanComparison::compare(const RoutePlan& plan, const Timeline& timeline, co
                 {"legs", legsJson(plan, track)},
                 {"findings", findings(plan, summary, track, timeline)},
                 {"offRouteM", offRoute}};
-    if (track.worst) {
+    if (track.worst.has_value()) {
         const std::size_t i = *track.worst;
         out["furthest"] = {{"t", timeline.samples.t[i]}, {"lat", timeline.at("lat", i)}, {"lon", timeline.at("lon", i)},
                            {"distanceM", track.offRouteM[i]}, {"leg", track.worstLeg}};

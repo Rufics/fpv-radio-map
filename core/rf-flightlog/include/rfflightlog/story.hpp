@@ -9,6 +9,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfflightlog {
@@ -24,7 +25,7 @@ class ModeBandBuilder {
 public:
     [[nodiscard]] std::vector<ModeBand> build(const FlightLog& log) const;
     /// The band of one state: disarmed and failsafe first, then the strongest assist mode.
-    [[nodiscard]] static std::string bandOf(bool armed, const std::vector<std::string>& modes, const std::string& failsafe);
+    [[nodiscard]] static std::string bandOf(bool armed, const std::vector<std::string>& modes, std::string_view failsafe);
     [[nodiscard]] static json toJson(const std::vector<ModeBand>& bands);
 };
 
@@ -76,7 +77,7 @@ struct StoryOptions {
 
 class StoryBuilder {
 public:
-    explicit StoryBuilder(StoryOptions options) : options_(options) {}
+    explicit StoryBuilder(const StoryOptions& options) : options_(options) {}
     [[nodiscard]] std::vector<StoryEvent> build(const FlightLog& log, const Timeline& timeline,
                                                 const std::vector<ModeBand>& bands) const;
     [[nodiscard]] static std::string disarmText(const std::string& reason);

@@ -2,9 +2,9 @@
 
 namespace rfflightlog {
 
-const std::vector<double>* SampledChannels::channel(const std::string& name) const {
-    const auto it = channels_.find(name);
-    return it == channels_.end() ? nullptr : &it->second;
+const std::vector<double>* SampledChannels::channel(std::string_view name) const {
+    const auto it = byName.find(name);
+    return it == byName.end() ? nullptr : &it->second;
 }
 
 std::vector<double> FlightLog::numbers(const json& array) {
@@ -83,8 +83,8 @@ FlightLog FlightLog::fromJson(const json& entry) {
     }
     log.readStates(entry.value("states", json::array()));
     for (const json& e : entry.value("events", json::array())) {
-        log.events.push_back({e.at("t").get<double>(), e.at("type").get<std::string>(), e.value("reason", std::string()),
-                              e.value("durationS", 0.0)});
+        log.events.emplace_back(e.at("t").get<double>(), e.at("type").get<std::string>(), e.value("reason", std::string()),
+                                e.value("durationS", 0.0));
     }
     return log;
 }

@@ -18,7 +18,7 @@ constexpr double kCellWindowS = 5.0;
 /// The last value at or before each instant, if it is no older than `maxAgeS`.
 std::vector<double> holdLast(const std::vector<double>& t, const std::vector<double>& v, const std::vector<double>& at,
                              double maxAgeS) {
-    std::vector<double> out(at.size(), kNoValue);
+    std::vector out(at.size(), kNoValue);
     std::size_t i = 0;
     for (std::size_t k = 0; k < at.size(); ++k) {
         while (i + 1 < t.size() && t[i + 1] <= at[k]) ++i;
@@ -39,7 +39,11 @@ json numbersJson(const std::vector<double>& v) {
 
 /// The usable GPS fixes only, as plain columns.
 struct Fixes {
-    std::vector<double> t, lat, lon, altM, speedMps;
+    std::vector<double> t;
+    std::vector<double> lat;
+    std::vector<double> lon;
+    std::vector<double> altM;
+    std::vector<double> speedMps;
 
     explicit Fixes(const GpsFix& gps) {
         for (std::size_t i = 0; i < gps.size(); ++i) {
@@ -55,11 +59,13 @@ struct Fixes {
     /// Geodesic distance flown up to each fix, leaving out jitter while standing still.
     [[nodiscard]] std::vector<double> distanceFlown(double maxGapS) const {
         const rfcore::Geodesy geo;
-        std::vector<double> out(t.size(), 0.0);
+        std::vector out(t.size(), 0.0);
         for (std::size_t i = 1; i < t.size(); ++i) {
             out[i] = out[i - 1];
-            const bool moving = !(speedMps[i] < kStandingMps && speedMps[i - 1] < kStandingMps);
-            if (!moving || t[i] - t[i - 1] > maxGapS) continue;
+            if (const bool moving = !(speedMps[i] < kStandingMps && speedMps[i - 1] < kStandingMps);
+                !moving || t[i] - t[i - 1] > maxGapS) {
+                continue;
+            }
             out[i] += geo.inverse({lat[i - 1], lon[i - 1]}, {lat[i], lon[i]}).distance.value();
         }
         return out;
@@ -104,7 +110,7 @@ double Resampler::between(const std::vector<double>& t, const std::vector<double
 
 std::vector<double> Resampler::resample(const std::vector<double>& t, const std::vector<double>& v,
                                         const std::vector<double>& at) const {
-    std::vector<double> out(at.size(), kNoValue);
+    std::vector out(at.size(), kNoValue);
     std::size_t i = 0;
     for (std::size_t k = 0; k < at.size(); ++k) {
         while (i + 1 < t.size() && t[i + 1] <= at[k]) ++i;
@@ -207,7 +213,7 @@ void TimelineBuilder::addGps(const FlightLog& log, Timeline& out) const {
     out.samples.set("distanceM", std::move(distance));
 
     const rfcore::Geodesy geo;
-    std::vector<double> home(at.size(), kNoValue);
+    std::vector home(at.size(), kNoValue);
     std::size_t h = 0;
     for (std::size_t k = 0; k < at.size(); ++k) {
         while (h + 1 < log.homes.size() && log.homes[h + 1].t <= at[k]) ++h;
@@ -225,7 +231,7 @@ void TimelineBuilder::addArmed(const FlightLog& log, Timeline& out) {
     std::vector<double> t;
     std::vector<double> armed;
     for (const StateChange& s : log.states) {
-        if (!s.armed) continue;
+        if (!s.armed.has_value()) continue;
         t.push_back(s.t);
         armed.push_back(*s.armed ? 1.0 : 0.0);
     }
@@ -258,7 +264,7 @@ void TimelineBuilder::addClimb(Timeline& out) {
     const std::vector<double>* alt = out.samples.channel("altM");
     if (alt == nullptr) return;
     const auto k = static_cast<std::size_t>(std::max(1.0, std::round(out.hz / 2.0)));
-    std::vector<double> climb(alt->size(), kNoValue);
+    std::vector climb(alt->size(), kNoValue);
     for (std::size_t i = k; i + k < alt->size(); ++i) {
         const double dt = out.samples.t[i + k] - out.samples.t[i - k];
         if (dt > 0.0) climb[i] = ((*alt)[i + k] - (*alt)[i - k]) / dt;

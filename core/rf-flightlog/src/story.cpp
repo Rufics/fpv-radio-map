@@ -30,8 +30,7 @@ std::vector<LowRun> lowRuns(const std::vector<double>& t, const std::vector<doub
         run.reset();
     };
     for (std::size_t i = 0; i < v.size(); ++i) {
-        const bool low = hasValue(v[i]) && v[i] < limit && keep(i);
-        if (!low) {
+        if (const bool low = hasValue(v[i]) && v[i] < limit && keep(i); !low) {
             if (run) close(run->to);
             continue;
         }
@@ -101,7 +100,7 @@ std::string failsafeText(const std::string& phase) {
 
 }  // namespace
 
-std::string ModeBandBuilder::bandOf(bool armed, const std::vector<std::string>& modes, const std::string& failsafe) {
+std::string ModeBandBuilder::bandOf(bool armed, const std::vector<std::string>& modes, std::string_view failsafe) {
     if (!armed) return "DISARMED";
     if (!failsafe.empty() && failsafe != "IDLE" && failsafe != "GPS_RESCUE") return "FAILSAFE";
     const auto has = [&modes](const char* name) { return std::ranges::find(modes, name) != modes.end(); };
@@ -125,7 +124,7 @@ std::vector<ModeBand> ModeBandBuilder::build(const FlightLog& log) const {
         const std::string band = bandOf(armed, modes, failsafe);
         if (!out.empty() && out.back().band == band) continue;
         if (!out.empty()) out.back().to = s.t;
-        out.push_back({s.t, s.t, band});
+        out.emplace_back(s.t, s.t, band);
     }
     if (!out.empty()) out.back().to = std::max(out.back().from, log.durationS);
     return out;
@@ -192,7 +191,7 @@ FlightSummary SummaryBuilder::build(const FlightLog& log, const Timeline& timeli
 json StoryEvent::toJson() const {
     json out = {{"t", std::round(t * 1000.0) / 1000.0}, {"type", type}, {"severity", severity}, {"title", title}};
     if (!detail.empty()) out["detail"] = detail;
-    if (lat && lon) {
+    if (lat.has_value() && lon.has_value()) {
         out["lat"] = *lat;
         out["lon"] = *lon;
     }
@@ -226,27 +225,47 @@ std::string StoryBuilder::bandTitle(const std::string& band) {
     return it == kTitle.end() ? band : it->second;
 }
 
-void StoryBuilder::addStates(const FlightLog& log, std::vector<StoryEvent>& out) const {
+namespace {
+
+/// What the flight controller reported last, while the state changes are read in order.
+struct StateTrack {
     std::optional<bool> armed;
     std::string failsafe = "IDLE";
     bool signal = true;
-    for (const StateChange& s : log.states) {
-        if (s.armed && *s.armed != armed.value_or(false)) {
-            if (*s.armed) out.push_back({s.t, "armed", "info", armed ? "Armed" : "Log starts armed", "", {}, {}});
+
+    void arming(const StateChange& s, std::vector<StoryEvent>& out) {
+        if (!s.armed.has_value()) return;
+        if (*s.armed != armed.value_or(false)) {
+            const std::string title = armed.has_value() ? "Armed" : "Log starts armed";
+            if (*s.armed) out.push_back({s.t, "armed", "info", title, "", {}, {}});
             else out.push_back({s.t, "disarmed", "info", "Disarmed", "", {}, {}});
         }
-        if (s.armed) armed = s.armed;
-        if (s.failsafe && *s.failsafe != failsafe) {
-            const bool idle = *s.failsafe == "IDLE";
-            out.push_back({s.t, "failsafe", idle ? "info" : "blocked", idle ? "Failsafe over" : "Failsafe",
-                           idle ? "" : failsafeText(*s.failsafe), {}, {}});
-            failsafe = *s.failsafe;
-        }
-        if (s.rxSignal && *s.rxSignal != signal) {
-            signal = *s.rxSignal;
-            out.push_back({s.t, "rx-loss", signal ? "info" : "warn", signal ? "Receiver signal back" : "Receiver signal lost",
-                           "", {}, {}});
-        }
+        armed = s.armed;
+    }
+
+    void failsafePhase(const StateChange& s, std::vector<StoryEvent>& out) {
+        if (!s.failsafe.has_value() || *s.failsafe == failsafe) return;
+        failsafe = *s.failsafe;
+        if (failsafe == "IDLE") out.push_back({s.t, "failsafe", "info", "Failsafe over", "", {}, {}});
+        else out.push_back({s.t, "failsafe", "blocked", "Failsafe", failsafeText(failsafe), {}, {}});
+    }
+
+    void receiver(const StateChange& s, std::vector<StoryEvent>& out) {
+        if (!s.rxSignal.has_value() || *s.rxSignal == signal) return;
+        signal = *s.rxSignal;
+        if (signal) out.push_back({s.t, "rx-loss", "info", "Receiver signal back", "", {}, {}});
+        else out.push_back({s.t, "rx-loss", "warn", "Receiver signal lost", "", {}, {}});
+    }
+};
+
+}  // namespace
+
+void StoryBuilder::addStates(const FlightLog& log, std::vector<StoryEvent>& out) const {
+    StateTrack track;
+    for (const StateChange& s : log.states) {
+        track.arming(s, out);
+        track.failsafePhase(s, out);
+        track.receiver(s, out);
     }
 }
 
@@ -353,8 +372,8 @@ std::vector<StoryEvent> StoryBuilder::build(const FlightLog& log, const Timeline
     addGpsLoss(timeline, out);
     addRecords(timeline, out);
     addLogEvents(log, out);
-    const auto disarmedLater = [&log, &bands](const LogEventEntry& e) { return e.type == "disarm" && e.t >= bands.back().from; };
-    if (!bands.empty() && bands.back().band != "DISARMED" && std::ranges::none_of(log.events, disarmedLater)) {
+    if (const auto disarmedLater = [&bands](const LogEventEntry& e) { return e.type == "disarm" && e.t >= bands.back().from; };
+        !bands.empty() && bands.back().band != "DISARMED" && std::ranges::none_of(log.events, disarmedLater)) {
         out.push_back({log.durationS, "log-stops-armed", "warn", "Log stops while armed",
                        "No disarm was logged: the battery was unplugged, the craft crashed or the flash chip filled up.",
                        {}, {}});
