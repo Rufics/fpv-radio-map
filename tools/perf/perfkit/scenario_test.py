@@ -1,6 +1,8 @@
 import io
 import json
 import shutil
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -133,12 +135,19 @@ class ScenarioSuiteTest(StandTestCase):
 
     def test_a_failed_profile_still_waits_for_the_load(self):
         suite, profiles, regressions = self.suite(), TargetsOnly(), [comparison("all", 20.0)]
+        loaded, done_at_down = threading.Event(), []
+
+        def slow_load(_stand):
+            time.sleep(0.2)
+            loaded.set()
+            return True
+
         with patch.object(Stand, "server_pid", side_effect=PerfError("the stand's server is not running")), \
+                patch.object(Stand, "load", slow_load), \
+                patch.object(Stand, "down", lambda _stand: done_at_down.append(loaded.is_set())), \
                 self.assertRaisesRegex(PerfError, "server is not running"):
             suite.profile(regressions, self.run_dir, profiles)
-        k6 = next(index for index, run in enumerate(self.runner.runs) if "k6" in run)
-        self.assertLess(k6, len(self.runner.runs) - 1, "k6 ran before the stand went down")
-        self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
+        self.assertEqual(done_at_down, [True], "the load finished before the stand went down")
 
     def test_items_and_thresholds(self):
         keys = [item.key for item in self.suite("peak").items()]
