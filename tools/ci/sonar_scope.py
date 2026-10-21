@@ -36,6 +36,8 @@ REVISION = re.compile(r"[0-9a-f]{7,64}")
 # Characters a Sonar inclusion pattern and a properties value can carry without escaping.
 SAFE_PATH = re.compile(r"[A-Za-z0-9_./@+-]{1,512}")
 MAX_FILES = 500
+# A test pattern that matches no file, for a pull request that changes no test.
+NO_TEST_PATTERN = "sonar-reports/no-changed-test"
 GIT_TIMEOUT_SECONDS = 120
 
 
@@ -61,13 +63,20 @@ class ChangeClassifier:
                    ".github/actions/cpp-deps/", ".github/actions/fuzz/")
     WEB_FOLDERS = ("web/", "schemas/")
     PYTHON_SUFFIXES = (".py",)
-    ANALYSIS_FILES = ("sonar-project.properties", ".github/workflows/sonar.yml", "tools/ci/sonar_scope.py")
+    # The analysis itself; sonar_lcov.py runs only in the web coverage step.
+    ANALYSIS_FILES = ("sonar-project.properties", ".github/workflows/sonar.yml", "tools/ci/sonar_scope.py",
+                      "tools/ci/sonar_lcov.py")
+    # The test patterns of sonar-project.properties (sonar.test.inclusions).
+    TEST_SUFFIXES = ("_test.py", ".spec.ts")
 
     def needs_everything(self, path):
         return path in self.ANALYSIS_FILES
 
     def is_header(self, path):
         return path.endswith(self.HEADER_SUFFIXES)
+
+    def is_test(self, path):
+        return "/tests/" in f"/{path}" or path.endswith(self.TEST_SUFFIXES)
 
     def areas(self, path):
         found = set()
@@ -82,11 +91,13 @@ class ChangeClassifier:
 
 
 class Scope:
-    """What one analysis covers: the parts to build and the files to scan (None for all of them)."""
+    """What one analysis covers: the parts to build, the files to scan (None for all of them) and
+    the changed test files among them."""
 
-    def __init__(self, areas, files=None, reason=""):
+    def __init__(self, areas, files=None, reason="", tests=()):
         self.areas = frozenset(areas)
         self.files = None if files is None else tuple(files)
+        self.tests = tuple(tests)
         self.reason = reason
 
     @classmethod
@@ -116,11 +127,12 @@ class ScopePlanner:
         areas = set()
         for path in files:
             areas |= self._classifier.areas(path)
+        tests = [path for path in files if self._classifier.is_test(path)]
         reason = f"{len(files)} changed file(s)"
         if any(self._classifier.is_header(path) for path in files):
             files += self._classifier.C_FAMILY_PATTERNS
             reason += " and every C/C++ file, for the changed headers"
-        return Scope(areas, files, reason)
+        return Scope(areas, files, reason, tests)
 
     def _full_reason(self, files):
         if not files:
@@ -170,6 +182,8 @@ class ScopeSettings:
         lines.append(f"# {scope.reason}")
         if not scope.is_full:
             lines.append("sonar.inclusions=" + ",".join(scope.files))
+            # sonar.inclusions leaves the test files alone; these are limited to the changed ones.
+            lines.append("sonar.test.inclusions=" + (",".join(scope.tests) or NO_TEST_PATTERN))
         lines.extend(self._skipped_area_lines(scope))
         return "\n".join(lines) + "\n"
 

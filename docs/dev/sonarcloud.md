@@ -35,10 +35,10 @@ and sorts the changed files into three parts:
 | Python | `*.py` | the `tools/ci` unit tests with coverage |
 | Web | `web/`, `schemas/` | `npm ci` and the Angular unit tests with coverage |
 
-Only the parts that changed are built and tested, and the scanner gets `sonar.inclusions` set to the
-changed files, so a web-only pull request runs neither the C++ build nor the Python tests. The
-C/C++ analyser reads a header only through the sources that include it, so a changed header adds
-every C/C++ file to the scan. For a
+Only the parts that changed are built and tested. The scanner gets `sonar.inclusions` set to the
+changed files and `sonar.test.inclusions` set to the changed test files, so a web-only pull
+request runs neither the C++ build nor the Python tests. The C/C++ analyser reads a header only
+through the sources that include it, so a changed header adds every C/C++ file to the scan. For a
 part that is skipped the scope also switches its coverage report off, and without the C++ part the
 C/C++ analyser is turned off (`sonar.c.file.suffixes=-` and so on), since it would need the
 compile database of the skipped build.
@@ -50,8 +50,9 @@ does not change the gate.
 
 The whole repository is analysed instead on every push to `main`, on manual runs, and on a pull
 request that changes the analysis itself (`sonar-project.properties`, `.github/workflows/sonar.yml`,
-`tools/ci/sonar_scope.py`), changes more than 500 files, only deletes files, or has a file name that
-a Sonar pattern cannot carry (anything but letters, digits and `_./@+-`).
+`tools/ci/sonar_scope.py`, `tools/ci/sonar_lcov.py`), changes more than 500 files, only deletes
+files, or has a file name that a Sonar pattern cannot carry (anything but letters, digits and
+`_./@+-`).
 
 ## One-time setup
 

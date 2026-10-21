@@ -59,6 +59,14 @@ class ScopePlannerTest(unittest.TestCase):
         self.assertIn("**/*.cpp", scope.files)
         self.assertIn("**/*.hpp", scope.files)
 
+    def test_changed_tests_are_collected(self):
+        scope = ScopePlanner().plan(["core/rf-core/tests/a_test.cpp", "tools/ci/x_test.py", "web/a.spec.ts",
+                                     "web/a.ts"])
+        self.assertEqual(scope.tests, ("core/rf-core/tests/a_test.cpp", "tools/ci/x_test.py", "web/a.spec.ts"))
+
+    def test_coverage_merge_script_needs_everything(self):
+        self.assertTrue(ScopePlanner().plan(["tools/ci/sonar_lcov.py"]).is_full)
+
     def test_changed_source_alone_scans_only_itself(self):
         self.assertEqual(ScopePlanner().plan(["core/a.cpp"]).files, ("core/a.cpp",))
 
@@ -88,6 +96,7 @@ class ScopeSettingsTest(unittest.TestCase):
         text = ScopeSettings("sonar.projectKey=x\n").render(Scope.full("no base commit given"))
         self.assertTrue(text.startswith("sonar.projectKey=x\n"))
         self.assertNotIn("sonar.inclusions", text)
+        self.assertNotIn("sonar.test.inclusions", text)
         self.assertNotIn("suffixes", text)
 
     def test_web_scope_limits_files_and_switches_off_other_parts(self):
@@ -97,6 +106,11 @@ class ScopeSettingsTest(unittest.TestCase):
         self.assertIn("\nsonar.coverageReportPaths=\n", text)
         self.assertIn("\nsonar.python.coverage.reportPaths=\n", text)
         self.assertNotIn("sonar.javascript.lcov.reportPaths=", text)
+        self.assertIn(f"\nsonar.test.inclusions={sonar_scope.NO_TEST_PATTERN}\n", text)
+
+    def test_changed_tests_limit_the_test_files(self):
+        scope = Scope({Areas.WEB}, ["web/a.ts", "web/a.spec.ts"], tests=["web/a.spec.ts"])
+        self.assertIn("\nsonar.test.inclusions=web/a.spec.ts\n", ScopeSettings("").render(scope))
 
     def test_cpp_scope_keeps_the_cpp_analyser(self):
         text = ScopeSettings("").render(Scope({Areas.CPP}, ["core/a.cpp"]))
