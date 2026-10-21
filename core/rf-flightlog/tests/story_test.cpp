@@ -147,6 +147,7 @@ TEST(StoryBuilder, NamesFailsafeRxLossGapsAndALogThatStopsArmed) {
     log["states"].push_back({{"t", 41.0}, {"failsafe", "IDLE"}, {"rxSignal", true}});
     log["events"] = json::array({{{"t", 10.0}, {"type", "gap"}, {"reason", "corrupt"}, {"durationS", 0.13}},
                                  {{"t", 12.0}, {"type", "logging-paused"}, {"durationS", 4.0}},
+                                 {{"t", 44.6}, {"type", "disarm"}, {"reason", "SWITCH"}},
                                  {{"t", 45.0}, {"type", "disarm"}, {"reason", "CRASH_PROTECTION"}}});
     const Built b = buildFrom(doc);
     const auto story = StoryBuilder({}).build(b.log, b.timeline, b.bands);
@@ -158,10 +159,12 @@ TEST(StoryBuilder, NamesFailsafeRxLossGapsAndALogThatStopsArmed) {
     EXPECT_EQ(ofType(story, "rx-loss").size(), 2u);
     EXPECT_EQ(ofType(story, "gap").at(0).detail, "0.13 s of damaged data skipped");
     EXPECT_EQ(ofType(story, "paused").at(0).detail, "for 4.0 s");
+    ASSERT_EQ(ofType(story, "disarmed").size(), 1u) << "of two disarms at the same moment the later one is told";
     EXPECT_EQ(ofType(story, "disarmed").at(0).severity, "blocked");
     EXPECT_TRUE(ofType(story, "log-stops-armed").empty()) << "the disarm was logged";
     EXPECT_TRUE(std::ranges::none_of(ofType(story, "mode"), [](const StoryEvent& e) { return e.title == "Mode: Failsafe"; }));
 
+    log["events"].erase(3);
     log["events"].erase(2);
     const Built cut = buildFrom(doc);
     EXPECT_EQ(ofType(StoryBuilder({}).build(cut.log, cut.timeline, cut.bands), "log-stops-armed").size(), 1u);

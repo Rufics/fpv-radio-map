@@ -4,6 +4,7 @@
 #include <cmath>
 #include <format>
 #include <map>
+#include <optional>
 #include <ranges>
 
 namespace rfflightlog {
@@ -96,6 +97,12 @@ std::string failsafeText(const std::string& phase) {
         {"AUTOPILOT", "autopilot took over"}};
     const auto it = kText.find(phase);
     return it == kText.end() ? phase : it->second;
+}
+
+/// Whether a sorted list holds a time within kSameMomentS of `t`.
+bool nearAny(const std::vector<double>& sorted, double t) {
+    const auto it = std::ranges::lower_bound(sorted, t - kSameMomentS);
+    return it != sorted.end() && *it <= t + kSameMomentS;
 }
 
 }  // namespace
@@ -330,6 +337,15 @@ void StoryBuilder::addRecords(const Timeline& timeline, std::vector<StoryEvent>&
 }
 
 void StoryBuilder::addLogEvents(const FlightLog& log, std::vector<StoryEvent>& out) const {
+    // The disarm reason replaces the plain state change logged at the same moment: those go in
+    // one pass, against the sorted disarm times.
+    std::vector<double> disarms;
+    for (const LogEventEntry& e : log.events) {
+        if (e.type == "disarm") disarms.push_back(e.t);
+    }
+    std::ranges::sort(disarms);
+    std::erase_if(out, [&disarms](const StoryEvent& s) { return s.type == "disarmed" && nearAny(disarms, s.t); });
+    std::optional<std::size_t> lastDisarm;
     for (const LogEventEntry& e : log.events) {
         if (e.type == "gap") {
             const bool corrupt = e.reason == "corrupt";
@@ -339,25 +355,36 @@ void StoryBuilder::addLogEvents(const FlightLog& log, std::vector<StoryEvent>& o
             out.push_back({e.t, "paused", "info", "Logging paused", "for " + fixed(e.durationS, 1) + " s", {}, {}});
         } else if (e.type == "disarm") {
             const bool bad = e.reason == "FAILSAFE" || e.reason == "CRASH_PROTECTION" || e.reason == "RUNAWAY_TAKEOFF";
-            // The disarm reason replaces the plain state change logged at the same moment.
-            std::erase_if(out, [&e](const StoryEvent& s) { return s.type == "disarmed" && std::abs(s.t - e.t) <= kSameMomentS; });
-            out.push_back({e.t, "disarmed", bad ? "blocked" : "info", "Disarmed", disarmText(e.reason), {}, {}});
+            StoryEvent disarmed{e.t, "disarmed", bad ? "blocked" : "info", "Disarmed", disarmText(e.reason), {}, {}};
+            // Of two disarms logged at the same moment, the later one is told.
+            if (lastDisarm.has_value() && std::abs(out[*lastDisarm].t - e.t) <= kSameMomentS) {
+                out[*lastDisarm] = std::move(disarmed);
+            } else {
+                lastDisarm = out.size();
+                out.push_back(std::move(disarmed));
+            }
         }
     }
 }
 
 void StoryBuilder::place(const Timeline& timeline, std::vector<StoryEvent>& events) {
-    if (timeline.samples.channel("lat") == nullptr || timeline.samples.channel("lon") == nullptr) return;
+    const std::vector<double>* lat = timeline.samples.channel("lat");
+    const std::vector<double>* lon = timeline.samples.channel("lon");
+    if (lat == nullptr || lon == nullptr) return;
+    // Where the craft was last seen at each sample, for an event when the GPS has no position at
+    // that very moment.
+    std::vector<std::optional<std::size_t>> seen(std::min(lat->size(), lon->size()));
+    std::optional<std::size_t> last;
+    for (std::size_t i = 0; i < seen.size(); ++i) {
+        if (hasValue((*lat)[i]) && hasValue((*lon)[i])) last = i;
+        seen[i] = last;
+    }
     for (StoryEvent& e : events) {
-        // Where the craft was last seen, when the GPS has no position at that very moment.
-        for (std::size_t i = timeline.indexAt(e.t) + 1; i-- > 0;) {
-            const double lat = timeline.at("lat", i);
-            const double lon = timeline.at("lon", i);
-            if (hasValue(lat) && hasValue(lon)) {
-                e.lat = lat;
-                e.lon = lon;
-                break;
-            }
+        const std::size_t i = timeline.indexAt(e.t);
+        if (i >= seen.size()) continue;
+        if (const std::optional<std::size_t> at = seen[i]; at.has_value()) {
+            e.lat = (*lat)[*at];
+            e.lon = (*lon)[*at];
         }
     }
 }
