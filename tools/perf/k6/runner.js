@@ -163,9 +163,11 @@ export function step() {
   const tags = { persona: persona.id, step: s.name };
   const body = bodyOf(s);
   const headers = { ...auth, "Content-Type": "application/json" };
+  // An undefined responseCallback would turn http_req_failed off, so a step without expect passes none.
+  const params = { headers, tags, timeout: "120s" };
+  if (s.responseCallback) params.responseCallback = s.responseCallback;
   const res = http.request(s.method, `${plan.baseUrl}${fill(s.path, credential, null)}`,
-                           body === null ? null : JSON.stringify(body),
-                           { headers, tags, timeout: "120s", responseCallback: s.responseCallback });
+                           body === null ? null : JSON.stringify(body), params);
   const answered = s.statuses.includes(res.status);
   check(res, { [`${s.name} answers ${s.statuses.join(" or ")}`]: () => answered }, tags);
   if (s.poll && answered) poll(s, credential, auth, res.json(), tags);
