@@ -57,6 +57,7 @@ std::string SchemaRegistry::libraryFile(const std::string& kind) {
 
 SchemaRegistry::SchemaRegistry(fs::path dir) : dir_(std::move(dir)) {
     add("mission", readJson(dir_ / "mission.schema.json"));
+    add("flightlog", readJson(dir_ / "flightlog.schema.json"));
     for (const std::string& kind : libraryKinds()) add(kind, readJson(dir_ / libraryFile(kind)));
 }
 

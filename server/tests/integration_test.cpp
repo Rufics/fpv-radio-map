@@ -6,6 +6,7 @@
 
 #include <rfcore/constants.hpp>
 #include <rfmod/package.hpp>
+#include <sample_log.hpp>
 
 #include <httplib.h>
 
@@ -1004,4 +1005,98 @@ TEST_F(Integration, AntennasOutOfBandOrCrossPolarisedAreNoted) {
     const std::string body = r.body.dump();
     EXPECT_NE(body.find("Test 5.8 GHz patch is specified for 5600-6000 MHz"), std::string::npos) << body;
     EXPECT_NE(body.find("differ in polarisation"), std::string::npos) << body;
+}
+
+TEST_F(Integration, FlightLogsDecodeImportReplayAndCompareWithThePlan) {
+    const std::vector<std::uint8_t> log = fpv::blackbox::SampleLog::build();
+    const std::string bytes(log.begin(), log.end());
+    const json m = shortMission(point(50.001, 30.001, 60));
+    const std::string session = sessionFor(m);
+    httplib::Client c("127.0.0.1", env->port);
+    c.set_read_timeout(120, 0);
+    const auto post = [&c, &session](const std::string& path, const std::string& body) {
+        return c.Post("/api/v1" + path, bearer(session), body, "application/octet-stream");
+    };
+
+    // Before any decoder is installed the server says so instead of guessing a format.
+    auto none = post("/flightlogs/decode?fileName=LOG00001.BFL", bytes);
+    ASSERT_TRUE(none);
+    EXPECT_EQ(none->status, 422) << none->body;
+    EXPECT_EQ(c.Post("/api/v1/flightlogs/decode", bytes, "application/octet-stream")->status, 401);
+
+    const std::string pkg = rfmod::PackageWriter::pack(
+        fs::path(BLACKBOX_STAGE), rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-owner.secret")));
+    auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
+    ASSERT_TRUE(up);
+    ASSERT_EQ(up->status, 200) << up->body;
+    ASSERT_TRUE(json::parse(up->body)["ok"].get<bool>()) << up->body;
+    const auto mods = call("GET", "/modules");
+    for (const json& mod : mods.body) {
+        if (mod["id"] == "fpv.blackbox") {
+            EXPECT_TRUE(mod["isolated"].get<bool>()) << "decoders parse uploads in a worker";
+        }
+        if (mod["id"] == "rf.flightlog") {
+            EXPECT_EQ(mod["state"], "active");
+        }
+    }
+
+    auto preview = post("/flightlogs/decode?fileName=../../etc/LOG00001.BFL", bytes);
+    ASSERT_EQ(preview->status, 200) << preview->body;
+    const json p = json::parse(preview->body);
+    EXPECT_EQ(p["decoder"], "fpv.blackbox");
+    EXPECT_EQ(p["source"]["fileName"], "LOG00001.BFL");
+    ASSERT_EQ(p["flights"].size(), 1u);
+    EXPECT_EQ(p["flights"][0]["schema"], "flightview/v1");
+    EXPECT_EQ(post("/flightlogs/decode", "PK\x03\x04 not a log")->status, 422);
+    EXPECT_EQ(post("/flightlogs/decode", "")->status, 400);
+
+    // Import into the mission, list it, replay it with plan against fact, delete it.
+    const auto created = call("POST", "/missions", m);
+    ASSERT_EQ(created.status, 201);
+    const std::string id = created.body["missionId"];
+    const std::string edit = created.body["session"];
+    const auto imported = c.Post("/api/v1/missions/" + id + "/flightlogs?fileName=LOG00001.BFL", bearer(edit), bytes,
+                                 "application/octet-stream");
+    ASSERT_EQ(imported->status, 201) << imported->body;
+    const json flights = json::parse(imported->body)["flights"];
+    ASSERT_EQ(flights.size(), 1u);
+    const std::string flightId = flights[0]["id"];
+    const auto again = c.Post("/api/v1/missions/" + id + "/flightlogs?fileName=copy.BFL", bearer(edit), bytes,
+                              "application/octet-stream");
+    EXPECT_EQ(json::parse(again->body)["flights"][0]["id"], flightId) << "the same file is not stored twice";
+
+    const auto list = call("GET", "/missions/" + id + "/flightlogs", nullptr, bearer(edit));
+    ASSERT_EQ(list.status, 200);
+    ASSERT_EQ(list.body.size(), 1u);
+    EXPECT_EQ(list.body[0]["fileName"], "copy.BFL");
+    EXPECT_FALSE(list.body[0].contains("timeline"));
+
+    const auto view = call("GET", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(edit));
+    ASSERT_EQ(view.status, 200) << view.body;
+    EXPECT_EQ(view.body["schema"], "flightview/v1");
+    EXPECT_TRUE(view.body["timeline"]["channels"].contains("lat"));
+    EXPECT_FALSE(view.body["plan"]["evaluated"].get<bool>());
+    EXPECT_TRUE(view.body["plan"].contains("rows"));
+    EXPECT_EQ(call("GET", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(session)).status, 403)
+        << "another mission's session";
+    EXPECT_EQ(call("GET", "/missions/" + id + "/flightlogs/nope", nullptr, bearer(edit)).status, 404);
+
+    // Read-only links can replay but not import or delete.
+    const auto link = call("POST", "/missions/" + id + "/links", {{"role", "view"}, {"pin", "123456"}},
+                           {{"X-Owner-Key", created.body["ownerKey"].get<std::string>()}});
+    ASSERT_EQ(link.status, 201) << link.body;
+    const auto opened = call("POST", "/links/" + link.body["token"].get<std::string>() + "/open", {{"pin", "123456"}});
+    ASSERT_EQ(opened.status, 200) << opened.body;
+    const std::string viewer = opened.body["session"];
+    EXPECT_EQ(call("GET", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(viewer)).status, 200);
+    EXPECT_EQ(call("DELETE", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(viewer)).status, 403);
+
+    EXPECT_EQ(call("DELETE", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(edit)).status, 204);
+    EXPECT_EQ(call("GET", "/missions/" + id + "/flightlogs", nullptr, bearer(edit)).body.size(), 0u);
+
+    // The admin can switch replay off.
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.flightlog", {{"enabled", false}}, admin()).status, 200);
+    EXPECT_EQ(post("/flightlogs/decode", bytes)->status, 403);
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.flightlog", {{"enabled", true}, {"options", {{"timelineHz", 5}}}}, admin()).status, 200);
+    EXPECT_EQ(call("DELETE", "/admin/modules/fpv.blackbox", nullptr, admin()).status / 100, 2);
 }
