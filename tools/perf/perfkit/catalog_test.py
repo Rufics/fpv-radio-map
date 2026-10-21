@@ -184,7 +184,6 @@ class ContentHasherTest(CatalogTestCase):
         (folder / "collector.py").rename(folder / "other.py")
         self.assertNotEqual(ContentHasher.folder(folder), changed)
 
-
     def test_files_are_ordered_by_posix_path_on_every_os(self):
         folder = self.sample.root / "fixtures/warsaw-points"
         (folder / "B.json").write_text("{}", encoding="utf-8")
