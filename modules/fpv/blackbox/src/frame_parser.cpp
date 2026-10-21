@@ -16,16 +16,12 @@ FrameParser::FrameParser(const LogHeader& header, std::span<const std::uint8_t> 
       in_(data),
       fields_(header.dataVersion()),
       predictors_(header),
-      intra_(header.frame('I')),
-      inter_(header.frame('P')),
-      gps_(header.frame('G')),
-      home_(header.frame('H')),
-      slow_(header.frame('S')) {
-    if (intra_) {
-        iterationField_ = intra_->indexOf("loopIteration").value_or(0);
-        timeField_ = intra_->indexOf("time").value_or(1);
+      defs_{header.frame('I'), header.frame('P'), header.frame('G'), header.frame('H'), header.frame('S')} {
+    if (defs_.intra) {
+        iterationField_ = defs_.intra->indexOf("loopIteration").value_or(0);
+        timeField_ = defs_.intra->indexOf("time").value_or(1);
     }
-    if (gps_) gpsTimeField_ = gps_->indexOf("time");
+    if (defs_.gps) gpsTimeField_ = defs_.gps->indexOf("time");
 }
 
 bool FrameParser::isMarker(int byte) {
@@ -33,15 +29,16 @@ bool FrameParser::isMarker(int byte) {
 }
 
 ParseStats FrameParser::run(IFrameSink& sink) {
+    using enum Outcome;
     sink_ = &sink;
     bool inCorruptRun = false;
     while (!in_.atEnd() && !stats_.logEnd) {
         const std::size_t start = in_.offset();
         const int marker = in_.readByte();
-        Outcome outcome = isMarker(marker) ? readFrame(static_cast<char>(marker)) : Outcome::Corrupt;
-        if (outcome == Outcome::Stop) break;
-        if (outcome == Outcome::Accepted && !frameComplete(start, static_cast<char>(marker))) outcome = Outcome::Corrupt;
-        if (outcome == Outcome::Corrupt) {
+        Outcome outcome = isMarker(marker) ? readFrame(static_cast<char>(marker)) : Corrupt;
+        if (outcome == Stop) break;
+        if (outcome == Accepted && !frameComplete(start, static_cast<char>(marker))) outcome = Corrupt;
+        if (outcome == Corrupt) {
             // One count per run of bad bytes; the scan restarts one byte after the bad frame start.
             if (!inCorruptRun) ++stats_.corruptFrames;
             inCorruptRun = true;
@@ -63,53 +60,55 @@ bool FrameParser::frameComplete(std::size_t start, char marker) const {
 }
 
 FrameParser::Outcome FrameParser::readFrame(char marker) {
+    using enum Outcome;
     switch (marker) {
     case 'I':
     case 'P':
         return readMain(marker);
     case 'G':
-        return gps_ ? readSimple(marker, scratch_) : Outcome::Corrupt;
+        return defs_.gps ? readSimple(marker, scratch_) : Corrupt;
     case 'H':
-        return home_ ? readSimple(marker, scratch_) : Outcome::Corrupt;
+        return defs_.home ? readSimple(marker, scratch_) : Corrupt;
     case 'S':
-        return slow_ ? readSimple(marker, scratch_) : Outcome::Corrupt;
+        return defs_.slow ? readSimple(marker, scratch_) : Corrupt;
     default:
         return readEvent();
     }
 }
 
 FrameParser::Outcome FrameParser::readMain(char marker) {
-    const FrameDefinition* def = marker == 'I' ? intra_ : inter_;
+    const FrameDefinition* def = marker == 'I' ? defs_.intra : defs_.inter;
     if (def == nullptr || !def->complete()) return Outcome::Corrupt;
     PredictionContext ctx;
-    ctx.previous = previous_;
+    ctx.previous = history_.previous;
     if (marker == 'P') {
-        ctx.previous2 = previous2_;
-        skipped_ = last_ ? header_.schedule().skippedAfter(last_->iteration) : 0;
-        ctx.skippedIterations = skipped_;
+        ctx.previous2 = history_.previous2;
+        clock_.skipped = last_.has_value() ? header_.schedule().skippedAfter(last_->iteration) : 0;
+        ctx.skippedIterations = clock_.skipped;
     }
     return decodeOutcome(decodeFields(*def, ctx, scratch_));
 }
 
 FrameParser::Outcome FrameParser::decodeOutcome(bool decoded) const {
-    if (decoded) return Outcome::Accepted;
-    return stats_.unsupportedEncoding || stats_.unsupportedPredictor ? Outcome::Stop : Outcome::Corrupt;
+    using enum Outcome;
+    if (decoded) return Accepted;
+    return stats_.unsupportedEncoding.has_value() || stats_.unsupportedPredictor.has_value() ? Stop : Corrupt;
 }
 
 FrameParser::Outcome FrameParser::readSimple(char marker, std::vector<std::int64_t>& out) {
-    const FrameDefinition* def = slow_;
-    if (marker == 'G') def = gps_;
-    if (marker == 'H') def = home_;
+    const FrameDefinition* def = defs_.slow;
+    if (marker == 'G') def = defs_.gps;
+    if (marker == 'H') def = defs_.home;
     if (!def->complete()) return Outcome::Corrupt;
     PredictionContext ctx;
     ctx.home = homeCoord_;
-    ctx.lastMainFrameTime = last_ ? last_->timeUs : 0;
+    ctx.lastMainFrameTime = last_.has_value() ? last_->timeUs : 0;
     return decodeOutcome(decodeFields(*def, ctx, out));
 }
 
 bool FrameParser::decodeFields(const FrameDefinition& def, const PredictionContext& ctx, std::vector<std::int64_t>& out) {
     if (!fields_.read(in_, def, raw_)) {
-        if (fields_.unsupported()) stats_.unsupportedEncoding = fields_.unsupported();
+        if (fields_.unsupported().has_value()) stats_.unsupportedEncoding = fields_.unsupported();
         return false;
     }
     out = raw_;
@@ -121,40 +120,36 @@ bool FrameParser::decodeFields(const FrameDefinition& def, const PredictionConte
 }
 
 FrameParser::Outcome FrameParser::readEvent() {
+    using enum Outcome;
     event_ = LogEvent{};
     event_.type = in_.readByte();
     switch (event_.type) {
     case kEventSyncBeep:
+    case kEventDisarm:
         event_.value = in_.readUnsignedVB();
         break;
     case kEventInflightAdjustment: {
         // Bit 7 of the function byte flags a float value, else a signed VB follows.
-        const std::uint8_t function = in_.readByte();
+        const unsigned function = in_.readByte();
         event_.function = function & 0x7F;
         event_.adjustment = (function & 0x80u) != 0 ? static_cast<double>(in_.readFloat())
                                                     : static_cast<double>(in_.readSignedVB());
         break;
     }
-    case kEventLoggingResume:
-        event_.value = in_.readUnsignedVB();
-        event_.lastValue = in_.readUnsignedVB();  // the time logging resumed at
-        break;
-    case kEventDisarm:
-        event_.value = in_.readUnsignedVB();
-        break;
-    case kEventFlightMode:
+    case kEventLoggingResume:  // lastValue: the time logging resumed at
+    case kEventFlightMode:     // lastValue: the flags before
         event_.value = in_.readUnsignedVB();
         event_.lastValue = in_.readUnsignedVB();
         break;
     case kEventLogEnd:
         for (const char c : kEndOfLog) {
-            if (in_.readByte() != static_cast<std::uint8_t>(c)) return Outcome::Corrupt;
+            if (in_.readByte() != static_cast<std::uint8_t>(c)) return Corrupt;
         }
         break;
     default:
-        return Outcome::Corrupt;
+        return Corrupt;
     }
-    return in_.bad() ? Outcome::Corrupt : Outcome::Accepted;
+    return in_.bad() ? Corrupt : Accepted;
 }
 
 void FrameParser::commit(char marker) {
@@ -164,9 +159,10 @@ void FrameParser::commit(char marker) {
         commitMain(marker);
         break;
     case 'G': {
-        const std::int64_t t = gpsTimeField_ && *gpsTimeField_ < scratch_.size()
-                                   ? unwrapTime(static_cast<std::uint32_t>(scratch_[*gpsTimeField_]))
-                                   : (last_ ? last_->timeUs : 0);
+        std::int64_t t = last_.has_value() ? last_->timeUs : 0;
+        if (gpsTimeField_.has_value() && *gpsTimeField_ < scratch_.size()) {
+            t = unwrapTime(static_cast<std::uint32_t>(scratch_[*gpsTimeField_]));
+        }
         ++stats_.frames['G'];
         sink_->onGpsFrame(scratch_, t);
         break;
@@ -174,11 +170,11 @@ void FrameParser::commit(char marker) {
     case 'H':
         if (scratch_.size() >= 2) homeCoord_ = {scratch_[0], scratch_[1]};
         ++stats_.frames['H'];
-        sink_->onHomeFrame(scratch_, last_ ? last_->timeUs : 0);
+        sink_->onHomeFrame(scratch_, last_.has_value() ? last_->timeUs : 0);
         break;
     case 'S':
         ++stats_.frames['S'];
-        sink_->onSlowFrame(scratch_, last_ ? last_->timeUs : 0);
+        sink_->onSlowFrame(scratch_, last_.has_value() ? last_->timeUs : 0);
         break;
     default:
         commitEvent();
@@ -196,18 +192,18 @@ void FrameParser::commitMain(char marker) {
 }
 
 void FrameParser::commitIntra(const MainPosition& pos) {
-    if (!last_ || plausible(*last_, pos) || (candidate_ && plausible(*candidate_, pos))) {
+    if (!last_.has_value() || plausible(*last_, pos) || (candidate_.has_value() && plausible(*candidate_, pos))) {
         acceptMain(pos, true);
         return;
     }
     // Too far from the last good frame: wait for a second I frame that agrees with this one.
     candidate_ = pos;
-    if (mainValid_ && last_) gapFromUs_ = last_->timeUs;
+    if (mainValid_ && last_.has_value()) gapFromUs_ = last_->timeUs;
     mainValid_ = false;
 }
 
 void FrameParser::commitInter(const MainPosition& pos) {
-    if (!mainValid_ || !last_) return;  // a P frame cannot resynchronise the stream
+    if (!mainValid_ || !last_.has_value()) return;  // a P frame cannot resynchronise the stream
     if (!plausible(*last_, pos)) {
         gapFromUs_ = last_->timeUs;
         mainValid_ = false;
@@ -217,34 +213,34 @@ void FrameParser::commitInter(const MainPosition& pos) {
 }
 
 void FrameParser::acceptMain(const MainPosition& pos, bool intra) {
-    if (last_ && gapFromUs_) {
+    if (last_.has_value() && gapFromUs_.has_value()) {
         sink_->onGap(*gapFromUs_, pos.timeUs, GapCause::Corrupt);
-    } else if (last_ && !resumed_ && pos.timeUs - last_->timeUs > kMissingGapUs) {
+    } else if (last_.has_value() && !clock_.resumed && pos.timeUs - last_->timeUs > kMissingGapUs) {
         sink_->onGap(last_->timeUs, pos.timeUs, GapCause::Missing);
     }
     gapFromUs_.reset();
     candidate_.reset();
-    resumed_ = false;
+    clock_.resumed = false;
     mainValid_ = true;
-    while (pos.timeUs >= rolloverUs_ + kTimeWrap) rolloverUs_ += kTimeWrap;
+    while (pos.timeUs >= clock_.rolloverUs + kTimeWrap) clock_.rolloverUs += kTimeWrap;
 
     if (intra) {
         // After an I frame both histories are the I frame: nothing older can be trusted.
-        previous_ = scratch_;
-        previous2_ = scratch_;
+        history_.previous = scratch_;
+        history_.previous2 = scratch_;
     } else {
-        previous2_ = std::move(previous_);
-        previous_ = scratch_;
+        history_.previous2 = std::move(history_.previous);
+        history_.previous = scratch_;
     }
     last_ = pos;
     ++stats_.frames[intra ? 'I' : 'P'];
-    if (!stats_.firstTimeUs) stats_.firstTimeUs = pos.timeUs;
+    if (!stats_.firstTimeUs.has_value()) stats_.firstTimeUs = pos.timeUs;
     stats_.lastTimeUs = pos.timeUs;
-    sink_->onMainFrame(previous_, pos.timeUs);
+    sink_->onMainFrame(history_.previous, pos.timeUs);
 }
 
 void FrameParser::commitEvent() {
-    event_.timeUs = last_ ? last_->timeUs : 0;
+    event_.timeUs = last_.has_value() ? last_->timeUs : 0;
     switch (event_.type) {
     case kEventSyncBeep:
         event_.timeUs = unwrapTime(event_.value);
@@ -252,10 +248,10 @@ void FrameParser::commitEvent() {
     case kEventLoggingResume: {
         // Logging was switched off (BOXBLACKBOX) and on again: frames continue from here.
         const MainPosition resumed{event_.value, unwrapTime(event_.lastValue)};
-        if (last_) sink_->onGap(last_->timeUs, resumed.timeUs, GapCause::Paused);
+        if (last_.has_value()) sink_->onGap(last_->timeUs, resumed.timeUs, GapCause::Paused);
         event_.timeUs = resumed.timeUs;
         last_ = resumed;
-        resumed_ = true;
+        clock_.resumed = true;
         mainValid_ = false;
         gapFromUs_.reset();
         break;
@@ -271,7 +267,7 @@ void FrameParser::commitEvent() {
 }
 
 void FrameParser::markCorrupt() {
-    if (mainValid_ && last_) gapFromUs_ = last_->timeUs;
+    if (mainValid_ && last_.has_value()) gapFromUs_ = last_->timeUs;
     mainValid_ = false;
 }
 
@@ -290,9 +286,9 @@ bool FrameParser::plausible(const MainPosition& from, const MainPosition& to) {
 std::int64_t FrameParser::unwrapTime(std::uint32_t raw) const {
     // time is a uint32 of microseconds: it wraps after 71.6 minutes. A small step past the wrap
     // is a rollover, as in blackbox-tools' flightLogApplyMainFrameTimeRollover.
-    std::int64_t t = rolloverUs_ + raw;
-    if (last_ && t < last_->timeUs) {
-        const auto forward = static_cast<std::uint32_t>(raw - static_cast<std::uint32_t>(last_->timeUs));
+    std::int64_t t = clock_.rolloverUs + raw;
+    if (last_.has_value() && t < last_->timeUs) {
+        const std::uint32_t forward = raw - static_cast<std::uint32_t>(last_->timeUs);
         if (forward < kMaxTimeJumpUs) t += kTimeWrap;
     }
     return t;

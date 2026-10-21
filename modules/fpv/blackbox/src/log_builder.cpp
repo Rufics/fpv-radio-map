@@ -26,7 +26,7 @@ json note(const char* code, const char* severity, std::string message, std::stri
 }
 
 std::optional<double> coordinate(std::optional<double> raw, double limit) {
-    if (!raw) return std::nullopt;
+    if (!raw.has_value()) return std::nullopt;
     const double deg = static_cast<std::int32_t>(static_cast<std::int64_t>(*raw)) / kCoordDivisor;
     if (std::abs(deg) > limit) return std::nullopt;
     return deg;
@@ -89,17 +89,17 @@ std::optional<double> NormalizedLogBuilder::field(std::span<const std::int64_t> 
 }
 
 std::optional<double> NormalizedLogBuilder::divided(std::optional<double> raw, const std::optional<double>& divisor) {
-    if (!raw || !divisor) return std::nullopt;
+    if (!raw.has_value() || !divisor.has_value()) return std::nullopt;
     return *raw / *divisor;
 }
 
 std::optional<double> NormalizedLogBuilder::throttlePct(std::span<const std::int64_t> values) const {
     if (!model_.unitsKnown()) return std::nullopt;
-    if (model_.throttleFromMixer() && main_.throttleMixer) {
-        // setpoint[3] = mixerGetThrottle() * 1000
-        if (const auto v = field(values, main_.throttleMixer)) return std::clamp(*v / 10.0, 0.0, 100.0);
+    if (model_.throttleFromMixer() && main_.throttleMixer.has_value()) {
+        // From 4.0 the mixer throttle is logged in setpoint[3], scaled by a thousand.
+        if (const auto v = field(values, main_.throttleMixer); v.has_value()) return std::clamp(*v / 10.0, 0.0, 100.0);
     }
-    if (const auto rc = field(values, main_.throttleRc)) {
+    if (const auto rc = field(values, main_.throttleRc); rc.has_value()) {
         // rcCommand[THROTTLE] runs 1000..2000 µs before 4.0
         return std::clamp((*rc / model_.rcCommandScale() - 1000.0) / 10.0, 0.0, 100.0);
     }
@@ -107,8 +107,8 @@ std::optional<double> NormalizedLogBuilder::throttlePct(std::span<const std::int
 }
 
 void NormalizedLogBuilder::onMainFrame(std::span<const std::int64_t> values, std::int64_t timeUs) {
-    if (!originUs_) originUs_ = timeUs;
-    if (lastKeptUs_ && !keepNext_ && timeUs - *lastKeptUs_ < intervalUs_) return;
+    if (!originUs_.has_value()) originUs_ = timeUs;
+    if (lastKeptUs_.has_value() && !keepNext_ && timeUs - *lastKeptUs_ < intervalUs_) return;
     if (timeUs_.size() >= options_.maxSamples) {
         samplesTruncated_ = true;
         return;
@@ -116,17 +116,17 @@ void NormalizedLogBuilder::onMainFrame(std::span<const std::int64_t> values, std
     lastKeptUs_ = timeUs;
     keepNext_ = false;
     timeUs_.push_back(timeUs);
-    voltage_.push(divided(field(values, main_.vbat), model_.voltageDivisor()));
-    current_.push(divided(field(values, main_.amperage), model_.currentDivisor()));
-    baro_.push(divided(field(values, main_.baro), model_.baroDivisor()));
+    columns_.voltage.push(divided(field(values, main_.vbat), model_.voltageDivisor()));
+    columns_.current.push(divided(field(values, main_.amperage), model_.currentDivisor()));
+    columns_.baro.push(divided(field(values, main_.baro), model_.baroDivisor()));
     const auto rssi = field(values, main_.rssi);
-    rssi_.push(rssi && model_.unitsKnown() ? std::optional<double>(*rssi / kRssiMax * 100.0) : std::nullopt);
-    throttle_.push(throttlePct(values));
+    columns_.rssi.push(rssi && model_.unitsKnown() ? std::optional<double>(*rssi / kRssiMax * 100.0) : std::nullopt);
+    columns_.throttle.push(throttlePct(values));
     if (model_.linkStatisticsInDebug()) {
         // crsf.c: DEBUG_SET(DEBUG_CRSF_LINK_STATISTICS_UPLINK, 0, uplink RSSI) and (…, 2, link quality).
         const auto dbm = field(values, main_.debug0);
-        linkQuality_.push(field(values, main_.debug2));
-        rssiDbm_.push(dbm ? std::optional<double>(-std::abs(*dbm)) : std::nullopt);
+        columns_.linkQuality.push(field(values, main_.debug2));
+        columns_.rssiDbm.push(dbm ? std::optional<double>(-std::abs(*dbm)) : std::nullopt);
     }
 }
 
@@ -135,7 +135,7 @@ void NormalizedLogBuilder::onGpsFrame(std::span<const std::int64_t> values, std:
     s.timeUs = timeUs;
     s.lat = coordinate(field(values, gpsFields_.lat), 90.0);
     s.lon = coordinate(field(values, gpsFields_.lon), 180.0);
-    if (s.lat && s.lon && *s.lat == 0.0 && *s.lon == 0.0) {
+    if (s.lat.has_value() && s.lon.has_value() && *s.lat == 0.0 && *s.lon == 0.0) {
         s.lat.reset();
         s.lon.reset();
     }
@@ -143,7 +143,7 @@ void NormalizedLogBuilder::onGpsFrame(std::span<const std::int64_t> values, std:
     if (model_.unitsKnown()) {
         // GPS_altitude was unsigned before 4.5 but carried a signed altitude: read it as int32.
         const auto alt = field(values, gpsFields_.alt);
-        if (const auto divisor = model_.gpsAltitudeDivisor(); alt && divisor) {
+        if (const auto divisor = model_.gpsAltitudeDivisor(); alt.has_value() && divisor.has_value()) {
             s.alt = static_cast<std::int32_t>(static_cast<std::int64_t>(*alt)) / *divisor;
         }
         s.speed = divided(field(values, gpsFields_.speed), kSpeedDivisor);
@@ -159,7 +159,7 @@ void NormalizedLogBuilder::onHomeFrame(std::span<const std::int64_t> values, std
     if (values.size() < 2 || (values[0] == 0 && values[1] == 0)) return;
     const auto lat = coordinate(static_cast<double>(values[0]), 90.0);
     const auto lon = coordinate(static_cast<double>(values[1]), 180.0);
-    if (!lat || !lon) return;
+    if (!lat.has_value() || !lon.has_value()) return;
     json home = {{"lat", *lat}, {"lon", *lon}};
     // 2025.12 added GPS_home[2], the home altitude in decimetres.
     if (values.size() >= 3 && model_.firmware().betaflightAtLeast({2025, 12, 0})) {
@@ -180,19 +180,19 @@ void NormalizedLogBuilder::applyModes(State& s, std::uint32_t mask) const {
 void NormalizedLogBuilder::onSlowFrame(std::span<const std::int64_t> values, std::int64_t timeUs) {
     State s = state_;
     s.timeUs = timeUs;
-    if (const auto mask = field(values, slowFields_.modes)) applyModes(s, static_cast<std::uint32_t>(*mask));
+    if (const auto mask = field(values, slowFields_.modes); mask.has_value()) applyModes(s, static_cast<std::uint32_t>(*mask));
     if (model_.unitsKnown()) {
-        if (const auto flags = field(values, slowFields_.state)) {
+        if (const auto flags = field(values, slowFields_.state); flags.has_value()) {
             const auto f = static_cast<std::int64_t>(*flags);
             s.gpsFix = (f & kStateGpsFix) != 0;
             s.gpsHomeSet = (f & kStateGpsFixHome) != 0;
         }
-        if (const auto phase = field(values, slowFields_.failsafe)) {
+        if (const auto phase = field(values, slowFields_.failsafe); phase.has_value()) {
             s.failsafe = FirmwareModel::failsafePhase(static_cast<std::int64_t>(*phase));
         }
     }
-    if (const auto rx = field(values, slowFields_.rxSignal)) s.rxSignal = *rx != 0;
-    if (const auto rx = field(values, slowFields_.rxValid)) s.rxValid = *rx != 0;
+    if (const auto rx = field(values, slowFields_.rxSignal); rx.has_value()) s.rxSignal = *rx != 0;
+    if (const auto rx = field(values, slowFields_.rxValid); rx.has_value()) s.rxValid = *rx != 0;
     pushState(std::move(s));
 }
 
@@ -243,7 +243,7 @@ void NormalizedLogBuilder::onGap(std::int64_t fromUs, std::int64_t toUs, GapCaus
 }
 
 double NormalizedLogBuilder::seconds(std::int64_t timeUs) const {
-    if (!originUs_ || timeUs <= *originUs_) return 0.0;
+    if (!originUs_.has_value() || timeUs <= *originUs_) return 0.0;
     return static_cast<double>(timeUs - *originUs_) / 1e6;
 }
 
@@ -259,16 +259,16 @@ json NormalizedLogBuilder::firmwareJson() const {
 }
 
 json NormalizedLogBuilder::channelsJson() const {
-    const bool currentReads = current_.anyValue() && current_.maxAbs() >= kZeroCurrentA;
+    const bool currentReads = columns_.current.anyValue() && columns_.current.maxAbs() >= kZeroCurrentA;
     const bool anyFix = std::ranges::any_of(gps_, [](const GpsSample& s) { return s.fix; });
     return {{"gps", anyFix},
-            {"voltage", voltage_.anyValue()},
+            {"voltage", columns_.voltage.anyValue()},
             {"current", currentReads},
-            {"baroAltitude", baro_.anyValue()},
-            {"rssi", rssi_.anyValue() && rssi_.maxAbs() > 0.0},
-            {"linkQuality", linkQuality_.anyValue()},
-            {"rssiDbm", rssiDbm_.anyValue()},
-            {"throttle", throttle_.anyValue()},
+            {"baroAltitude", columns_.baro.anyValue()},
+            {"rssi", columns_.rssi.anyValue() && columns_.rssi.maxAbs() > 0.0},
+            {"linkQuality", columns_.linkQuality.anyValue()},
+            {"rssiDbm", columns_.rssiDbm.anyValue()},
+            {"throttle", columns_.throttle.anyValue()},
             {"modes", model_.modes() != nullptr && !states_.empty()}};
 }
 
@@ -279,13 +279,13 @@ json NormalizedLogBuilder::seriesJson() const {
     const auto add = [&out](const char* name, const Column& c) {
         if (c.anyValue()) out[name] = c.toJson();
     };
-    add("voltageV", voltage_);
-    if (current_.maxAbs() >= kZeroCurrentA) add("currentA", current_);
-    add("baroAltM", baro_);
-    if (rssi_.maxAbs() > 0.0) add("rssiPct", rssi_);
-    add("linkQualityPct", linkQuality_);
-    add("rssiDbm", rssiDbm_);
-    add("throttlePct", throttle_);
+    add("voltageV", columns_.voltage);
+    if (columns_.current.maxAbs() >= kZeroCurrentA) add("currentA", columns_.current);
+    add("baroAltM", columns_.baro);
+    if (columns_.rssi.maxAbs() > 0.0) add("rssiPct", columns_.rssi);
+    add("linkQualityPct", columns_.linkQuality);
+    add("rssiDbm", columns_.rssiDbm);
+    add("throttlePct", columns_.throttle);
     return out;
 }
 
@@ -320,13 +320,13 @@ json NormalizedLogBuilder::statesJson() const {
     json out = json::array();
     for (const State& s : states_) {
         json e = {{"t", seconds(s.timeUs)}};
-        if (s.armed) e["armed"] = *s.armed;
+        if (s.armed.has_value()) e["armed"] = *s.armed;
         if (s.modes) e["modes"] = *s.modes;
         if (s.failsafe) e["failsafe"] = *s.failsafe;
-        if (s.rxSignal) e["rxSignal"] = *s.rxSignal;
-        if (s.rxValid) e["rxValid"] = *s.rxValid;
-        if (s.gpsFix) e["gpsFix"] = *s.gpsFix;
-        if (s.gpsHomeSet) e["gpsHomeSet"] = *s.gpsHomeSet;
+        if (s.rxSignal.has_value()) e["rxSignal"] = *s.rxSignal;
+        if (s.rxValid.has_value()) e["rxValid"] = *s.rxValid;
+        if (s.gpsFix.has_value()) e["gpsFix"] = *s.gpsFix;
+        if (s.gpsHomeSet.has_value()) e["gpsHomeSet"] = *s.gpsHomeSet;
         out.push_back(std::move(e));
     }
     return out;
@@ -343,14 +343,14 @@ json NormalizedLogBuilder::eventsJson() const {
 }
 
 void NormalizedLogBuilder::addSensorNotes(json& notes) const {
-    if (!main_.amperage) {
+    if (!main_.amperage.has_value()) {
         notes.push_back(note("no-current-sensor", "info", "This craft logs no current sensor, so mAh and Wh are not shown.",
                              "Set current_meter to ADC or ESC and calibrate ibata_scale to log the current."));
-    } else if (current_.anyValue() && current_.maxAbs() < kZeroCurrentA) {
+    } else if (columns_.current.anyValue() && columns_.current.maxAbs() < kZeroCurrentA) {
         notes.push_back(note("current-reads-zero", "info", "The current sensor read 0 A all flight, so mAh and Wh are not shown.",
                              "Calibrate the current sensor (ibata_scale) or check current_meter."));
     }
-    if (main_.rssi && rssi_.anyValue() && rssi_.maxAbs() == 0.0) {
+    if (main_.rssi.has_value() && columns_.rssi.anyValue() && columns_.rssi.maxAbs() == 0.0) {
         notes.push_back(note("rssi-not-set", "info", "RSSI read 0 all flight: no RSSI source is set.",
                              "Set an RSSI source in the Receiver tab (an RSSI channel, or from the receiver protocol)."));
     }
@@ -393,12 +393,12 @@ void NormalizedLogBuilder::addLinkNotes(json& notes) const {
 json NormalizedLogBuilder::notesJson(const ParseStats& stats) const {
     json notes = json::array();
     const bool hasFrames = !timeUs_.empty() || !gps_.empty();
-    if (stats.unsupportedEncoding || stats.unsupportedPredictor) {
-        const std::string what = stats.unsupportedEncoding ? std::format("field encoding {}", *stats.unsupportedEncoding)
+    if (stats.unsupportedEncoding.has_value() || stats.unsupportedPredictor.has_value()) {
+        const std::string what = stats.unsupportedEncoding.has_value() ? std::format("field encoding {}", *stats.unsupportedEncoding)
                                                            : std::format("field predictor {}", *stats.unsupportedPredictor);
         notes.push_back(note("unsupported-format", "blocked", "The log uses " + what + ", which this decoder does not know."));
     }
-    if (!hasFrames && !stats.unsupportedEncoding && !stats.unsupportedPredictor) {
+    if (!hasFrames && !stats.unsupportedEncoding.has_value() && !stats.unsupportedPredictor.has_value()) {
         notes.push_back(note("header-only", "warn", "The log has its header but no flight data: logging stopped right after it started.",
                              "Check that Blackbox logging stays on while armed and that the flash or card is not full."));
         return notes;
@@ -438,35 +438,37 @@ json NormalizedLogBuilder::notesJson(const ParseStats& stats) const {
 std::optional<std::string> NormalizedLogBuilder::startedAt() const {
     // "Log start datetime" is "0000-01-01T00:00:00.000+00:00" when the clock was never set.
     const auto v = header_.value("Log start datetime");
-    if (!v || v->size() < 20 || v->starts_with("0000")) return std::nullopt;
+    if (!v.has_value() || v->size() < 20 || v->starts_with("0000")) return std::nullopt;
     const std::string& s = *v;
-    const bool shape = std::isdigit(static_cast<unsigned char>(s[0])) && s[4] == '-' && s[7] == '-' && s[10] == 'T' &&
-                       s[13] == ':' && s[16] == ':';
-    if (!shape || s.size() > 40) return std::nullopt;
+    if (const bool shape = std::isdigit(static_cast<unsigned char>(s[0])) && s[4] == '-' && s[7] == '-' && s[10] == 'T' &&
+                           s[13] == ':' && s[16] == ':';
+        !shape || s.size() > 40) {
+        return std::nullopt;
+    }
     return s;
 }
 
 std::string NormalizedLogBuilder::status(const ParseStats& stats) const {
-    if (stats.unsupportedEncoding || stats.unsupportedPredictor) return "unsupported";
+    if (stats.unsupportedEncoding.has_value() || stats.unsupportedPredictor.has_value()) return "unsupported";
     if (timeUs_.empty() && gps_.empty()) return "header-only";
     if (stats.corruptFrames > 0 || !model_.unitsKnown() || samplesTruncated_) return "partial";
     return "ok";
 }
 
-json NormalizedLogBuilder::finish(const ParseStats& stats, int index, std::pair<std::size_t, std::size_t> byteRange) {
+json NormalizedLogBuilder::finish(const ParseStats& stats, int index, std::pair<std::size_t, std::size_t> byteRange) const {
     json log = {{"index", index},
                 {"status", status(stats)},
                 {"byteRange", {byteRange.first, byteRange.second}},
                 {"firmware", firmwareJson()},
                 {"channels", channelsJson()},
                 {"notes", notesJson(stats)}};
-    if (const auto craft = header_.value("Craft name"); craft && !craft->empty()) log["craft"] = craft->substr(0, 128);
-    if (const auto at = startedAt()) log["startedAt"] = *at;
-    if (stats.firstTimeUs && stats.lastTimeUs) {
+    if (const auto craft = header_.value("Craft name"); craft.has_value() && !craft->empty()) log["craft"] = craft->substr(0, 128);
+    if (const auto at = startedAt(); at.has_value()) log["startedAt"] = *at;
+    if (stats.firstTimeUs.has_value() && stats.lastTimeUs.has_value()) {
         log["durationS"] = static_cast<double>(*stats.lastTimeUs - *stats.firstTimeUs) / 1e6;
     }
     const auto divisor = model_.voltageDivisor();
-    if (const auto cells = header_.integers("vbatcellvoltage"); cells.size() >= 3 && divisor) {
+    if (const auto cells = header_.integers("vbatcellvoltage"); cells.size() >= 3 && divisor.has_value()) {
         const double d = *divisor;
         log["battery"] = {{"cellMinV", static_cast<double>(cells[0]) / d},
                           {"cellWarnV", static_cast<double>(cells[1]) / d},
@@ -496,7 +498,7 @@ json NormalizedLogBuilder::statsJson(const ParseStats& stats) const {
     json frames = json::object();
     for (const auto& [marker, count] : stats.frames) frames[std::string(1, marker)] = count;
     json out = {{"frames", std::move(frames)}, {"corruptFrames", stats.corruptFrames}, {"sampleHz", options_.sampleHz}};
-    if (stats.firstTimeUs && stats.lastTimeUs && *stats.lastTimeUs > *stats.firstTimeUs) {
+    if (stats.firstTimeUs.has_value() && stats.lastTimeUs.has_value() && *stats.lastTimeUs > *stats.firstTimeUs) {
         const auto mainFrames = stats.frames.contains('I') ? stats.frames.at('I') : 0;
         const auto interFrames = stats.frames.contains('P') ? stats.frames.at('P') : 0;
         out["loggedHz"] =

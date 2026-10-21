@@ -1,6 +1,7 @@
 #include "log_header.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <charconv>
 #include <format>
@@ -36,6 +37,20 @@ bool equalsIgnoreCase(std::string_view a, std::string_view b) {
            });
 }
 
+/// Reads up to three dot-separated numbers from `pos` into `parts`; answers how many it read.
+std::size_t readDotted(std::string_view text, std::size_t pos, std::array<int, 3>& parts) {
+    std::size_t count = 0;
+    while (count < parts.size() && pos < text.size()) {
+        const auto [ptr, ec] = std::from_chars(text.data() + pos, text.data() + text.size(), parts[count]);
+        if (ec != std::errc()) return count;
+        ++count;
+        pos = static_cast<std::size_t>(ptr - text.data());
+        if (pos >= text.size() || text[pos] != '.') return count;
+        ++pos;
+    }
+    return count;
+}
+
 }  // namespace
 
 std::string Version::str() const { return std::format("{}.{}.{}", major, minor, patch); }
@@ -45,25 +60,15 @@ std::optional<Version> Version::find(std::string_view text) {
         if (!std::isdigit(static_cast<unsigned char>(text[i])) || (i > 0 && std::isalnum(static_cast<unsigned char>(text[i - 1])))) {
             continue;
         }
-        int parts[3] = {0, 0, 0};
-        std::size_t pos = i;
-        int count = 0;
-        while (count < 3 && pos < text.size()) {
-            const auto [ptr, ec] = std::from_chars(text.data() + pos, text.data() + text.size(), parts[count]);
-            if (ec != std::errc()) break;
-            ++count;
-            pos = static_cast<std::size_t>(ptr - text.data());
-            if (pos >= text.size() || text[pos] != '.') break;
-            ++pos;
-        }
-        if (count >= 2) return Version{parts[0], parts[1], parts[2]};
+        std::array<int, 3> parts{0, 0, 0};
+        if (readDotted(text, i, parts) >= 2) return Version{parts[0], parts[1], parts[2]};
     }
     return std::nullopt;
 }
 
 FirmwareInfo FirmwareInfo::fromHeader(const std::map<std::string, std::string, std::less<>>& values) {
     FirmwareInfo info;
-    const auto get = [&values](std::string_view key) -> std::string {
+    const auto get = [&values](std::string_view key) {
         const auto it = values.find(key);
         return it == values.end() ? std::string() : it->second;
     };
@@ -116,7 +121,7 @@ void FrameDefinition::setNames(const std::vector<std::string>& names) {
     resize(names.size());
     for (std::size_t i = 0; i < fields_.size(); ++i) {
         fields_[i].name = names[i];
-        index_.emplace(names[i], i);
+        index_.try_emplace(names[i], i);
     }
 }
 

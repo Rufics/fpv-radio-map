@@ -23,14 +23,13 @@
 
 namespace fpv::blackbox {
 
-enum EventType : int {
-    kEventSyncBeep = 0,
-    kEventInflightAdjustment = 13,
-    kEventLoggingResume = 14,
-    kEventDisarm = 15,
-    kEventFlightMode = 30,
-    kEventLogEnd = 255,
-};
+/// Event frame types (FLIGHT_LOG_EVENT_*).
+inline constexpr int kEventSyncBeep = 0;
+inline constexpr int kEventInflightAdjustment = 13;
+inline constexpr int kEventLoggingResume = 14;
+inline constexpr int kEventDisarm = 15;
+inline constexpr int kEventFlightMode = 30;
+inline constexpr int kEventLogEnd = 255;
 
 struct LogEvent {
     int type = 0;
@@ -121,17 +120,32 @@ private:
     IFrameSink* sink_ = nullptr;
     ParseStats stats_;
 
-    const FrameDefinition* intra_ = nullptr;
-    const FrameDefinition* inter_ = nullptr;
-    const FrameDefinition* gps_ = nullptr;
-    const FrameDefinition* home_ = nullptr;
-    const FrameDefinition* slow_ = nullptr;
+    /// The header's frame definitions; null for a frame type the log does not define.
+    struct Definitions {
+        const FrameDefinition* intra = nullptr;
+        const FrameDefinition* inter = nullptr;
+        const FrameDefinition* gps = nullptr;
+        const FrameDefinition* home = nullptr;
+        const FrameDefinition* slow = nullptr;
+    };
+    /// The main frames before the current one, for the predictors.
+    struct History {
+        std::vector<std::int64_t> previous;
+        std::vector<std::int64_t> previous2;
+    };
+    /// The main frame clock: wraps of the 32-bit time, pauses, and skipped iterations.
+    struct Clock {
+        std::int64_t rolloverUs = 0;
+        bool resumed = false;
+        std::uint32_t skipped = 0;
+    };
+
+    Definitions defs_;
     std::size_t iterationField_ = 0;
     std::size_t timeField_ = 1;
     std::optional<std::size_t> gpsTimeField_;
 
-    std::vector<std::int64_t> previous_;
-    std::vector<std::int64_t> previous2_;
+    History history_;
     std::vector<std::int64_t> scratch_;
     std::vector<std::int64_t> raw_;
     std::array<std::int64_t, 2> homeCoord_{0, 0};
@@ -141,9 +155,7 @@ private:
     std::optional<MainPosition> last_;
     std::optional<MainPosition> candidate_;  ///< an implausible I frame waiting for a second one
     std::optional<std::int64_t> gapFromUs_;  ///< corruption began after this main frame time
-    std::int64_t rolloverUs_ = 0;
-    bool resumed_ = false;
-    std::uint32_t skipped_ = 0;
+    Clock clock_;
 };
 
 }  // namespace fpv::blackbox

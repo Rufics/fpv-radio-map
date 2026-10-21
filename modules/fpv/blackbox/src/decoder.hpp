@@ -52,7 +52,7 @@ public:
     /// {format, match, logs, firmware?}: whether this decoder reads the file.
     [[nodiscard]] json probe(std::span<const std::uint8_t> data) const;
     /// The normalized flight log (schemas/flightlog.schema.json).
-    [[nodiscard]] json decode(std::span<const std::uint8_t> data, const std::string& fileName, const BuildOptions& options) const;
+    [[nodiscard]] json decode(std::span<const std::uint8_t> data, std::string_view fileName, const BuildOptions& options) const;
 
 private:
     [[nodiscard]] static json decodeLog(std::span<const std::uint8_t> data, const BlackboxFile::Segment& segment, int index,

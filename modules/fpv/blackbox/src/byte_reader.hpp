@@ -43,7 +43,7 @@ public:
     std::uint32_t readUnsignedVB() {
         std::uint32_t result = 0;
         for (unsigned shift = 0; shift < 35; shift += 7) {
-            const std::uint8_t b = readByte();
+            const unsigned b = readByte();
             if (bad_) return 0;
             result |= static_cast<std::uint32_t>(b & 0x7Fu) << shift;
             if ((b & 0x80u) == 0) return result;

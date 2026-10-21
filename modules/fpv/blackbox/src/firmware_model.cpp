@@ -19,6 +19,23 @@ constexpr Version kV4_0{4, 0, 0};
 constexpr Version kV4_1{4, 1, 0};
 constexpr Version kV4_3{4, 3, 0};
 
+constexpr double kCentiamperesPerAmpere = 100.0;
+constexpr double kCentimetresPerMetre = 100.0;
+
+// rx.h serialRxType_e: 1 to 12 are the same in every release since 3.1.
+constexpr std::array<const char*, 13> kStableRadios = {
+    "", "SPEKTRUM2048", "SBUS", "SUMD", "SUMH", "XBUS_MODE_B", "XBUS_MODE_B_RJ01", "IBUS", "JETIEXBUS", "CRSF",
+    "SRXL", "TARGET_CUSTOM", "FPORT"};
+
+// Betaflight failsafePhase_e.
+constexpr std::array<const char*, 8> kFailsafePhases = {
+    "IDLE", "RX_LOSS_DETECTED", "LANDING", "LANDED", "RX_LOSS_MONITORING", "RX_LOSS_RECOVERED", "GPS_RESCUE", "AUTOPILOT"};
+
+// Betaflight flightLogDisarmReason_e.
+constexpr std::array<const char*, 12> kDisarmReasons = {
+    "ARMING_DISABLED", "FAILSAFE",       "THROTTLE_TIMEOUT", "STICKS",  "SWITCH",   "CRASH_PROTECTION",
+    "RUNAWAY_TAKEOFF", "GPS_RESCUE",     "SERIAL_COMMAND",   "LANDING", "CRASHFLIP", "LAUNCH_ABORT"};
+
 }  // namespace
 
 const std::vector<ModeTable>& ModeTable::all() {
@@ -49,13 +66,13 @@ std::vector<std::string> ModeTable::active(std::uint32_t mask) const {
     return names;
 }
 
-FirmwareModel::FirmwareModel(const LogHeader& header) : firmware_(header.firmware()) {
-    unitsKnown_ = firmware_.betaflightAtLeast(kV3_1);
-    highResolution_ = header.integer("blackbox_high_resolution").value_or(0) != 0;
-    serialRx_ = header.integer("serialrx_provider").value_or(-1);
-    debugMode_ = header.integer("debug_mode").value_or(-1);
-    modes_ = ModeTable::forFirmware(firmware_);
-}
+FirmwareModel::FirmwareModel(const LogHeader& header)
+    : firmware_(header.firmware()),
+      unitsKnown_(firmware_.betaflightAtLeast(kV3_1)),
+      highResolution_(header.integer("blackbox_high_resolution").value_or(0) != 0),
+      serialRx_(header.integer("serialrx_provider").value_or(-1)),
+      debugMode_(header.integer("debug_mode").value_or(-1)),
+      modes_(ModeTable::forFirmware(firmware_)) {}
 
 std::optional<double> FirmwareModel::voltageDivisor() const {
     if (!unitsKnown_) return std::nullopt;
@@ -65,7 +82,7 @@ std::optional<double> FirmwareModel::voltageDivisor() const {
 
 std::optional<double> FirmwareModel::currentDivisor() const {
     if (!unitsKnown_) return std::nullopt;
-    return 100.0;  // amperageLatest is in centiamperes since 3.1
+    return kCentiamperesPerAmpere;  // amperageLatest since 3.1
 }
 
 std::optional<double> FirmwareModel::gpsAltitudeDivisor() const {
@@ -79,17 +96,15 @@ std::optional<double> FirmwareModel::gpsAltitudeDivisor() const {
 
 std::optional<double> FirmwareModel::baroDivisor() const {
     if (!unitsKnown_) return std::nullopt;
-    return 100.0;  // baro altitude in centimetres
+    return kCentimetresPerMetre;  // baro altitude
 }
 
 bool FirmwareModel::throttleFromMixer() const { return firmware_.betaflightAtLeast(kV4_0); }
 
 std::string FirmwareModel::radioProtocol() const {
-    // rx.h serialRxType_e: 1 to 12 are the same in every release since 3.1.
-    static constexpr std::array<const char*, 13> kStable = {
-        "", "SPEKTRUM2048", "SBUS", "SUMD", "SUMH", "XBUS_MODE_B", "XBUS_MODE_B_RJ01", "IBUS", "JETIEXBUS", "CRSF",
-        "SRXL", "TARGET_CUSTOM", "FPORT"};
-    if (serialRx_ >= 1 && serialRx_ < static_cast<long long>(kStable.size())) return kStable[static_cast<std::size_t>(serialRx_)];
+    if (serialRx_ >= 1 && serialRx_ < static_cast<long long>(kStableRadios.size())) {
+        return kStableRadios[static_cast<std::size_t>(serialRx_)];
+    }
     if (serialRx_ == 13 && firmware_.betaflightAtLeast(kV4_1)) return "SRXL2";
     if (serialRx_ == 14 && firmware_.betaflightAtLeast(kV4_3)) return "GHST";
     return {};
@@ -102,17 +117,16 @@ bool FirmwareModel::linkStatisticsInDebug() const {
 }
 
 std::string FirmwareModel::failsafePhase(std::int64_t phase) {
-    static constexpr std::array<const char*, 8> kNames = {
-        "IDLE", "RX_LOSS_DETECTED", "LANDING", "LANDED", "RX_LOSS_MONITORING", "RX_LOSS_RECOVERED", "GPS_RESCUE", "AUTOPILOT"};
-    if (phase >= 0 && phase < static_cast<std::int64_t>(kNames.size())) return kNames[static_cast<std::size_t>(phase)];
+    if (phase >= 0 && phase < static_cast<std::int64_t>(kFailsafePhases.size())) {
+        return kFailsafePhases[static_cast<std::size_t>(phase)];
+    }
     return std::format("PHASE_{}", phase);
 }
 
 std::string FirmwareModel::disarmReason(std::int64_t reason) {
-    static constexpr std::array<const char*, 12> kNames = {
-        "ARMING_DISABLED", "FAILSAFE",       "THROTTLE_TIMEOUT", "STICKS",  "SWITCH",   "CRASH_PROTECTION",
-        "RUNAWAY_TAKEOFF", "GPS_RESCUE",     "SERIAL_COMMAND",   "LANDING", "CRASHFLIP", "LAUNCH_ABORT"};
-    if (reason >= 0 && reason < static_cast<std::int64_t>(kNames.size())) return kNames[static_cast<std::size_t>(reason)];
+    if (reason >= 0 && reason < static_cast<std::int64_t>(kDisarmReasons.size())) {
+        return kDisarmReasons[static_cast<std::size_t>(reason)];
+    }
     return std::format("REASON_{}", reason);
 }
 

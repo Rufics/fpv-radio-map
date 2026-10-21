@@ -98,10 +98,10 @@ json BlackboxDecoder::decodeLog(std::span<const std::uint8_t> data, const Blackb
     return builder.finish(stats, index, {segment.begin, segment.end});
 }
 
-json BlackboxDecoder::decode(std::span<const std::uint8_t> data, const std::string& fileName, const BuildOptions& options) const {
+json BlackboxDecoder::decode(std::span<const std::uint8_t> data, std::string_view fileName, const BuildOptions& options) const {
     const BlackboxFile file(data);
     json source = {{"decoder", moduleId_}, {"decoderVersion", version_}, {"format", kFormat}, {"bytes", data.size()}};
-    if (!fileName.empty()) source["fileName"] = fileName.substr(0, 255);
+    if (!fileName.empty()) source["fileName"] = std::string(fileName.substr(0, 255));
     json logs = json::array();
     int index = 0;
     for (const BlackboxFile::Segment& segment : file.logs()) logs.push_back(decodeLog(data, segment, ++index, options));

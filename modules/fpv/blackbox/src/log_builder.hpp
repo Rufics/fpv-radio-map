@@ -53,24 +53,43 @@ public:
     void onGap(std::int64_t fromUs, std::int64_t toUs, GapCause cause) override;
 
     /// The finished log entry. `index` counts from 1 in the file.
-    [[nodiscard]] json finish(const ParseStats& stats, int index, std::pair<std::size_t, std::size_t> byteRange);
+    [[nodiscard]] json finish(const ParseStats& stats, int index, std::pair<std::size_t, std::size_t> byteRange) const;
 
 private:
     struct MainFields {
-        std::optional<std::size_t> vbat, amperage, baro, rssi, throttleMixer, throttleRc, debug0, debug2;
+        std::optional<std::size_t> vbat;
+        std::optional<std::size_t> amperage;
+        std::optional<std::size_t> baro;
+        std::optional<std::size_t> rssi;
+        std::optional<std::size_t> throttleMixer;
+        std::optional<std::size_t> throttleRc;
+        std::optional<std::size_t> debug0;
+        std::optional<std::size_t> debug2;
     };
     struct GpsFields {
-        std::optional<std::size_t> sats, lat, lon, alt, speed, course;
+        std::optional<std::size_t> sats;
+        std::optional<std::size_t> lat;
+        std::optional<std::size_t> lon;
+        std::optional<std::size_t> alt;
+        std::optional<std::size_t> speed;
+        std::optional<std::size_t> course;
     };
     struct SlowFields {
-        std::optional<std::size_t> modes, state, failsafe, rxSignal, rxValid;
+        std::optional<std::size_t> modes;
+        std::optional<std::size_t> state;
+        std::optional<std::size_t> failsafe;
+        std::optional<std::size_t> rxSignal;
+        std::optional<std::size_t> rxValid;
     };
     struct State {
         std::int64_t timeUs = 0;
         std::optional<bool> armed;
         std::optional<std::vector<std::string>> modes;
         std::optional<std::string> failsafe;
-        std::optional<bool> rxSignal, rxValid, gpsFix, gpsHomeSet;
+        std::optional<bool> rxSignal;
+        std::optional<bool> rxValid;
+        std::optional<bool> gpsFix;
+        std::optional<bool> gpsHomeSet;
         [[nodiscard]] bool sameAs(const State& o) const {
             return armed == o.armed && modes == o.modes && failsafe == o.failsafe && rxSignal == o.rxSignal &&
                    rxValid == o.rxValid && gpsFix == o.gpsFix && gpsHomeSet == o.gpsHomeSet;
@@ -82,7 +101,12 @@ private:
     };
     struct GpsSample {
         std::int64_t timeUs = 0;
-        std::optional<double> lat, lon, alt, speed, course, sats;
+        std::optional<double> lat;
+        std::optional<double> lon;
+        std::optional<double> alt;
+        std::optional<double> speed;
+        std::optional<double> course;
+        std::optional<double> sats;
         bool fix = false;
     };
 
@@ -121,7 +145,17 @@ private:
     bool keepNext_ = false;
     bool samplesTruncated_ = false;
     std::vector<std::int64_t> timeUs_;
-    Column voltage_, current_, baro_, rssi_, linkQuality_, rssiDbm_, throttle_;
+    /// The main-frame channels kept for the series, one value per kept sample.
+    struct Columns {
+        Column voltage;
+        Column current;
+        Column baro;
+        Column rssi;
+        Column linkQuality;
+        Column rssiDbm;
+        Column throttle;
+    };
+    Columns columns_;
 
     std::vector<GpsSample> gps_;
     std::vector<std::pair<std::int64_t, json>> homes_;

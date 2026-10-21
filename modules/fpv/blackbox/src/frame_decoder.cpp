@@ -88,13 +88,13 @@ void FieldReader::readTag8_8SVB(ByteReader& in, std::span<std::int64_t> out) {
         out[0] = in.readSignedVB();
         return;
     }
-    const std::uint8_t header = in.readByte();
+    const unsigned header = in.readByte();
     for (std::size_t j = 0; j < out.size(); ++j) out[j] = (header >> j) & 1u ? in.readSignedVB() : 0;
 }
 
-void FieldReader::readGroupedBytes(ByteReader& in, std::uint8_t selectors, std::span<std::int64_t, 3> out) {
+void FieldReader::readGroupedBytes(ByteReader& in, unsigned selectors, std::span<std::int64_t, 3> out) {
     // Two bits per field, first field in the low bits: 1, 2, 3 or 4 little-endian bytes.
-    for (std::size_t j = 0; j < 3; ++j, selectors = static_cast<std::uint8_t>(selectors >> 2)) {
+    for (std::size_t j = 0; j < 3; ++j, selectors >>= 2) {
         const unsigned bytes = (selectors & 3u) + 1u;
         out[j] = signExtend(littleEndian(in, bytes), 8 * bytes);
     }
@@ -102,7 +102,7 @@ void FieldReader::readGroupedBytes(ByteReader& in, std::uint8_t selectors, std::
 
 void FieldReader::readTag2_3S32(ByteReader& in, std::span<std::int64_t, 3> out) {
     // blackboxWriteTag2_3S32. Top two bits select 2, 4, 6 or 8..32 bits per field.
-    const std::uint8_t lead = in.readByte();
+    const unsigned lead = in.readByte();
     switch (lead >> 6) {
     case 0:
         out[0] = signExtend(lead >> 4, 2);
@@ -111,7 +111,7 @@ void FieldReader::readTag2_3S32(ByteReader& in, std::span<std::int64_t, 3> out) 
         break;
     case 1: {
         out[0] = signExtend(lead, 4);
-        const std::uint8_t b = in.readByte();
+        const unsigned b = in.readByte();
         out[1] = signExtend(b >> 4, 4);
         out[2] = signExtend(b, 4);
         break;
@@ -129,7 +129,7 @@ void FieldReader::readTag2_3S32(ByteReader& in, std::span<std::int64_t, 3> out) 
 
 void FieldReader::readTag2_3SVariable(ByteReader& in, std::span<std::int64_t, 3> out) {
     // blackboxWriteTag2_3SVariable: 2-2-2, 5-5-4 or 8-7-7 bits, or 8..32 bits per field.
-    const std::uint8_t lead = in.readByte();
+    const unsigned lead = in.readByte();
     switch (lead >> 6) {
     case 0:
         out[0] = signExtend(lead >> 4, 2);
@@ -138,7 +138,7 @@ void FieldReader::readTag2_3SVariable(ByteReader& in, std::span<std::int64_t, 3>
         break;
     case 1: {
         // ss11 1112 2222 3333
-        const std::uint8_t b = in.readByte();
+        const unsigned b = in.readByte();
         out[0] = signExtend(lead >> 1, 5);
         out[1] = signExtend(static_cast<std::uint32_t>((lead & 1u) << 4) | (b >> 4), 5);
         out[2] = signExtend(b, 4);
@@ -146,8 +146,8 @@ void FieldReader::readTag2_3SVariable(ByteReader& in, std::span<std::int64_t, 3>
     }
     case 2: {
         // ss11 1111 1122 2222 2333 3333
-        const std::uint8_t b1 = in.readByte();
-        const std::uint8_t b2 = in.readByte();
+        const unsigned b1 = in.readByte();
+        const unsigned b2 = in.readByte();
         out[0] = signExtend(static_cast<std::uint32_t>((lead & 0x3Fu) << 2) | (b1 >> 6), 8);
         out[1] = signExtend(static_cast<std::uint32_t>((b1 & 0x3Fu) << 1) | (b2 >> 7), 7);
         out[2] = signExtend(b2, 7);
@@ -160,7 +160,7 @@ void FieldReader::readTag2_3SVariable(ByteReader& in, std::span<std::int64_t, 3>
 }
 
 void FieldReader::readTag8_4S16(ByteReader& in, std::span<std::int64_t, 4> out) const {
-    const std::uint8_t selector = in.readByte();
+    const unsigned selector = in.readByte();
     if (dataVersion_ < 2) {
         readTag8_4S16v1(in, selector, out);
     } else {
@@ -168,39 +168,41 @@ void FieldReader::readTag8_4S16(ByteReader& in, std::span<std::int64_t, 4> out) 
     }
 }
 
-void FieldReader::readTag8_4S16v1(ByteReader& in, std::uint8_t selector, std::span<std::int64_t, 4> out) {
+void FieldReader::readTag8_4S16v1(ByteReader& in, unsigned selector, std::span<std::int64_t, 4> out) {
     // Data version 1: a 4-bit field shares its byte with the next field (low nibble first),
     // 8-bit is one byte, 16-bit is little-endian.
-    for (std::size_t j = 0; j < 4; ++j, selector = static_cast<std::uint8_t>(selector >> 2)) {
-        switch (selector & 3u) {
+    std::size_t j = 0;
+    while (j < 4) {
+        const unsigned width = selector & 3u;
+        selector >>= 2;
+        switch (width) {
         case 0:
-            out[j] = 0;
+            out[j++] = 0;
             break;
         case 1: {
-            const std::uint8_t b = in.readByte();
-            out[j] = signExtend(b, 4);
-            if (j + 1 < 4) {
-                ++j;
-                selector = static_cast<std::uint8_t>(selector >> 2);
-                out[j] = signExtend(b >> 4, 4);
+            const unsigned b = in.readByte();
+            out[j++] = signExtend(b, 4);
+            if (j < 4) {
+                out[j++] = signExtend(b >> 4, 4);
+                selector >>= 2;
             }
             break;
         }
         case 2:
-            out[j] = signExtend(in.readByte(), 8);
+            out[j++] = signExtend(in.readByte(), 8);
             break;
         default:
-            out[j] = signExtend(littleEndian(in, 2), 16);
+            out[j++] = signExtend(littleEndian(in, 2), 16);
             break;
         }
     }
 }
 
-void FieldReader::readTag8_4S16v2(ByteReader& in, std::uint8_t selector, std::span<std::int64_t, 4> out) {
+void FieldReader::readTag8_4S16v2(ByteReader& in, unsigned selector, std::span<std::int64_t, 4> out) {
     // blackboxWriteTag8_4S16: values are packed in nibbles, high nibble first; a value that
     // starts in the middle of a byte continues in the next one.
     bool halfByte = false;  // the low nibble of `buffer` is still unread
-    std::uint8_t buffer = 0;
+    unsigned buffer = 0;
     const auto nibble = [&in, &halfByte, &buffer]() -> std::uint32_t {
         if (halfByte) {
             halfByte = false;
@@ -210,7 +212,7 @@ void FieldReader::readTag8_4S16v2(ByteReader& in, std::uint8_t selector, std::sp
         halfByte = true;
         return buffer >> 4;
     };
-    for (std::size_t j = 0; j < 4; ++j, selector = static_cast<std::uint8_t>(selector >> 2)) {
+    for (std::size_t j = 0; j < 4; ++j, selector >>= 2) {
         switch (selector & 3u) {
         case 0:
             out[j] = 0;
@@ -233,12 +235,17 @@ void FieldReader::readTag8_4S16v2(ByteReader& in, std::uint8_t selector, std::sp
     }
 }
 
-Predictors::Predictors(const LogHeader& header) {
-    // blackbox-tools and the firmware default: minthrottle 1150, vbatref 4095.
-    minThrottle_ = header.integer("minthrottle").value_or(1150);
-    vbatRef_ = header.integer("vbatref").value_or(4095);
+// blackbox-tools and the firmware default: minthrottle 1150, vbatref 4095.
+Predictors::Predictors(const LogHeader& header)
+    : minThrottle_(header.integer("minthrottle").value_or(1150)), vbatRef_(header.integer("vbatref").value_or(4095)) {
     const auto motorOutput = header.integers("motorOutput");
     minMotor_ = motorOutput.empty() ? minThrottle_ : motorOutput.front();
+}
+
+std::int64_t Predictors::average2(std::int64_t a, std::int64_t b) {
+    // The firmware's C division truncates toward zero; std::midpoint rounds toward `a` instead.
+    const std::int64_t sum = a + b;
+    return sum / 2;
 }
 
 std::optional<std::int64_t> Predictors::predict(const FrameDefinition& def, std::size_t i, const PredictionContext& ctx,
@@ -254,12 +261,12 @@ std::optional<std::int64_t> Predictors::predict(const FrameDefinition& def, std:
     case kPredStraightLine:
         return hasPrevious ? 2 * prev - prev2 : 0;
     case kPredAverage2:
-        return hasPrevious ? (prev + prev2) / 2 : 0;  // C division: truncates toward zero
+        return hasPrevious ? average2(prev, prev2) : 0;
     case kPredMinThrottle:
         return minThrottle_;
     case kPredMotor0: {
         const auto motor0 = def.indexOf("motor[0]");
-        return motor0 && *motor0 < i ? values[*motor0] : 0;
+        return motor0.has_value() && *motor0 < i ? values[*motor0] : 0;
     }
     case kPredIncrement:
         return prev + ctx.skippedIterations + 1;
@@ -282,7 +289,7 @@ std::optional<std::int64_t> Predictors::predict(const FrameDefinition& def, std:
 bool Predictors::apply(const FrameDefinition& def, const PredictionContext& ctx, std::vector<std::int64_t>& values) {
     for (std::size_t i = 0; i < def.size() && i < values.size(); ++i) {
         const auto prediction = predict(def, i, ctx, values);
-        if (!prediction) {
+        if (!prediction.has_value()) {
             unsupported_ = def.field(i).predictor;
             return false;
         }
