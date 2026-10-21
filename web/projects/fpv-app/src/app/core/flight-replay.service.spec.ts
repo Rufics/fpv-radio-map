@@ -112,6 +112,38 @@ describe('FlightReplay', () => {
     expect(replay.logbook()).toEqual([]);
   });
 
+  it('ignores answers for the mission before when another one opened meanwhile', async () => {
+    rows = [MockFlights.row({ ...flight, id: 'f1' })];
+    const switching = replay.setMode('replay');
+    missionId.set('m2');
+    TestBed.tick();
+    await switching;
+    expect(replay.logbook()).toEqual([]);
+    expect(replay.view()).toBeNull();
+    expect(replay.importOpen()).toBe(false);
+    expect(api.getFlightLog).not.toHaveBeenCalled();
+
+    missionId.set('m1');
+    TestBed.tick();
+    const opening = replay.open('f1');
+    missionId.set('m2');
+    await opening;
+    expect(replay.view()).toBeNull();
+
+    missionId.set('m1');
+    api.listFlightLogs.mockRejectedValueOnce(new Error('gone'));
+    const failing = replay.refresh();
+    missionId.set('m2');
+    await failing;
+    expect(replay.error()).toBeNull();
+
+    missionId.set('m1');
+    const removing = replay.remove('f1');
+    missionId.set('m2');
+    await removing;
+    expect(api.listFlightLogs).toHaveBeenCalledTimes(2);
+  });
+
   it('clears the flight on screen when it is deleted', async () => {
     replay.show({ ...flight, id: 'f1' });
     await replay.remove('f1');

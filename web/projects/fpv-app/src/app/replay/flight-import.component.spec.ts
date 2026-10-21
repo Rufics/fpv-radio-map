@@ -131,6 +131,25 @@ describe('FlightImportComponent', () => {
     expect(vm.busy()).toBe(false);
   });
 
+  it('leaves the screen alone when the dialog closed or the mission changed while saving', async () => {
+    vm.add([file('a.bbl')]);
+    await settled();
+    const saving = vm.replayChosen();
+    missionId.set('m2');
+    await saving;
+    expect(api.listFlightLogs).not.toHaveBeenCalled();
+    expect(replay.view()).toBeNull();
+    expect(replay.importOpen()).toBe(true);
+
+    missionId.set('m1');
+    api.importFlightLog.mockRejectedValueOnce(new Error('late'));
+    const failing = vm.replayChosen();
+    TestBed.resetTestingModule();
+    await failing;
+    expect(vm.error()).toBeNull();
+    expect(vm.busy()).toBe(false);
+  });
+
   it('shows the flight when the import gives no stored row, and says why an import failed', async () => {
     vm.add([file('a.bbl')]);
     await settled();

@@ -87,11 +87,13 @@ export class FlightReplay {
       this.pause();
       return;
     }
+    const mission = this.store.missionId();
+    // The user may switch the mode or the mission again while the logbook loads.
+    const stale = () => this.mode() !== mode || this.store.missionId() !== mission;
     await this.refresh();
-    // The user may have switched again while the logbook loaded.
-    if (this.mode() !== mode) return;
+    if (stale()) return;
     if (!this.view() && this.logbook().length > 0) await this.open(this.logbook()[0].id ?? '');
-    if (this.mode() !== mode) return;
+    if (stale()) return;
     if (!this.view() && this.logbook().length === 0) this.importOpen.set(true);
   }
 
@@ -99,9 +101,10 @@ export class FlightReplay {
     const id = this.store.missionId();
     if (!id) return;
     try {
-      this.logbook.set(await this.api.listFlightLogs(id));
+      const rows = await this.api.listFlightLogs(id);
+      if (this.current(id)) this.logbook.set(rows);
     } catch (e) {
-      this.error.set(ApiError.from(e).message);
+      this.fail(id, e);
     }
   }
 
@@ -110,9 +113,10 @@ export class FlightReplay {
     if (!id || !logId) return;
     this.busy.set(true);
     try {
-      this.show(await this.api.getFlightLog(id, logId));
+      const view = await this.api.getFlightLog(id, logId);
+      if (this.current(id)) this.show(view);
     } catch (e) {
-      this.error.set(ApiError.from(e).message);
+      this.fail(id, e);
     } finally {
       this.busy.set(false);
     }
@@ -134,11 +138,21 @@ export class FlightReplay {
     if (!id) return;
     try {
       await this.api.deleteFlightLog(id, logId);
+      if (!this.current(id)) return;
       if (this.view()?.id === logId) this.view.set(null);
       await this.refresh();
     } catch (e) {
-      this.error.set(ApiError.from(e).message);
+      this.fail(id, e);
     }
+  }
+
+  /** A response is applied only while the mission it was asked for is still open. */
+  private current(missionId: string): boolean {
+    return this.store.missionId() === missionId;
+  }
+
+  private fail(missionId: string, e: unknown): void {
+    if (this.current(missionId)) this.error.set(ApiError.from(e).message);
   }
 
   seek(t: number): void {

@@ -1,4 +1,4 @@
-import { Component, ElementRef, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, afterNextRender, computed, inject, signal, viewChild } from '@angular/core';
 import { ApiError, FlightLogPreview, FlightView, MissionStore, ReplayFormat, RfmapApiClient } from '@rfmap/ui-kit';
 import { FlightReplay } from '../core/flight-replay.service';
 import { ReplayVm } from './replay-vm';
@@ -111,6 +111,7 @@ export class FlightImportComponent {
   protected readonly store = inject(MissionStore);
   private readonly api = inject(RfmapApiClient);
   private readonly dialog = viewChild<ElementRef<HTMLElement>>('dialog');
+  private destroyed = false;
 
   protected readonly files = signal<PickedFile[]>([]);
   protected readonly choice = signal<Choice | null>(null);
@@ -126,6 +127,7 @@ export class FlightImportComponent {
 
   constructor() {
     afterNextRender(() => this.dialog()?.nativeElement.focus());
+    inject(DestroyRef).onDestroy(() => (this.destroyed = true));
   }
 
   protected close(): void {
@@ -225,15 +227,20 @@ export class FlightImportComponent {
     }
     this.busy.set(true);
     this.error.set(null);
+    const mission = this.store.missionId();
+    // The dialog may close, or another mission open, while the files are saved.
+    const gone = () => this.destroyed || this.store.missionId() !== mission;
     try {
       const keep = await this.keepAll(c.file);
+      if (gone()) return;
       await this.replay.refresh();
+      if (gone()) return;
       const row = keep?.flights.find((r) => r.index === view.index);
       if (row?.id) await this.replay.open(row.id);
       else this.replay.show(view);
       this.close();
     } catch (e) {
-      this.error.set(ApiError.from(e).message);
+      if (!gone()) this.error.set(ApiError.from(e).message);
     } finally {
       this.busy.set(false);
     }
