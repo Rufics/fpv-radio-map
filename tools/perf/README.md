@@ -1,8 +1,47 @@
 # Performance tools
 
 Tooling for the load and performance tests of the C++ code (core, platform, FPV modules and the
-server). Only the terrain dataset builder exists so far; the orchestrator, benchmarks and k6
-scenarios follow.
+server). So far there are the terrain dataset builder and the catalog of descriptions and
+extensions; the runs, benchmarks, k6 scenarios and reports follow. Nothing here runs in CI yet.
+
+## Catalog (`perf.py`)
+
+Everything a perf run uses is an item of the catalog: a folder with a `manifest.json`. New
+personas, scenarios or collectors are new folders; the core code does not change.
+
+| kind | folder | group | what it is |
+|---|---|---|---|
+| `fixture` | `fixtures/<id>/` | description | shared request data: points, request bodies, link set-ups |
+| `persona` | `personas/<id>/` | description | one kind of user: sign-in, steps, pauses |
+| `scenario` | `scenarios/<id>/` | description | which personas, how much load, how long, thresholds |
+| `collector` | `extensions/collectors/<id>/` | extension | Python code that reads metrics from one tool |
+| `reporter` | `extensions/reporters/<id>/` | extension | Python code that turns results into a report |
+| `benchmark` | `extensions/benchmarks/<id>/` | extension | Google Benchmark sources for one C++ component |
+
+Descriptions are JSON only; extensions also carry code. Each kind is defined by
+`schemas/<kind>.schema.json`: its `x-perfkit` block says where items live, which fields refer to
+other items (`"fixtures": ["warsaw-points"]`, `"body": "link-setups:control.json"`) and which name
+files that must exist (`"entry": "collector.py:K6SummaryCollector"`). A new kind is a new schema.
+The id of an item must equal its folder name.
+
+```bash
+python3 -I tools/perf/perf.py list [--kind persona]
+python3 -I tools/perf/perf.py catalog check
+python3 -I tools/perf/perf.py catalog lock
+```
+
+`--catalog-dir DIR` (before the command) reads another catalog folder; the default is
+`tools/perf`.
+
+`catalog check` validates every manifest against its schema, checks that referenced items and
+files exist, and compares the catalog with `catalog.lock.json`. The lock file holds the version
+and a SHA-256 of the content of every item, so an item cannot change without a new version:
+results are only compared between runs with the same major versions. After a change, raise
+`version` in the manifest (major: results no longer comparable, minor: comparable but the load
+changed a little, patch: the numbers do not change) and run `catalog lock`. It refuses while an
+item changed without a higher version.
+
+Exit codes: 0 on success, 1 when the catalog has problems, 2 on a usage error.
 
 ## Terrain dataset (`dataset.py`)
 
@@ -57,4 +96,4 @@ Notes:
 
 Exit codes: 0 on success, 1 when the build or the check fails, 2 on a usage error.
 
-Tests: `python3 -I -m unittest discover -s tools/perf -p '*_test.py'`.
+Tests of both tools: `python3 -I -m unittest discover -s tools/perf -p '*_test.py'`.

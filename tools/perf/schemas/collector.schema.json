@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "collector.schema.json",
+  "title": "Collector: Python code that reads metrics from one tool",
+  "x-perfkit": {
+    "folder": "extensions/collectors",
+    "group": "extension",
+    "files": [{ "path": "entry", "before": ":" }]
+  },
+  "type": "object",
+  "required": ["kind", "id", "version", "entry"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "collector" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/version" },
+    "description": { "$ref": "common.schema.json#/$defs/description" },
+    "entry": { "$ref": "common.schema.json#/$defs/entry" },
+    "options": { "type": "object" },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "unit", "better"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+          "unit": { "type": "string", "minLength": 1 },
+          "better": { "enum": ["lower", "higher"] },
+          "failAbove": { "type": "number" }
+        }
+      }
+    }
+  }
+}

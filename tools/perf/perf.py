@@ -1,0 +1,25 @@
+#!/usr/bin/env python3
+"""Command line of the perf toolchain.
+
+    python3 -I tools/perf/perf.py [--catalog-dir DIR] list [--kind KIND]
+    python3 -I tools/perf/perf.py [--catalog-dir DIR] catalog check
+    python3 -I tools/perf/perf.py [--catalog-dir DIR] catalog lock
+
+The catalog is one folder (default: tools/perf) with fixtures/, personas/, scenarios/ and
+extensions/{collectors,reporters,benchmarks}/, one subfolder with a manifest.json per item.
+`list` shows what was found. `catalog check` validates every manifest against its schema, checks
+that referenced items and files exist, and that catalog.lock.json matches the catalog, so no item
+changed without a new version. `catalog lock` rewrites catalog.lock.json after versions were
+raised.
+
+The exit code is 0 on success, 1 when the catalog has problems, 2 on a usage error.
+"""
+import sys
+from pathlib import Path
+
+if __name__ == "__main__":
+    # Run with -I, Python does not put this folder on sys.path; perfkit lives next to this file.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from perfkit.cli import PerfCli
+
+    sys.exit(PerfCli().main())

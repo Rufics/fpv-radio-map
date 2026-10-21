@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchmark.schema.json",
+  "title": "Benchmark: a Google Benchmark binary for one C++ component",
+  "x-perfkit": {
+    "folder": "extensions/benchmarks",
+    "group": "extension",
+    "requiredFiles": ["CMakeLists.txt"]
+  },
+  "type": "object",
+  "required": ["kind", "id", "version", "target", "links"],
+  "additionalProperties": false,
+  "properties": {
+    "kind": { "const": "benchmark" },
+    "id": { "$ref": "common.schema.json#/$defs/id" },
+    "version": { "$ref": "common.schema.json#/$defs/version" },
+    "description": { "$ref": "common.schema.json#/$defs/description" },
+    "target": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "links": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "repetitions": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "needsDataset": { "type": "boolean" },
+    "compare": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "metric": { "enum": ["real_time", "cpu_time"] },
+        "stat": { "enum": ["median", "mean", "min"] },
+        "maxRegressionPct": { "$ref": "common.schema.json#/$defs/percent" }
+      }
+    }
+  }
+}
