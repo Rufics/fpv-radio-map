@@ -24,38 +24,40 @@ ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "modules" / "fpv" / "blackbox" / "src" / "mode_tables.inc"
 SOURCE_URL = "https://raw.githubusercontent.com/betaflight/betaflight/{ref}/src/main/{path}"
 
+RC_MODES = "fc/rc_modes.h"
+
 # (first firmware version the table applies to, git ref, file holding boxId_e at that ref).
 # 3.1 kept the enum in rc_controls.h. "master" is pinned to a commit.
 RELEASES = [
     ("3.1.0", "v3.1.0", "fc/rc_controls.h"),
-    ("3.2.0", "v3.2.0", "fc/rc_modes.h"),
-    ("3.3.0", "v3.3.0", "fc/rc_modes.h"),
-    ("3.4.0", "3.4.0", "fc/rc_modes.h"),
-    ("3.5.0", "3.5.0", "fc/rc_modes.h"),
-    ("4.0.0", "4.0.0", "fc/rc_modes.h"),
-    ("4.1.0", "4.1.0", "fc/rc_modes.h"),
-    ("4.2.0", "4.2.0", "fc/rc_modes.h"),
-    ("4.3.0", "4.3.0", "fc/rc_modes.h"),
-    ("4.4.0", "4.4.0", "fc/rc_modes.h"),
-    ("4.5.0", "4.5.0", "fc/rc_modes.h"),
-    ("2025.12.0", "2025.12.2", "fc/rc_modes.h"),
-    ("2026.12.0", "c1a17eca71b6cefe5224eb4c3d3aab587cf1b802", "fc/rc_modes.h"),
+    ("3.2.0", "v3.2.0", RC_MODES),
+    ("3.3.0", "v3.3.0", RC_MODES),
+    ("3.4.0", "3.4.0", RC_MODES),
+    ("3.5.0", "3.5.0", RC_MODES),
+    ("4.0.0", "4.0.0", RC_MODES),
+    ("4.1.0", "4.1.0", RC_MODES),
+    ("4.2.0", "4.2.0", RC_MODES),
+    ("4.3.0", "4.3.0", RC_MODES),
+    ("4.4.0", "4.4.0", RC_MODES),
+    ("4.5.0", "4.5.0", RC_MODES),
+    ("2025.12.0", "2025.12.2", RC_MODES),
+    ("2026.12.0", "c1a17eca71b6cefe5224eb4c3d3aab587cf1b802", RC_MODES),
 ]
 
 
 class BoxEnumParser:
     """Reads the boxId_e names, in value order, from the text of a Betaflight header."""
 
-    _ENUM = re.compile(r"typedef\s+enum\s*\{(?P<body>[^}]*BOXARM[^}]*)\}\s*boxId_e\s*;", re.S)
-    _ENTRY = re.compile(r"^\s*(?P<name>[A-Z][A-Z0-9_]*)\s*(?:=\s*(?P<value>[A-Za-z0-9_]+))?\s*$")
+    _ENUM = re.compile(r"typedef\s+enum\s*\{(?P<body>[^}]*)\}\s*boxId_e\s*;")
+    _ENTRY = re.compile(r"(?P<name>[A-Z][A-Z0-9_]*)(?:\s*=\s*(?P<value>\w+))?")
 
     def parse(self, text):
         match = self._ENUM.search(text)
-        if not match:
+        if not match or "BOXARM" not in match.group("body"):
             raise ValueError("no boxId_e enum in the header")
         names = []
         for entry in self._entries(match.group("body")):
-            parsed = self._ENTRY.match(entry)
+            parsed = self._ENTRY.fullmatch(entry)
             if not parsed:
                 raise ValueError(f"unexpected boxId_e entry: {entry!r}")
             value = parsed.group("value")
@@ -147,23 +149,23 @@ class ModeTableGenerator:
 class CommandLine:
     """Parses the arguments and runs the generator."""
 
+    def __init__(self, output=OUTPUT):
+        self._output = Path(output)
+
     def run(self, argv):
         parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
         parser.add_argument("--source", help="folder with rc_modes-<ref>.h files instead of the network")
         parser.add_argument("--check", action="store_true", help="only compare with the committed file")
-        try:
-            args = parser.parse_args(argv)
-        except SystemExit as exit_request:
-            return 0 if exit_request.code == 0 else 2
+        args = parser.parse_args(argv)
         text = ModeTableGenerator(SourceFetcher(args.source)).generate()
         if args.check:
-            current = OUTPUT.read_text(encoding="utf-8") if OUTPUT.exists() else ""
+            current = self._output.read_text(encoding="utf-8") if self._output.exists() else ""
             if current != text:
-                print(f"{OUTPUT.relative_to(ROOT)} is stale: run tools/blackbox/mode_tables.py", file=sys.stderr)
+                print(f"{self._output.name} is stale: run tools/blackbox/mode_tables.py", file=sys.stderr)
                 return 1
             return 0
-        OUTPUT.write_text(text, encoding="utf-8")
-        print(f"wrote {OUTPUT.relative_to(ROOT)} ({len(RELEASES)} releases)")
+        self._output.write_text(text, encoding="utf-8")
+        print(f"wrote {self._output.name} ({len(RELEASES)} releases)")
         return 0
 
 

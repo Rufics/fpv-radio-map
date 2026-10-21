@@ -1,10 +1,13 @@
 """Tests of the mode table generator: python3 -I -m unittest discover -s tools/blackbox -p '*_test.py'"""
+import contextlib
+import io
 import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from mode_tables import OUTPUT, RELEASES, BoxEnumParser, ModeTableGenerator, ModeTableWriter, SourceFetcher
+from mode_tables import OUTPUT, RELEASES, BoxEnumParser, CommandLine, ModeTableGenerator, ModeTableWriter, SourceFetcher
 
 HEADER = """
 #pragma once
@@ -44,16 +47,24 @@ class BoxEnumParserTest(unittest.TestCase):
         self.assertEqual(BoxEnumParser().parse(HEADER), ["BOXARM", "BOXANGLE", "BOXHORIZON", "BOXMAG", "BOXALTHOLD", "BOXFAILSAFE"])
 
     def test_refuses_a_header_without_the_enum(self):
+        parser = BoxEnumParser()
         with self.assertRaisesRegex(ValueError, "no boxId_e"):
-            BoxEnumParser().parse("typedef enum { A, B } other_e;")
+            parser.parse("typedef enum { A, B } other_e;")
+
+    def test_refuses_an_enum_without_the_arm_box(self):
+        parser = BoxEnumParser()
+        with self.assertRaisesRegex(ValueError, "no boxId_e"):
+            parser.parse("typedef enum { BOXANGLE } boxId_e;")
 
     def test_refuses_an_explicit_value_that_leaves_a_hole(self):
+        parser = BoxEnumParser()
         with self.assertRaisesRegex(ValueError, "leaves a hole"):
-            BoxEnumParser().parse("typedef enum { BOXARM = 0, BOXANGLE = 5 } boxId_e;")
+            parser.parse("typedef enum { BOXARM = 0, BOXANGLE = 5 } boxId_e;")
 
     def test_refuses_an_entry_it_cannot_read(self):
+        parser = BoxEnumParser()
         with self.assertRaisesRegex(ValueError, "unexpected boxId_e entry"):
-            BoxEnumParser().parse("typedef enum { BOXARM, BOXANGLE = 1 << 2 } boxId_e;")
+            parser.parse("typedef enum { BOXARM, BOXANGLE = 1 << 2 } boxId_e;")
 
 
 class ModeTableWriterTest(unittest.TestCase):
@@ -77,13 +88,52 @@ class ModeTableGeneratorTest(unittest.TestCase):
         self.assertEqual(text.count('"ALTHOLD"'), len(RELEASES))
 
     def test_names_the_release_whose_header_it_cannot_read(self):
+        generator = ModeTableGenerator(FakeFetcher("nothing here"))
         with self.assertRaisesRegex(ValueError, re.escape(f"{RELEASES[0][1]}/{RELEASES[0][2]}")):
-            ModeTableGenerator(FakeFetcher("nothing here")).generate()
+            generator.generate()
 
     def test_reads_local_headers_by_ref(self):
         with tempfile.TemporaryDirectory() as folder:
             Path(folder, "rc_modes-4.5.0.h").write_text(HEADER, encoding="utf-8")
             self.assertEqual(SourceFetcher(folder).read("4.5.0", "fc/rc_modes.h"), HEADER)
+
+
+class SourceFetcherTest(unittest.TestCase):
+    def test_reads_a_pinned_release_from_github(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = HEADER.encode("utf-8")
+        with mock.patch("mode_tables.urllib.request.urlopen", return_value=response) as urlopen:
+            self.assertEqual(SourceFetcher().read("4.5.0", "fc/rc_modes.h"), HEADER)
+        url = urlopen.call_args.args[0]
+        self.assertEqual(url, "https://raw.githubusercontent.com/betaflight/betaflight/4.5.0/src/main/fc/rc_modes.h")
+
+
+class CommandLineTest(unittest.TestCase):
+    def setUp(self):
+        self._folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self._folder.cleanup)
+        self.source = Path(self._folder.name, "headers")
+        self.source.mkdir()
+        for _, ref, _ in RELEASES:
+            (self.source / f"rc_modes-{ref}.h").write_text(HEADER, encoding="utf-8")
+        self.output = Path(self._folder.name, "mode_tables.inc")
+
+    def run_quietly(self, argv):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            code = CommandLine(self.output).run(argv)
+        return code, err.getvalue()
+
+    def test_writes_the_table_then_finds_it_current(self):
+        self.assertEqual(self.run_quietly(["--source", str(self.source)])[0], 0)
+        self.assertIn('"ALTHOLD"', self.output.read_text(encoding="utf-8"))
+        self.assertEqual(self.run_quietly(["--source", str(self.source), "--check"])[0], 0)
+
+    def test_check_reports_a_stale_or_missing_table(self):
+        code, err = self.run_quietly(["--source", str(self.source), "--check"])
+        self.assertEqual(code, 1)
+        self.assertIn("is stale", err)
+        self.output.write_text("old", encoding="utf-8")
+        self.assertEqual(self.run_quietly(["--source", str(self.source), "--check"])[0], 1)
 
 
 class CommittedTableTest(unittest.TestCase):
