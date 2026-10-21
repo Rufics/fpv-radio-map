@@ -39,6 +39,8 @@ class CommandRunner:
             raise PerfError(f"{args[0]} is not installed") from error
         except subprocess.TimeoutExpired as error:
             raise PerfError(f"{Path(args[0]).name} did not finish in {timeout:g} s") from error
+        except OSError as error:
+            raise PerfError(f"{Path(args[0]).name} could not be started: {error}") from error
         if done.returncode not in allowed:
             raise PerfError(f"{Path(args[0]).name} failed with exit code {done.returncode}")
         return done.returncode
@@ -53,6 +55,8 @@ class CommandRunner:
             raise PerfError(f"{args[0]} is not installed") from error
         except subprocess.TimeoutExpired as error:
             raise PerfError(f"{Path(args[0]).name} did not finish in {timeout:g} s") from error
+        except OSError as error:
+            raise PerfError(f"{Path(args[0]).name} could not be started: {error}") from error
         except subprocess.CalledProcessError as error:
             raise PerfError(f"{Path(args[0]).name} failed with exit code {error.returncode}: "
                             f"{error.stderr.strip()[-500:]}") from error

@@ -34,6 +34,16 @@ class CommandRunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(PerfError, "is not installed"):
             self.runner.capture(["/nonexistent/tool"])
 
+    def test_a_command_that_cannot_start(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = Path(tmp) / "tool"
+            tool.write_text("not a program", encoding="utf-8")
+            tool.chmod(0o644)
+            with self.assertRaisesRegex(PerfError, "tool could not be started"):
+                self.runner.run([str(tool)])
+            with self.assertRaisesRegex(PerfError, "tool could not be started"):
+                self.runner.capture([str(tool)])
+
     def test_a_hung_command_ends(self):
         sleeping = [sys.executable, "-c", "import time; time.sleep(30)"]
         with self.assertRaisesRegex(PerfError, "did not finish in 0.2 s"):
