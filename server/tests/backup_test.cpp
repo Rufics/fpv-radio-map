@@ -103,6 +103,13 @@ protected:
         return dir;
     }
 
+    static std::size_t filesUnder(const fs::path& dir) {
+        if (!fs::exists(dir)) return 0;
+        std::size_t n = 0;
+        for (const auto& e : fs::recursive_directory_iterator(dir)) n += e.is_regular_file() ? 1 : 0;
+        return n;
+    }
+
     std::string baseUrl_;
     fs::path dir_;
 };
@@ -136,6 +143,7 @@ TEST_F(BackupTest, RestoresEveryRowAndFileExactly) {
     const BackupFiles target = files("target");
     EXPECT_EQ(readFile(target.modulesRoot / "fpv.osd" / "lib" / "osd.so"), std::string("\0\x01\x02 lib", 8));
     EXPECT_EQ(readFile(target.trustStore), R"({"keys": []})");
+    EXPECT_EQ(filesUnder(dir_ / "target"), 2u) << "no staged file is left next to the restored ones";
     // And the restored database backs up to the same rows again.
     const std::string again = backup(to, target);
     EXPECT_EQ(again.substr(again.find('\n')), text.substr(text.find('\n')));
@@ -178,6 +186,7 @@ TEST_F(BackupTest, ATruncatedBackupRestoresNothing) {
     const std::string to = freshDatabase("rfmap_backup_target");
     EXPECT_THROW((void)restore(to, cut), BackupError);
     EXPECT_EQ(query(to, "select to_regclass('public.missions')::text"), "<null>");
+    EXPECT_EQ(filesUnder(dir_ / "target"), 0u) << "the files it had read are not left behind";
 }
 
 TEST_F(BackupTest, RefusesFilesOutsideTheModuleRoot) {

@@ -22,6 +22,34 @@ namespace fs = std::filesystem;
 constexpr std::string_view kFormat = "rfmap-backup";
 constexpr std::string_view kModulesPrefix = "modules/";
 constexpr std::string_view kTrustStoreName = "trust-store";
+/// Restored files are written next to their place under this suffix until the database commits.
+constexpr std::string_view kStagedSuffix = ".rfmap-restoring";
+
+/// The files of a restore that wait for its commit: installed together after it, removed when it fails.
+class StagedFiles {
+public:
+    StagedFiles() = default;
+    StagedFiles(const StagedFiles&) = delete;
+    StagedFiles& operator=(const StagedFiles&) = delete;
+    ~StagedFiles() {
+        std::error_code ignored;
+        for (const auto& file : staged_) fs::remove(file, ignored);
+    }
+
+    void add(fs::path staged) { staged_.push_back(std::move(staged)); }
+
+    /// Moves every file to its place; each move replaces the old file in one step.
+    void install() {
+        for (const auto& file : staged_) {
+            const std::string name = file.string();
+            fs::rename(file, name.substr(0, name.size() - kStagedSuffix.size()));
+        }
+        staged_.clear();
+    }
+
+private:
+    std::vector<fs::path> staged_;
+};
 template <class V>
 using ByName = std::map<std::string, V, std::less<>>;
 using NameSet = std::set<std::string, std::less<>>;
@@ -91,7 +119,7 @@ std::string base64(std::string_view bytes) {
     return out;
 }
 
-std::string unbase64(const std::string& text, std::string_view what) {
+std::string unbase64(std::string_view text, std::string_view what) {
     std::string out(text.size() / 4 * 3 + 3, '\0');
     std::size_t length = 0;
     if (sodium_base642bin(reinterpret_cast<unsigned char*>(out.data()), out.size(), text.data(), text.size(), nullptr,
@@ -256,13 +284,14 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
     w.exec("set constraints all deferred");
 
     BackupSummary summary;
+    StagedFiles staged;
     json entry = nextLine(in, "the end");
     for (; !entry.contains("end"); entry = nextLine(in, "the end")) {
         if (entry.contains("table")) {
             summary.rows += readRows(w, entry, in);
             ++summary.tables;
         } else if (entry.contains("file")) {
-            readFile(entry);
+            staged.add(readFile(entry));
             ++summary.files;
         } else {
             throw BackupError("the backup holds a line this server does not know: " + entry.dump().substr(0, 80));
@@ -273,6 +302,7 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
     summary.newerMigrations = migrations_.apply(w, done);
     for (const auto& m : summary.newerMigrations) log_ << "rfmap-server: restore: applied migration " << m << '\n';
     w.commit();
+    staged.install();
     return summary;
 }
 
@@ -323,14 +353,14 @@ std::size_t BackupRestorer::readRows(pqxx::work& w, const json& table, std::istr
     return rows;
 }
 
-void BackupRestorer::readFile(const json& entry) const {
+fs::path BackupRestorer::readFile(const json& entry) const {
     const auto name = entry.at("file").get<std::string>();
     const std::string bytes = unbase64(entry.at("data").get<std::string>(), name);
     if (bytes.size() != entry.at("size").get<std::size_t>() ||
         Secrets::hex(Secrets::sha256(bytes)) != entry.at("sha256").get<std::string>()) {
         throw BackupError(name + " does not match its checksum");
     }
-    const fs::path file = target(name);
+    const fs::path file = target(name).string() + std::string(kStagedSuffix);
     fs::create_directories(file.parent_path());
     {
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
@@ -338,6 +368,7 @@ void BackupRestorer::readFile(const json& entry) const {
         if (!out.flush()) throw BackupError("cannot write " + file.string());
     }
     fs::permissions(file, static_cast<fs::perms>(entry.at("mode").get<unsigned>()) & fs::perms::mask);
+    return file;
 }
 
 fs::path BackupRestorer::target(const std::string& name) const {

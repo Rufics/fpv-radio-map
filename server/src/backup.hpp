@@ -28,7 +28,8 @@
 
 namespace rfmap {
 
-/// A backup that cannot be written or restored. Nothing is committed when a restore throws it.
+/// A backup that cannot be written or restored. A restore that throws it commits nothing and
+/// leaves no files behind.
 class BackupError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
@@ -94,7 +95,9 @@ private:
     /// Refuses a backup whose end line counts other tables, rows or files than it holds.
     static void checkTotals(const json& end, const BackupSummary& summary);
     static std::size_t readRows(pqxx::work& w, const json& table, std::istream& in);
-    void readFile(const json& entry) const;
+    /// Writes a file of the backup next to its place; returns the staged file, which the restore
+    /// moves into place once the database has committed.
+    [[nodiscard]] std::filesystem::path readFile(const json& entry) const;
     [[nodiscard]] std::filesystem::path target(const std::string& name) const;
 
     pqxx::connection& connection_;

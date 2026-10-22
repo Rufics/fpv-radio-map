@@ -585,9 +585,9 @@ A restore builds the schema with the server's own migrations, loads the rows, pu
 files back, then applies the migrations that came after the backup, all in one transaction. A
 backup therefore restores into the same or a newer server, on any PostgreSQL version, and the
 migrations adapt the data to the new version. It restores only into a database that has no
-schema yet. If it stops, nothing is committed to the database, which stays empty: fix the cause
-and run it again. Module files and the trust store (`keys.json`) it wrote before it stopped stay
-on disk, and the next run overwrites them.
+schema yet. If it stops, nothing is committed to the database, which stays empty, and no module
+file or trust store (`keys.json`) is changed: fix the cause and run it again. The files go into
+place only after the database has committed, each replacing the file of the same name.
 
 1. **On the old server**, stop the server so nothing changes after the snapshot, and back up:
 
