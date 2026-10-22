@@ -264,6 +264,17 @@ TEST_F(BackupTest, RefusesFilesOutsideTheModuleRoot) {
     EXPECT_FALSE(fs::exists(dir_ / "escape"));
 }
 
+TEST_F(BackupTest, RefusesAModuleFolderThatLinksOutOfTheRoot) {
+    const std::string text = backup(source(), files("source"));
+    const ServerFiles target = files("target");
+    fs::create_directories(target.modulesRoot);
+    fs::create_directories(dir_ / "outside");
+    fs::create_directory_symlink(dir_ / "outside", target.modulesRoot / "fpv.osd");
+    const std::string to = freshDatabase("rfmap_backup_target");
+    EXPECT_THROW((void)restore(to, text), BackupError);
+    EXPECT_TRUE(fs::is_empty(dir_ / "outside"));
+}
+
 TEST_F(BackupTest, CommandLineBacksUpAndRestores) {
     const std::string from = source();
     const ServerFiles f = files("source");
@@ -607,4 +618,6 @@ TEST_F(BackupTest, StagedReadTellsAMissingFileFromAnUnreadableOne) {
     const StagedFiles staged;
     EXPECT_EQ(staged.read(dir_ / "missing"), std::nullopt);
     EXPECT_THROW((void)staged.read(dir_), fs::filesystem_error) << "a directory cannot be read as a file";
+    fs::create_symlink(dir_ / "gone", dir_ / "dangling");
+    EXPECT_THROW((void)staged.read(dir_ / "dangling"), fs::filesystem_error) << "a dangling link is not a missing file";
 }

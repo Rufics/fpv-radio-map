@@ -43,7 +43,8 @@ void StagedFiles::write(const fs::path& target, std::string_view bytes, fs::perm
 std::optional<std::string> StagedFiles::read(const fs::path& target) const {
     const fs::path staged = stagedPath(target);
     const fs::path& file = std::ranges::find(staged_, staged) != staged_.end() ? staged : target;
-    if (!fs::exists(file)) return std::nullopt;
+    // A dangling symbolic link exists but cannot be read: an error, not a missing file.
+    if (fs::symlink_status(file).type() == fs::file_type::not_found) return std::nullopt;
     // file_size throws for what is not a regular file; a short read is an error, not an empty file.
     std::string bytes(fs::file_size(file), '\0');
     std::ifstream in(file, std::ios::binary);

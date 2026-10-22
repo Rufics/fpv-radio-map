@@ -364,6 +364,12 @@ fs::path BackupRestorer::target(const std::string& name) const {
     if (name == kTrustStoreName) return files_.trustStore;
     const fs::path relative = name.starts_with(kModulesPrefix) ? fs::path(name.substr(kModulesPrefix.size())) : fs::path();
     if (!staysInside(relative)) throw BackupError("the backup names a file outside the module root: " + name);
+    // A folder already under the root may be a symbolic link that leads out of it.
+    const fs::path root = fs::weakly_canonical(files_.modulesRoot);
+    const fs::path folder = fs::weakly_canonical((files_.modulesRoot / relative).parent_path());
+    if (folder != root && !staysInside(folder.lexically_relative(root))) {
+        throw BackupError("the backup's file " + name + " would land outside the module root, through " + folder.string());
+    }
     return files_.modulesRoot / relative;
 }
 
