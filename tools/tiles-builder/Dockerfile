@@ -20,7 +20,7 @@
 FROM ubuntu:26.04
 
 ARG UBUNTU_SNAPSHOT=20261015T000000Z
-ARG CA_CERTIFICATES_VERSION=20260816ubuntu0.26.04.1
+ARG CA_CERTIFICATES_VERSION=20260601~26.04.1
 ARG GDAL_VERSION=3.12.2+dfsg-1build2
 ARG OPENJDK_VERSION=21.0.12.1+1-1~26.04.4
 ARG CURL_VERSION=8.18.0-1ubuntu2.8
@@ -41,19 +41,21 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# 1) CA certificates (needed to reach the https snapshot archive), then
-# 2) everything else at exact versions from the dated snapshot, then
+# 1) CA certificates from the live archive, unpinned, only to reach the https snapshot archive, then
+# 2) everything at exact versions from the dated snapshot, ca-certificates included (this can be a
+#    downgrade of the bootstrap copy, hence --allow-downgrades), then
 # 3) Planetiler (OpenMapTiles profile is built in) and go-pmtiles, verified by sha256, and the
 #    glyph fonts at a pinned commit. One layer, so the optional extra CA is mounted once.
 RUN --mount=type=secret,id=extra_ca,required=false \
     set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends "ca-certificates=${CA_CERTIFICATES_VERSION}"; \
+    apt-get install -y --no-install-recommends ca-certificates; \
     if [ -s /run/secrets/extra_ca ]; then \
       cp /run/secrets/extra_ca /usr/local/share/ca-certificates/build-extra-ca.crt; update-ca-certificates; \
     fi; \
     apt-get update --snapshot "${UBUNTU_SNAPSHOT}"; \
-    apt-get install -y --no-install-recommends --snapshot "${UBUNTU_SNAPSHOT}" \
+    apt-get install -y --no-install-recommends --allow-downgrades --snapshot "${UBUNTU_SNAPSHOT}" \
+      "ca-certificates=${CA_CERTIFICATES_VERSION}" \
       "curl=${CURL_VERSION}" \
       "gdal-bin=${GDAL_VERSION}" \
       "git=${GIT_VERSION}" \
