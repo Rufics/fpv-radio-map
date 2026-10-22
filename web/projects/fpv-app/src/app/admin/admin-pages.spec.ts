@@ -9,8 +9,8 @@ import { SourcesPage } from './sources.page';
 interface ModulesVm {
   modules(): ModuleInfo[];
   error(): string | null;
-  checkClass(c: { ok?: boolean; detail?: string }): string;
-  checkMark(c: { ok?: boolean; detail?: string }): string;
+  reloadedAt(): number;
+  reload(): Promise<void>;
 }
 
 interface SourcesVm {
@@ -48,11 +48,16 @@ describe('admin pages', () => {
     expect(p.modules().some((m) => m.id === 'fpv.core')).toBe(true);
   });
 
-  it('modules: marks validation checks as passed, warning or failed', () => {
+  it('modules: reload needs the admin token and then refreshes the listing', async () => {
     const p = page<ModulesVm>(ModulesPage);
-    expect([p.checkClass({ ok: true }), p.checkMark({ ok: true })]).toEqual(['ok', '✓']);
-    expect([p.checkClass({ ok: true, detail: 'Warning: unsigned' }), p.checkMark({ ok: true, detail: 'warning: old' })]).toEqual(['warn', '!']);
-    expect([p.checkClass({ ok: false, detail: 'Warning: x' }), p.checkMark({ ok: false })]).toEqual(['bad', '✕']);
+    await MockApiHarness.settle(p.reload());
+    expect(p.error()).toContain('admin token');
+    expect(p.reloadedAt()).toBe(0);
+    creds.setAdminToken('admin-token');
+    await MockApiHarness.settle(p.reload());
+    expect(p.error()).toBeNull();
+    expect(p.reloadedAt()).toBeGreaterThan(0);
+    expect(p.modules().some((m) => m.id === 'fpv.core')).toBe(true);
   });
 
   it('sources: asks for the admin token before it shows cache limits', async () => {

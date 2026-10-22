@@ -7,9 +7,14 @@
 #include <rfcore/link_budget.hpp>
 #include <rfext/refractivity.hpp>
 
-#include <map>
+#include "lru.hpp"
+
+#include <condition_variable>
+#include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -74,10 +79,37 @@ public:
     [[nodiscard]] bool configured() const { return source_ != nullptr; }
 
 private:
-    struct Cached {
-        json response;
-        TimePoint fetched;
+    /// Fetched responses by place and model set. Places are quantised to kGridDeg, so a client
+    /// probing with ever-changing coordinates cannot fill the cache with distinct keys, the
+    /// size is bounded by kMaxEntries with the least recently used dropped first, and one place
+    /// is fetched once even when several requests miss at the same time.
+    class ForecastCache {
+    public:
+        using Fetch = std::function<json()>;
+        explicit ForecastCache(std::chrono::minutes ttl);
+
+        /// The cached response, or the one `fetch` returns, which is then cached.
+        json get(double lat, double lon, const std::string& models, TimePoint now, const Fetch& fetch);
+
+        static constexpr double kGridDeg = 0.01;  ///< about 1 km, below any forecast model's cell
+        static constexpr std::size_t kMaxEntries = 5000;
+        [[nodiscard]] static std::string key(double lat, double lon, const std::string& models);
+
+    private:
+        struct Entry {
+            json response;
+            TimePoint fetched;
+        };
+        /// Waits for a fetch of `key` by another thread, then looks the key up again.
+        [[nodiscard]] std::optional<json> lookup(const std::string& key, TimePoint now, std::unique_lock<std::mutex>& lock);
+
+        std::chrono::minutes ttl_;
+        std::mutex mutex_;
+        std::condition_variable fetched_;
+        std::set<std::string, std::less<>> inFlight_;
+        LruCache<std::string, Entry> entries_;
     };
+
     json fetchCached(double lat, double lon, const Config::WeatherTier& tier);
     /// fetchCached, or nothing with `error` set when the tier's service fails.
     std::optional<json> fetchOrError(double lat, double lon, const Config::WeatherTier& tier, std::string& error);
@@ -99,7 +131,7 @@ private:
     IForecastSource* source_;
     const IClock& clock_;
     std::mutex mutex_;
-    std::map<std::string, Cached, std::less<>> cache_;
+    ForecastCache cache_;
     std::optional<std::pair<TimePoint, std::optional<TimePoint>>> run_;
 };
 

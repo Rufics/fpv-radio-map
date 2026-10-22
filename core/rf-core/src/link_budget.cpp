@@ -42,12 +42,9 @@ LinkResult LinkEvaluator::evaluate(const TerrainProfile& profile, Hertz frequenc
 
     const PathContext context{profile, geometry, diff, frequency};
     for (const auto& c : contributors_) {
-        for (BudgetTerm& term : c->contribute(context)) {
-            out.terms.push_back(std::move(term));
-        }
-        for (UncertaintyNote& note : c->notes(context)) {
-            out.uncertainty.push_back(std::move(note));
-        }
+        LossContribution contribution = c->contribute(context);
+        for (BudgetTerm& term : contribution.terms) out.terms.push_back(std::move(term));
+        for (UncertaintyNote& note : contribution.notes) out.uncertainty.push_back(std::move(note));
     }
 
     out.terms.emplace_back("rx_gain", "RX antenna gain", -Decibel(rx.antennaGain.value()), "radio profile");

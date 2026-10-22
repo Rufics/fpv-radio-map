@@ -28,6 +28,15 @@ using rfcore::DecibelMilliwatt;
 using rfcore::Hertz;
 using rfcore::Metres;
 
+void ModuleFailure::appendTo(json& list) const {
+    const bool seen = std::ranges::any_of(list, [this](const json& j) { return j.value("module", "") == moduleId; });
+    if (!seen) list.push_back(toJson());
+}
+
+void ModuleFailure::appendAll(json& list, const std::vector<ModuleFailure>& failures) {
+    for (const auto& f : failures) f.appendTo(list);
+}
+
 std::string toString(LinkKind k) { return k == LinkKind::Control ? "control" : "video"; }
 
 LinkKind linkKindFromString(std::string_view s) {

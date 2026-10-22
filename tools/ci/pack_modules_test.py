@@ -146,7 +146,7 @@ class CommandTest(unittest.TestCase):
     def test_failed_check_stops_the_run(self):
         status, _, stderr = self.run_command(env={"FAKE_RFMOD_FAIL": "test"})
         self.assertEqual(status, 1)
-        self.assertIn("upload checks failed for", stderr)
+        self.assertIn("install checks failed for", stderr)
         self.assertIn("(exit 3)", stderr)
 
     def test_check_without_the_pass_line_fails(self):

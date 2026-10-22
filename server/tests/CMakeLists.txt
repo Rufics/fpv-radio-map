@@ -13,7 +13,7 @@ target_link_libraries(rfmap_server_tests PRIVATE rfmap_server_lib GTest::gtest_m
 target_compile_definitions(rfmap_server_tests PRIVATE ${_defs})
 gtest_discover_tests(rfmap_server_tests PROPERTIES LABELS server)
 
-# A module the integration tests upload: it answers well, oddly or not at all, as its options say.
+# A module the integration tests install: it answers well, oddly or not at all, as its options say.
 add_library(test_probe SHARED probe/src/probe.cpp)
 target_link_libraries(test_probe PRIVATE rfmod_sdk)
 set_target_properties(test_probe PROPERTIES CXX_VISIBILITY_PRESET hidden)

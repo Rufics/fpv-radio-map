@@ -33,9 +33,10 @@ std::string matchKey(const json& obj, const std::string& wanted) {
     }
     // Keys absent from the file still get their proper spelling.
     static constexpr auto known = std::to_array<std::string_view>({
-        "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "maxUploadBytes", "database", "url",
+        "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "database", "url",
         "poolSize", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
-        "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "weather",
+        "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "allowDevOwnerKey", "requireSandbox", "maxMemoryMb",
+        "maxTimeoutMs", "weather",
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
@@ -119,7 +120,6 @@ Config Config::fromJson(json doc) {
     read(s, "threads", c.server.threads);
     read(s, "trustProxy", c.server.trustProxy);
     read(s, "maxBodyBytes", c.server.maxBodyBytes);
-    read(s, "maxUploadBytes", c.server.maxUploadBytes);
 
     const json& db = doc.value("database", json::object());
     read(db, "url", c.database.url);
@@ -146,6 +146,10 @@ Config Config::fromJson(json doc) {
     readPath(m, "worker", c.modules.worker);
     readPath(m, "trustStore", c.modules.trustStore);
     read(m, "isolateAll", c.modules.isolateAll);
+    read(m, "allowDevOwnerKey", c.modules.allowDevOwnerKey);
+    read(m, "requireSandbox", c.modules.requireSandbox);
+    read(m, "maxMemoryMb", c.modules.maxMemoryMb);
+    read(m, "maxTimeoutMs", c.modules.maxTimeoutMs);
 
     const json& w = doc.value("weather", json::object());
     read(w, "baseUrl", c.weather.baseUrl);

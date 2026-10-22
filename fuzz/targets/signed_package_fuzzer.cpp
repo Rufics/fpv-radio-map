@@ -103,7 +103,7 @@ extern "C" int LLVMFuzzerTestOneInput(const std::uint8_t* data, std::size_t size
     }
 
     rfmod::ValidationReport report;
-    const auto verified = rfmod::PackageVerifier::verify(writeTar(files), trust, host, report);
+    const auto verified = rfmod::PackageVerifier(trust, host).verify(writeTar(files), report);
     rfmap::fuzz::check(verified.has_value() == report.ok());
     return 0;
 }

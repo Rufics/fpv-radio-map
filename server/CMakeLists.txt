@@ -34,14 +34,29 @@ add_library(rfmap_server_lib STATIC
   src/raster.cpp
   src/result_cache.cpp
   src/weather.cpp
+  src/tiles_manifest.cpp
   src/link_service.cpp
   src/module_runner.cpp
+  src/invocation_scope.cpp
+  src/host_methods.cpp
   src/host_services.cpp
+  src/grid_outline.cpp
+  src/result_key.cpp
+  src/route_evaluator.cpp
+  src/coverage_engine.cpp
   src/calculator.cpp
   src/rate_limiter.cpp
   src/jobs.cpp
   src/metrics.cpp
   src/logger.cpp
+  src/request.cpp
+  src/cache_admin.cpp
+  src/map_config.cpp
+  src/module_catalog.cpp
+  src/services.cpp
+  src/mission_api.cpp
+  src/data_api.cpp
+  src/admin_api.cpp
   src/app.cpp)
 target_include_directories(rfmap_server_lib PUBLIC src)
 target_link_libraries(rfmap_server_lib

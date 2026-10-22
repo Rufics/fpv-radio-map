@@ -4,13 +4,13 @@
 // on fd 3; the module's own stdout and stderr go to the host log. Usage (host only):
 //   rfmod-worker <library.so> <memoryMb>
 
+#include "worker_sandbox.hpp"
+
 #include "rfmod/abi.h"
 
 #include <nlohmann/json.hpp>
 
 #include <dlfcn.h>
-#include <sched.h>
-#include <sys/prctl.h>
 #include <unistd.h>
 
 #include <array>
@@ -124,13 +124,6 @@ void serve(const rfmod_module* api, Channel& channel) {
 
 /// The worker after its arguments are checked. Returns the exit code.
 int run(const char* library) {
-
-    // Hardening that does not need privileges. Each result is reported to the host as it is.
-    const bool noNewPrivs = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0;
-    // A new user+network namespace leaves the module with only a loopback device and no route out.
-    // Where the kernel or container forbids unprivileged namespaces this fails and we say so.
-    const bool netIsolated = unshare(CLONE_NEWUSER | CLONE_NEWNET) == 0;
-
     // Both outlive every module call: the module keeps the host pointer from init until shutdown.
     rfmod_host_context context;
     const rfmod_host host{RFMOD_ABI_VERSION, &context, &hostCall, &hostLog};
@@ -152,6 +145,13 @@ int run(const char* library) {
     const rfmod_module* api = entry();
     if (!api || api->abi_version != RFMOD_ABI_VERSION) return fail("library speaks a different rfmod ABI");
 
+    // The library is mapped; from here on the process confines itself before any module code
+    // runs. Each measure is reported to the host as it is, and the host decides whether that is
+    // enough for the module's signer.
+    // The host started the worker in the module's directory: the only one it keeps read access to.
+    const WorkerSandbox::Report sandbox = WorkerSandbox(".").apply();
+    if (!sandbox.notes.empty()) std::cerr << "rfmod-worker: sandbox: " << sandbox.notes << '\n';
+
     if (const std::string options = init.value("options", json::object()).dump();
         api->init(&host, options.c_str()) != RFMOD_OK) {
         return fail("module init returned an error");
@@ -160,7 +160,11 @@ int run(const char* library) {
     context.channel.send({{"t", "ready"},
                           {"status", 0},
                           {"manifest", std::string(api->manifest_json())},
-                          {"sandbox", {{"noNewPrivileges", noNewPrivs}, {"networkIsolated", netIsolated}}}});
+                          {"sandbox",
+                           {{"noNewPrivileges", sandbox.noNewPrivileges},
+                            {"networkIsolated", sandbox.networkIsolated},
+                            {"filesystemIsolated", sandbox.filesystemIsolated},
+                            {"syscallFilter", sandbox.syscallFilter}}}});
 
     serve(api, context.channel);
     api->shutdown();

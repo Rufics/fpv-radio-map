@@ -29,6 +29,27 @@ long long nowMs() {
 
 }  // namespace
 
+Limits ModulePolicy::effective(const Limits& requested) const {
+    Limits out;
+    out.memoryMb = std::max(1u, std::min(requested.memoryMb, maxMemoryMb));
+    out.timeoutMs = std::max(1u, std::min(requested.timeoutMs, maxTimeoutMs));
+    return out;
+}
+
+std::string SandboxInfo::describe() const {
+    std::string out;
+    const auto add = [&out](const char* name, bool on) {
+        if (!out.empty()) out += ", ";
+        out += name;
+        out += on ? ": yes" : ": no";
+    };
+    add("no-new-privileges", noNewPrivileges);
+    add("network isolated", networkIsolated);
+    add("file system confined", filesystemIsolated);
+    add("syscall filter", syscallFilter);
+    return out;
+}
+
 /// Holds the worker for the lifetime of the object; see busy_.
 class IsolatedModule::Turn {
 public:
@@ -53,13 +74,17 @@ private:
     IsolatedModule& owner_;
 };
 
-IsolatedModule::IsolatedModule(Manifest manifest, std::filesystem::path library, std::filesystem::path workerExecutable,
-                               IHostServices& services, json options)
+IsolatedModule::IsolatedModule(Manifest manifest, std::filesystem::path moduleDir, std::filesystem::path library,
+                               std::filesystem::path workerExecutable, IHostServices& services, json options,
+                               const ModulePolicy& policy)
     : manifest_(std::move(manifest)),
+      moduleDir_(std::move(moduleDir)),
       library_(std::move(library)),
       worker_(std::move(workerExecutable)),
       services_(services),
-      options_(std::move(options)) {
+      options_(std::move(options)),
+      policy_(policy),
+      limits_(policy.effective(manifest_.limits)) {
     const Turn turn(*this);
     start();
 }
@@ -89,12 +114,12 @@ void IsolatedModule::start() {
     // execve takes mutable strings, so argv and envp point into strings this function owns.
     std::string workerPath = worker_.string();
     std::string libraryPath = library_.string();
-    const std::string dir = library_.parent_path().string();
-    std::string memory = std::to_string(manifest_.limits.memoryMb);
+    const std::string dir = moduleDir_.string();
+    std::string memory = std::to_string(limits_.memoryMb);
     std::string locale = "LC_ALL=C";
     const std::array<char*, 4> argv = {workerPath.data(), libraryPath.data(), memory.data(), nullptr};
     const std::array<char*, 2> envp = {locale.data(), nullptr};
-    const rlim_t memBytes = static_cast<rlim_t>(manifest_.limits.memoryMb) << 20;
+    const rlim_t memBytes = static_cast<rlim_t>(limits_.memoryMb) << 20;
 
     const pid_t pid = fork();
     if (pid < 0) {
@@ -117,40 +142,53 @@ void IsolatedModule::start() {
 
     try {
         send({{"t", "init"}, {"options", options_}});
-        const json ready = waitFor("ready", 0, nowMs() + kStartupTimeoutMs);
-        if (ready.value("status", 1) != 0) {
-            throw ModuleError("init_failed", ready.value("message", std::string("module init failed")));
-        }
-        if (const json embedded = json::parse(ready.value("manifest", std::string("{}")));
-            embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
-            throw ModuleError("load_failed", "library manifest does not match manifest.json");
-        }
-        const json sb = ready.value("sandbox", json::object());
-        sandbox_.noNewPrivileges = sb.value("noNewPrivileges", false);
-        sandbox_.networkIsolated = sb.value("networkIsolated", false);
-        sandbox_.memoryLimitMb = manifest_.limits.memoryMb;
+        acceptReady(waitFor("ready", 0, nowMs() + kStartupTimeoutMs));
     } catch (...) {
         stop(true);
         throw;
     }
 }
 
+void IsolatedModule::acceptReady(const json& ready) {
+    if (ready.value("status", 1) != 0) {
+        throw ModuleError("init_failed", ready.value("message", std::string("module init failed")));
+    }
+    if (const json embedded = json::parse(ready.value("manifest", std::string("{}")));
+        embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
+        throw ModuleError("load_failed", "library manifest does not match manifest.json");
+    }
+    const json sb = ready.value("sandbox", json::object());
+    sandbox_.noNewPrivileges = sb.value("noNewPrivileges", false);
+    sandbox_.networkIsolated = sb.value("networkIsolated", false);
+    sandbox_.filesystemIsolated = sb.value("filesystemIsolated", false);
+    sandbox_.syscallFilter = sb.value("syscallFilter", false);
+    sandbox_.memoryLimitMb = limits_.memoryMb;
+    if (policy_.requireSandbox && !sandbox_.complete()) {
+        throw ModuleError("sandbox_incomplete",
+                          std::format("{}: the worker could not confine itself ({}); refusing to run an unconfined module",
+                                      manifest_.id, sandbox_.describe()));
+    }
+}
+
 void IsolatedModule::stop(bool kill) {
     if (pid_ <= 0) return;
+    // The worker leads its own process group (WorkerExec::detachFromHost), so -pid reaches
+    // anything it managed to spawn as well.
     if (kill) {
-        ::kill(pid_, SIGKILL);
+        ::kill(-pid_, SIGKILL);
     } else {
         // Give the worker a moment to shut down cleanly, then make sure it is gone.
         const long long deadline = nowMs() + 2000;
         int status = 0;
         while (waitpid(pid_, &status, WNOHANG) == 0) {
             if (nowMs() > deadline) {
-                ::kill(pid_, SIGKILL);
+                ::kill(-pid_, SIGKILL);
                 break;
             }
             pollfd none{};
             poll(&none, 0, 20);
         }
+        ::kill(-pid_, SIGKILL);  // whatever the group still holds
     }
     int status = 0;
     waitpid(pid_, &status, 0);
@@ -215,12 +253,27 @@ void IsolatedModule::logBufferedStderr() {
     }
 }
 
+void IsolatedModule::bufferOutput(std::size_t stream, const char* data, std::size_t size) {
+    if (stream == 0) {
+        if (outBuffer_.size() + size > policy_.maxReplyBytes) {
+            stop(true);
+            throw ModuleError("protocol", std::format("{}: worker reply exceeds {} bytes; worker stopped", manifest_.id,
+                                                      policy_.maxReplyBytes));
+        }
+        outBuffer_.append(data, size);
+        return;
+    }
+    // Log output is best effort: a module that floods stderr loses the flood, not its worker.
+    const std::size_t room = policy_.maxLogBytes > errBuffer_.size() ? policy_.maxLogBytes - errBuffer_.size() : 0;
+    errBuffer_.append(data, std::min(size, room));
+}
+
 void IsolatedModule::readWorkerOutput(long long deadlineMs) {
     const long long left = deadlineMs - nowMs();
     if (left <= 0) {
         stop(true);
         throw ModuleError("timeout", std::format("{} did not answer within {} ms; worker stopped", manifest_.id,
-                                                 manifest_.limits.timeoutMs));
+                                                 limits_.timeoutMs));
     }
     std::array<pollfd, 2> fds{{{fromWorker_, POLLIN, 0}, {errFromWorker_, POLLIN, 0}}};
     if (const int rc = poll(fds.data(), fds.size(), static_cast<int>(std::min<long long>(left, 1000))); rc < 0 && errno == EINTR) {
@@ -230,8 +283,7 @@ void IsolatedModule::readWorkerOutput(long long deadlineMs) {
     for (std::size_t i = 0; i < fds.size(); ++i) {
         if (!(fds[i].revents & (POLLIN | POLLHUP | POLLERR))) continue;
         if (const ssize_t n = read(fds[i].fd, buf.data(), buf.size()); n > 0) {
-            (i == 0 ? outBuffer_ : errBuffer_).append(buf.data(), static_cast<std::size_t>(n));
-            if (outBuffer_.size() > (256u << 20)) throw ModuleError("protocol", manifest_.id + ": reply too large");
+            bufferOutput(i, buf.data(), static_cast<std::size_t>(n));
         } else if (i == 0) {
             const std::string lastWords = errBuffer_;
             stop(true);
@@ -252,10 +304,11 @@ json IsolatedModule::waitFor(const std::string& type, long long id, long long de
 
 json IsolatedModule::invoke(const std::string& method, const json& request) {
     const Turn turn(*this);
+    if (down_) throw ModuleError("unavailable", manifest_.id + " has been shut down");
     if (pid_ <= 0) start();  // restart after a crash or timeout
     const long long id = nextId_++;
     send({{"t", "invoke"}, {"id", id}, {"method", method}, {"request", request}});
-    const json res = waitFor("res", id, nowMs() + manifest_.limits.timeoutMs);
+    const json res = waitFor("res", id, nowMs() + limits_.timeoutMs);
     const json body = res.value("body", json());
     if (res.value("status", 3) != 0) {
         const json err = body.is_object() && body.contains("error") ? body.at("error") : json::object();
@@ -266,6 +319,7 @@ json IsolatedModule::invoke(const std::string& method, const json& request) {
 
 void IsolatedModule::shutdown() {
     const Turn turn(*this);
+    down_ = true;
     if (pid_ <= 0) return;
     try {
         send({{"t", "shutdown"}});

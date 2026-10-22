@@ -53,6 +53,9 @@ struct CalcContext {
     [[nodiscard]] json optionsFor(const std::string& id) const {
         return optedIn(id) && missionModules.at(id).is_object() ? missionModules.at(id) : json::object();
     }
+    /// Which forecast tier fed the calculation: hourly | long-range | none (beyond the forecast,
+    /// k = 4/3) | off (rf.weather not opted in by the mission, or disabled by the admin).
+    [[nodiscard]] std::string forecastTier() const { return forecast ? forecast->point.value("tier", "none") : "off"; }
 };
 
 /// A terrain profile between the ground and air ends, clutter applied, ready for any link.
@@ -71,6 +74,10 @@ struct ModuleFailure {
     std::string moduleId;
     std::string error;
     [[nodiscard]] json toJson() const { return {{"module", moduleId}, {"error", error}}; }
+    /// Adds this failure to a result's list unless the module is listed already.
+    void appendTo(json& list) const;
+    /// Adds each failure once, keeping the entries already in `list`.
+    static void appendAll(json& list, const std::vector<ModuleFailure>& failures);
 };
 
 struct LinkEvaluation {

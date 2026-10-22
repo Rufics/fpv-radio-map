@@ -41,7 +41,12 @@ std::vector<GeoPoint> Geodesy::sample(const GeoPoint& from, const GeoPoint& to, 
     const GeographicLib::GeodesicLine line = geod.InverseLine(
         from.latitudeDeg, from.longitudeDeg, to.latitudeDeg, to.longitudeDeg);
     const double total = line.Distance();
-    const auto intervals = static_cast<std::size_t>(std::max(1.0, std::ceil(total / maxStep.value())));
+    const double wanted = std::max(1.0, std::ceil(total / maxStep.value()));
+    if (!(wanted <= static_cast<double>(kMaxIntervals))) {
+        throw std::invalid_argument("Geodesy::sample: more than " + std::to_string(kMaxIntervals) +
+                                    " intervals; use a larger step");
+    }
+    const auto intervals = static_cast<std::size_t>(wanted);
 
     std::vector<GeoPoint> points;
     points.reserve(intervals + 1);

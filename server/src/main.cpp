@@ -8,6 +8,8 @@
 #include "app.hpp"
 #include "command_line.hpp"
 
+#include <sys/prctl.h>
+
 #include <atomic>
 #include <csignal>
 #include <format>
@@ -25,6 +27,13 @@ std::atomic<rfmap::Application*>& runningApplication() {
 void onSignal(int) {
     if (rfmap::Application* app = runningApplication().load()) app->stop();
 }
+
+/// What the process does to itself before it holds secrets: no core dumps and no ptrace
+/// from other users' processes, since memory holds the admin token and session hashes.
+class ProcessHardening {
+public:
+    static void apply() { (void)prctl(PR_SET_DUMPABLE, 0, 0, 0, 0); }
+};
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -34,6 +43,7 @@ int main(int argc, char** argv) {
     const auto cmd = rfmap::CommandLine::parse(args, env, RFMAP_DEFAULT_SQL_DIR);
     if (cmd.action() != rfmap::CommandLine::Action::Serve) return cmd.answerWithoutServing(std::cout, std::cerr);
     try {
+        ProcessHardening::apply();
         rfmap::Application app(rfmap::Config::load(cmd.configFile(), env),
                                RFMAP_OWNER_PUBKEY_TEXT, RFMAP_OWNER_KEY_IS_DEV != 0, cmd.sqlDir());
         runningApplication() = &app;

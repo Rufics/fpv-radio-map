@@ -560,27 +560,30 @@ paths:
         - { name: path, in: path, required: true, schema: { type: string }, description: 'e.g. ui/bundle.js' }
         - { name: grant, in: query, schema: { type: string } }
       responses:
-        '200': { description: The file, with X-Content-Type-Options nosniff }
+        '200': { description: 'The file, as a resource only: X-Content-Type-Options nosniff, Content-Security-Policy "default-src ''none''; sandbox", Cross-Origin-Resource-Policy same-origin' }
         '404': { description: No such public file (also for alpha files without a grant) }
 
-  /admin/modules:
+  /admin/modules/reload:
     post:
       tags: [admin]
       security: [{ admin: [] }]
-      summary: Upload a .rfmod package. The server validates schema, signature, ABI, dependencies and runs its self-test.
-      parameters:
-        - { name: install, in: query, schema: { type: boolean, default: true }, description: 'false = check only' }
-      requestBody:
-        required: true
-        content:
-          application/octet-stream:
-            schema: { type: string, format: binary }
+      summary: Pick up what the rfmod CLI installed, removed or trusted on the server machine.
+      description: |
+        Modules are never uploaded through the API. The operator installs a `.rfmod` package on
+        the machine with `rfmod install FILE --root DIR` (which verifies the signature, checks the
+        dependencies and runs the self-test in a sandboxed worker) and trusts authors' keys with
+        `rfmod trust add`. This call re-reads the trust store and the module root, re-verifies
+        every package and reloads the modules in dependency order.
       responses:
         '200':
-          description: Validation report; installs only if every check passed and install=true.
+          description: The admin module listing and the load-time notices
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ValidationReport' }
+              schema:
+                type: object
+                properties:
+                  modules: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
+                  notices: { type: array, items: { type: string } }
 
   /admin/modules/{moduleId}:
     parameters:
@@ -605,12 +608,6 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
         '422': { description: Options do not match the schema, or unknown module }
-    delete:
-      tags: [admin]
-      security: [{ admin: [] }]
-      responses:
-        '204': { description: Removed }
-        '422': { description: Built-in modules can be disabled, not removed; or other modules require this one }
 
   /admin/modules/notices:
     get:
@@ -629,40 +626,12 @@ paths:
       security: [{ admin: [] }]
       responses:
         '200':
-          description: Trusted signing keys; the built-in owner key cannot be removed
+          description: |
+            Trusted signing keys: the built-in owner key and those the operator added with
+            `rfmod trust add` on the machine. The API only lists them.
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/TrustedKey' } }
-    post:
-      tags: [admin]
-      security: [{ admin: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [key]
-              properties:
-                key: { type: string, description: 'Public key in rfmod text form' }
-                label: { type: string }
-      responses:
-        '201':
-          description: Key added; modules are reloaded. Returns the key list.
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/TrustedKey' } }
-        '422': { description: Not a valid key }
-
-  /admin/keys/{keyId}:
-    delete:
-      tags: [admin]
-      security: [{ admin: [] }]
-      parameters:
-        - { name: keyId, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]+$' } }
-      responses:
-        '204': { description: Removed; modules signed with it stop loading at once }
-        '409': { description: The built-in owner key cannot be removed, or no such key }
 
   /admin/cache:
     get:
@@ -1123,15 +1092,3 @@ components:
         evictions: { type: integer }
         hitRate: { type: number }
 
-    ValidationReport:
-      type: object
-      properties:
-        ok: { type: boolean }
-        checks:
-          type: array
-          items:
-            type: object
-            properties:
-              name: { type: string }
-              ok: { type: boolean }
-              detail: { type: string }

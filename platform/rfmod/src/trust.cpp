@@ -39,6 +39,11 @@ void TrustStore::remove(const std::string& keyId) {
     save();
 }
 
+void TrustStore::reload() {
+    std::erase_if(keys_, [](const TrustedKey& k) { return !k.builtIn; });
+    load();
+}
+
 void TrustStore::load() {
     if (storePath_.empty() || !std::filesystem::exists(storePath_)) return;
     std::ifstream in(storePath_);

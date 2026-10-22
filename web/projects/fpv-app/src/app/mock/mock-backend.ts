@@ -22,7 +22,6 @@ import {
   SchemaValidator,
   ShareLink,
   TrustedKey,
-  ValidationReport,
 } from '@rfmap/ui-kit';
 import {
   LIBRARY,
@@ -122,12 +121,9 @@ export class MockBackend {
     r('GET', /^\/weather\/point$/, (req) => this.ok(weatherAt(req.params.get('timeUtc') ?? undefined, this.scenario() === 'stale-forecast', MockBackend.placeOf(req.params))));
     r('GET', /^\/modules$/, () => this.ok(this.modules));
     r('PUT', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.setModule(decodeURIComponent(m[1]), req.body as { enabled?: boolean })));
-    r('DELETE', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.removeModule(decodeURIComponent(m[1]))));
-    r('POST', /^\/admin\/modules$/, (req) => this.admin(req, () => this.uploadModule(req)));
+    r('POST', /^\/admin\/modules\/reload$/, (req) => this.admin(req, () => this.ok({ modules: this.modules, notices: [] })));
     r('GET', /^\/admin\/modules\/notices$/, (req) => this.admin(req, () => this.ok([])));
     r('GET', /^\/admin\/keys$/, (req) => this.admin(req, () => this.ok(this.keys)));
-    r('POST', /^\/admin\/keys$/, (req) => this.admin(req, () => this.addKey(req.body as { key?: string; label?: string })));
-    r('DELETE', /^\/admin\/keys\/([^/]+)$/, (req, m) => this.admin(req, () => this.deleteKey(m[1])));
     r('DELETE', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(null, 204)));
     r('GET', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(this.cache)));
     r('PUT', /^\/admin\/cache$/, (req) => this.admin(req, () => this.putCache(req.body as CacheLimit[])));
@@ -426,49 +422,6 @@ export class MockBackend {
       x.stateDetail = body.enabled ? undefined : 'Disabled by the admin';
     }
     return this.ok(this.modules);
-  }
-
-  private removeModule(id: string): HttpResponse<unknown> {
-    const mod = this.modules.find((x) => x.id === id);
-    if (!mod) throw this.error(422, 'Unknown module');
-    if (mod.builtIn) throw this.error(422, 'Built-in modules can be disabled, not removed');
-    const users = this.modules.filter((x) => x.id !== id && x.state === 'active' && (x.requires ?? []).some((r) => r.split(/[<>=]/)[0] === id));
-    if (users.length) throw this.error(422, `Required by ${users.map((u) => u.id).join(', ')}`);
-    this.modules = this.modules.filter((x) => x.id !== id);
-    return this.ok(null, 204);
-  }
-
-  private addKey(body: { key?: string; label?: string }): HttpResponse<unknown> {
-    const key = (body?.key ?? '').trim();
-    const m = /^rfmod-ed25519 ([0-9a-f]{8})[0-9a-f]{8,}$/.exec(key);
-    if (!m) throw this.error(422, 'Not a valid key (expected "rfmod-ed25519 <hex>")');
-    if (!this.keys.some((k) => k.id === m[1])) this.keys.push({ id: m[1], label: body.label || 'Publisher key', key: `${key.slice(0, 26)}…`, builtIn: false, firstParty: false });
-    return this.ok(this.keys, 201);
-  }
-
-  private deleteKey(id: string): HttpResponse<unknown> {
-    const k = this.keys.find((x) => x.id === id);
-    if (!k || k.builtIn) throw this.error(409, k ? 'The built-in owner key cannot be removed' : 'No such key');
-    this.keys = this.keys.filter((x) => x !== k);
-    return this.ok(null, 204);
-  }
-
-  private async uploadModule(req: HttpRequest<unknown>): Promise<HttpResponse<ValidationReport>> {
-    const blob = req.body as Blob;
-    const size = blob.size ?? 0;
-    const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
-    const isZip = head[0] === 0x50 && head[1] === 0x4b;
-    const checks = [
-      { name: 'Package format', ok: isZip, detail: isZip ? '.rfmod archive (zip) read' : 'Not a .rfmod archive (expected a zip container)' },
-      { name: 'Size', ok: size <= 50 * 1024 * 1024, detail: `${(size / 1024 / 1024).toFixed(2)} MB of max 50 MB` },
-      { name: 'Signature', ok: isZip, detail: isZip ? 'Signature valid, publisher key trusted' : 'No signature found' },
-      { name: 'Manifest', ok: isZip, detail: isZip ? 'manifest.json matches schema rfmod/v1' : 'manifest.json missing' },
-      { name: 'ABI', ok: isZip, detail: 'Needs rf-core ≥1.2 <2, installed 1.3.0; ABI 2' },
-      { name: 'Dependencies', ok: isZip, detail: 'Dependencies resolved: rf.weather 1.1.0' },
-      { name: 'Deprecated API', ok: true, detail: 'warning: calls link::budget_v1, deprecated in 1.3, removed in 1.6. Use link::budget.' },
-      { name: 'Self-test', ok: isZip, detail: isZip ? 'Conformance tests 48 / 48 on reference cases' : 'not run' },
-    ];
-    return this.ok({ ok: checks.every((c) => c.ok), checks });
   }
 
   /** The place a request names, or none when lat or lon is missing (the pilot's reference weather). */

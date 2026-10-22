@@ -42,6 +42,9 @@ public:
     /// Removes an admin key. Throws std::invalid_argument for the owner key or an unknown id.
     void remove(const std::string& keyId);
 
+    /// Re-reads the store file: keys added or removed by the rfmod CLI since the last read.
+    void reload();
+
 private:
     void load();
     void save() const;

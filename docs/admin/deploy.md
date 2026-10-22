@@ -235,16 +235,27 @@ cover the requested time, the result says so (`forecastTier: none`) and uses k =
 All under `/api/v1/admin` with `Authorization: Bearer <RFMAP_ADMIN_TOKEN>`, or in the client
 under **Admin**.
 
-- **Keys** (`/admin/keys`): add a module author's `.pub`; remove it again. The built-in owner
-  key cannot be removed. Removing a key unloads the modules signed with it at once.
-- **Modules** (`POST /admin/modules?install=true|false`, body `application/octet-stream`):
-  the server checks the archive, signature, manifest, ABI, host range, dependencies and
-  sandbox, runs the self-test in a worker, and installs only if every check passed.
-  `?install=false` only checks. `PUT /admin/modules/<id>` with `{enabled, options}` disables
-  or configures a module, including the built-in `rf.weather`, `rf.clutter`, `rf.uncertainty`
-  and `rf.radio-profiles`. The module pack under `modules/fpv` is signed with the development
-  owner key in the source tree; re-sign it with your `owner.secret` (`rfmod pack`) before you
-  upload it to a production server.
+- **Keys** (`GET /admin/keys`): the trusted signing keys. Adding or removing one is done on
+  the server machine: `rfmod trust add author.pub --label "Author" --trust-store
+  /var/lib/rfmap/keys.json`, `rfmod trust remove <keyId> ...`, then `POST /admin/modules/reload`.
+  The built-in owner key cannot be removed. Removing a key unloads the modules signed with it
+  at the next reload.
+- **Modules**: installing and removing is a local operation on the server machine, never an
+  upload. `rfmod install FILE.rfmod --root /var/lib/rfmap/modules` checks the archive, signature,
+  manifest, ABI, host range, dependencies and lifecycle, runs the self-test in a sandboxed worker
+  and installs only if every check passed; `rfmod check FILE.rfmod` only checks; `rfmod remove ID
+  --root ...` takes a module out; `rfmod list --root ...` shows what is installed. In the compose
+  deployment: `docker compose exec rfmap-server rfmod install /var/lib/rfmap/incoming/FILE.rfmod
+  --root /var/lib/rfmap/modules` after copying the file into the `rfmap-state` volume. Then
+  `POST /admin/modules/reload` (or **Admin → Modules → Reload**) makes the running server pick
+  the change up. `PUT /admin/modules/<id>` with `{enabled, options}` disables or configures a
+  module, including the built-in `rf.weather`, `rf.clutter`, `rf.uncertainty` and
+  `rf.radio-profiles`. The module pack under `modules/fpv` is signed with the development owner
+  key in the source tree; re-sign it with your `owner.secret` (`rfmod pack`) before you install
+  it on a production server.
+- **Dev owner key**: a build without `RFMAP_OWNER_PUBKEY` carries the public development key
+  and refuses to start unless `modules.allowDevOwnerKey` is set. Never set it on a server that
+  anyone else can reach.
 - **Library** (`POST/PUT /library/<kind>`): only the admin edits. Every edit needs the version
   it was made from, saves a new version and keeps the old one in `/history`. Results list the
   item versions they used.
@@ -253,12 +264,14 @@ under **Admin**.
 
 ### Module sandbox in containers
 
-Modules not signed with the owner key run in `rfmod-worker` with a memory cap, no file writes
-and `no_new_privs`. A separate network namespace needs unprivileged user namespaces, which
-Docker's default seccomp profile blocks. The upload report then says
-`network NOT isolated on this host`; this was seen in a test of this image. In this compose
-file, `rfmap-server` and its workers have no route to the internet anyway, because both of its
-networks are internal. They can still reach `postgis` and `open-meteo`. A call that runs past
+Modules not signed with the owner key run in `rfmod-worker` with a memory cap, no file writes,
+`no_new_privs`, a Landlock ruleset (read access to the module's own directory only) and a
+seccomp filter that refuses sockets, new processes and signals to other processes. The worker
+reports what took effect; a third-party module loads only when everything did
+(`modules.requireSandbox`). A separate network namespace needs unprivileged user namespaces,
+which Docker's default seccomp profile blocks; the seccomp filter closes the network anyway. In
+this compose file, `rfmap-server` and its workers have no route to the internet either, because
+both of its networks are internal. They can still reach `postgis` and `open-meteo`. A call that runs past
 the module's `limits.timeoutMs` kills its worker. Owner-signed modules run in-process and are
 not time-limited.
 

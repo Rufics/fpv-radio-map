@@ -91,30 +91,39 @@ std::optional<LinkRecord> PgAuthStore::linkByToken(const Digest& tokenHash) {
     });
 }
 
-FailureOutcome PgAuthStore::recordFailure(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
-                                          TimePoint now) {
-    // One statement, so concurrent wrong guesses are counted one by one under the row lock.
+AttemptOutcome PgAuthStore::beginAttempt(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
+                                         TimePoint now) {
+    // One statement under the row lock, so concurrent guesses are counted one by one. The CTE
+    // keeps whether the link was paused before this attempt; the update reads the old row.
     return db_.tx([&linkId, maxAttempts, lockout, now](pqxx::work& w) {
         const auto r = w.exec(
-            "update share_links set "
-            "  locked_until = case when failed_attempts + 1 >= $2 "
-            "    then to_timestamp($4) + make_interval(secs => $3 * power(2, least(lockouts, 10))) else locked_until end, "
-            "  lockouts = case when failed_attempts + 1 >= $2 then lockouts + 1 else lockouts end, "
-            "  failed_attempts = case when failed_attempts + 1 >= $2 then 0 else failed_attempts + 1 end "
-            "where id = $1 "
-            "returning failed_attempts, (failed_attempts = 0) as locked, extract(epoch from locked_until)::float8",
+            "with before as (select id, coalesce(locked_until > to_timestamp($4), false) as paused "
+            "  from share_links where id = $1 for update) "
+            "update share_links s set "
+            "  locked_until = case when before.paused then s.locked_until when s.failed_attempts + 1 >= $2 "
+            "    then to_timestamp($4) + make_interval(secs => $3 * power(2, least(s.lockouts, 10))) else s.locked_until end, "
+            "  lockouts = case when before.paused then s.lockouts when s.failed_attempts + 1 >= $2 then s.lockouts + 1 "
+            "    else s.lockouts end, "
+            "  failed_attempts = case when before.paused then s.failed_attempts when s.failed_attempts + 1 >= $2 then 0 "
+            "    else s.failed_attempts + 1 end "
+            "from before where s.id = before.id "
+            "returning s.failed_attempts, before.paused, coalesce(s.locked_until > to_timestamp($4), false), "
+            "  extract(epoch from s.locked_until)::float8",
             pqxx::params{linkId, maxAttempts, static_cast<double>(lockout.count()), epochSeconds(now)});
         if (r.empty()) throw StoredDataError("link vanished");
-        if (r[0][1].as<bool>()) return FailureOutcome{0, fromEpochSeconds(r[0][2].as<double>())};
-        return FailureOutcome{maxAttempts - r[0][0].as<int>(), std::nullopt};
+        const auto& row = r[0];
+        const bool refused = row[1].as<bool>();
+        const bool pausedNow = row[2].as<bool>();
+        if (!pausedNow) return AttemptOutcome{false, maxAttempts - row[0].as<int>(), std::nullopt};
+        return AttemptOutcome{refused, 0, fromEpochSeconds(row[3].as<double>())};
     });
 }
 
 void PgAuthStore::recordSuccess(const std::string& linkId, TimePoint now) {
     db_.tx([&linkId, now](pqxx::work& w) {
         w.exec(
-            "update share_links set failed_attempts = 0, lockouts = 0, last_opened_at = to_timestamp($2), "
-            "open_count = open_count + 1 where id = $1",
+            "update share_links set failed_attempts = 0, lockouts = 0, locked_until = null, "
+            "last_opened_at = to_timestamp($2), open_count = open_count + 1 where id = $1",
             pqxx::params{linkId, epochSeconds(now)});
     });
 }

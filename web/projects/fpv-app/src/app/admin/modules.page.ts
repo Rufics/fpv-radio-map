@@ -1,7 +1,11 @@
 import { Component, OnInit, computed, effect, inject, signal, untracked } from '@angular/core';
-import { ApiError, CredentialStore, ModuleInfo, ModuleUiLoader, RfmapApiClient, TrustedKey, ValidationReport } from '@rfmap/ui-kit';
+import { ApiError, CredentialStore, ModuleInfo, ModuleUiLoader, RfmapApiClient, TrustedKey } from '@rfmap/ui-kit';
 
-/** Module manager (ModuleManager.dc.html): installed modules with lifecycle, upload + validation report. */
+/**
+ * Module manager (ModuleManager.dc.html): the installed modules with their lifecycle, enable and
+ * configure, and a reload after the operator installed or removed one on the server machine with
+ * the rfmod CLI. Nothing is uploaded through the browser: the API has no route for it.
+ */
 @Component({
   selector: 'fpv-modules-page',
   template: `
@@ -29,9 +33,6 @@ import { ApiError, CredentialStore, ModuleInfo, ModuleUiLoader, RfmapApiClient, 
               <span role="cell" class="acts">
                 @if (isAdmin() && m.id) {
                   <button type="button" class="rf-btn rf-btn--dense rf-btn--secondary" [disabled]="busy()" (click)="toggle(m)" [attr.aria-label]="(m.state === 'disabled' ? 'Enable ' : 'Disable ') + m.id">{{ m.state === 'disabled' ? 'Enable' : 'Disable' }}</button>
-                  @if (!m.builtIn) {
-                    <button type="button" class="rf-btn rf-btn--dense rf-btn--danger" [disabled]="busy()" (click)="remove(m)" [attr.aria-label]="'Remove ' + m.id">Remove</button>
-                  }
                 }
               </span>
             </div>
@@ -46,7 +47,7 @@ import { ApiError, CredentialStore, ModuleInfo, ModuleUiLoader, RfmapApiClient, 
             <span class="rf-badge rf-badge--deprecated">deprecated · works, warns</span><span class="arrow">→</span>
             <span class="rf-badge rf-badge--removed">removed</span>
           </div>
-          <div class="muted small">A deprecated API stays for at least 3 minor releases. The warning names the version it goes away in and the replacement, and appears in the upload report, server logs and a banner in affected missions.</div>
+          <div class="muted small">A deprecated API stays for at least 3 minor releases. The warning names the version it goes away in and the replacement, and appears in the install report, server logs and a banner in affected missions.</div>
         </section>
         @if (notices().length) {
           <section class="lifecycle">
@@ -64,34 +65,26 @@ import { ApiError, CredentialStore, ModuleInfo, ModuleUiLoader, RfmapApiClient, 
         }
       </main>
       <aside class="side">
-        <label class="drop" [class.over]="over()" (dragover)="$event.preventDefault(); over.set(true)" (dragleave)="over.set(false)" (drop)="onDrop($event)">
-          <b>Drop a module package</b><span class="small">.rfmod · signed · max 50 MB · or click to choose</span>
-          <input type="file" accept=".rfmod,application/octet-stream" class="sr-only" (change)="onPick($event)" />
-        </label>
-        @if (busy()) {<div class="muted" role="status">Checking {{ fileName() }}…</div>}
-        @if (error(); as e) {<div class="rf-field-error" role="alert">{{ e }}</div>}
-        @if (report(); as r) {
-          <div class="report-head"><b>{{ fileName() }}</b><span class="small muted">checked {{ checkedAgo() }}</span></div>
-          <ul class="checks">
-            @for (c of r.checks ?? []; track $index) {
-              <li [class]="checkClass(c)">
-                <span class="mark" aria-hidden="true">{{ checkMark(c) }}</span>
-                <span><span class="sr-only">{{ c.ok ? (isWarning(c) ? 'Warning:' : 'Passed:') : 'Failed:' }}</span> <b>{{ c.name }}</b> · {{ c.detail }}</span>
-              </li>
-            }
-          </ul>
+        <section class="install" aria-labelledby="install-title">
+          <h2 id="install-title">Install or remove a module</h2>
+          <div class="muted small">Modules are installed on the server machine, never uploaded here. The <code>rfmod</code> CLI verifies the signature, checks the dependencies and runs the self-test in a sandboxed worker before anything is installed.</div>
+          <pre class="rf-mono cli">rfmod install FILE.rfmod --root /var/lib/rfmap/modules
+rfmod remove MODULE_ID --root /var/lib/rfmap/modules
+rfmod list --root /var/lib/rfmap/modules</pre>
+          <div class="muted small">Then reload, so the running server picks the change up.</div>
           <div class="actions">
-            <button type="button" class="rf-btn rf-btn--primary" [disabled]="!r.ok || busy()" (click)="install()">{{ r.ok ? 'Install as beta' : 'Cannot install' }}</button>
-            <button type="button" class="rf-btn rf-btn--danger" (click)="reject()">Reject</button>
+            <button type="button" class="rf-btn rf-btn--primary" [disabled]="!isAdmin() || busy()" (click)="reload()">Reload modules</button>
           </div>
-          @if (installed()) {<div class="ok-text" role="status">Installed. It appears in the list after the server reloads its modules.</div>}
-        }
+          @if (busy()) {<div class="muted" role="status">Reloading…</div>}
+          @if (error(); as e) {<div class="rf-field-error" role="alert">{{ e }}</div>}
+          @if (reloadedAt()) {<div class="ok-text" role="status">Reloaded {{ reloadedAgo() }}: {{ modules().length }} modules, {{ notices().length }} notice(s).</div>}
+        </section>
         <section class="keys" aria-labelledby="keys-title">
           <h2 id="keys-title">Trusted signing keys</h2>
           @if (!isAdmin()) {
-            <div class="muted small">Set the admin token (top right) to see and change the keys.</div>
+            <div class="muted small">Set the admin token (top right) to see the keys.</div>
           } @else {
-            <div class="muted small">Only packages signed with one of these keys load. Removing a key stops its modules at once; the built-in owner key stays.</div>
+            <div class="muted small">Only packages signed with one of these keys load. Keys are added and removed on the server machine, then reloaded here; the built-in owner key stays.</div>
             @for (k of keys(); track k.id) {
               <div class="key">
                 <div class="key-text">
@@ -99,18 +92,10 @@ import { ApiError, CredentialStore, ModuleInfo, ModuleUiLoader, RfmapApiClient, 
                   @if (k.builtIn) {<span class="rf-badge rf-badge--stable">built in</span>}
                   <span class="rf-mono small muted">{{ k.id }}{{ k.key ? ' · ' + k.key : '' }}</span>
                 </div>
-                @if (!k.builtIn && k.id) {
-                  <button type="button" class="rf-btn rf-btn--dense rf-btn--danger" [disabled]="busy()" (click)="deleteKey(k)" [attr.aria-label]="'Remove key ' + (k.label || k.id)">Remove</button>
-                }
               </div>
             }
-            <label class="rf-field">Public key (rfmod text form)
-              <textarea class="rf-input rf-mono keyin" rows="2" [value]="newKey()" (input)="newKey.set($any($event.target).value)"></textarea>
-            </label>
-            <label class="rf-field">Label
-              <input class="rf-input" [value]="newLabel()" (input)="newLabel.set($any($event.target).value)" />
-            </label>
-            <button type="button" class="rf-btn rf-btn--secondary" [disabled]="busy() || !newKey().trim()" (click)="addKey()">Add key</button>
+            <pre class="rf-mono cli">rfmod trust add AUTHOR.pub --label "Author" --trust-store /var/lib/rfmap/keys.json
+rfmod trust remove KEY_ID --trust-store /var/lib/rfmap/keys.json</pre>
             @if (keyError(); as e) {<div class="rf-field-error" role="alert">{{ e }}</div>}
           }
         </section>
@@ -138,23 +123,14 @@ import { ApiError, CredentialStore, ModuleInfo, ModuleUiLoader, RfmapApiClient, 
     .lifecycle { padding: 14px; border-radius: 12px; border: 1px solid var(--rf-border); background: var(--rf-surface-1); display: flex; flex-direction: column; gap: 10px; }
     .chain { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .arrow { color: var(--rf-border-strong); }
-    .drop { min-height: 92px; border: 2px dashed var(--rf-border-strong); border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--rf-text-2); cursor: pointer; text-align: center; }
-    .drop b { color: var(--rf-text); }
-    .drop.over, .drop:focus-within { border-color: var(--rf-ok); }
-    .report-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 16px; }
-    .checks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
-    .checks li { display: flex; gap: 8px; padding: 2px 0; }
-    .checks .mark { width: 16px; flex: none; }
-    .checks .ok .mark { color: var(--rf-ok-text); }
-    .checks .bad { color: var(--rf-blocked-text); }
-    .checks .warn { padding: 8px; border-radius: 8px; background: var(--rf-warn-bg); color: var(--rf-warn-text); }
     .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+    .install { display: flex; flex-direction: column; gap: 8px; }
+    .cli { margin: 0; padding: 10px; border-radius: 10px; border: 1px solid var(--rf-border); background: var(--rf-surface-1); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
     .keys { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--rf-divider); }
     h2 { margin: 0; font-size: 16px; }
     .key { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--rf-border); background: var(--rf-surface-1); }
     .key-text { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; min-width: 0; }
     .key-text .rf-mono { overflow-wrap: anywhere; }
-    .keyin { height: auto; min-height: 56px; padding: 8px; font-size: 12px; }
     .actions { display: flex; gap: 8px; }
     .actions .rf-btn--primary { flex: 1; }
   `,
@@ -166,18 +142,11 @@ export class ModulesPage implements OnInit {
   protected readonly isAdmin = computed(() => !!this.creds.adminTokenSignal());
   protected readonly keys = signal<TrustedKey[]>([]);
   protected readonly notices = signal<Record<string, unknown>[]>([]);
-  protected readonly newKey = signal('');
-  protected readonly newLabel = signal('');
   protected readonly keyError = signal<string | null>(null);
   protected readonly modules = signal<ModuleInfo[]>([]);
-  protected readonly report = signal<ValidationReport | null>(null);
-  protected readonly fileName = signal('');
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly over = signal(false);
-  protected readonly installed = signal(false);
-  private checkedAt = 0;
-  private file: File | null = null;
+  protected readonly reloadedAt = signal(0);
   protected readonly uiStatus = this.loader.status;
 
   protected readonly deprecatedCount = computed(() => this.modules().filter((m) => m.lifecycle === 'deprecated').length);
@@ -219,28 +188,21 @@ export class ModulesPage implements OnInit {
     await this.adminCall(async () => this.modules.set(await this.api.setModule(m.id!, { enabled: m.state === 'disabled' })));
   }
 
-  protected async remove(m: ModuleInfo): Promise<void> {
+  /** The server re-reads its module root and trust store; the listing and notices follow. */
+  protected async reload(): Promise<void> {
+    this.error.set(null);
     await this.adminCall(async () => {
-      await this.api.removeModule(m.id!);
-      this.modules.set(await this.api.modules());
+      const r = await this.api.reloadModules();
+      this.modules.set(r.modules ?? (await this.api.modules()));
+      this.notices.set((r.notices ?? []).map((text) => ({ text })));
+      this.keys.set(await this.api.adminKeys());
+      this.reloadedAt.set(Date.now());
     });
   }
 
-  protected async addKey(): Promise<void> {
-    this.keyError.set(null);
-    await this.adminCall(async () => {
-      this.keys.set(await this.api.addKey(this.newKey().trim(), this.newLabel().trim() || undefined));
-      this.newKey.set('');
-      this.newLabel.set('');
-    }, this.keyError);
-  }
-
-  protected async deleteKey(k: TrustedKey): Promise<void> {
-    this.keyError.set(null);
-    await this.adminCall(async () => {
-      await this.api.deleteKey(k.id!);
-      this.keys.set(await this.api.adminKeys());
-    }, this.keyError);
+  protected reloadedAgo(): string {
+    const s = Math.max(1, Math.round((Date.now() - this.reloadedAt()) / 1000));
+    return `${s} s ago`;
   }
 
   private async adminCall(fn: () => Promise<void>, errSignal = this.error): Promise<void> {
@@ -265,74 +227,5 @@ export class ModulesPage implements OnInit {
     if (m.lifecycle === 'beta') return 'Users see a beta label';
     if (m.lifecycle === 'alpha') return 'Hidden from users';
     return m.ui?.bundle ? `UI bundle · slots ${m.ui.slots?.join(', ')}` : '';
-  }
-
-  protected isWarning(c: { detail?: string }): boolean {
-    return (c.detail ?? '').toLowerCase().startsWith('warning');
-  }
-  protected checkClass(c: { ok?: boolean; detail?: string }): string {
-    if (!c.ok) return 'bad';
-    return this.isWarning(c) ? 'warn' : 'ok';
-  }
-  protected checkMark(c: { ok?: boolean; detail?: string }): string {
-    if (!c.ok) return '✕';
-    return this.isWarning(c) ? '!' : '✓';
-  }
-  protected checkedAgo(): string {
-    const s = Math.max(1, Math.round((Date.now() - this.checkedAt) / 1000));
-    return `${s} s ago`;
-  }
-
-  protected onPick(e: Event): void {
-    const f = (e.target as HTMLInputElement).files?.[0];
-    if (f) void this.check(f);
-  }
-  protected onDrop(e: DragEvent): void {
-    e.preventDefault();
-    this.over.set(false);
-    const f = e.dataTransfer?.files?.[0];
-    if (f) void this.check(f);
-  }
-
-  private async check(f: File): Promise<void> {
-    this.file = f;
-    this.fileName.set(f.name);
-    this.report.set(null);
-    this.installed.set(false);
-    this.error.set(null);
-    if (f.size > 50 * 1024 * 1024) {
-      this.error.set('The package is larger than 50 MB.');
-      return;
-    }
-    this.busy.set(true);
-    try {
-      this.report.set(await this.api.uploadModule(f, false));
-      this.checkedAt = Date.now();
-    } catch (e) {
-      const err = ApiError.from(e);
-      this.error.set(err.status === 401 ? 'Set the admin token first (top right).' : err.message);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  protected async install(): Promise<void> {
-    if (!this.file) return;
-    this.busy.set(true);
-    try {
-      const r = await this.api.uploadModule(this.file, true);
-      this.report.set(r);
-      this.installed.set(!!r.ok);
-    } catch (e) {
-      this.error.set(ApiError.from(e).message);
-    } finally {
-      this.busy.set(false);
-    }
-  }
-
-  protected reject(): void {
-    this.file = null;
-    this.report.set(null);
-    this.fileName.set('');
   }
 }

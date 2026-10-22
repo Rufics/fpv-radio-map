@@ -28,8 +28,7 @@ public:
     /// @param tiltDeg polarisation tilt (45 for circular)
     RainContributor(double rainRateMmPerHour, double tiltDeg, std::string rateSource);
 
-    [[nodiscard]] std::vector<rfcore::BudgetTerm> contribute(const rfcore::PathContext& context) const override;
-    [[nodiscard]] std::vector<rfcore::UncertaintyNote> notes(const rfcore::PathContext& context) const override;
+    [[nodiscard]] rfcore::LossContribution contribute(const rfcore::PathContext& context) const override;
 
 private:
     double rate_;
