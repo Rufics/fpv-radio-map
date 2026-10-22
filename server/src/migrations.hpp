@@ -25,6 +25,8 @@
 
 namespace rfmap {
 
+class FileLock;
+
 /// A database, a backup or a step that does not fit this server's migrations. Thrown inside the
 /// migration transaction, so nothing it would have changed is committed.
 class MigrationError : public std::runtime_error {
@@ -193,6 +195,7 @@ public:
 
     /// Applies the steps up to `pivot` (none when it is empty or the database is past it), runs
     /// `atPivot` on that schema, applies the rest and commits; then the staged files move into place.
+    /// A backup waits for all of it (the module root's lock).
     /// Refuses, before changing anything, a database or pivot that is ahead of the catalog or
     /// differs from it, and a breaking step the options do not allow.
     MigrationReport migrateThrough(pqxx::connection& c, const SchemaVersion& pivot, const Action& atPivot,
@@ -214,6 +217,9 @@ private:
     static void requireNewDatabase(pqxx::work& w, const SchemaVersion& current);
     void requireAllowed(const MigrationPlan& plan, Options options) const;
     std::vector<std::string> apply(MigrationContext& ctx, const std::vector<const MigrationStep*>& steps) const;
+    /// The module root's lock, exclusive, so a backup never reads the rows of one version and the
+    /// files of another; none when the migrator has no files.
+    [[nodiscard]] std::unique_ptr<FileLock> lockFiles() const;
     /// Fills the checksums that rows written before checksums lack.
     void recordChecksums(pqxx::work& w, const SchemaVersion& current) const;
 

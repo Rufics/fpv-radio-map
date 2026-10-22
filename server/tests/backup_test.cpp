@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <format>
 #include <fstream>
 #include <future>
 #include <memory>
@@ -19,6 +20,31 @@ using namespace rfmap;
 namespace fs = std::filesystem;
 
 namespace {
+
+/// The server's own migrations: every test database starts at this version.
+const SchemaVersion& serverVersion() {
+    static const SchemaVersion version = MigrationCatalog(RFMAP_SQL_DIR).version();
+    return version;
+}
+
+/// A step `after` places past the server's last, so a test's step never takes a real one's number.
+std::string nextStep(int after, std::string_view what) {
+    const std::string& last = serverVersion().ids().back().name;
+    return std::format("{:03}_{}", std::stoi(last.substr(0, last.find('_'))) + after, what);
+}
+
+/// The step most tests add.
+const std::string& testStep() {
+    static const std::string name = nextStep(1, "test.sql");
+    return name;
+}
+
+std::vector<std::string> serverStepsAnd(std::initializer_list<std::string> more) {
+    std::vector<std::string> names;
+    for (const auto& id : serverVersion().ids()) names.push_back(id.name);
+    names.insert(names.end(), more);
+    return names;
+}
 
 std::string readFile(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
@@ -111,7 +137,7 @@ protected:
     }
 
     /// A copy of the server's migrations plus `extra` as the next one, `name`, in a folder of its own.
-    fs::path migrationsWith(const std::string& extra, const std::string& name = "999_test.sql",
+    fs::path migrationsWith(const std::string& extra, const std::string& name = testStep(),
                             const std::string& folder = "sql-newer") const {
         const fs::path dir = dir_ / folder;
         fs::create_directories(dir);
@@ -122,10 +148,13 @@ protected:
         return dir;
     }
 
+    /// The files under `dir`, leaving out the module lock file that migrations and backups share.
     static std::size_t filesUnder(const fs::path& dir) {
         if (!fs::exists(dir)) return 0;
         std::size_t n = 0;
-        for (const auto& e : fs::recursive_directory_iterator(dir)) n += e.is_regular_file() ? 1 : 0;
+        for (const auto& e : fs::recursive_directory_iterator(dir)) {
+            n += e.is_regular_file() && e.path().filename() != ModuleGate::kLockFile ? 1 : 0;
+        }
         return n;
     }
 
@@ -174,7 +203,7 @@ TEST_F(BackupTest, NewerMigrationsAdaptTheRestoredRows) {
     const fs::path sql = migrationsWith("alter table missions add column note text;"
                                         "update missions set note = 'from ' || name;");
     const BackupSummary s = restore(to, text, sql);
-    EXPECT_EQ(s.newerMigrations, std::vector<std::string>{"999_test.sql"});
+    EXPECT_EQ(s.newerMigrations, std::vector<std::string>{testStep()});
     EXPECT_EQ(query(to, "select note from missions where id = 'm2'"), "from Second");
 }
 
@@ -211,7 +240,7 @@ TEST_F(BackupTest, RefusesABackupFromANewerServerAndChangesNothing) {
         (void)restore(to, text);
         FAIL() << "restored a backup of an unknown migration";
     } catch (const MigrationError& e) {
-        EXPECT_NE(std::string(e.what()).find("999_test.sql"), std::string::npos) << e.what();
+        EXPECT_NE(std::string(e.what()).find(testStep()), std::string::npos) << e.what();
     }
     EXPECT_EQ(query(to, "select to_regclass('public.schema_migrations')::text"), "<null>");
 }
@@ -365,7 +394,7 @@ namespace {
 /// A C++ step as a future version would add one: it rewrites rows with code and adds a module file.
 class UpperNotes final : public CodeMigration {
 public:
-    UpperNotes() : CodeMigration("003_upper_notes", "rev 1", Breaking::No) {}
+    UpperNotes() : CodeMigration(nextStep(2, "upper_notes"), "rev 1", Breaking::No) {}
     void apply(MigrationContext& ctx) const override {
         ctx.work().exec("update missions set note = upper(note)");
         ctx.staged().write(ctx.files().modulesRoot / "added.txt", "from a step",
@@ -390,7 +419,7 @@ TEST_F(BackupTest, AnOldBackupIsRestoredAtItsVersionThenTakenThroughEveryNewerSt
     const std::string text = backup(source(), files("source"));
     const fs::path sql = migrationsWith("alter table missions add column note text;"
                                         "update missions set note = 'from ' || name;",
-                                        "002_note.sql");
+                                        nextStep(1, "note.sql"));
     const MigrationCatalog newer(sql, upperNotes());
     const std::string to = freshDatabase("rfmap_backup_target");
     const ServerFiles target = files("target");
@@ -400,11 +429,17 @@ TEST_F(BackupTest, AnOldBackupIsRestoredAtItsVersionThenTakenThroughEveryNewerSt
     const BackupSummary s =
         BackupRestorer(c, newer, target, [&notes](const std::string& line) { notes.push_back(line); }).restore(in);
 
-    EXPECT_EQ(s.newerMigrations, (std::vector<std::string>{"002_note.sql", "003_upper_notes"}));
+    const std::string note = nextStep(1, "note.sql");
+    const std::string upper = nextStep(2, "upper_notes");
+    EXPECT_EQ(s.newerMigrations, (std::vector<std::string>{note, upper}));
     // 002 filled the note from the restored rows, so it ran after them; 003 ran after 002.
     EXPECT_EQ(query(to, "select note from missions where id = 'm2'"), "FROM SECOND");
     EXPECT_EQ(query(to, "select string_agg(name, ',' order by name) from schema_migrations"),
-              "001_init.sql,002_note.sql,003_upper_notes");
+              [&] {
+                  std::string all;
+                  for (const auto& n : serverStepsAnd({note, upper})) all += (all.empty() ? "" : ",") + n;
+                  return all;
+              }());
     EXPECT_EQ(query(to, "select count(*) from schema_migrations where checksum is null or checksum = ''"), "0");
     EXPECT_EQ(readFile(target.modulesRoot / "added.txt"), "from a step");
     EXPECT_EQ(readFile(target.trustStore), "{\"keys\": []}\n") << "the step saw the restored file";
@@ -415,13 +450,15 @@ TEST_F(BackupTest, AnOldBackupIsRestoredAtItsVersionThenTakenThroughEveryNewerSt
 TEST_F(BackupTest, ABackupOfFormat1StillRestores) {
     const std::string text = backup(source(), files("source"));
     const std::string body = text.substr(text.find('\n'));
-    const std::string format1 =
-        R"({"format":"rfmap-backup","version":1,"createdAt":"2026-10-21T00:00:00Z","migrations":["001_init.sql"]})" + body;
+    const json header = {{"format", "rfmap-backup"}, {"version", 1}, {"createdAt", "2026-10-21T00:00:00Z"},
+                         {"migrations", serverStepsAnd({})}};
+    const std::string format1 = header.dump() + body;
     const std::string to = freshDatabase("rfmap_backup_target");
     const BackupSummary s = restore(to, format1);
     EXPECT_EQ(s.rows, 5u);
     EXPECT_EQ(query(to, "select count(*) from missions"), "2");
-    EXPECT_EQ(query(to, "select length(checksum)::text from schema_migrations"), "64") << "taken from this server";
+    EXPECT_EQ(query(to, "select count(*) from schema_migrations where length(checksum) <> 64"), "0")
+        << "taken from this server";
 }
 
 TEST_F(BackupTest, RefusesABackupFormatNewerThanTheServer) {
@@ -438,14 +475,14 @@ TEST_F(BackupTest, AStartRefusesADatabaseNewerThanTheServer) {
         (void)migrate(url, MigrationCatalog(RFMAP_SQL_DIR));
         FAIL() << "an older server started on a newer database";
     } catch (const MigrationError& e) {
-        EXPECT_NE(std::string(e.what()).find("999_test.sql"), std::string::npos) << e.what();
+        EXPECT_NE(std::string(e.what()).find(testStep()), std::string::npos) << e.what();
     }
 }
 
 TEST_F(BackupTest, AStartRefusesAMigrationChangedAfterItWasApplied) {
     const std::string url = freshDatabase("rfmap_backup_target");
-    (void)migrate(url, MigrationCatalog(migrationsWith("create table later (id int);", "999_test.sql", "a")));
-    const MigrationCatalog changed(migrationsWith("create table later (id bigint);", "999_test.sql", "b"));
+    (void)migrate(url, MigrationCatalog(migrationsWith("create table later (id int);", testStep(), "a")));
+    const MigrationCatalog changed(migrationsWith("create table later (id bigint);", testStep(), "b"));
     try {
         (void)migrate(url, changed);
         FAIL() << "started with a changed migration";
@@ -465,11 +502,11 @@ TEST_F(BackupTest, ABreakingStepWaitsForMigrate) {
     }
     EXPECT_EQ(query(url, "select count(*) from sessions"), "1");
     const MigrationReport r = migrate(url, breaking, {.allowBreaking = true});
-    EXPECT_EQ(r.afterPivot, std::vector<std::string>{"999_test.sql"});
+    EXPECT_EQ(r.afterPivot, std::vector<std::string>{testStep()});
     EXPECT_EQ(query(url, "select count(*) from sessions"), "0");
     // A new database has no data to break: a start builds it with every step.
     const std::string fresh = freshDatabase("rfmap_backup_target");
-    EXPECT_EQ(migrate(fresh, breaking).afterPivot.size(), 2u);
+    EXPECT_EQ(migrate(fresh, breaking).afterPivot.size(), serverVersion().size() + 1);
 }
 
 TEST_F(BackupTest, ChecksumsAreFilledForRowsWrittenBeforeThem) {
@@ -478,16 +515,18 @@ TEST_F(BackupTest, ChecksumsAreFilledForRowsWrittenBeforeThem) {
         pqxx::connection c(url);
         pqxx::work w(c);  // as a server before checksums left it
         w.exec("create table schema_migrations (name text primary key, applied_at timestamptz not null default now())");
-        w.exec("insert into schema_migrations (name) values ('001_init.sql')");
-        std::ifstream in(fs::path(RFMAP_SQL_DIR) / "001_init.sql");
+        const std::string& first = serverVersion().ids().front().name;
+        w.exec("insert into schema_migrations (name) values ($1)", pqxx::params{first});
+        std::ifstream in(fs::path(RFMAP_SQL_DIR) / first);
         std::ostringstream sql;
         sql << in.rdbuf();
         w.exec(sql.str());
         w.commit();
     }
     const MigrationCatalog catalog(RFMAP_SQL_DIR);
-    EXPECT_TRUE(migrate(url, catalog).afterPivot.empty());
-    EXPECT_EQ(query(url, "select checksum from schema_migrations"), catalog.version().ids().front().checksum);
+    EXPECT_EQ(migrate(url, catalog).afterPivot.size(), serverVersion().size() - 1);
+    EXPECT_EQ(query(url, "select checksum from schema_migrations order by name collate \"C\" limit 1"),
+              serverVersion().ids().front().checksum);
 }
 
 TEST_F(BackupTest, MigrateCommandPlansThenApplies) {
@@ -499,21 +538,34 @@ TEST_F(BackupTest, MigrateCommandPlansThenApplies) {
     std::ostringstream err;
     const auto plan = CommandLine::parse({"--migrate", "--plan", "--sql", sql.string()}, env, "/nowhere");
     ASSERT_EQ(ServiceCommand::run(plan, env, none, out, err), 0) << err.str();
-    EXPECT_EQ(out.str(), "database: 1 migrations applied\napply: 999_test.sql (breaking)\n");
+    EXPECT_EQ(out.str(), std::format("database: {} migrations applied\napply: {} (breaking)\n", serverVersion().size(),
+                                     testStep()));
     EXPECT_EQ(query(url, "select count(*) from sessions"), "1") << "a plan changes nothing";
     const auto apply = CommandLine::parse({"--migrate", "--sql", sql.string()}, env, "/nowhere");
     ASSERT_EQ(ServiceCommand::run(apply, env, none, out, err), 0) << err.str();
-    EXPECT_NE(err.str().find("applied migration 999_test.sql"), std::string::npos) << err.str();
+    EXPECT_NE(err.str().find("applied migration " + testStep()), std::string::npos) << err.str();
     EXPECT_EQ(query(url, "select count(*) from sessions"), "0");
 }
 
 TEST_F(BackupTest, TwoStepsWithOneNumberAreRefused) {
     class Clash final : public CodeMigration {
     public:
-        Clash() : CodeMigration("001_clash", "rev 1", Breaking::No) {}
+        Clash() : CodeMigration(serverVersion().ids().front().name.substr(0, 4) + "clash", "rev 1", Breaking::No) {}
         void apply(MigrationContext&) const override {}
     };
     std::vector<std::unique_ptr<MigrationStep>> code;
     code.push_back(std::make_unique<Clash>());
     EXPECT_THROW(MigrationCatalog(RFMAP_SQL_DIR, std::move(code)), MigrationError);
+}
+
+TEST_F(BackupTest, ABackupWaitsForARestoreToPutItsFilesInPlace) {
+    const std::string text = backup(source(), files("source"));
+    const ServerFiles target = files("target");
+    fs::create_directories(target.modulesRoot);
+    auto backupRunning = std::make_unique<FileLock>(target.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
+    const std::string to = freshDatabase("rfmap_backup_target");
+    auto restoring = std::async(std::launch::async, [&] { return restore(to, text); });
+    EXPECT_EQ(restoring.wait_for(std::chrono::milliseconds(300)), std::future_status::timeout);
+    backupRunning.reset();
+    EXPECT_EQ(restoring.get().rows, 5u);
 }

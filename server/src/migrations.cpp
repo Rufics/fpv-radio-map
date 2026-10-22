@@ -1,5 +1,6 @@
 #include "migrations.hpp"
 
+#include "file_lock.hpp"
 #include "security.hpp"
 
 #include <algorithm>
@@ -209,8 +210,16 @@ std::vector<std::string> SchemaMigrator::apply(MigrationContext& ctx, const std:
     return applied;
 }
 
+std::unique_ptr<FileLock> SchemaMigrator::lockFiles() const {
+    if (files_.modulesRoot.empty()) return nullptr;
+    fs::create_directories(files_.modulesRoot);
+    return std::make_unique<FileLock>(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Exclusive);
+}
+
 MigrationReport SchemaMigrator::migrateThrough(pqxx::connection& c, const SchemaVersion& pivot, const Action& atPivot,
                                                Options options) const {
+    // A backup reads the rows and the files under the shared lock: it waits until both have changed.
+    const std::unique_ptr<FileLock> filesLock = lockFiles();
     StagedFiles staged;
     pqxx::work w(c);
     const MigrationPlan plan = planFor(w, pivot, options);

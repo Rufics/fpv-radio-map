@@ -704,7 +704,7 @@ cd ~/fpv-radio-map/deploy &&
   docker compose build rfmap-server &&
   docker compose run --rm -T --no-deps rfmap-server --migrate --plan &&
   docker compose run --rm -T --no-deps rfmap-server --migrate &&
-  docker compose up -d
+  docker compose up -d --build
 ```
 
 `--migrate --plan` lists the migrations it would apply and changes nothing. `--migrate` applies
