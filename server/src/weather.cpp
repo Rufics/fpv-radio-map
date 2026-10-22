@@ -191,7 +191,7 @@ std::string WeatherService::ForecastCache::key(double lat, double lon, const std
 std::optional<json> WeatherService::ForecastCache::lookup(const std::string& key, TimePoint now,
                                                           std::unique_lock<std::mutex>& lock) {
     fetched_.wait(lock, [this, &key] { return !inFlight_.contains(key); });
-    if (const auto hit = entries_.get(key); hit && now - hit->fetched < ttl_) return hit->response;
+    if (const auto hit = entries_.get(key); hit && now - hit->fetched < ttl_) return std::make_optional(hit->response);
     return std::nullopt;
 }
 
