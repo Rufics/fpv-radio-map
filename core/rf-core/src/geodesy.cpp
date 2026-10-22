@@ -4,6 +4,7 @@
 #include <GeographicLib/GeodesicLine.hpp>
 
 #include <cmath>
+#include <format>
 #include <stdexcept>
 
 namespace rfcore {
@@ -43,8 +44,8 @@ std::vector<GeoPoint> Geodesy::sample(const GeoPoint& from, const GeoPoint& to, 
     const double total = line.Distance();
     const double wanted = std::max(1.0, std::ceil(total / maxStep.value()));
     if (!(wanted <= static_cast<double>(kMaxIntervals))) {
-        throw std::invalid_argument("Geodesy::sample: more than " + std::to_string(kMaxIntervals) +
-                                    " intervals; use a larger step");
+        throw std::invalid_argument(
+            std::format("Geodesy::sample: more than {} intervals; use a larger step", kMaxIntervals));
     }
     const auto intervals = static_cast<std::size_t>(wanted);
 

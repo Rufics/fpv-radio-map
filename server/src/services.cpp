@@ -82,17 +82,42 @@ void Services::openDatabase(const std::filesystem::path& sqlDir) {
     for (const auto& m : store_.db->migrate(sqlDir)) log_.info("startup", "applied migration " + m);
 }
 
-std::unique_ptr<PinGate> Services::makePinGate() const {
+namespace {
+
+/// The PIN hashing gate for the config, its limits logged.
+std::unique_ptr<PinGate> makePinGate(const Config& config, Logger& log) {
     auto gate = std::make_unique<PinGate>(
-        PinGate::limitsFor(config_.auth, config_.server.threads, std::thread::hardware_concurrency()));
+        PinGate::limitsFor(config.auth, config.server.threads, std::thread::hardware_concurrency()));
     const PinGate::Limits& l = gate->limits();
-    log_.info("startup",
-              std::format("PIN checks: {} at once, {} waiting up to {} ms", l.concurrency, l.queue, l.wait.count()));
-    if (l.concurrency + l.queue >= config_.server.threads) {
-        log_.warn("startup", "auth.pinConcurrency + auth.pinQueue leave no server thread free during a PIN storm");
+    log.info("startup",
+             std::format("PIN checks: {} at once, {} waiting up to {} ms", l.concurrency, l.queue, l.wait.count()));
+    if (l.concurrency + l.queue >= config.server.threads) {
+        log.warn("startup", "auth.pinConcurrency + auth.pinQueue leave no server thread free during a PIN storm");
     }
     return gate;
 }
+
+/// Opens a raster over `blocks`; `name` falls back to the tiles manifest's source, then the file name.
+std::shared_ptr<GdalRaster> openRaster(const std::filesystem::path& file, BlockCache& blocks, std::string& name) {
+    auto raster = std::make_shared<GdalRaster>(file, blocks);
+    if (name.empty()) name = TilesManifest(file).sourceName();
+    if (name.empty()) name = file.filename().string();
+    return raster;
+}
+
+rfmod::RegistryConfig registryConfig(const Config::Modules& modules) {
+    rfmod::RegistryConfig rc;
+    rc.root = modules.root;
+    rc.workerExecutable = modules.worker;
+    rc.hostVersion = rfmod::Version::parse(RFMAP_HOST_VERSION);
+    rc.isolateAll = modules.isolateAll;
+    rc.policy.requireSandbox = modules.requireSandbox;
+    rc.policy.maxMemoryMb = modules.maxMemoryMb;
+    rc.policy.maxTimeoutMs = modules.maxTimeoutMs;
+    return rc;
+}
+
+}  // namespace
 
 void Services::buildStores() {
     store_.schemas = std::make_unique<SchemaRegistry>(config_.schemasDir);
@@ -100,7 +125,7 @@ void Services::buildStores() {
     store_.schemas->addInline("link-create", linkCreateSchema());
     store_.authStore = std::make_unique<PgAuthStore>(*store_.db);
     store_.pins = std::make_unique<PinHasher>(PinHasher::costFromName(config_.auth.argon2Cost));
-    store_.pinGate = makePinGate();
+    store_.pinGate = makePinGate(config_, log_);
     store_.auth = std::make_unique<AuthService>(
         *store_.authStore, *store_.pins, *store_.pinGate, clock_,
         AuthService::Settings{config_.auth.pinMaxAttempts, std::chrono::minutes(config_.auth.pinLockoutMinutes),
@@ -113,13 +138,6 @@ void Services::buildStores() {
     }
 }
 
-std::shared_ptr<GdalRaster> Services::openRaster(const std::filesystem::path& file, std::string& name) const {
-    auto raster = std::make_shared<GdalRaster>(file, *terrain_.blocks);
-    if (name.empty()) name = TilesManifest(file).sourceName();
-    if (name.empty()) name = file.filename().string();
-    return raster;
-}
-
 void Services::openTerrain() {
     terrain_.blocks = std::make_unique<BlockCache>(config_.cache.demBlocksMb << 20, [](const RasterBlock& b) {
         return b.values.size() * sizeof(float) + sizeof(RasterBlock);
@@ -127,7 +145,7 @@ void Services::openTerrain() {
     const Config::Data& data = config_.data;
     if (!data.dem.empty()) {
         std::string name = data.demName;
-        auto raster = openRaster(data.dem, name);
+        auto raster = openRaster(data.dem, *terrain_.blocks, name);
         log_.info("terrain", std::format("DEM {} ({}, step {} m): {}", data.dem.string(), raster->dataType(),
                                          std::to_string(raster->nativeResolution().value()), name));
         terrain_.dem = std::make_shared<DemSource>(raster, name, data.demStatedErrorM, data.demStatedErrorSource);
@@ -145,7 +163,7 @@ void Services::openTerrain() {
         return;
     }
     std::string name = data.landcoverName;
-    auto raster = openRaster(data.landcover, name);
+    auto raster = openRaster(data.landcover, *terrain_.blocks, name);
     terrain_.landcover = std::make_shared<LandCoverSource>(raster, name);
 }
 
@@ -165,24 +183,12 @@ void Services::buildForecast() {
     forecast_.service = std::make_unique<WeatherService>(config_.weather, forecast_.source.get(), clock_);
 }
 
-rfmod::RegistryConfig Services::registryConfig() const {
-    rfmod::RegistryConfig rc;
-    rc.root = config_.modules.root;
-    rc.workerExecutable = config_.modules.worker;
-    rc.hostVersion = rfmod::Version::parse(RFMAP_HOST_VERSION);
-    rc.isolateAll = config_.modules.isolateAll;
-    rc.policy.requireSandbox = config_.modules.requireSandbox;
-    rc.policy.maxMemoryMb = config_.modules.maxMemoryMb;
-    rc.policy.maxTimeoutMs = config_.modules.maxTimeoutMs;
-    return rc;
-}
-
 void Services::buildModules(const std::string& ownerKeyText) {
     // The host answers module calls only inside a request's InvocationScope, so it needs no
     // service of its own: the registry can load modules before the calculations exist.
     modules_.host = std::make_unique<ServerHostServices>(log_);
     modules_.trust = std::make_unique<rfmod::TrustStore>(ownerKeyText, config_.modules.trustStore);
-    modules_.registry = std::make_unique<rfmod::ModuleRegistry>(registryConfig(), *modules_.trust, *modules_.host);
+    modules_.registry = std::make_unique<rfmod::ModuleRegistry>(registryConfig(config_.modules), *modules_.trust, *modules_.host);
     modules_.registry->reload();
     for (const auto& n : modules_.registry->notices()) log_.warn("modules", n);
     modules_.runner = std::make_unique<ModuleRunner>(*modules_.registry);

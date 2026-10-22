@@ -60,16 +60,16 @@ private:
     /// its errors as JSON and records the request in the metrics.
     [[nodiscard]] RawHandler route(std::string rateClass, Handler handler);
     /// Runs `handler`; every failure becomes a JSON answer.
-    void dispatch(const std::string& rateClass, const Handler& handler, const httplib::Request& req,
-                  httplib::Response& res);
+    template <typename Fn>
+    void dispatch(const std::string& rateClass, const Fn& handler, const httplib::Request& req, httplib::Response& res);
     /// Logs an unexpected request failure and answers 500 without its details.
     void internalError(const httplib::Request& req, httplib::Response& res, std::string_view what);
     /// The Prometheus text of GET /admin/metrics.
-    [[nodiscard]] std::string metricsText();
+    [[nodiscard]] std::string metricsText() const;
 
     /// A controller method as a Handler.
-    template <typename Api>
-    [[nodiscard]] Handler on(const Api& api, void (Api::*method)(const HttpRequest&, HttpReply&) const) {
+    template <typename Api, typename Method>
+    [[nodiscard]] static Handler on(const Api& api, Method method) {
         return [&api, method](const HttpRequest& req, HttpReply& res) { (api.*method)(req, res); };
     }
 

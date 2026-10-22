@@ -95,7 +95,7 @@ private:
     const HostEnvironment& environment_;
     const CalcContext& context_;
     std::string contributor_;
-    mutable int depth_ = 0;                ///< host calls open in this scope and its parents
+    mutable std::atomic<int> depth_ = 0;  ///< host calls open in this scope and its parents
     mutable std::atomic<int> calls_ = 0;  ///< on the root only: host calls made in the whole chain, over every thread
 };
 

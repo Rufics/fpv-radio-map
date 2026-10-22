@@ -33,7 +33,7 @@ InvocationScope::InvocationScope(const CalcContext& context)
       root_(previous_->root_),
       environment_(previous_->environment_),
       context_(context),
-      depth_(previous_->depth_) {
+      depth_(previous_->depth_.load()) {
     currentSlot() = this;
 }
 
@@ -43,7 +43,7 @@ InvocationScope::InvocationScope(std::string contributor)
       environment_(previous_->environment_),
       context_(previous_->context_),
       contributor_(std::move(contributor)),
-      depth_(previous_->depth_) {
+      depth_(previous_->depth_.load()) {
     currentSlot() = this;
 }
 
@@ -63,7 +63,7 @@ InvocationScope::HostCall::HostCall(const InvocationScope& scope) : scope_(scope
         throw HostCallBudgetError(std::format("host calls nested deeper than {}", kMaxDepth));
     }
     // Counted before the check so that threads sharing the budget cannot slip past it together.
-    if (scope.root_->calls_.fetch_add(1, std::memory_order_relaxed) >= kMaxHostCalls) {
+    if (scope.root_->calls_.fetch_add(1) >= kMaxHostCalls) {
         throw HostCallBudgetError(std::format("this request made more than {} host calls", kMaxHostCalls));
     }
     ++scope.depth_;

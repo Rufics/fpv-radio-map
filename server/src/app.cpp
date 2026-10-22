@@ -79,7 +79,7 @@ int Application::bindAny() { return http_->bind_to_any_port(config_.server.liste
 void Application::serveBound() { http_->listen_after_bind(); }
 void Application::stop() { http_->stop(); }
 
-std::string Application::metricsText() {
+std::string Application::metricsText() const {
     ServerSample sample;
     sample.version = RFMAP_HOST_VERSION;
     sample.startTimeSeconds = startTimeSeconds_;
@@ -98,7 +98,8 @@ std::string Application::metricsText() {
     return out.text();
 }
 
-void Application::dispatch(const std::string& rateClass, const Handler& handler, const Req& req, Res& res) {
+template <typename Fn>
+void Application::dispatch(const std::string& rateClass, const Fn& handler, const Req& req, Res& res) {
     const HttpRequest request(req, config_.server);
     HttpReply reply(res);
     try {

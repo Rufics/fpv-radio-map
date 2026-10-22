@@ -12,8 +12,10 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
+#include <array>
 #include <cerrno>
 #include <cstring>
+#include <span>
 #include <vector>
 
 // Landlock constants newer than the kernel headers this is built against. The values are ABI.
@@ -77,7 +79,7 @@ public:
 private:
     static constexpr __u32 kDeny = SECCOMP_RET_ERRNO | (EPERM & SECCOMP_RET_DATA);
 
-    static constexpr int kSocketSyscalls[] = {
+    static constexpr auto kSocketSyscalls = std::to_array<int>({
 #ifdef __NR_socket
         __NR_socket,
 #endif
@@ -129,9 +131,9 @@ private:
 #ifdef __NR_io_uring_setup
         __NR_io_uring_setup,
 #endif
-    };
+    });
 
-    static constexpr int kProcessSyscalls[] = {
+    static constexpr auto kProcessSyscalls = std::to_array<int>({
 #ifdef __NR_fork
         __NR_fork,
 #endif
@@ -174,9 +176,9 @@ private:
 #ifdef __NR_setns
         __NR_setns,
 #endif
-    };
+    });
 
-    static constexpr int kPrivilegeSyscalls[] = {
+    static constexpr auto kPrivilegeSyscalls = std::to_array<int>({
 #ifdef __NR_setuid
         __NR_setuid,
 #endif
@@ -216,9 +218,9 @@ private:
 #ifdef __NR_request_key
         __NR_request_key,
 #endif
-    };
+    });
 
-    static constexpr int kKernelSyscalls[] = {
+    static constexpr auto kKernelSyscalls = std::to_array<int>({
 #ifdef __NR_mount
         __NR_mount,
 #endif
@@ -324,11 +326,11 @@ private:
 #ifdef __NR_seccomp
         __NR_seccomp,  // no second filter on top of this one, which a module could use to confuse the host
 #endif
-    };
+    });
 
     /// What Landlock does not cover: changing a file's mode, owner, times and attributes, and
     /// truncation before ABI 3. The module reads files; it never changes them.
-    static constexpr int kFileMetadataSyscalls[] = {
+    static constexpr auto kFileMetadataSyscalls = std::to_array<int>({
 #ifdef __NR_truncate
         __NR_truncate,
 #endif
@@ -392,7 +394,7 @@ private:
 #ifdef __NR_fremovexattr
         __NR_fremovexattr,
 #endif
-    };
+    });
 
 #if defined(__x86_64__)
     static constexpr __u32 kArch = AUDIT_ARCH_X86_64;
@@ -417,8 +419,7 @@ private:
 #endif
     }
 
-    template <std::size_t N>
-    void denyAll(const int (&numbers)[N]) {
+    void denyAll(std::span<const int> numbers) {
         for (const int nr : numbers) {
             program_.push_back(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, static_cast<__u32>(nr), 0, 1));
             program_.push_back(BPF_STMT(BPF_RET | BPF_K, kDeny));
@@ -433,7 +434,7 @@ private:
 
     /// kill, tkill and tgkill reach only this process (abort() and raise() keep working).
     void denySignalsToOthers() {
-        const int numbers[] = {
+        const auto numbers = std::to_array<int>({
 #ifdef __NR_kill
             __NR_kill,
 #endif
@@ -443,7 +444,7 @@ private:
 #ifdef __NR_tgkill
             __NR_tgkill,
 #endif
-        };
+        });
         for (const int nr : numbers) {
             // if nr != this syscall: skip 4 instructions
             program_.push_back(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, static_cast<__u32>(nr), 0, 4));
@@ -483,7 +484,8 @@ private:
 /// Where glibc's loader looks for a library's dependencies when no path is given: the cache and
 /// the system library directories (multiarch directories lie beneath /usr/lib). Read-only and
 /// world-readable anyway; whichever of them exist are allowed.
-constexpr const char* kLoaderPaths[] = {"/etc/ld.so.cache", "/lib", "/lib64", "/usr/lib", "/usr/lib64", "/usr/local/lib"};
+constexpr std::array<const char*, 6> kLoaderPaths = {"/etc/ld.so.cache", "/lib",      "/lib64",
+                                                      "/usr/lib",        "/usr/lib64", "/usr/local/lib"};
 
 }  // namespace
 
@@ -547,7 +549,7 @@ bool WorkerSandbox::landlock() {
         attr.scoped = LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET | LANDLOCK_SCOPE_SIGNAL;
         size = sizeof(attr);
     }
-    const int ruleset = static_cast<int>(syscall(SYS_landlock_create_ruleset, &attr, size, 0));
+    const auto ruleset = static_cast<int>(syscall(SYS_landlock_create_ruleset, &attr, size, 0));
     if (ruleset < 0) {
         note("landlock", std::strerror(errno));
         return false;

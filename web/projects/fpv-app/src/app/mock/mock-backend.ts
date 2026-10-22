@@ -84,12 +84,12 @@ export class MockBackend {
     { id: 'results-memory', label: 'Results in memory', limitBytes: 5e8, usedBytes: 1.8e8, entries: 61, hits: 830, misses: 520, evictions: 4, hitRate: 0.61 },
     { id: 'results-table', label: 'Results table (Postgres)', limitBytes: 4e9, limitRows: 50000, usedBytes: 0.9e9, entries: 8120, hits: 2210, misses: 1430, evictions: 0, hitRate: 0.61 },
   ];
-  private keys: TrustedKey[] = [
+  private readonly keys: TrustedKey[] = [
     { id: '9f3a1c0b', label: 'Server owner key', key: 'rfmod-ed25519 9f3a1c0b5e7d…', builtIn: true, firstParty: true },
     { id: '4be27d11', label: 'club.ham publisher', key: 'rfmod-ed25519 4be27d11a0c3…', builtIn: false, firstParty: false },
   ];
   private readonly history = new Map<string, { version: number; verified: boolean; item: Record<string, unknown>; changedBy: string; changedAt: string }[]>();
-  private modules: ModuleInfo[] = structuredClone(MODULES);
+  private readonly modules: ModuleInfo[] = structuredClone(MODULES);
   private readonly validator = new SchemaValidator();
   private readonly routes: [string, RegExp, Handler][] = [];
 

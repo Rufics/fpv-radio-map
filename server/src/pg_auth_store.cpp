@@ -91,25 +91,32 @@ std::optional<LinkRecord> PgAuthStore::linkByToken(const Digest& tokenHash) {
     });
 }
 
+namespace {
+
+/// One statement under the row lock, so concurrent guesses are counted one by one. The CTE keeps
+/// whether the link was paused before this attempt; the update reads the old row.
+/// $1 link id, $2 max attempts, $3 lockout seconds, $4 now (epoch seconds).
+constexpr const char* kBeginAttemptSql =
+    "with before as (select id, coalesce(locked_until > to_timestamp($4), false) as paused "
+    "  from share_links where id = $1 for update) "
+    "update share_links s set "
+    "  locked_until = case when before.paused then s.locked_until when s.failed_attempts + 1 >= $2 "
+    "    then to_timestamp($4) + make_interval(secs => $3 * power(2, least(s.lockouts, 10))) else s.locked_until end, "
+    "  lockouts = case when before.paused then s.lockouts when s.failed_attempts + 1 >= $2 then s.lockouts + 1 "
+    "    else s.lockouts end, "
+    "  failed_attempts = case when before.paused then s.failed_attempts when s.failed_attempts + 1 >= $2 then 0 "
+    "    else s.failed_attempts + 1 end "
+    "from before where s.id = before.id "
+    "returning s.failed_attempts, before.paused, coalesce(s.locked_until > to_timestamp($4), false), "
+    "  extract(epoch from s.locked_until)::float8";
+
+}  // namespace
+
 AttemptOutcome PgAuthStore::beginAttempt(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
                                          TimePoint now) {
-    // One statement under the row lock, so concurrent guesses are counted one by one. The CTE
-    // keeps whether the link was paused before this attempt; the update reads the old row.
     return db_.tx([&linkId, maxAttempts, lockout, now](pqxx::work& w) {
-        const auto r = w.exec(
-            "with before as (select id, coalesce(locked_until > to_timestamp($4), false) as paused "
-            "  from share_links where id = $1 for update) "
-            "update share_links s set "
-            "  locked_until = case when before.paused then s.locked_until when s.failed_attempts + 1 >= $2 "
-            "    then to_timestamp($4) + make_interval(secs => $3 * power(2, least(s.lockouts, 10))) else s.locked_until end, "
-            "  lockouts = case when before.paused then s.lockouts when s.failed_attempts + 1 >= $2 then s.lockouts + 1 "
-            "    else s.lockouts end, "
-            "  failed_attempts = case when before.paused then s.failed_attempts when s.failed_attempts + 1 >= $2 then 0 "
-            "    else s.failed_attempts + 1 end "
-            "from before where s.id = before.id "
-            "returning s.failed_attempts, before.paused, coalesce(s.locked_until > to_timestamp($4), false), "
-            "  extract(epoch from s.locked_until)::float8",
-            pqxx::params{linkId, maxAttempts, static_cast<double>(lockout.count()), epochSeconds(now)});
+        const auto r = w.exec(kBeginAttemptSql,
+                              pqxx::params{linkId, maxAttempts, static_cast<double>(lockout.count()), epochSeconds(now)});
         if (r.empty()) throw StoredDataError("link vanished");
         const auto& row = r[0];
         const bool refused = row[1].as<bool>();

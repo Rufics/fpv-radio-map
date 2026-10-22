@@ -9,13 +9,13 @@
 
 #include "lru.hpp"
 
-#include <functional>
 #include <future>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 namespace rfmap {
@@ -85,11 +85,18 @@ private:
     /// is fetched once even when several requests miss at the same time.
     class ForecastCache {
     public:
-        using Fetch = std::function<json()>;
-        explicit ForecastCache(std::chrono::minutes ttl);
+        /// A point's forecast for a model set, asked at `now`.
+        struct Query {
+            double lat;
+            double lon;
+            std::string models;
+            TimePoint now;
+        };
+        /// `source` answers the misses; null when no forecast service is configured.
+        ForecastCache(std::chrono::minutes ttl, IForecastSource* source) : ttl_(ttl), source_(source) {}
 
-        /// The cached response, or the one `fetch` returns, which is then cached.
-        json get(double lat, double lon, const std::string& models, TimePoint now, const Fetch& fetch);
+        /// The cached response for the query's cell, or the one the source returns, which is then cached.
+        json get(const Query& q);
 
         static constexpr double kGridDeg = 0.01;  ///< about 1 km, below any forecast model's cell
         static constexpr std::size_t kMaxEntries = 5000;
@@ -100,15 +107,21 @@ private:
             json response;
             TimePoint fetched;
         };
-        /// Runs `fetch` for `key`, hands its outcome to `promise` and the waiters, and caches a result.
-        json fetchInto(const std::string& key, TimePoint now, const Fetch& fetch, std::promise<json>& promise);
+        /// What the cache holds for a key: a fresh answer, the fetch in flight, or nothing.
+        using Found = std::variant<std::monostate, json, std::shared_future<json>>;
+        /// Under the lock: the fresh answer or the fetch in flight for `key`; when there is neither,
+        /// `promise` is registered as the fetch in flight and the caller must run it.
+        Found lookup(const std::string& key, TimePoint now, std::promise<json>& promise);
+        /// Fetches `key` from the source, hands the outcome to `promise` and the waiters, and caches a result.
+        json fetchInto(const std::string& key, const Query& q, std::promise<json>& promise);
 
         std::chrono::minutes ttl_;
+        IForecastSource* source_;
         std::mutex mutex_;
         /// The fetch under way per key: a later miss on the same key waits for its outcome, an
         /// exception included, instead of starting a fetch of its own.
         std::map<std::string, std::shared_future<json>, std::less<>> inFlight_;
-        LruCache<std::string, Entry> entries_;
+        LruCache<std::string, Entry> entries_{kMaxEntries, [](const Entry&) { return std::size_t{1}; }};
     };
 
     json fetchCached(double lat, double lon, const Config::WeatherTier& tier);

@@ -156,7 +156,7 @@ std::optional<TimePoint> OpenMeteoSource::runTime() {
 }
 
 WeatherService::WeatherService(const Config::Weather& cfg, IForecastSource* source, const IClock& clock)
-    : cfg_(cfg), source_(source), clock_(clock), cache_(std::chrono::minutes(cfg.cacheMinutes)) {}
+    : cfg_(cfg), source_(source), clock_(clock), cache_(std::chrono::minutes(cfg.cacheMinutes), source) {}
 
 double WeatherService::meanRadius(double latitudeDeg) {
     const double m = rfcore::EarthModel::radiusOfCurvature(latitudeDeg, 0.0).value();
@@ -180,44 +180,52 @@ double WeatherService::geometricHeight(double z) {
     return kRe * z / (kRe - z);
 }
 
-WeatherService::ForecastCache::ForecastCache(std::chrono::minutes ttl)
-    : ttl_(ttl), entries_(kMaxEntries, [](const Entry&) { return std::size_t{1}; }) {}
-
 std::string WeatherService::ForecastCache::key(double lat, double lon, const std::string& models) {
     const auto cell = [](double deg) { return static_cast<long long>(std::llround(deg / kGridDeg)); };
     return std::format("{},{},{}", cell(lat), cell(lon), models);
 }
 
-json WeatherService::ForecastCache::get(double lat, double lon, const std::string& models, TimePoint now,
-                                        const Fetch& fetch) {
-    const std::string k = key(lat, lon, models);
-    std::unique_lock lock(mutex_);
-    if (const auto hit = entries_.get(k); hit && now - hit->fetched < ttl_) return hit->response;
-    if (const auto it = inFlight_.find(k); it != inFlight_.end()) {
-        const std::shared_future<json> pending = it->second;
-        lock.unlock();
-        return pending.get();  // the fetcher's answer, or its exception rethrown
-    }
-    std::promise<json> promise;
-    inFlight_.emplace(k, promise.get_future().share());
-    lock.unlock();
-    return fetchInto(k, now, fetch, promise);
+WeatherService::ForecastCache::Found WeatherService::ForecastCache::lookup(const std::string& key, TimePoint now,
+                                                                            std::promise<json>& promise) {
+    const std::lock_guard lock(mutex_);
+    if (const auto hit = entries_.get(key); hit && now - hit->fetched < ttl_) return hit->response;
+    if (const auto it = inFlight_.find(key); it != inFlight_.end()) return it->second;
+    inFlight_.emplace(key, promise.get_future().share());
+    return std::monostate{};
 }
 
-json WeatherService::ForecastCache::fetchInto(const std::string& key, TimePoint now, const Fetch& fetch,
-                                              std::promise<json>& promise) {
+json WeatherService::ForecastCache::get(const Query& q) {
+    const std::string k = key(q.lat, q.lon, q.models);
+    std::promise<json> promise;
+    Found found = lookup(k, q.now, promise);
+    if (auto* hit = std::get_if<json>(&found)) return std::move(*hit);
+    if (const auto* pending = std::get_if<std::shared_future<json>>(&found)) {
+        return pending->get();  // the fetcher's answer, or its exception rethrown
+    }
+    return fetchInto(k, q, promise);
+}
+
+json WeatherService::ForecastCache::fetchInto(const std::string& key, const Query& q, std::promise<json>& promise) {
     // Whatever the fetch does, the key must not stay in flight, or every later request waits.
-    struct Done {
-        ForecastCache& cache;
-        const std::string& key;
+    class Done {
+    public:
+        Done(ForecastCache& cache, const std::string& key) : cache_(cache), key_(key) {}
         ~Done() {
-            const std::lock_guard guard(cache.mutex_);
-            cache.inFlight_.erase(key);
+            const std::lock_guard guard(cache_.mutex_);
+            cache_.inFlight_.erase(key_);
         }
-    } const done{*this, key};
+        Done(const Done&) = delete;
+        Done& operator=(const Done&) = delete;
+
+    private:
+        ForecastCache& cache_;
+        const std::string& key_;
+    };
+    const Done done(*this, key);
     try {
-        json r = fetch();
-        entries_.put(key, std::make_shared<const Entry>(Entry{r, now}));
+        if (!source_) throw ForecastUnavailableError("no forecast service is configured");
+        json r = source_->fetch(q.lat, q.lon, q.models);
+        entries_.put(key, std::make_shared<const Entry>(r, q.now));
         promise.set_value(r);
         return r;
     } catch (...) {
@@ -227,8 +235,7 @@ json WeatherService::ForecastCache::fetchInto(const std::string& key, TimePoint 
 }
 
 json WeatherService::fetchCached(double lat, double lon, const Config::WeatherTier& tier) {
-    return cache_.get(lat, lon, tier.models, clock_.now(),
-                      [this, lat, lon, &tier] { return source_->fetch(lat, lon, tier.models); });
+    return cache_.get({lat, lon, tier.models, clock_.now()});
 }
 
 std::optional<json> WeatherService::fetchOrError(double lat, double lon, const Config::WeatherTier& tier,

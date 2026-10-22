@@ -35,7 +35,7 @@ struct RegistryConfig {
 class ModuleRegistry {
 public:
     struct Entry {
-        InstalledModule module;
+        InstalledModule installed;
         ModuleState state = ModuleState::Disabled;
         std::string stateDetail;
         std::shared_ptr<IModuleInstance> instance;

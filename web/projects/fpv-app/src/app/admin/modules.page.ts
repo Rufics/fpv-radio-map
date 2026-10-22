@@ -185,6 +185,7 @@ export class ModulesPage implements OnInit {
   }
 
   protected async toggle(m: ModuleInfo): Promise<void> {
+    this.error.set(null);
     await this.adminCall(async () => this.modules.set(await this.api.setModule(m.id!, { enabled: m.state === 'disabled' })));
   }
 

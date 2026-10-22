@@ -8,6 +8,7 @@
 #include "rfmod/report.hpp"
 #include "rfmod/trust.hpp"
 
+#include <array>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -35,18 +36,18 @@ public:
     ModuleInstaller(InstallerConfig config, const TrustStore& trust, IHostServices& selfTestHost);
 
     /// Every check an install runs, without installing.
-    [[nodiscard]] ValidationReport check(std::string_view archive);
+    [[nodiscard]] ValidationReport check(std::string_view archive) const;
     /// Installs when every check passes. Replaces an older version of the same module, keeping
     /// its settings when they still fit the new options schema.
-    [[nodiscard]] ValidationReport install(std::string_view archive);
+    [[nodiscard]] ValidationReport install(std::string_view archive) const;
     /// Throws std::invalid_argument when the module is unknown or another enabled module requires it.
-    void remove(const std::string& id);
+    void remove(const std::string& id) const;
 
     /// The modules in the store whose packages still verify, by id.
     [[nodiscard]] std::map<std::string, InstalledModule, std::less<>> installed() const;
 
     /// Module ids under these prefixes belong to the platform: only the owner key may sign them.
-    static constexpr std::string_view kReservedPrefixes[] = {"fpv.", "rf."};
+    static constexpr std::array<std::string_view, 2> kReservedPrefixes = {"fpv.", "rf."};
     [[nodiscard]] static bool reservedId(std::string_view id);
     /// True for a string of the manifest id alphabet: what a directory under installed/ is named.
     [[nodiscard]] static bool looksLikeModuleId(std::string_view id);
@@ -54,7 +55,7 @@ public:
 private:
     using Installed = std::map<std::string, InstalledModule, std::less<>>;
 
-    [[nodiscard]] ValidationReport run(std::string_view archive, bool install);
+    [[nodiscard]] ValidationReport run(std::string_view archive, bool install) const;
     /// The checks against what is installed: signer, version upgrade, dependents, dependencies, lifecycle.
     void checkAgainstInstalled(const VerifiedPackage& pkg, const Installed& have, ValidationReport& report) const;
     void checkSigner(const VerifiedPackage& pkg, const Installed& have, ValidationReport& report) const;

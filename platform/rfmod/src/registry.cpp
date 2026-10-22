@@ -59,11 +59,11 @@ void ModuleRegistry::shutdownAll() {
 
 ModuleRegistry::Entries ModuleRegistry::readEntries(std::vector<std::string>& notices) const {
     Entries entries;
-    for (auto& [id, module] : InstalledReader(store_, verifier_).all(notices)) {
-        Entry e{std::move(module), ModuleState::Disabled, {}, nullptr, nullptr};
-        if (const auto& schema = e.module.manifest.optionsSchema) {
+    for (auto& [id, installed] : InstalledReader(store_, verifier_).all(notices)) {
+        Entry e{std::move(installed), ModuleState::Disabled, {}, nullptr, nullptr};
+        if (const auto& schema = e.installed.manifest.optionsSchema) {
             try {
-                e.optionsSchema = std::make_shared<const OptionsSchema>(json::parse(store_.readFile(e.module.dir / *schema)));
+                e.optionsSchema = std::make_shared<const OptionsSchema>(json::parse(store_.readFile(e.installed.dir / *schema)));
             } catch (const std::invalid_argument& ex) {  // the schema cannot be used
                 notices.push_back(id + ": options schema is unusable: " + ex.what());
             } catch (const json::exception& ex) {  // the schema is not JSON
@@ -72,12 +72,12 @@ ModuleRegistry::Entries ModuleRegistry::readEntries(std::vector<std::string>& no
         }
         // Options from state.json are checked again on every load: the file is the admin's,
         // but a schema can change with an upgrade.
-        if (const auto why = e.optionsSchema ? e.optionsSchema->check(e.module.settings.options)
+        if (const auto why = e.optionsSchema ? e.optionsSchema->check(e.installed.settings.options)
                                              : std::optional<std::string>(std::nullopt);
-            why || (!e.optionsSchema && !e.module.settings.options.empty())) {
+            why || (!e.optionsSchema && !e.installed.settings.options.empty())) {
             notices.push_back(id + ": stored options no longer fit the module and were ignored" +
                               (why ? " (" + *why + ")" : ""));
-            e.module.settings.options = json::object();
+            e.installed.settings.options = json::object();
         }
         entries.try_emplace(id, std::move(e));
     }
@@ -89,7 +89,7 @@ void ModuleRegistry::reloadLocked() {
     std::vector<std::string> notices;
     Entries entries = readEntries(notices);
     DependencyResolver::Candidates candidates;
-    for (const auto& [id, e] : entries) candidates.try_emplace(id, &e.module.manifest, e.module.settings.enabled);
+    for (const auto& [id, e] : entries) candidates.try_emplace(id, &e.installed.manifest, e.installed.settings.enabled);
     const std::vector<DependencyResolver::Step> plan = DependencyResolver(candidates, config_.hostVersion).plan();
     {
         const std::lock_guard lock(mutex_);
@@ -118,7 +118,7 @@ void ModuleRegistry::loadAll(const std::vector<DependencyResolver::Step>& plan) 
 }
 
 bool ModuleRegistry::requiredDependenciesActive(const Entry& e, std::string& detail) const {
-    for (const Dependency& d : e.module.manifest.dependencies) {
+    for (const Dependency& d : e.installed.manifest.dependencies) {
         const auto dep = entries_.find(d.id);
         if (dep != entries_.end() && dep->second.state == ModuleState::Active) continue;
         detail = "needs " + d.id + " " + d.range.str() + " (" +
@@ -135,7 +135,7 @@ bool ModuleRegistry::loadOne(Entry& e) {
     ModuleState state = ModuleState::MissingDependency;
     if (requiredDependenciesActive(e, detail)) {
         try {
-            instance = loader_.load(e.module.manifest, e.module.signer, e.module.dir, e.module.settings.options, false);
+            instance = loader_.load(e.installed.manifest, e.installed.signer, e.installed.dir, e.installed.settings.options, false);
             state = ModuleState::Active;
         } catch (const ModuleError& ex) {
             detail = ex.what();
@@ -165,16 +165,16 @@ void ModuleRegistry::addNotices(const std::string& id, const Entry& e) {
         return;
     }
     if (e.state != Active) return;
-    const Manifest& m = e.module.manifest;
+    const Manifest& m = e.installed.manifest;
     if (m.deprecation.has_value()) {
         const auto& d = *m.deprecation;
         notices_.push_back(id + " is deprecated since " + d.since.str() + " and will be removed in " + d.removedIn.str() +
                            ". " + d.message + (d.replacement.empty() ? "" : " Use " + d.replacement + " instead."));
     }
     for (const Dependency& dep : m.dependencies) {
-        if (const Entry& target = entries_.at(dep.id); target.module.manifest.deprecation.has_value()) {
+        if (const Entry& target = entries_.at(dep.id); target.installed.manifest.deprecation.has_value()) {
             notices_.push_back(id + " depends on deprecated " + dep.id + "; it stops working when " + dep.id +
-                               " is removed in " + target.module.manifest.deprecation->removedIn.str() + ".");
+                               " is removed in " + target.installed.manifest.deprecation->removedIn.str() + ".");
         }
     }
 }
@@ -187,8 +187,8 @@ void ModuleRegistry::reload() {
 std::vector<std::string> ModuleRegistry::dependentsOf(std::string_view id) const {
     std::vector<std::string> out;
     for (const auto& [otherId, e] : entries_) {
-        if (!e.module.settings.enabled) continue;
-        for (const Dependency& d : e.module.manifest.dependencies) {
+        if (!e.installed.settings.enabled) continue;
+        for (const Dependency& d : e.installed.manifest.dependencies) {
             if (d.id == id) out.push_back(otherId);
         }
     }
@@ -197,7 +197,7 @@ std::vector<std::string> ModuleRegistry::dependentsOf(std::string_view id) const
 
 void ModuleRegistry::updateSettings(const std::string& id, const ModuleSettings& settings) {
     const Entry& e = entries_.at(id);
-    store_.writeSettings(e.module.dir, settings, e.module.manifest, e.module.signer);
+    store_.writeSettings(e.installed.dir, settings, e.installed.manifest, e.installed.signer);
     reloadLocked();
 }
 
@@ -210,7 +210,7 @@ void ModuleRegistry::setEnabled(const std::string& id, bool enabled) {
             throw std::invalid_argument(id + " is required by " + joined(deps, ", ") + "; disable that first");
         }
     }
-    ModuleSettings settings = it->second.module.settings;
+    ModuleSettings settings = it->second.installed.settings;
     settings.enabled = enabled;
     updateSettings(id, settings);
 }
@@ -218,7 +218,7 @@ void ModuleRegistry::setEnabled(const std::string& id, bool enabled) {
 void ModuleRegistry::setOptions(const std::string& id, const json& options) {
     const std::lock_guard admin(adminMutex_);
     if (const auto why = checkOptions(id, options)) throw std::invalid_argument(*why);
-    ModuleSettings settings = entries_.at(id).module.settings;
+    ModuleSettings settings = entries_.at(id).installed.settings;
     settings.options = options;
     updateSettings(id, settings);
 }
@@ -229,7 +229,7 @@ std::optional<std::string> ModuleRegistry::checkOptions(const std::string& id, c
     if (it == entries_.end()) return "unknown module " + id;
     if (!options.is_object()) return id + ": options must be an object";
     if (!it->second.optionsSchema) {
-        if (it->second.module.manifest.optionsSchema) return id + ": options schema is unusable";
+        if (it->second.installed.manifest.optionsSchema) return id + ": options schema is unusable";
         if (!options.empty()) return id + ": module takes no options";
         return std::nullopt;
     }
@@ -238,15 +238,15 @@ std::optional<std::string> ModuleRegistry::checkOptions(const std::string& id, c
 }
 
 json ModuleRegistry::describe(const Entry& e) const {
-    const Manifest& m = e.module.manifest;
+    const Manifest& m = e.installed.manifest;
     json info = {{"id", m.id},
                  {"version", m.version.str()},
                  {"title", m.title},
                  {"lifecycle", toString(m.lifecycle)},
                  {"provides", m.provides},
-                 {"signedBy", e.module.signer.label + " (" + e.module.signer.key.id() + ")"},
-                 {"isolated", e.instance ? e.instance->isolated() : loader_.isolates(e.module.signer)},
-                 {"enabled", e.module.settings.enabled},
+                 {"signedBy", e.installed.signer.label + " (" + e.installed.signer.key.id() + ")"},
+                 {"isolated", e.instance ? e.instance->isolated() : loader_.isolates(e.installed.signer)},
+                 {"enabled", e.installed.settings.enabled},
                  {"state", toString(e.state)}};
     if (!e.stateDetail.empty()) info["stateDetail"] = e.stateDetail;
     json req = json::array();
@@ -283,7 +283,7 @@ std::vector<std::shared_ptr<IModuleInstance>> ModuleRegistry::withCapability(con
     std::vector<std::shared_ptr<IModuleInstance>> out;
     for (const std::string& id : order_) {
         const Entry& e = entries_.at(id);
-        if (e.instance && e.module.manifest.hasCapability(capability)) out.push_back(e.instance);
+        if (e.instance && e.installed.manifest.hasCapability(capability)) out.push_back(e.instance);
     }
     return out;
 }
@@ -301,9 +301,9 @@ std::optional<fs::path> ModuleRegistry::publicFile(const std::string& id, const 
     try {
         // Canonical, so ".." and symlinks are resolved before the check: the file must be the
         // options schema itself or lie under ui/; never lib/ or anything outside the module.
-        const fs::path dir = store_.root().confine(it->second.module.dir);
+        const fs::path dir = store_.root().confine(it->second.installed.dir);
         fs::path p = store_.root().confine(dir / path);
-        const auto& schema = it->second.module.manifest.optionsSchema;
+        const auto& schema = it->second.installed.manifest.optionsSchema;
         const bool isSchema = schema && p == store_.root().confine(dir / *schema);
         const bool isUi = p.string().starts_with((dir / "ui" / "").string());
         if ((!isUi && !isSchema) || !fs::is_regular_file(p)) return std::nullopt;

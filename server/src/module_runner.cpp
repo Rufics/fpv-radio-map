@@ -118,7 +118,7 @@ std::vector<ModuleRunner::Active> ModuleRunner::optedIn(const std::string& capab
     for (std::shared_ptr<rfmod::IModuleInstance>& m : registry_.withCapability(capability)) {
         const std::string id = m->manifest().id;
         if (!ctx.optedIn(id)) continue;
-        out.push_back({std::move(m), id, ctx.optionsFor(id)});
+        out.emplace_back(std::move(m), id, ctx.optionsFor(id));
     }
     return out;
 }

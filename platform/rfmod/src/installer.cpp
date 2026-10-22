@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <format>
+#include <ranges>
 #include <system_error>
 
 namespace rfmod {
@@ -12,9 +13,9 @@ namespace fs = std::filesystem;
 
 namespace {
 
-std::string sandboxDetail(const IsolatedModule& module) {
-    return std::format("separate process, memory limit {} MB, timeout {} ms; {}", module.limits().memoryMb,
-                       module.limits().timeoutMs, module.sandbox().describe());
+std::string sandboxDetail(const IsolatedModule& isolated) {
+    return std::format("separate process, memory limit {} MB, timeout {} ms; {}", isolated.limits().memoryMb,
+                       isolated.limits().timeoutMs, isolated.sandbox().describe());
 }
 
 std::string selfTestDetail(const json& result, bool passed) {
@@ -66,11 +67,11 @@ std::map<std::string, InstalledModule, std::less<>> ModuleInstaller::installed()
     return InstalledReader(store_, verifier_).all(notices);
 }
 
-ValidationReport ModuleInstaller::check(std::string_view archive) { return run(archive, false); }
+ValidationReport ModuleInstaller::check(std::string_view archive) const { return run(archive, false); }
 
-ValidationReport ModuleInstaller::install(std::string_view archive) { return run(archive, true); }
+ValidationReport ModuleInstaller::install(std::string_view archive) const { return run(archive, true); }
 
-ValidationReport ModuleInstaller::run(std::string_view archive, bool install) {
+ValidationReport ModuleInstaller::run(std::string_view archive, bool install) const {
     ValidationReport report;
     auto pkg = verifier_.verify(archive, report);
     if (!pkg) return report;
@@ -228,9 +229,19 @@ void ModuleInstaller::installStaged(const VerifiedPackage& pkg, std::string_view
 }
 
 bool ModuleInstaller::looksLikeModuleId(std::string_view id) {
-    // One path component of the manifest id alphabet (schemas/rfmod-manifest.schema.json).
-    if (id.empty() || id.size() > 128 || id.find('.') == std::string_view::npos) return false;
-    return std::ranges::all_of(id, [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-'; });
+    // The manifest id shape (schemas/rfmod-manifest.schema.json): lower-case words of letters,
+    // digits and dashes, each starting with a letter, joined by single dots. Never "." or "..",
+    // never a path.
+    if (id.empty() || id.size() > 128) return false;
+    std::size_t words = 0;
+    for (const auto word : id | std::views::split('.')) {
+        const std::string_view w(word.begin(), word.end());
+        if (w.empty() || !std::islower(static_cast<unsigned char>(w.front()))) return false;
+        const bool plain = std::ranges::all_of(w, [](char c) { return std::islower(static_cast<unsigned char>(c)) || std::isdigit(static_cast<unsigned char>(c)) || c == '-'; });
+        if (!plain) return false;
+        ++words;
+    }
+    return words >= 2;
 }
 
 std::vector<std::string> ModuleInstaller::dependentsOf(std::string_view id, const Installed& have) {
@@ -244,7 +255,7 @@ std::vector<std::string> ModuleInstaller::dependentsOf(std::string_view id, cons
     return out;
 }
 
-void ModuleInstaller::remove(const std::string& id) {
+void ModuleInstaller::remove(const std::string& id) const {
     const Installed have = installed();
     const auto it = have.find(id);
     if (it == have.end()) {

@@ -75,13 +75,9 @@ private:
     void openDatabase(const std::filesystem::path& sqlDir);
     void buildStores();
     void openTerrain();
-    [[nodiscard]] std::shared_ptr<GdalRaster> openRaster(const std::filesystem::path& file, std::string& name) const;
     void buildCaches();
     void buildForecast();
     void buildModules(const std::string& ownerKeyText);
-    [[nodiscard]] rfmod::RegistryConfig registryConfig() const;
-    /// The PIN hashing gate for this config, its limits logged.
-    [[nodiscard]] std::unique_ptr<PinGate> makePinGate() const;
 
     /// Persistent state: the database and the stores and services built on it.
     struct Stores {

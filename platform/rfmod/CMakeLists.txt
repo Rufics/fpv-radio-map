@@ -68,6 +68,7 @@ add_library(rfmod_platform
   src/loader.cpp
   src/installer.cpp
   src/registry.cpp
+  src/cli.cpp
   "${_schema_header}")
 target_include_directories(rfmod_platform PUBLIC include PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(rfmod_platform

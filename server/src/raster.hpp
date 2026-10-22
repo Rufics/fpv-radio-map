@@ -73,7 +73,7 @@ private:
     /// The transformation from WGS84 into the raster's own system, or none when it is WGS84.
     void readProjection(const std::array<double, 6>& geoTransform);
     /// The smallest pixel pitch over the raster and its centre, measured on the ellipsoid.
-    void measurePitch(const std::array<double, 6>& geoTransform, const Transformation& toWgs);
+    void measurePitch(const std::array<double, 6>& geoTransform, OGRCoordinateTransformation* toWgs);
     std::shared_ptr<const RasterBlock> block(int bx, int by) const;
     /// The block cache key of a block: the raster's id and the block's position, each in its own bits.
     [[nodiscard]] std::uint64_t blockKey(int bx, int by) const;

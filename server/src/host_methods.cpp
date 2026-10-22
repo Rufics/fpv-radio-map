@@ -124,7 +124,9 @@ public:
         const double total = g.inverse(from, to).distance.value();
         double step = std::max(kMinStepM, dem.nativeResolution().value());
         // The module's step replaces the DEM's: coarser for a long path, finer where it wants detail.
-        if (const auto asked = req.optionalNumber("stepM", kMinStepM, HostRequest::kMaxDistanceM)) step = *asked;
+        if (const auto asked = req.optionalNumber("stepM", kMinStepM, HostRequest::kMaxDistanceM); asked.has_value()) {
+            step = *asked;
+        }
         if (total / step > kMaxSamples) {
             throw HostCallError(std::format("bad_request: the path needs more than {} samples at {} m; use a larger stepM",
                                             static_cast<long>(kMaxSamples), step));

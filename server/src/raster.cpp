@@ -93,12 +93,12 @@ void GdalRaster::readProjection(const std::array<double, 6>& geoTransform) {
         toWgs.reset(OGRCreateCoordinateTransformation(&target, &wgs84));
         if (!toWgs) throw RasterError(file_.string() + ": cannot transform to WGS84");
     }
-    measurePitch(geoTransform, toWgs);
+    measurePitch(geoTransform, toWgs.get());
 }
 
-void GdalRaster::measurePitch(const std::array<double, 6>& gt, const Transformation& toWgs) {
+void GdalRaster::measurePitch(const std::array<double, 6>& gt, OGRCoordinateTransformation* toWgs) {
     // Pixel centre positions back in WGS84, to measure the pixel pitch on the ellipsoid.
-    auto centreOf = [&gt, &toWgs](double col, double row) {
+    auto centreOf = [&gt, toWgs](double col, double row) {
         double x = gt[0] + (col + 0.5) * gt[1] + (row + 0.5) * gt[2];
         double y = gt[3] + (col + 0.5) * gt[4] + (row + 0.5) * gt[5];
         if (toWgs) toWgs->Transform(1, &x, &y);
