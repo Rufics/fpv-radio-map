@@ -584,11 +584,11 @@ to another machine. The map data can always be built again from step 2.
 
 ### 10.1 Restore on a new server
 
-A restore builds the schema with the server's own migrations, loads the rows, puts the module
-files back, then applies the migrations that came after the backup, all in one transaction. A
-backup therefore restores into the same or a newer server, on any PostgreSQL version, and the
-migrations adapt the data to the new version. It restores only into a database that has no
-schema yet. If it stops, nothing is committed to the database, which stays empty, and no module
+A restore builds the schema with the server's own migrations, loads the rows and applies the
+migrations that came after the backup, all in one transaction, then puts the module files back
+once that transaction has committed. A backup therefore restores into the same or a newer
+server, on any PostgreSQL version, and the migrations adapt the data to the new version. It
+restores only into a database that has no schema yet. If it stops, nothing is committed to the database, which stays empty, and no module
 file or trust store (`keys.json`) is changed: fix the cause and run it again. The files go into
 place only after the database has committed, each replacing the file of the same name.
 
@@ -664,8 +664,8 @@ two commands again, with the same `backup=` path. Do not run the backup again at
 it would now read the new, empty database.
 
 The backup runs before `up` replaces the old `postgis` container, so the new server reads the old
-database. The stack is down from `stop` to the last `up`; on a small database that is under a
-minute. To go back, check out the previous version and run `docker compose up -d`: it opens the old
+database. `rfmap-server` is down from `stop` to the last `up`: the web container keeps running,
+but its `/api` requests cannot reach the server. On a small database that is under a minute. To go back, check out the previous version and run `docker compose up -d`: it opens the old
 volume again, without anything written after the move. Remove the old volume
 (`docker volume rm rfmap_pgdata`) once the new database has run for a while and you have a backup
 of it. Never use `docker compose down -v`: it removes the volumes.

@@ -56,6 +56,11 @@ std::string readFile(const fs::path& p) {
 /// Fresh, empty databases next to the test database, and folders for their module files.
 class BackupTest : public ::testing::Test {
 protected:
+    /// What a backup of source() holds: every application table, its rows, and its two files.
+    static constexpr std::size_t kSourceTables = 9;
+    static constexpr std::size_t kSourceRows = 6;
+    static constexpr std::size_t kSourceFiles = 2;
+
     void SetUp() override {
         const char* url = std::getenv("RFMAP_TEST_DATABASE_URL");
         if (!url) GTEST_SKIP() << "RFMAP_TEST_DATABASE_URL not set (run through ctest)";
@@ -179,9 +184,9 @@ TEST_F(BackupTest, RestoresEveryRowAndFileExactly) {
 
     const std::string to = freshDatabase("rfmap_backup_target");
     const BackupSummary s = restore(to, text);
-    EXPECT_EQ(s.tables, 9u);
-    EXPECT_EQ(s.rows, 6u);
-    EXPECT_EQ(s.files, 2u);
+    EXPECT_EQ(s.tables, kSourceTables);
+    EXPECT_EQ(s.rows, kSourceRows);
+    EXPECT_EQ(s.files, kSourceFiles);
     EXPECT_TRUE(s.newerMigrations.empty());
 
     EXPECT_EQ(query(to, std::string(kMission)), query(from, std::string(kMission)));
@@ -196,7 +201,7 @@ TEST_F(BackupTest, RestoresEveryRowAndFileExactly) {
     const ServerFiles target = files("target");
     EXPECT_EQ(readFile(target.modulesRoot / "fpv.osd" / "lib" / "osd.so"), std::string("\0\x01\x02 lib", 8));
     EXPECT_EQ(readFile(target.trustStore), R"({"keys": []})");
-    EXPECT_EQ(filesUnder(dir_ / "target"), 2u) << "no staged file is left next to the restored ones";
+    EXPECT_EQ(filesUnder(dir_ / "target"), kSourceFiles) << "no staged file is left next to the restored ones";
     // And the restored database backs up to the same rows again.
     const std::string again = backup(to, target);
     EXPECT_EQ(again.substr(again.find('\n')), text.substr(text.find('\n')));
@@ -318,7 +323,9 @@ TEST_F(BackupTest, CommandLineBacksUpAndRestores) {
     std::ostringstream err;
     const auto backupCmd = CommandLine::parse({"--backup"}, env, RFMAP_SQL_DIR);
     ASSERT_EQ(ServiceCommand::run(backupCmd, env, none, out, err), 0) << err.str();
-    EXPECT_NE(err.str().find("backed up 9 tables, 6 rows and 2 files"), std::string::npos) << err.str();
+    const std::string summary =
+        std::format("backed up {} tables, {} rows and {} files", kSourceTables, kSourceRows, kSourceFiles);
+    EXPECT_NE(err.str().find(summary), std::string::npos) << err.str();
 
     const ServerFiles t = files("target");
     env = {{"RFMAP_DATABASE_URL", freshDatabase("rfmap_backup_target")},
@@ -388,9 +395,10 @@ TEST_F(BackupTest, CommandLineRefusesADamagedCompressedBackup) {
 
 TEST_F(BackupTest, RefusesABackupWhoseTotalsDoNotMatch) {
     std::string text = backup(source(), files("source"));
-    const auto at = text.find("\"rows\":6");
+    const std::string total = std::format("\"rows\":{}", kSourceRows);
+    const auto at = text.find(total);
     ASSERT_NE(at, std::string::npos);
-    text.replace(at, std::string("\"rows\":6").size(), "\"rows\":7");
+    text.replace(at, total.size(), std::format("\"rows\":{}", kSourceRows + 1));
     const std::string to = freshDatabase("rfmap_backup_target");
     EXPECT_THROW((void)restore(to, text), BackupError);
     EXPECT_EQ(query(to, "select to_regclass('public.missions')::text"), "<null>");
@@ -550,7 +558,7 @@ TEST_F(BackupTest, ABackupOfFormat1StillRestores) {
     const std::string format1 = header.dump() + body;
     const std::string to = freshDatabase("rfmap_backup_target");
     const BackupSummary s = restore(to, format1);
-    EXPECT_EQ(s.rows, 6u);
+    EXPECT_EQ(s.rows, kSourceRows);
     EXPECT_EQ(query(to, "select count(*) from missions"), "2");
     EXPECT_EQ(query(to, "select count(*) from schema_migrations where length(checksum) <> 64"), "0")
         << "taken from this server";
@@ -571,7 +579,7 @@ TEST_F(BackupTest, ABackupOfFormat2StillRestores) {
     const json header = {{"format", "rfmap-backup"}, {"version", 2}, {"createdAt", "2026-10-21T00:00:00Z"},
                          {"migrations", serverVersion().toJson()}};
     const std::string to = freshDatabase("rfmap_backup_target");
-    EXPECT_EQ(restore(to, header.dump() + text.substr(text.find('\n'))).rows, 6u);
+    EXPECT_EQ(restore(to, header.dump() + text.substr(text.find('\n'))).rows, kSourceRows);
     EXPECT_EQ(query(to, "select count(*) from missions"), "2");
 }
 
@@ -600,7 +608,7 @@ TEST_F(BackupTest, ADatabaseMigratedBeforeChecksumsBacksUpWithTheServersChecksum
     const std::string text = backup(from, files("source"));
     EXPECT_NE(text.find(serverVersion().fingerprint()), std::string::npos);
     const std::string to = freshDatabase("rfmap_backup_target");
-    EXPECT_EQ(restore(to, text).rows, 6u);
+    EXPECT_EQ(restore(to, text).rows, kSourceRows);
 }
 
 TEST_F(BackupTest, RefusesABackupFormatNewerThanTheServer) {
@@ -712,7 +720,7 @@ TEST_F(BackupTest, ABackupWaitsForARestoreToPutItsFilesInPlace) {
     auto restoring = std::async(std::launch::async, [&] { return restore(to, text); });
     EXPECT_EQ(restoring.wait_for(std::chrono::milliseconds(300)), std::future_status::timeout);
     backupRunning.reset();
-    EXPECT_EQ(restoring.get().rows, 6u);
+    EXPECT_EQ(restoring.get().rows, kSourceRows);
 }
 
 TEST_F(BackupTest, AStartWithNothingToApplyDoesNotWaitForABackup) {
