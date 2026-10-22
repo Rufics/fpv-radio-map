@@ -305,12 +305,17 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
 
     BackupSummary summary;
     StagedFiles staged;
+    NameSet destinations;
     json entry = nextLine(in, "the end");
     for (; !entry.contains("end"); entry = nextLine(in, "the end")) {
         if (entry.contains("table")) {
             summary.rows += readRows(w, entry, in);
             ++summary.tables;
         } else if (entry.contains("file")) {
+            const auto name = entry.at("file").get<std::string>();
+            if (!destinations.insert(target(name).lexically_normal().string()).second) {
+                throw BackupError("the backup holds " + name + " twice");
+            }
             staged.add(readFile(entry));
             ++summary.files;
         } else {

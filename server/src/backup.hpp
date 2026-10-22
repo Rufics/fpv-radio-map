@@ -29,7 +29,8 @@
 namespace rfmap {
 
 /// A backup that cannot be written or restored. A restore that throws it commits nothing and
-/// leaves no files behind.
+/// leaves no files behind, except when a file cannot move into place after the commit: the
+/// rows are restored then, and the message names the staged files left to move by hand.
 class BackupError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;

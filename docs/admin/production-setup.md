@@ -590,6 +590,19 @@ schema yet. If it stops, nothing is committed to the database, which stays empty
 file or trust store (`keys.json`) is changed: fix the cause and run it again. The files go into
 place only after the database has committed, each replacing the file of the same name.
 
+One failure comes after that commit: a file that cannot move into place, for example because a
+directory of the same name is in the way. The rows are then restored, and the error names the
+file. Do not run the restore again, since the database now has a schema. Clear what is in the
+way, move each file that
+ends in `.rfmap-restoring` to the same name without that ending, in the `rfmap-state` volume,
+and start the stack:
+
+```sh
+docker compose run --rm --no-deps --entrypoint sh rfmap-server -c \
+  'find /var/lib/rfmap -name "*.rfmap-restoring" -exec sh -c "mv \"\$1\" \"\${1%.rfmap-restoring}\"" _ {} \;'
+docker compose up -d
+```
+
 1. **On the old server**, stop the server so nothing changes after the snapshot, and back up:
 
    ```sh

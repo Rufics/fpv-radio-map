@@ -304,3 +304,22 @@ TEST_F(BackupTest, WaitsForAModuleChangeToFinish) {
     EXPECT_NE(text.find("\"end\":true"), std::string::npos);
     EXPECT_EQ(text.find(std::string(ModuleGate::kLockFile)), std::string::npos) << "the lock file is not backed up";
 }
+
+TEST_F(BackupTest, RefusesAFileThatComesTwice) {
+    std::string text = backup(source(), files("source"));
+    const auto start = text.find("{\"data\"");
+    ASSERT_NE(start, std::string::npos);
+    const std::string file = text.substr(start, text.find('\n', start) + 1 - start);
+    text.insert(start, file);
+    const auto files = text.find("\"files\":2");
+    ASSERT_NE(files, std::string::npos);
+    text.replace(files, std::string("\"files\":2").size(), "\"files\":3");
+    const std::string to = freshDatabase("rfmap_backup_target");
+    try {
+        (void)restore(to, text);
+        FAIL() << "restored a file twice";
+    } catch (const BackupError& e) {
+        EXPECT_NE(std::string(e.what()).find("twice"), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(query(to, "select to_regclass('public.missions')::text"), "<null>");
+}
