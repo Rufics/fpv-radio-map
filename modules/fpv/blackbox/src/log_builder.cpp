@@ -432,6 +432,8 @@ json NormalizedLogBuilder::notesJson(const ParseStats& stats) const {
     if (!hasFrames && !stats.unsupportedEncoding.has_value() && !stats.unsupportedPredictor.has_value()) {
         notes.push_back(note("header-only", "warn", "The log has its header but no flight data: logging stopped right after it started.",
                              "Check that Blackbox logging stays on while armed and that the flash or card is not full."));
+        // Events alone are no flight to replay, but say when some of them were dropped.
+        if (truncated_.records) notes.push_back(recordsTruncatedNote());
         return notes;
     }
     if (!model_.unitsKnown()) {
@@ -460,16 +462,18 @@ json NormalizedLogBuilder::notesJson(const ParseStats& stats) const {
         notes.push_back(note("samples-truncated", "warn",
                              std::format("Only the first {} samples are kept; the rest of the log is not shown.", options_.maxSamples)));
     }
-    if (truncated_.records) {
-        notes.push_back(note("records-truncated", "warn",
-                             std::format("The log holds more GPS fixes, events or state changes than are kept ({} GPS "
-                                         "fixes, {} of the others); the later ones are not shown.",
-                                         options_.maxSamples, options_.maxEvents)));
-    }
+    if (truncated_.records) notes.push_back(recordsTruncatedNote());
     addSensorNotes(notes);
     addGpsNotes(notes);
     addLinkNotes(notes);
     return notes;
+}
+
+json NormalizedLogBuilder::recordsTruncatedNote() const {
+    return note("records-truncated", "warn",
+                std::format("The log holds more GPS fixes, events or state changes than are kept ({} GPS fixes, {} of "
+                            "the others); the later ones are not shown.",
+                            options_.maxSamples, options_.maxEvents));
 }
 
 std::optional<std::string> NormalizedLogBuilder::startedAt() const {

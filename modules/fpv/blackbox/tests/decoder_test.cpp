@@ -351,6 +351,18 @@ TEST(BlackboxDecoder, KeepsABoundedNumberOfGpsFixesEventsAndStates) {
     EXPECT_EQ(l.at("gps").at("t").size(), 1u) << l.at("gps").dump();
 }
 
+TEST(BlackboxDecoder, ALogOfEventsOnlyStaysHeaderOnlyAndSaysEventsWereDropped) {
+    SyntheticLog log;
+    for (int i = 0; i < 3; ++i) log.disarm(4);
+    log.end();
+    BuildOptions o;
+    o.maxEvents = 2;
+    const json l = BlackboxDecoder("fpv.blackbox", "1.0.0").decode(log.bytes(), "test.bbl", o).at("logs").at(0);
+    EXPECT_EQ(l.at("status"), "header-only");
+    EXPECT_TRUE(hasNote(l, "header-only"));
+    EXPECT_TRUE(hasNote(l, "records-truncated")) << l.at("notes").dump();
+}
+
 TEST(BlackboxDecoder, HeaderOnlyLog) {
     SyntheticLog log;
     log.end();

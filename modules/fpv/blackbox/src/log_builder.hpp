@@ -136,6 +136,7 @@ private:
     void addSensorNotes(json& notes) const;
     void addGpsNotes(json& notes) const;
     void addLinkNotes(json& notes) const;
+    [[nodiscard]] json recordsTruncatedNote() const;
     [[nodiscard]] std::optional<std::string> startedAt() const;
     [[nodiscard]] std::string status(const ParseStats& stats) const;
 
