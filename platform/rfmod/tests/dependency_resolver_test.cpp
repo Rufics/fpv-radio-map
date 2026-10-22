@@ -4,6 +4,8 @@
 
 #include <map>
 #include <ranges>
+#include <string>
+#include <utility>
 
 using namespace rfmod;
 
@@ -75,6 +77,37 @@ TEST(DependencyResolver, MutualOptionalDependenciesBothLoad) {
     ASSERT_EQ(steps.size(), 2u);
     EXPECT_EQ(steps.at("a").state, ModuleState::Active) << steps.at("a").detail;
     EXPECT_EQ(steps.at("b").state, ModuleState::Active) << steps.at("b").detail;
+}
+
+TEST(DependencyResolver, OptionalDependencyThatRequiresTheModuleLoadsAfterIt) {
+    // a optionally uses b, b requires a: both load, a first, whichever is visited first.
+    for (const auto& [first, second] : {std::pair{"a", "b"}, std::pair{"b", "a"}}) {
+        Manifest user = manifestOf(first, "1.0.0");
+        Manifest dependant = manifestOf(second, "1.0.0", {{first, "*"}});
+        user.optionalDependencies.emplace_back(second, VersionRange::parse("*"));
+        DependencyResolver::Candidates candidates = {{first, {&user, true}}, {second, {&dependant, true}}};
+        const auto steps = DependencyResolver(candidates, Version(0, 1, 0)).plan();
+        ASSERT_EQ(steps.size(), 2u);
+        EXPECT_EQ(steps[0].id, first) << steps[0].detail;
+        EXPECT_EQ(steps[0].state, ModuleState::Active) << steps[0].detail;
+        EXPECT_EQ(steps[1].id, second) << steps[1].detail;
+        EXPECT_EQ(steps[1].state, ModuleState::Active) << steps[1].detail;
+    }
+}
+
+TEST(DependencyResolver, OptionalDependencyThatRequiresTheModuleThroughAnotherLoadsAfterIt) {
+    // a optionally uses c, c requires b, b requires a: a, b, c.
+    Manifest a = manifestOf("a", "1.0.0");
+    const Manifest b = manifestOf("b", "1.0.0", {{"a", "*"}});
+    const Manifest c = manifestOf("c", "1.0.0", {{"b", "*"}});
+    a.optionalDependencies.emplace_back("c", VersionRange::parse("*"));
+    DependencyResolver::Candidates candidates = {{"a", {&a, true}}, {"b", {&b, true}}, {"c", {&c, true}}};
+    const auto steps = DependencyResolver(candidates, Version(0, 1, 0)).plan();
+    ASSERT_EQ(steps.size(), 3u);
+    for (std::size_t i = 0; i < steps.size(); ++i) {
+        EXPECT_EQ(steps[i].id, std::string(1, static_cast<char>('a' + i))) << steps[i].detail;
+        EXPECT_EQ(steps[i].state, ModuleState::Active) << steps[i].detail;
+    }
 }
 
 TEST(DependencyResolver, RemovedInThisHostVersion) {

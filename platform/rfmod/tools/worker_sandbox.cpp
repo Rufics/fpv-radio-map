@@ -16,6 +16,7 @@
 #include <cerrno>
 #include <cstring>
 #include <span>
+#include <utility>
 #include <vector>
 
 // Landlock constants newer than the kernel headers this is built against. The values are ABI.
@@ -70,6 +71,7 @@ public:
         denyAll(kPrivilegeSyscalls);
         denyAll(kKernelSyscalls);
         denyAll(kFileMetadataSyscalls);
+        denyTruncatingOpens();
         denySignalsToOthers();
         denyNewProcesses();
         program_.push_back(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
@@ -452,6 +454,39 @@ private:
             program_.push_back(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, self_, 0, 1));
             program_.push_back(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
             program_.push_back(BPF_STMT(BPF_RET | BPF_K, kDeny));
+            loadSyscallNumberAgain();
+        }
+    }
+
+    /// Landlock covers truncation only from ABI 3, and before that open(O_RDONLY | O_TRUNC)
+    /// empties any file the module may read. So open and openat refuse O_TRUNC; creat always
+    /// truncates and openat2 keeps its flags in a struct the filter cannot read, so both are
+    /// refused outright (glibc uses neither for open()).
+    void denyTruncatingOpens() {
+        constexpr auto kAlways = std::to_array<int>({
+#ifdef __NR_creat
+            __NR_creat,
+#endif
+#ifdef __NR_openat2
+            __NR_openat2,
+#endif
+        });
+        denyAll(kAlways);
+        constexpr auto kOpens = std::to_array<std::pair<int, unsigned>>({
+#ifdef __NR_open
+            {__NR_open, 1u},  // flags is the second argument
+#endif
+#ifdef __NR_openat
+            {__NR_openat, 2u},  // the third after dirfd
+#endif
+        });
+        for (const auto& [nr, flagsIndex] : kOpens) {
+            // if nr != this syscall: skip 4 instructions
+            program_.push_back(BPF_JUMP(BPF_JMP | BPF_JEQ | BPF_K, static_cast<__u32>(nr), 0, 4));
+            loadArgument(flagsIndex);
+            program_.push_back(BPF_JUMP(BPF_JMP | BPF_JSET | BPF_K, static_cast<__u32>(O_TRUNC), 0, 1));
+            program_.push_back(BPF_STMT(BPF_RET | BPF_K, kDeny));
+            program_.push_back(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
             loadSyscallNumberAgain();
         }
     }

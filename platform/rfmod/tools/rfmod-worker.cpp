@@ -129,8 +129,13 @@ int run(const char* library) {
     const rfmod_host host{RFMOD_ABI_VERSION, &context, &hostCall, &hostLog};
 
     const json init = context.channel.receive();
-    auto fail = [&context](const std::string& message) {
-        context.channel.send({{"t", "ready"}, {"status", 1}, {"message", message}});
+    json sandboxJson;  // null until the sandbox has been applied
+    // A failure reply carries the sandbox report once there is one, so the host can tell a
+    // module that failed to load from a worker that could not confine itself.
+    auto fail = [&context, &sandboxJson](const std::string& message) {
+        json ready = {{"t", "ready"}, {"status", 1}, {"message", message}};
+        if (!sandboxJson.is_null()) ready["sandbox"] = sandboxJson;
+        context.channel.send(ready);
         return 1;
     };
     if (init.value("t", "") != "init") return fail("expected init");
@@ -141,17 +146,13 @@ int run(const char* library) {
     // directory it keeps read access to, besides the system libraries the module links.
     const WorkerSandbox::Report sandbox = WorkerSandbox(".").apply();
     if (!sandbox.notes.empty()) std::cerr << "rfmod-worker: sandbox: " << sandbox.notes << '\n';
-    const json sandboxJson = {{"noNewPrivileges", sandbox.noNewPrivileges},
-                              {"networkIsolated", sandbox.networkIsolated},
-                              {"filesystemIsolated", sandbox.filesystemIsolated},
-                              {"syscallFilter", sandbox.syscallFilter}};
+    sandboxJson = {{"noNewPrivileges", sandbox.noNewPrivileges},
+                   {"networkIsolated", sandbox.networkIsolated},
+                   {"filesystemIsolated", sandbox.filesystemIsolated},
+                   {"syscallFilter", sandbox.syscallFilter}};
     // When the host requires every measure, the library is not even loaded without them.
     if (init.value("requireSandbox", true) && !sandbox.complete()) {
-        context.channel.send({{"t", "ready"},
-                              {"status", 1},
-                              {"message", "the worker could not confine itself: " + sandbox.notes},
-                              {"sandbox", sandboxJson}});
-        return 1;
+        return fail("the worker could not confine itself: " + sandbox.notes);
     }
 
     void* handle = dlopen(library, RTLD_NOW | RTLD_LOCAL);

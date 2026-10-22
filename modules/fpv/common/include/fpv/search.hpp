@@ -89,17 +89,17 @@ public:
         // The loops visit every cell of the bounding box, inside the area or not: a thin diagonal
         // area over a wide box costs the box, so the box is bounded as well as the points.
         const double widest = std::max(world.inverse(sw, {s, e}).distanceM, world.inverse({n, w}, {n, e}).distanceM);
-        if ((height / cellM) * (widest / cellM) > kMaxGridCells) {
-            throw rfmod::BadRequest(std::format("the area's bounding box holds more than {} cells at {} m; draw a "
-                                                "smaller area or use a larger cell",
-                                                kMaxGridCells, static_cast<int>(cellM)));
-        }
+        if ((height / cellM) * (widest / cellM) > kMaxGridCells) throw tooManyCells(cellM);
         std::vector<LatLon> out;
+        // The estimate above uses the box's edges; rows between them can be wider (a box across
+        // the equator is widest in the middle), so the cells visited are counted as well.
+        double visited = 0.0;
         for (std::size_t row = 0; (static_cast<double>(row) + 0.5) * cellM < height; ++row) {
             const double dy = (static_cast<double>(row) + 0.5) * cellM;
             const LatLon rowStart = world.direct(sw, 0.0, dy).point;
             const double width = world.inverse(rowStart, {rowStart.lat, e}).distanceM;
             for (std::size_t col = 0; (static_cast<double>(col) + 0.5) * cellM < width; ++col) {
+                if (++visited > kMaxGridCells) throw tooManyCells(cellM);
                 const double dx = (static_cast<double>(col) + 0.5) * cellM;
                 const LatLon p = world.direct(rowStart, 90.0, dx).point;
                 if (!contains(p)) continue;
@@ -112,6 +112,12 @@ public:
             }
         }
         return out;
+    }
+
+    [[nodiscard]] static rfmod::BadRequest tooManyCells(double cellM) {
+        return rfmod::BadRequest(std::format("the area's bounding box holds more than {} cells at {} m; draw a "
+                                             "smaller area or use a larger cell",
+                                             kMaxGridCells, static_cast<int>(cellM)));
     }
 
     /// A cell below this would make the grid loops run for minutes before maxPoints stops them.

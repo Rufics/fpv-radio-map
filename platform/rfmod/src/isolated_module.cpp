@@ -151,6 +151,12 @@ void IsolatedModule::start() {
 }
 
 void IsolatedModule::acceptReady(const json& ready) {
+    const bool failed = ready.value("status", 1) != 0;
+    // The worker reports its sandbox from the moment it has applied one; a failure before that
+    // (an unexpected first message) is its own error, not a confinement problem.
+    if (failed && !ready.contains("sandbox")) {
+        throw ModuleError("init_failed", ready.value("message", std::string("module init failed")));
+    }
     const json sb = ready.value("sandbox", json::object());
     sandbox_.noNewPrivileges = sb.value("noNewPrivileges", false);
     sandbox_.networkIsolated = sb.value("networkIsolated", false);
@@ -163,9 +169,7 @@ void IsolatedModule::acceptReady(const json& ready) {
                           std::format("{}: the worker could not confine itself ({}); refusing to run an unconfined module",
                                       manifest_.id, sandbox_.describe()));
     }
-    if (ready.value("status", 1) != 0) {
-        throw ModuleError("init_failed", ready.value("message", std::string("module init failed")));
-    }
+    if (failed) throw ModuleError("init_failed", ready.value("message", std::string("module init failed")));
     if (const json embedded = json::parse(ready.value("manifest", std::string("{}")));
         embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
         throw ModuleError("load_failed", "library manifest does not match manifest.json");
@@ -184,10 +188,12 @@ void IsolatedModule::stop(bool kill) {
     if (kill) {
         killWorker();
     } else {
-        // Give the worker a moment to shut down cleanly, then make sure it is gone.
+        // Give the worker a moment to shut down cleanly, then make sure it is gone. WNOWAIT only
+        // looks: the final waitpid below is the one reap, so until then the pid stays the
+        // worker's and the kill cannot reach a process that reused it.
         const long long deadline = nowMs() + 2000;
-        int status = 0;
-        while (waitpid(pid_, &status, WNOHANG) == 0) {
+        siginfo_t info{};
+        while (waitid(P_PID, static_cast<id_t>(pid_), &info, WEXITED | WNOHANG | WNOWAIT) == 0 && info.si_pid == 0) {
             if (nowMs() > deadline) {
                 killWorker();
                 break;

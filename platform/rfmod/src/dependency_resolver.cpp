@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <ranges>
+#include <set>
+#include <string_view>
 
 namespace rfmod {
 
@@ -86,14 +88,25 @@ bool DependencyResolver::requiredDependenciesLoadable(const Candidate& c, Step& 
 void DependencyResolver::visitOptionalDependencies(const Candidate& c) {
     for (const Dependency& d : c.manifest->optionalDependencies) {
         const auto dep = candidates_.find(d.id);
-        // A mutual optional dependency is no cycle to fail on: both modules load.
-        if (dep != candidates_.end() && !visiting(d.id) && d.range.contains(dep->second.manifest->version)) (void)visit(d.id);
+        if (dep == candidates_.end() || !d.range.contains(dep->second.manifest->version)) continue;
+        // An optional dependency that is on the chain, or requires a module on it, is no cycle to
+        // fail on: it is planned after the chain unwinds, and both modules load.
+        std::set<std::string_view> seen;
+        if (!requiresVisiting(d.id, seen)) (void)visit(d.id);
     }
 }
 
 bool DependencyResolver::visiting(const std::string& id) const {
     const auto mark = marks_.find(id);
     return mark != marks_.end() && mark->second == Mark::Visiting;
+}
+
+bool DependencyResolver::requiresVisiting(const std::string& id, std::set<std::string_view>& seen) const {
+    if (visiting(id)) return true;
+    const auto candidate = candidates_.find(id);
+    if (candidate == candidates_.end() || !seen.insert(id).second) return false;
+    return std::ranges::any_of(candidate->second.manifest->dependencies,
+                               [this, &seen](const Dependency& d) { return requiresVisiting(d.id, seen); });
 }
 
 }  // namespace rfmod

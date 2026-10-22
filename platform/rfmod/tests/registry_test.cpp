@@ -128,7 +128,21 @@ TEST_F(RegistryTest, WorkerSandboxConfinesTheModule) {
     EXPECT_FALSE(probe.at("opensSocket").get<bool>()) << probe.dump();
     EXPECT_FALSE(probe.at("forks").get<bool>()) << probe.dump();
     EXPECT_FALSE(probe.at("signalsOthers").get<bool>()) << probe.dump();
+    EXPECT_FALSE(probe.at("truncatesOwnFile").get<bool>()) << probe.dump();
     EXPECT_FALSE(probe.at("writesHere").get<bool>()) << probe.dump();
+}
+
+TEST_F(RegistryTest, ALibraryThatDoesNotLoadReportsItsOwnError) {
+    // A third-party module requires the sandbox; a failure after confinement is still the
+    // module's failure, not reported as an incomplete sandbox.
+    const fs::path junk = root / "not-a-library.so";
+    fs::create_directories(root);
+    std::ofstream(junk) << "this is not an ELF file";
+    const auto r = install(pack(baseManifest("test.alpha", "1.0.0"), junk.c_str(), thirdPartySecret()));
+    EXPECT_FALSE(r.ok());
+    const std::string why = failed(r);
+    EXPECT_NE(why.find("dlopen"), std::string::npos) << why;
+    EXPECT_EQ(why.find("confine"), std::string::npos) << why;
 }
 
 TEST_F(RegistryTest, IsolatedTimeoutAndMemoryLimit) {

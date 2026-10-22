@@ -4,6 +4,7 @@
 #include <archive_entry.h>
 #include <gtest/gtest.h>
 
+#include <fstream>
 #include <map>
 
 using namespace rfmod;
@@ -118,6 +119,18 @@ TEST(Package, UntrustedKeyIsRefused) {
     ValidationReport r;
     EXPECT_FALSE(PackageVerifier(trust, kHost).verify(pkg, r));
     EXPECT_EQ(failedCheck(r), "signature");
+}
+
+TEST(Package, ADamagedTrustStoreFileKeepsTheKeysOnReload) {
+    const auto path = scratchDir("package") / "rfmod-trust-damaged.json";
+    std::filesystem::remove(path);
+    TrustStore trust(ownerPublicText(), path);
+    trust.add(thirdPartySecret().publicKey(), "Test vendor");
+    std::ofstream(path) << "{ not json";
+    EXPECT_THROW(trust.reload(), nlohmann::json::exception);
+    ASSERT_EQ(trust.keys().size(), 2u);
+    EXPECT_TRUE(trust.find(thirdPartySecret().publicKey().id()).has_value());
+    std::filesystem::remove(path);
 }
 
 TEST(Package, ThirdPartyKeyIsNotFirstParty) {

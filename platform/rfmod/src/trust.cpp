@@ -58,8 +58,16 @@ void TrustStore::remove(const std::string& keyId) {
 
 void TrustStore::reload() {
     const std::lock_guard lock(mutex_);
+    // A store file that cannot be read (half-written by the CLI, or damaged) changes nothing:
+    // the keys trusted so far stay, and the caller hears why.
+    std::vector<TrustedKey> previous = keys_;
     std::erase_if(keys_, [](const TrustedKey& k) { return !k.builtIn; });
-    load();
+    try {
+        load();
+    } catch (...) {
+        keys_ = std::move(previous);
+        throw;
+    }
 }
 
 void TrustStore::load() {
