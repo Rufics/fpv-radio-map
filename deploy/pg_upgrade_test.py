@@ -19,9 +19,12 @@ class FakeDocker(pg_upgrade.Docker):
         self.counts_before = counts_before
         self.counts_after = counts_before if counts_after is None else counts_after
         self.fail_on = None
+        self.never_ready = False
 
     def run(self, args, stdin=None, stdout=None):
         self.calls.append(list(args))
+        if self.never_ready and "pg_isready" in args:
+            raise UpgradeError("no response")
         if self.fail_on and self.fail_on in args:
             raise UpgradeError(f"{self.fail_on} failed")
         if args[:2] == ["volume", "inspect"]:
@@ -101,6 +104,7 @@ class UpgradeTest(unittest.TestCase):
         dumps = list(self.backup.glob("rfmap-pg16-*.dump"))
         self.assertEqual(len(dumps), 1)
         self.assertEqual(dumps[0].read_bytes(), b"PGDMP")
+        self.assertEqual(dumps[0].stat().st_mode & 0o777, 0o600)
         self.assertIn("Row counts match", self.messages)
 
     def test_stops_when_the_counts_differ(self):
@@ -115,6 +119,16 @@ class UpgradeTest(unittest.TestCase):
         with self.assertRaises(UpgradeError):
             self.upgrade(docker).run()
         self.assertEqual(docker.commands()[-1], f"stop {pg_upgrade.OLD_CONTAINER}")
+
+    def test_stops_the_temporary_container_when_it_never_gets_ready(self):
+        docker = FakeDocker(volumes={pg_upgrade.OLD_VOLUME})
+        docker.never_ready = True
+        with (mock.patch.object(pg_upgrade, "READY_TIMEOUT_SECONDS", 0),
+              mock.patch.object(pg_upgrade, "READY_POLL_SECONDS", 0),
+              self.assertRaisesRegex(UpgradeError, "did not get ready")):
+            self.upgrade(docker).run()
+        self.assertEqual(docker.commands()[-1], f"stop {pg_upgrade.OLD_CONTAINER}")
+        self.assertFalse(any("pg_dump" in call for call in docker.commands()))
 
 
 class CommandTest(unittest.TestCase):

@@ -287,13 +287,18 @@ python3 -I deploy/pg_upgrade.py --backup-dir ~/rfmap-backup
 
 It stops rfmap-server and postgis, dumps the database with a temporary PostgreSQL 16 container
 that has no network, starts PostgreSQL 18 on a new volume (`rfmap_pgdata18`), restores the dump
-in one transaction, checks that every table has the same number of rows, and starts the stack.
+in one transaction, checks that every application table has the same number of rows, and starts the stack.
 The stack is down for the whole move; on a small database that is well under a minute. Then
 rebuild the images as usual (`docker compose up -d --build`).
 
-The old volume `rfmap_pgdata` is opened only by PostgreSQL 16 and stays as it was. To go back, check out the previous
-`deploy/docker-compose.yml` and run `docker compose up -d`: it opens the old volume again. Once
-the new database has run for a while, remove the old one with `docker volume rm rfmap_pgdata`.
+The old volume `rfmap_pgdata` is opened only by PostgreSQL 16 and stays as it was. To go back,
+check out the previous `deploy/docker-compose.yml` and run `docker compose up -d`: it opens the
+old volume again. **Going back loses every change made after the move** (new missions, share
+links, sessions, library edits), because the old volume holds the database as it was at the
+move. If the new database has taken writes, back it up first (`pg_dump`, as in
+[Production server, step by step](production-setup.md#10-backups)) and check that the backup
+restores before you switch. Remove the old volume (`docker volume rm rfmap_pgdata`) only once the
+new database has run for a while and you have a backup of it that you have checked.
 Never use `docker compose down -v` here: it can remove both volumes.
 
 If a step fails, the tool says which and how to go back or try again. A fresh install needs none

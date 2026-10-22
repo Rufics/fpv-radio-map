@@ -584,13 +584,15 @@ again from step 2.
 ```sh
 cd ~/fpv-radio-map
 git pull
+# Only once, on the pull that moves the database from PostgreSQL 16 to 18 (see below):
+python3 -I deploy/pg_upgrade.py --backup-dir ~/rfmap-backup
 cd deploy && docker compose up -d --build
 ```
 
-Migrations run at start. A pull that moves the database to a new PostgreSQL major version (16
-to 18) needs one step before `docker compose up`: see
-[PostgreSQL major upgrades](deploy.md#postgresql-major-upgrades). When a module's version in `modules/fpv/*/manifest.json` goes up,
-repeat step 6 with your offline owner key; the server takes only versions newer than the
+Migrations run at start. A pull that moves the database to a new PostgreSQL major version needs
+the `pg_upgrade.py` step before `docker compose up`; on any other pull it refuses to run and
+changes nothing. See [PostgreSQL major upgrades](deploy.md#postgresql-major-upgrades). When a
+module's version in `modules/fpv/*/manifest.json` goes up, repeat step 6 with your offline owner key; the server takes only versions newer than the
 installed one.
 
 **New OSM data** (monthly is plenty), with the same `--bbox` and options as in step 2:

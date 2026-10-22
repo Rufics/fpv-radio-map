@@ -22,6 +22,7 @@ for a while (the tool prints the command). The exit code is 0 on success, 1 when
 a usage error or a refused start.
 """
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -180,7 +181,15 @@ class OldCluster:
     def __enter__(self):
         self._docker.run(["run", "-d", "--rm", "--name", OLD_CONTAINER, "--network", "none",
                           "-v", f"{self._volume}:/var/lib/postgresql/data", self._image])
-        self._wait_ready()
+        ready = False
+        try:
+            self._wait_ready()
+            ready = True
+        finally:
+            # __exit__ does not run when __enter__ fails; a container left running would hold the
+            # old volume and block the next try with a name conflict.
+            if not ready:
+                self._docker.succeeds(["stop", OLD_CONTAINER])
         return self
 
     def __exit__(self, *exc):
@@ -196,7 +205,10 @@ class OldCluster:
             time.sleep(READY_POLL_SECONDS)
 
     def dump(self, target):
-        with target.open("wb") as out:
+        # The dump holds the whole database: readable by the owner only, whatever the umask.
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as out:
             self._docker.run(["exec", OLD_CONTAINER, "pg_dump", "-U", DB_USER, "-Fc", DATABASE],
                              stdout=out)
 
@@ -223,7 +235,7 @@ class Upgrade:
                                f"Remove it first only if you are sure it holds nothing you need")
 
     def run(self):
-        self._backup_dir.mkdir(parents=True, exist_ok=True)
+        self._backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
         dump = self._backup_dir / f"{DATABASE}-pg16-{time.strftime('%Y%m%d-%H%M%S')}.dump"
         self._say("Stopping rfmap-server and postgis")
         self._compose.stop("rfmap-server", "postgis")
