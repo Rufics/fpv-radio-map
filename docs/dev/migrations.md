@@ -71,6 +71,7 @@ public:
     RehashShareTokens() : CodeMigration("004_rehash_share_tokens", "rev 1", Breaking::Yes) {}
     void apply(MigrationContext& ctx) const override {
         // ctx.work(): the migration transaction. ctx.files(): the module root and the trust store.
+        // ctx.staged().read(path): what a file holds now, including a file a restore has staged.
         // ctx.staged().write(path, bytes, mode): a file that moves into place after the commit.
     }
 };

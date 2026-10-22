@@ -370,6 +370,9 @@ public:
         ctx.work().exec("update missions set note = upper(note)");
         ctx.staged().write(ctx.files().modulesRoot / "added.txt", "from a step",
                            fs::perms::owner_read | fs::perms::owner_write);
+        // The restored trust store is still staged here: the step reads and rewrites that copy.
+        const auto keys = ctx.staged().read(ctx.files().trustStore);
+        if (keys) ctx.staged().write(ctx.files().trustStore, *keys + "\n", fs::perms::owner_read | fs::perms::owner_write);
         ctx.note("upper-cased the notes");
     }
 };
@@ -404,7 +407,8 @@ TEST_F(BackupTest, AnOldBackupIsRestoredAtItsVersionThenTakenThroughEveryNewerSt
               "001_init.sql,002_note.sql,003_upper_notes");
     EXPECT_EQ(query(to, "select count(*) from schema_migrations where checksum is null or checksum = ''"), "0");
     EXPECT_EQ(readFile(target.modulesRoot / "added.txt"), "from a step");
-    EXPECT_EQ(readFile(target.trustStore), R"({"keys": []})");
+    EXPECT_EQ(readFile(target.trustStore), "{\"keys\": []}\n") << "the step saw the restored file";
+    EXPECT_EQ(filesUnder(dir_ / "target"), 3u) << "nothing left staged";
     EXPECT_NE(std::ranges::find(notes, "upper-cased the notes"), notes.end());
 }
 

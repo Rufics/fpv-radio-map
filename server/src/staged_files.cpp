@@ -1,7 +1,9 @@
 #include "staged_files.hpp"
 
+#include <algorithm>
 #include <format>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <system_error>
 
@@ -14,10 +16,13 @@ StagedFiles::~StagedFiles() {
     for (const auto& file : staged_) fs::remove(file, ignored);
 }
 
+fs::path StagedFiles::stagedPath(const fs::path& target) { return target.string() + std::string(kSuffix); }
+
 void StagedFiles::write(const fs::path& target, std::string_view bytes, fs::perms mode) {
-    const fs::path file = target.string() + std::string(kSuffix);
+    const fs::path file = stagedPath(target);
     fs::create_directories(file.parent_path());
-    staged_.push_back(file);  // from here on a failure removes it
+    // One entry per target: from here on a failure removes it, and install() moves it once.
+    if (std::ranges::find(staged_, file) == staged_.end()) staged_.push_back(file);
     {
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
         out << bytes;
@@ -26,6 +31,16 @@ void StagedFiles::write(const fs::path& target, std::string_view bytes, fs::perm
         }
     }
     fs::permissions(file, mode & fs::perms::mask);
+}
+
+std::optional<std::string> StagedFiles::read(const fs::path& target) const {
+    const fs::path staged = stagedPath(target);
+    const fs::path& file = std::ranges::find(staged_, staged) != staged_.end() ? staged : target;
+    std::ifstream in(file, std::ios::binary);
+    if (!in) return std::nullopt;
+    std::ostringstream bytes;
+    bytes << in.rdbuf();
+    return bytes.str();
 }
 
 void StagedFiles::install() {
