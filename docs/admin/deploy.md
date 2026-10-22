@@ -264,9 +264,11 @@ not time-limited.
 
 ## 6. Backups and upgrades
 
-- Back up the `pgdata` volume (or `pg_dump rfmap`) and the `rfmap-state` volume (installed
+- Back up the `pgdata18` volume (or `pg_dump rfmap`) and the `rfmap-state` volume (installed
   modules and `keys.json`). Everything else can be rebuilt.
-- Upgrade: `git pull`, then `docker compose up -d --build`. Migrations run at start. Results
+- Upgrade: `git pull`, then `docker compose up -d --build` from `deploy/` (a pull that moves
+  PostgreSQL to a new major needs [one more step](#postgresql-major-upgrades) first).
+  Migrations run at start. Results
   cached under the old version are keyed by input hash, which includes the server version,
   so they are not reused.
 - Mission owner keys, share-link tokens and session tokens are stored only as hashes, and
@@ -289,10 +291,10 @@ It stops rfmap-server and postgis, dumps the database with a temporary PostgreSQ
 that has no network, starts PostgreSQL 18 on a new volume (`rfmap_pgdata18`), restores the dump
 in one transaction, checks that every application table has the same number of rows, and starts the stack.
 The stack is down for the whole move; on a small database that is well under a minute. Then
-rebuild the images as usual (`docker compose up -d --build`).
+rebuild the images as usual (`cd deploy && docker compose up -d --build`).
 
 The old volume `rfmap_pgdata` is opened only by PostgreSQL 16 and stays as it was. To go back,
-check out the previous `deploy/docker-compose.yml` and run `docker compose up -d`: it opens the
+check out the previous `deploy/docker-compose.yml` and run `docker compose up -d` from `deploy/`: it opens the
 old volume again. **Going back loses every change made after the move** (new missions, share
 links, sessions, library edits), because the old volume holds the database as it was at the
 move. If the new database has taken writes, back it up first (`pg_dump`, as in
