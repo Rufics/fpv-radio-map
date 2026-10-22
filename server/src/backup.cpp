@@ -170,6 +170,7 @@ std::vector<BackupWriter::Table> BackupWriter::tables(pqxx::transaction_base& w)
         if (child != nameOf.end() && parent != nameOf.end()) parents[child->second].insert(parent->second);
     }
     std::vector<std::string> names;
+    names.reserve(byName.size());
     for (const auto& [name, table] : byName) names.push_back(name);
     std::vector<Table> ordered;
     for (const auto& name : parentsFirst(names, parents)) ordered.push_back(std::move(byName.at(name)));

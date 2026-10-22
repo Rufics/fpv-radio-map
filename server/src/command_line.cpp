@@ -23,13 +23,10 @@ CommandLine CommandLine::parse(const std::vector<std::string_view>& args, const 
             out.sqlDir_ = args[i++];
         } else if ((a == "--backup" || a == "--restore") && out.action_ == Serve) {
             out.action_ = a == "--backup" ? Backup : Restore;
-        } else if (out.isServiceAction()) {
-            out.action_ = Invalid;
-            out.invalidArgument_ = a;
-        } else if (a == "--health") {
+        } else if (a == "--health" && out.action_ == Serve) {
             out.action_ = Health;
             out.healthUrl_ = hasValue ? args[i] : kDefaultHealthUrl;
-        } else if (a == "--help" || a == "-h") {
+        } else if ((a == "--help" || a == "-h") && out.action_ == Serve) {
             out.action_ = Help;
         } else {
             out.action_ = Invalid;
