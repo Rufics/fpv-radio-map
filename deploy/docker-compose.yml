@@ -22,7 +22,9 @@ services:
       - pgdata18:/var/lib/postgresql
     networks: [backend]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rfmap -d rfmap"]
+      # Over TCP: while the image initialises a new database, its temporary server listens on the
+      # socket only, and a socket check would pass before the extensions are created.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U rfmap -d rfmap"]
       interval: 10s
       timeout: 5s
       retries: 10

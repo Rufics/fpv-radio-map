@@ -121,6 +121,8 @@ class Compose:
         self.run("stop", *services)
 
     def start_and_wait(self, service):
+        # Waits for the healthcheck, which runs over TCP and so passes only once the image has
+        # finished initialising a new database (its temporary init server has no TCP listener).
         self.run("up", "-d", "--wait", "--wait-timeout", str(READY_TIMEOUT_SECONDS), service)
 
     def start_all(self):
@@ -245,7 +247,7 @@ class Upgrade:
         # The image's first start fills the new database with its own extensions and their schemas
         # (tiger, topology), which the dump creates again. Restore into an empty one instead.
         self._compose.postgis("psql", "-U", DB_USER, "-d", "postgres", "-v", "ON_ERROR_STOP=1",
-                              "-c", f"drop database {DATABASE}",
+                              "-c", f"drop database {DATABASE} with (force)",
                               "-c", f"create database {DATABASE} template template0 owner {DB_USER}")
 
     def _check(self, before):

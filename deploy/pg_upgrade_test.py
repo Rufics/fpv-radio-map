@@ -91,7 +91,7 @@ class UpgradeTest(unittest.TestCase):
                  "pg_dump -U rfmap -Fc rfmap",
                  f"stop {pg_upgrade.OLD_CONTAINER}",
                  "up -d --wait",
-                 "drop database rfmap -c create database rfmap template template0 owner rfmap",
+                 "drop database rfmap with (force) -c create database rfmap template template0 owner rfmap",
                  "pg_restore -U rfmap -d rfmap --no-owner --single-transaction --exit-on-error"]
         positions = [next(i for i, c in enumerate(commands) if step in c) for step in steps]
         self.assertEqual(positions, sorted(positions))
