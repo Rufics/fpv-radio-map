@@ -61,3 +61,38 @@ TEST(Search, GridCountsTheCellsItVisits) {
     // 1000 x 1000 cells by the edges, under the limit; the middle rows hold a million each.
     EXPECT_THROW((void)a.grid(w, 1.0, 10'000'000), rfmod::BadRequest);
 }
+
+TEST(BestLaunch, PicksTheBestCandidateAndScoresTheWorstLink) {
+    const LocalWorld w([](const LatLon&) { return std::optional<double>(100.0); }, 30.0);
+    const LatLon a{48.5, 35.2};
+    const LatLon t = w.direct(a, 90.0, 3000.0).point;
+    const LatLon e0 = w.direct(a, 90.0, 1000.0).point, e1 = w.direct(a, 90.0, 2000.0).point;
+    const json area = {{{"lat", 48.4995}, {"lon", e0.lon}}, {{"lat", 48.5005}, {"lon", e0.lon}},
+                       {{"lat", 48.5005}, {"lon", e1.lon}}, {{"lat", 48.4995}, {"lon", e1.lon}}};
+    const json mission = {{"pilot", {{"lat", a.lat}, {"lon", a.lon}, {"aglM", 1.5}}},
+                          {"waypoints", {{{"lat", t.lat}, {"lon", t.lon}, {"aglM", 50.0}}}},
+                          {"returnToPilot", false}, {"evaluate", "both"}};
+    const DistanceLink link(w);
+    const json r = fpv::launch::analyze({{"mission", mission}, {"options", {{"area", area}, {"cellM", 50.0}, {"stepM", 500.0}}}}, w, link);
+    const json& d = r.at("data");
+    // From the pilot the worst point is the target: video, 20 - 30 = -10 dB.
+    EXPECT_NEAR(d.at("current").at("worstMarginDb").get<double>(), -10.0, 1e-6);
+    EXPECT_EQ(d.at("current").at("link"), "video");
+    // The best candidate is the one with the smallest worst distance to the route samples: near
+    // the middle of the route, so its worst sample is either the start or the target.
+    const double best = d.at("candidates").at(0).at("worstMarginDb").get<double>();
+    EXPECT_GT(best, -10.0);
+    for (const json& c : d.at("candidates")) EXPECT_LE(c.at("worstMarginDb").get<double>(), best);
+    EXPECT_TRUE(r.at("reasons").at(0).contains("fix"));
+    EXPECT_EQ(r.at("reasons").at(0).at("fix").at("patch").at("pilot").at("aglM"), 1.5);
+}
+
+TEST(BestLaunch, AsksForAnAreaFirst) {
+    const LocalWorld w([](const LatLon&) { return std::optional<double>(100.0); }, 30.0);
+    const DistanceLink link(w);
+    const json mission = {{"pilot", {{"lat", 48.5}, {"lon", 35.2}, {"aglM", 1.5}}},
+                          {"waypoints", {{{"lat", 48.5}, {"lon", 35.3}, {"aglM", 50.0}}}}};
+    const json r = fpv::launch::analyze({{"mission", mission}}, w, link);
+    EXPECT_EQ(r.at("reasons").at(0).at("severity"), "info");
+    EXPECT_EQ(link.calls, 0);
+}
