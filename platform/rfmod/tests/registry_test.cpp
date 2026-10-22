@@ -1,4 +1,5 @@
 #include "rfmod/installer.hpp"
+#include "rfmod/module_store.hpp"
 #include "rfmod/registry.hpp"
 #include "test_support.hpp"
 
@@ -324,6 +325,17 @@ TEST_F(RegistryTest, RemovedKeyDisablesItsModulesOnReload) {
     EXPECT_EQ(registry->instance("test.alpha"), nullptr);
     ASSERT_FALSE(registry->notices().empty());
     EXPECT_NE(registry->notices().front().find("does not trust"), std::string::npos);
+}
+
+TEST_F(RegistryTest, AFailedReplaceKeepsTheInstalledModule) {
+    ASSERT_TRUE(install(pack(baseManifest("test.alpha", "1.0.0"), RFMOD_LIB_ALPHA, ownerSecret())).ok());
+    const ModuleStore store(config.root);
+    const fs::path installedDir = config.root / "installed" / "test.alpha";
+    // The staged directory vanished before the swap: the rename throws after the old version was set aside.
+    EXPECT_THROW(store.replace(config.root / "staging" / "gone", "test.alpha"), fs::filesystem_error);
+    EXPECT_TRUE(fs::exists(installedDir / "manifest.json"));
+    registry->reload();
+    EXPECT_NE(registry->instance("test.alpha"), nullptr);
 }
 
 TEST_F(RegistryTest, TamperedFilesOnDiskAreRestored) {

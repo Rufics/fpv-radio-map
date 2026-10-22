@@ -126,8 +126,15 @@ void ModuleStore::replace(const fs::path& staged, const std::string& id) const {
     const fs::path target = installedDir(id);
     const fs::path source = root_.confine(staged);
     const fs::path old = root_.resolve(fs::path("staging") / (id + ".old." + randomName()));
-    if (fs::exists(target)) fs::rename(target, old);
-    fs::rename(source, target);
+    const bool hadOld = fs::exists(target);
+    if (hadOld) fs::rename(target, old);
+    try {
+        fs::rename(source, target);
+    } catch (...) {
+        // The new version did not land: the module that was installed stays installed.
+        if (hadOld) fs::rename(old, target);
+        throw;
+    }
     fs::remove_all(old);
 }
 

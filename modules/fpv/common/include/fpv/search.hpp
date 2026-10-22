@@ -51,7 +51,10 @@ class DrawnArea {
 public:
     static DrawnArea fromJson(const json& ring) {
         DrawnArea a;
-        for (const json& p : ring) a.ring_.push_back({p.at("lat").get<double>(), p.at("lon").get<double>()});
+        for (const json& p : ring) {
+            a.ring_.push_back({p.at("lat").get<double>(), p.at("lon").get<double>()});
+            a.mercY_.push_back(mercY(a.ring_.back().lat));
+        }
         if (a.ring_.size() < 3) throw rfmod::BadRequest("an area needs at least three points");
         return a;
     }
@@ -62,9 +65,9 @@ public:
         const double py = mercY(p.lat);
         for (std::size_t i = 0, j = ring_.size() - 1; i < ring_.size(); j = i++) {
             const double xi = ring_[i].lon;
-            const double yi = mercY(ring_[i].lat);
+            const double yi = mercY_[i];
             const double xj = ring_[j].lon;
-            const double yj = mercY(ring_[j].lat);
+            const double yj = mercY_[j];
             if ((yi > py) != (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside;
         }
         return inside;
@@ -128,6 +131,7 @@ public:
 private:
     static double mercY(double latDeg) { return std::asinh(std::tan(latDeg * rfcore::constants::kPi / 180.0)); }
     std::vector<LatLon> ring_;
+    std::vector<double> mercY_;  ///< the ring's Mercator y, one per vertex: contains() runs per grid cell
 };
 
 /// Samples along a route, at most this many: a step too small for the route is a bad request,
