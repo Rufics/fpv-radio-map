@@ -265,13 +265,16 @@ TEST_F(BackupTest, RefusesFilesOutsideTheModuleRoot) {
 }
 
 TEST_F(BackupTest, RefusesTheModuleLockFile) {
-    std::string text = backup(source(), files("source"));
+    const std::string text = backup(source(), files("source"));
     const auto at = text.find("\"file\":\"modules/fpv.osd");
     ASSERT_NE(at, std::string::npos);
     const auto end = text.find('"', at + std::string("\"file\":\"").size());
-    text.replace(at, end + 1 - at, "\"file\":\"modules/.rfmap-lock\"");
-    const std::string to = freshDatabase("rfmap_backup_target");
-    EXPECT_THROW((void)restore(to, text), BackupError);
+    for (const std::string name : {"modules/.rfmap-lock", "modules/./.rfmap-lock", "modules//.rfmap-lock"}) {
+        std::string named = text;
+        named.replace(at, end + 1 - at, "\"file\":\"" + name + "\"");
+        const std::string to = freshDatabase("rfmap_backup_target");
+        EXPECT_THROW((void)restore(to, named), BackupError) << name;
+    }
 }
 
 TEST_F(BackupTest, RefusesAModuleFolderThatLinksOutOfTheRoot) {
