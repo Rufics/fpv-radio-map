@@ -14,13 +14,18 @@ CommandLine CommandLine::parse(const std::vector<std::string_view>& args, const 
     if (const auto c = env.find("RFMAP_CONFIG"); c != env.end()) out.configFile_ = c->second;
     if (const auto s = env.find("RFMAP_SQL_DIR"); s != env.end()) out.sqlDir_ = s->second;
     std::size_t i = 0;
-    while (i < args.size() && out.action_ == Serve) {
+    while (i < args.size() && (out.action_ == Serve || out.isServiceAction())) {
         const std::string_view a = args[i++];
         const bool hasValue = i < args.size();
         if (a == "--config" && hasValue) {
             out.configFile_ = args[i++];
         } else if (a == "--sql" && hasValue) {
             out.sqlDir_ = args[i++];
+        } else if ((a == "--backup" || a == "--restore") && out.action_ == Serve) {
+            out.action_ = a == "--backup" ? Backup : Restore;
+        } else if (out.isServiceAction()) {
+            out.action_ = Invalid;
+            out.invalidArgument_ = a;
         } else if (a == "--health") {
             out.action_ = Health;
             out.healthUrl_ = hasValue ? args[i] : kDefaultHealthUrl;
@@ -40,7 +45,9 @@ int CommandLine::answerWithoutServing(std::ostream& out, std::ostream& err) cons
         case Health: return health(healthUrl_, err);
         case Help: out << kUsage; return 0;
         case Invalid: err << "unknown argument " << invalidArgument_ << "\n"; return 2;
-        case Serve: break;
+        case Serve:
+        case Backup:
+        case Restore: break;
     }
     return 0;
 }

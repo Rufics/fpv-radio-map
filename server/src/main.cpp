@@ -2,10 +2,13 @@
 //
 //   rfmap-server [--config /etc/rfmap/server.json] [--sql /usr/share/rfmap/sql]
 //   rfmap-server --health [http://127.0.0.1:8080]   exit 0 if /api/v1/health answers 200
+//   rfmap-server --backup  > rfmap.backup            the data and module files, to standard output
+//   rfmap-server --restore < rfmap.backup            into a new, empty database (backup.hpp)
 //
 // The config file is optional (RFMAP_CONFIG names it too); environment variables override it.
 
 #include "app.hpp"
+#include "backup.hpp"
 #include "command_line.hpp"
 
 #include <atomic>
@@ -32,6 +35,7 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
     const auto env = rfmap::Config::processEnvironment();
     const auto cmd = rfmap::CommandLine::parse(args, env, RFMAP_DEFAULT_SQL_DIR);
+    if (cmd.isServiceAction()) return rfmap::ServiceCommand::run(cmd, env, std::cin, std::cout, std::cerr);
     if (cmd.action() != rfmap::CommandLine::Action::Serve) return cmd.answerWithoutServing(std::cout, std::cerr);
     try {
         rfmap::Application app(rfmap::Config::load(cmd.configFile(), env),

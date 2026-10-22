@@ -16,11 +16,35 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 namespace rfmap {
+
+/// The server's schema: server/sql/NNN_*.sql, applied in name order, each once, and recorded in
+/// schema_migrations. Both the start of the server and a restore build the schema from these files.
+class Migrations {
+public:
+    explicit Migrations(const std::filesystem::path& sqlDir);
+
+    /// The file names, in the order they apply.
+    [[nodiscard]] const std::vector<std::string>& names() const { return names_; }
+
+    /// Takes the migration lock for the rest of `w` (one server migrates at a time, even with
+    /// several replicas starting together), creates schema_migrations, and returns what it records.
+    static std::set<std::string> lock(pqxx::work& w);
+
+    /// Applies, in order, the files not in `done`, up to and including `last` (all when empty),
+    /// and records each in schema_migrations and in `done`. Returns the names applied.
+    std::vector<std::string> apply(pqxx::work& w, std::set<std::string>& done, std::string_view last = {}) const;
+
+private:
+    std::vector<std::filesystem::path> files_;
+    std::vector<std::string> names_;
+};
 
 /// A fixed pool of PostgreSQL connections. `with` lends one for the duration of a callback and
 /// replaces it if it broke, so one dropped connection does not poison the pool.
@@ -55,8 +79,7 @@ public:
         });
     }
 
-    /// Applies server/sql/NNN_*.sql files not yet recorded in schema_migrations, in order.
-    /// Returns the names applied.
+    /// Applies the migrations in `sqlDir` not yet recorded in schema_migrations. Returns the names applied.
     std::vector<std::string> migrate(const std::filesystem::path& sqlDir);
 
     [[nodiscard]] DbPoolStats stats();

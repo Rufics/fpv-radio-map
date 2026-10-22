@@ -17,8 +17,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       # PostgreSQL 18 keeps its data in a versioned folder below this mount
-      # (/var/lib/postgresql/18/docker). The PostgreSQL 16 volume was pgdata: move it
-      # with deploy/pg_upgrade.py (docs/admin/deploy.md, "PostgreSQL major upgrades").
+      # (/var/lib/postgresql/18/docker). The PostgreSQL 16 volume was pgdata: move its data with
+      # rfmap-server --backup and --restore (docs/admin/production-setup.md, step 10.2).
       - pgdata18:/var/lib/postgresql
     networks: [backend]
     healthcheck:

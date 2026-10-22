@@ -140,3 +140,24 @@ TEST_F(CommandLineTest, HealthCheckFailsWhenNothingAnswers) {
     EXPECT_EQ(answer({"--health", url}), 1);
     EXPECT_EQ(err.str(), "rfmap-server: health check failed\n");
 }
+
+TEST_F(CommandLineTest, BackupAndRestoreReadTheFilesOnEitherSide) {
+    env = {{"RFMAP_SQL_DIR", "/opt/sql"}};
+    const auto backup = parse({"--config", "c.json", "--backup"});
+    EXPECT_EQ(backup.action(), Action::Backup);
+    EXPECT_TRUE(backup.isServiceAction());
+    EXPECT_EQ(backup.configFile(), "c.json");
+    const auto restore = parse({"--restore", "--sql", "sql", "--config", "d.json"});
+    EXPECT_EQ(restore.action(), Action::Restore);
+    EXPECT_EQ(restore.sqlDir(), "sql");
+    EXPECT_EQ(restore.configFile(), "d.json");
+    EXPECT_FALSE(parse({}).isServiceAction());
+}
+
+TEST_F(CommandLineTest, OneServiceActionAtATime) {
+    const auto both = parse({"--backup", "--restore"});
+    EXPECT_EQ(both.action(), Action::Invalid);
+    EXPECT_EQ(both.invalidArgument(), "--restore");
+    EXPECT_EQ(parse({"--restore", "--health"}).action(), Action::Invalid);
+    EXPECT_EQ(parse({"--backup", "--sql"}).action(), Action::Invalid);
+}

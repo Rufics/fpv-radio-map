@@ -24,7 +24,7 @@ add_custom_command(TARGET test_probe POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:test_probe> ${CMAKE_CURRENT_BINARY_DIR}/probe-stage/lib/)
 
 # Integration: a throw-away PostGIS cluster around one test process.
-add_executable(rfmap_server_integration integration_test.cpp host_calls_test.cpp library_seed_test.cpp)
+add_executable(rfmap_server_integration integration_test.cpp host_calls_test.cpp library_seed_test.cpp backup_test.cpp)
 target_link_libraries(rfmap_server_integration PRIVATE rfmap_server_lib GTest::gtest_main)
 target_compile_definitions(rfmap_server_integration PRIVATE ${_defs}
   RFMOD_WORKER="$<TARGET_FILE:rfmod-worker>"

@@ -264,10 +264,11 @@ not time-limited.
 
 ## 6. Backups and upgrades
 
-- Back up the `pgdata18` volume (or `pg_dump rfmap`) and the `rfmap-state` volume (installed
-  modules and `keys.json`). Everything else can be rebuilt.
+- Back up with `docker compose exec -T rfmap-server rfmap-server --backup > rfmap.backup`: one
+  file with the database rows, the installed modules and `keys.json`. Everything else can be
+  rebuilt. Restoring it is in [Restore on a new server](production-setup.md#101-restore-on-a-new-server).
 - Upgrade: `git pull`, then `docker compose up -d --build` from `deploy/` (a pull that moves
-  PostgreSQL to a new major needs [one more step](#postgresql-major-upgrades) first).
+  PostgreSQL to a new major needs [a backup and restore](#postgresql-major-upgrades) instead).
   Migrations run at start. Results
   cached under the old version are keyed by input hash, which includes the server version,
   so they are not reused.
@@ -277,34 +278,12 @@ not time-limited.
 ### PostgreSQL major upgrades
 
 A new PostgreSQL major version cannot open the data folder of the previous one, so a `git pull`
-that moves `postgis` to a new major needs one extra step. The move from PostgreSQL 16 to 18 is
-done by [`deploy/pg_upgrade.py`](../../deploy/pg_upgrade.py). Run it after `git pull` and before
-`docker compose up`:
-
-```sh
-cd ~/fpv-radio-map
-git pull
-python3 -I deploy/pg_upgrade.py --backup-dir ~/rfmap-backup
-```
-
-It stops rfmap-server and postgis, dumps the database with a temporary PostgreSQL 16 container
-that has no network, starts PostgreSQL 18 on a new volume (`rfmap_pgdata18`), restores the dump
-in one transaction, checks that every application table has the same number of rows, and starts the stack.
-The stack is down for the whole move; on a small database that is well under a minute. Then
-rebuild the images as usual (`cd deploy && docker compose up -d --build`).
-
-The old volume `rfmap_pgdata` is opened only by PostgreSQL 16 and stays as it was. To go back,
-check out the previous `deploy/docker-compose.yml` and run `docker compose up -d` from `deploy/`: it opens the
-old volume again. **Going back loses every change made after the move** (new missions, share
-links, sessions, library edits), because the old volume holds the database as it was at the
-move. If the new database has taken writes, back it up first (`pg_dump`, as in
-[Production server, step by step](production-setup.md#10-backups)) and check that the backup
-restores before you switch. Remove the old volume (`docker volume rm rfmap_pgdata`) only once the
-new database has run for a while and you have a backup of it that you have checked.
-Never use `docker compose down -v` here: it can remove both volumes.
-
-If a step fails, the tool says which and how to go back or try again. A fresh install needs none
-of this: it starts on PostgreSQL 18 directly.
+that moves `postgis` to a new major (16 to 18 is one) moves the data with the server's own
+backup and restore (`rfmap-server --backup` and `--restore`) into the new version's empty volume
+(`rfmap_pgdata18`). The backup holds data only; the restore builds the schema with the server's
+migrations, which also adapt the data to a newer version. The commands are in
+[Move to a new PostgreSQL major version](production-setup.md#102-move-to-a-new-postgresql-major-version).
+A fresh install needs none of this: it starts on PostgreSQL 18 directly.
 
 ## 7. Updating base images
 
