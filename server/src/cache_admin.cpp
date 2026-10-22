@@ -70,17 +70,25 @@ CacheAdmin::Limits CacheAdmin::read(Limits l, const json& request) {
         if (!t.is_object() || !t.contains("id") || !t.at("id").is_string()) throw HttpError(422, "each tier needs an id");
         const std::string id = t.at("id");
         if (id == kDemTier) {
-            l.demBlocksBytes = t.value("limitBytes", l.demBlocksBytes);
+            l.demBlocksBytes = limit(t, "limitBytes", l.demBlocksBytes);
         } else if (id == kMemoryTier) {
-            l.results.memoryBytes = t.value("limitBytes", l.results.memoryBytes);
+            l.results.memoryBytes = limit(t, "limitBytes", l.results.memoryBytes);
         } else if (id == kTableTier) {
-            l.results.tableBytes = t.value("limitBytes", l.results.tableBytes);
-            l.results.tableRows = t.value("limitRows", l.results.tableRows);
+            l.results.tableBytes = limit(t, "limitBytes", l.results.tableBytes);
+            l.results.tableRows = limit(t, "limitRows", l.results.tableRows);
         } else {
             throw HttpError(422, "unknown cache tier " + id);
         }
     }
     return l;
+}
+
+std::size_t CacheAdmin::limit(const json& tier, const char* key, std::size_t current) {
+    if (!tier.contains(key)) return current;
+    const json& v = tier.at(key);
+    // A negative or fractional number would wrap into an unbounded cache and be stored as such.
+    if (!v.is_number_unsigned()) throw HttpError(422, std::string(key) + " must be a non-negative integer");
+    return v.get<std::size_t>();
 }
 
 void CacheAdmin::setLimits(const json& request) const {

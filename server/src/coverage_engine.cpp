@@ -154,7 +154,7 @@ void CoverageEngine::runModules(const Request& request, std::size_t cells, json&
             const json resp = a.instance->invoke("coverage.analyze", req);
             addModule(grid, resp, a.id, cells);
         });
-        if (!failure.empty()) grid["moduleFailures"].push_back({{"module", a.id}, {"error", failure}});
+        if (!failure.empty()) ModuleFailure{a.id, failure}.appendTo(grid["moduleFailures"]);
     }
 }
 

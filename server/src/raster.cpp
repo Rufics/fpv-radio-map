@@ -91,6 +91,7 @@ void GdalRaster::readProjection(const std::array<double, 6>& geoTransform) {
         toRaster_.reset(OGRCreateCoordinateTransformation(&wgs84, &target));
         if (!toRaster_) throw RasterError(file_.string() + ": cannot transform from WGS84");
         toWgs.reset(OGRCreateCoordinateTransformation(&target, &wgs84));
+        if (!toWgs) throw RasterError(file_.string() + ": cannot transform to WGS84");
     }
     measurePitch(geoTransform, toWgs);
 }

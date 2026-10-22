@@ -4,8 +4,8 @@
 
 namespace rfmap {
 
-void MapConfig::dropUnbuiltLayers(json& map, const std::filesystem::path& dem) {
-    const auto files = TilesManifest(dem).files();
+void MapConfig::dropUnbuiltLayers(json& map, const TilesManifest& manifest) {
+    const auto files = manifest.files();
     if (!files) return;  // without a manifest every layer stays
     for (const char* layer : {"basemap", "satellite", "hillshade", "contours"}) {
         if (!files->contains(std::string(layer) + ".pmtiles")) map.erase(layer);
@@ -23,10 +23,11 @@ json MapConfig::build() const {
                 {"zoom", 11}};
     // The satellite credit is the operator's: it comes from the manifest the tiles-builder wrote.
     if (!config_.data.dem.empty()) {
-        if (const auto attributions = TilesManifest(config_.data.dem).attributions(); !attributions.empty()) {
+        const TilesManifest manifest(config_.data.dem);  // read once: credits and layers agree
+        if (const auto attributions = manifest.attributions(); !attributions.empty()) {
             out["attribution"] = attributions;
         }
-        dropUnbuiltLayers(out, config_.data.dem);
+        dropUnbuiltLayers(out, manifest);
     }
     if (dem_) {
         const rfcore::GeoPoint c = dem_->raster().centre();

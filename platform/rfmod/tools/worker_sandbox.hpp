@@ -12,6 +12,9 @@ public:
         bool filesystemIsolated = false; ///< Landlock: the module directory and the system libraries are readable, nothing else is reachable
         bool syscallFilter = false;      ///< seccomp: no sockets, processes, signals to others, ptrace, mounts, ...
         std::string notes;               ///< why a measure failed, for the host log
+
+        /// Every measure a third-party module needs (ModulePolicy::requireSandbox on the host).
+        [[nodiscard]] bool complete() const { return noNewPrivileges && networkIsolated && filesystemIsolated && syscallFilter; }
     };
 
     /// `moduleDir` stays readable, with the system library directories the dynamic loader

@@ -123,7 +123,8 @@ public:
         const auto to = req.point("to");
         const double total = g.inverse(from, to).distance.value();
         double step = std::max(kMinStepM, dem.nativeResolution().value());
-        if (const auto asked = req.optionalNumber("stepM", kMinStepM, HostRequest::kMaxDistanceM)) step = std::min(step, *asked);
+        // The module's step replaces the DEM's: coarser for a long path, finer where it wants detail.
+        if (const auto asked = req.optionalNumber("stepM", kMinStepM, HostRequest::kMaxDistanceM)) step = *asked;
         if (total / step > kMaxSamples) {
             throw HostCallError(std::format("bad_request: the path needs more than {} samples at {} m; use a larger stepM",
                                             static_cast<long>(kMaxSamples), step));
@@ -166,7 +167,8 @@ public:
     [[nodiscard]] json call(const HostRequest& req, const InvocationScope& scope) const override {
         const double lat = req.number("lat", -90.0, 90.0);
         const double lon = req.number("lon", -180.0, 180.0);
-        return scope.environment().weather.at(lat, lon, req.time("time", Clock::now())).point;
+        // The request's time, not the wall clock: the same hour the calculation itself uses.
+        return scope.environment().weather.at(lat, lon, req.time("time", scope.context().time)).point;
     }
 };
 
@@ -185,6 +187,8 @@ public:
 /// link.evaluate: a mission's link at two ends, or raw radio parameters.
 class LinkEvaluate final : public IHostMethod {
 public:
+    static constexpr double kMaxAglM = 100'000.0;  ///< above any aircraft the model is for
+
     [[nodiscard]] std::string_view name() const override { return "link.evaluate"; }
     [[nodiscard]] json call(const HostRequest& req, const InvocationScope& scope) const override {
         // The guide's promise: evaluating a link runs loss.contribute, so calling it from there recurses.
@@ -204,6 +208,11 @@ private:
         return HostCallError("missing-data: no elevation data on " + spans + " of the path; nothing is guessed");
     }
 
+    /// A path end, every field checked for shape and range like any other host request field.
+    [[nodiscard]] static Terminal terminal(const HostRequest& end) {
+        return {{end.number("lat", -90.0, 90.0), end.number("lon", -180.0, 180.0)}, end.number("aglM", 0.0, kMaxAglM)};
+    }
+
     [[nodiscard]] static json withMission(const HostRequest& req, const InvocationScope& scope) {
         const HostEnvironment& env = scope.environment();
         const json& mission = req.object("mission");
@@ -218,8 +227,8 @@ private:
         const CalcContext ctx = env.contexts.contextFor(mission);
         const InvocationScope nested(ctx);
         const ResolvedLink link = env.links.resolve(links.at(toString(kind)), kind);
-        const Terminal ground = Terminal::fromJson(req.has("ground") ? req.object("ground") : mission.at("pilot"));
-        const Terminal drone = Terminal::fromJson(req.object("drone"));
+        const Terminal ground = terminal(HostRequest(req.has("ground") ? req.object("ground") : mission.at("pilot")));
+        const Terminal drone = terminal(HostRequest(req.object("drone")));
         const PreparedPath path = env.links.prepare(ground, drone, ctx);
         if (!path.complete()) throw missingError(path);
         return env.links.evaluate(path, link, ctx, true, false).result;
@@ -232,8 +241,8 @@ private:
         const HostRequest rx(req.object("rx"));
         LinkService::RawEnds e{req.number("frequencyHz", 1e3, 1e12),
                                req.number("txPowerDbm", -100.0, 100.0),
-                               Terminal::fromJson(tx.raw()),
-                               Terminal::fromJson(rx.raw()),
+                               terminal(tx),
+                               terminal(rx),
                                tx.optionalNumber("gainDbi", -50.0, 100.0).value_or(0.0),
                                tx.optionalNumber("feederLossDb", 0.0, 100.0).value_or(0.0),
                                rx.optionalNumber("gainDbi", -50.0, 100.0).value_or(0.0),

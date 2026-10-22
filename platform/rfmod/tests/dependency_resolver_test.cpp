@@ -65,6 +65,18 @@ TEST(DependencyResolver, CyclesFailInsteadOfLooping) {
     for (const auto& s : steps) EXPECT_NE(s.state, ModuleState::Active) << s.id;
 }
 
+TEST(DependencyResolver, MutualOptionalDependenciesBothLoad) {
+    Manifest a = manifestOf("a", "1.0.0");
+    Manifest b = manifestOf("b", "1.0.0");
+    a.optionalDependencies.emplace_back("b", VersionRange::parse("*"));
+    b.optionalDependencies.emplace_back("a", VersionRange::parse("*"));
+    DependencyResolver::Candidates candidates = {{"a", {&a, true}}, {"b", {&b, true}}};
+    const auto steps = byId(DependencyResolver(candidates, Version(0, 1, 0)).plan());
+    ASSERT_EQ(steps.size(), 2u);
+    EXPECT_EQ(steps.at("a").state, ModuleState::Active) << steps.at("a").detail;
+    EXPECT_EQ(steps.at("b").state, ModuleState::Active) << steps.at("b").detail;
+}
+
 TEST(DependencyResolver, RemovedInThisHostVersion) {
     Manifest a = manifestOf("a", "1.0.0");
     a.deprecation = Deprecation{Version(0, 1, 0), Version(0, 4, 0), "", "gone"};

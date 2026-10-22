@@ -86,6 +86,14 @@ public:
         }
         const LatLon sw{s, w};
         const double height = world.inverse(sw, {n, w}).distanceM;
+        // The loops visit every cell of the bounding box, inside the area or not: a thin diagonal
+        // area over a wide box costs the box, so the box is bounded as well as the points.
+        const double widest = std::max(world.inverse(sw, {s, e}).distanceM, world.inverse({n, w}, {n, e}).distanceM);
+        if ((height / cellM) * (widest / cellM) > kMaxGridCells) {
+            throw rfmod::BadRequest(std::format("the area's bounding box holds more than {} cells at {} m; draw a "
+                                                "smaller area or use a larger cell",
+                                                kMaxGridCells, static_cast<int>(cellM)));
+        }
         std::vector<LatLon> out;
         for (std::size_t row = 0; (static_cast<double>(row) + 0.5) * cellM < height; ++row) {
             const double dy = (static_cast<double>(row) + 0.5) * cellM;
@@ -108,6 +116,8 @@ public:
 
     /// A cell below this would make the grid loops run for minutes before maxPoints stops them.
     static constexpr double kMinCellM = 1.0;
+    /// Bounding-box cells a grid may visit: a few seconds of geodesic steps at most.
+    static constexpr double kMaxGridCells = 2'000'000.0;
 
 private:
     static double mercY(double latDeg) { return std::asinh(std::tan(latDeg * rfcore::constants::kPi / 180.0)); }

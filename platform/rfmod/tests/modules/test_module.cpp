@@ -54,7 +54,8 @@ public:
         const pid_t child = fork();
         if (child == 0) _exit(0);
         if (child > 0) waitpid(child, nullptr, 0);
-        const bool signalsOthers = kill(1, 0) == 0 || errno != EPERM;
+        // The host is the same user, so only the sandbox can refuse the signal.
+        const bool signalsOthers = kill(getppid(), 0) == 0;
         return {{"readsEtc", readsEtc}, {"readsOwnDir", readsOwnDir}, {"opensSocket", sock >= 0},
                 {"forks", child > 0}, {"signalsOthers", signalsOthers}, {"writesHere", std::ofstream("probe.tmp").good()}};
     }

@@ -141,6 +141,18 @@ int run(const char* library) {
     // directory it keeps read access to, besides the system libraries the module links.
     const WorkerSandbox::Report sandbox = WorkerSandbox(".").apply();
     if (!sandbox.notes.empty()) std::cerr << "rfmod-worker: sandbox: " << sandbox.notes << '\n';
+    const json sandboxJson = {{"noNewPrivileges", sandbox.noNewPrivileges},
+                              {"networkIsolated", sandbox.networkIsolated},
+                              {"filesystemIsolated", sandbox.filesystemIsolated},
+                              {"syscallFilter", sandbox.syscallFilter}};
+    // When the host requires every measure, the library is not even loaded without them.
+    if (init.value("requireSandbox", true) && !sandbox.complete()) {
+        context.channel.send({{"t", "ready"},
+                              {"status", 1},
+                              {"message", "the worker could not confine itself: " + sandbox.notes},
+                              {"sandbox", sandboxJson}});
+        return 1;
+    }
 
     void* handle = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (!handle) return fail(std::string("dlopen: ") + dlerror());
@@ -157,14 +169,8 @@ int run(const char* library) {
         return fail("module init returned an error");
     }
 
-    context.channel.send({{"t", "ready"},
-                          {"status", 0},
-                          {"manifest", std::string(api->manifest_json())},
-                          {"sandbox",
-                           {{"noNewPrivileges", sandbox.noNewPrivileges},
-                            {"networkIsolated", sandbox.networkIsolated},
-                            {"filesystemIsolated", sandbox.filesystemIsolated},
-                            {"syscallFilter", sandbox.syscallFilter}}}});
+    context.channel.send(
+        {{"t", "ready"}, {"status", 0}, {"manifest", std::string(api->manifest_json())}, {"sandbox", sandboxJson}});
 
     serve(api, context.channel);
     api->shutdown();

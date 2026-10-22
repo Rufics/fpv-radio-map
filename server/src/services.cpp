@@ -194,6 +194,7 @@ void Services::buildModules(const std::string& ownerKeyText) {
 }
 
 void Services::reloadModules() const {
+    const std::lock_guard lock(reloadMutex_);  // reloads from parallel admin requests run in turn
     modules_.trust->reload();
     modules_.registry->reload();
     for (const auto& n : modules_.registry->notices()) log_.warn("modules", n);

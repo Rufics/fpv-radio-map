@@ -10,9 +10,9 @@
 //
 // Operator commands, run on the server machine against its module root. They are the only way a
 // module gets onto a server: the HTTP API lists modules and toggles them, it never installs.
-//   rfmod install FILE.rfmod --root DIR [--trust-store KEYS.json] [--fixtures FILE.json]
-//   rfmod remove ID --root DIR
-//   rfmod list --root DIR [--trust-store KEYS.json]
+//   rfmod install FILE.rfmod --root DIR --trust-store KEYS.json [--fixtures FILE.json]
+//   rfmod remove ID --root DIR --trust-store KEYS.json
+//   rfmod list --root DIR --trust-store KEYS.json
 //   rfmod trust list|add KEY.pub --label TEXT|remove KEY_ID  --trust-store KEYS.json
 //
 // "check" runs every install check except the self-test; "test" and "install" also run the
@@ -320,9 +320,9 @@ public:
                      "  rfmod inspect FILE.rfmod\n"
                      "  rfmod check FILE.rfmod --trust KEY.pub [--host-version X.Y.Z]\n"
                      "  rfmod test FILE.rfmod --trust KEY.pub [--with DEP.rfmod ...] [--fixtures FILE.json]\n"
-                     "  rfmod install FILE.rfmod --root DIR [--trust-store KEYS.json] [--fixtures FILE.json]\n"
-                     "  rfmod remove ID --root DIR\n"
-                     "  rfmod list --root DIR [--trust-store KEYS.json]\n"
+                     "  rfmod install FILE.rfmod --root DIR --trust-store KEYS.json [--fixtures FILE.json]\n"
+                     "  rfmod remove ID --root DIR --trust-store KEYS.json\n"
+                     "  rfmod list --root DIR --trust-store KEYS.json\n"
                      "  rfmod trust list|add KEY.pub --label TEXT|remove KEY_ID --trust-store KEYS.json\n";
     }
 
@@ -348,10 +348,11 @@ private:
         return store;
     }
 
-    /// The operator's trust: the owner key of this build plus the trust store file, as on the server.
+    /// The operator's trust: the owner key of this build plus the server's trust store file, so
+    /// third-party modules are seen as the server sees them (a missing store would hide them).
     [[nodiscard]] rfmod::TrustStore operatorTrust() const {
         if (std::string_view(kOwnerKey).empty()) throw std::invalid_argument("this rfmod was built without an owner key");
-        return {kOwnerKey, a_.get("--trust-store")};
+        return {kOwnerKey, a_.need("--trust-store", "give --trust-store KEYS.json: the server's modules.trustStore file")};
     }
 
     [[nodiscard]] FixtureHost fixtureHost() const {
@@ -443,20 +444,20 @@ private:
     }
 
     int install() {
-        const std::string& file = a_.only("rfmod install FILE.rfmod --root DIR");
+        const std::string& file = a_.only("rfmod install FILE.rfmod --root DIR --trust-store KEYS.json");
         const rfmod::TrustStore trust = operatorTrust();
         FixtureHost host = fixtureHost();
-        rfmod::ModuleInstaller installer(installerConfig(a_.need("--root", "rfmod install FILE.rfmod --root DIR")), trust, host);
+        rfmod::ModuleInstaller installer(installerConfig(a_.need("--root", "rfmod install FILE.rfmod --root DIR --trust-store KEYS.json")), trust, host);
         const int rc = printReport(installer.install(Files::read(file)));
         if (rc == 0) std::cout << "Ask the server to pick it up: POST /api/v1/admin/modules/reload\n";
         return rc;
     }
 
     int remove() {
-        const std::string& id = a_.only("rfmod remove ID --root DIR");
+        const std::string& id = a_.only("rfmod remove ID --root DIR --trust-store KEYS.json");
         const rfmod::TrustStore trust = operatorTrust();
         FixtureHost host = fixtureHost();
-        rfmod::ModuleInstaller(installerConfig(a_.need("--root", "rfmod remove ID --root DIR")), trust, host).remove(id);
+        rfmod::ModuleInstaller(installerConfig(a_.need("--root", "rfmod remove ID --root DIR --trust-store KEYS.json")), trust, host).remove(id);
         std::cout << "Removed " << id << ". Ask the server to pick it up: POST /api/v1/admin/modules/reload\n";
         return 0;
     }
@@ -464,7 +465,7 @@ private:
     int list() {
         const rfmod::TrustStore trust = operatorTrust();
         FixtureHost host = fixtureHost();
-        const rfmod::ModuleInstaller installer(installerConfig(a_.need("--root", "rfmod list --root DIR")), trust, host);
+        const rfmod::ModuleInstaller installer(installerConfig(a_.need("--root", "rfmod list --root DIR --trust-store KEYS.json")), trust, host);
         for (const auto& [id, m] : installer.installed()) {
             std::cout << id << " " << m.manifest.version.str() << (m.settings.enabled ? "" : " (disabled)")
                       << "  signed by " << m.signer.label << " (" << m.signer.key.id() << ")\n";

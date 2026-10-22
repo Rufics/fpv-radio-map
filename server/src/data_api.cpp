@@ -78,6 +78,9 @@ void DataApi::getModuleFile(const HttpRequest& req, HttpReply& res) const {
     const auto file = s_.catalog().file(id, req.match(2));
     if (!file.has_value() || (file->alpha && !mayReadAlpha(req, id))) throw HttpError(404, "no such module file");
     const std::ifstream in(file->path, std::ios::binary);
+    // The file may have gone between the lookup and here (a reload or CLI removal): never send
+    // an empty body the browser would cache as the module.
+    if (!in) throw HttpError(404, "no such module file");
     std::ostringstream content;
     content << in.rdbuf();
     // A module file is a resource the app imports, never a page: no sniffing, no scripts if a

@@ -241,12 +241,15 @@ under **Admin**.
   The built-in owner key cannot be removed. Removing a key unloads the modules signed with it
   at the next reload.
 - **Modules**: installing and removing is a local operation on the server machine, never an
-  upload. `rfmod install FILE.rfmod --root /var/lib/rfmap/modules` checks the archive, signature,
-  manifest, ABI, host range, dependencies and lifecycle, runs the self-test in a sandboxed worker
-  and installs only if every check passed; `rfmod check FILE.rfmod` only checks; `rfmod remove ID
-  --root ...` takes a module out; `rfmod list --root ...` shows what is installed. In the compose
-  deployment: `docker compose exec rfmap-server rfmod install /var/lib/rfmap/incoming/FILE.rfmod
-  --root /var/lib/rfmap/modules` after copying the file into the `rfmap-state` volume. Then
+  upload. `rfmod install FILE.rfmod --root /var/lib/rfmap/modules --trust-store
+  /var/lib/rfmap/keys.json` checks the archive, signature, manifest, ABI, host range,
+  dependencies and lifecycle, runs the self-test in a sandboxed worker and installs only if every
+  check passed; `rfmod check FILE.rfmod --trust KEY.pub` only checks; `rfmod remove ID --root ...
+  --trust-store ...` takes a module out; `rfmod list --root ... --trust-store ...` shows what is
+  installed. The trust store is the server's `modules.trustStore` file, so the CLI sees
+  third-party modules as the server does. In the compose deployment: `docker compose exec
+  rfmap-server rfmod install /var/lib/rfmap/incoming/FILE.rfmod --root /var/lib/rfmap/modules
+  --trust-store /var/lib/rfmap/keys.json` after copying the file into the `rfmap-state` volume. Then
   `POST /admin/modules/reload` (or **Admin → Modules → Reload**) makes the running server pick
   the change up. `PUT /admin/modules/<id>` with `{enabled, options}` disables or configures a
   module, including the built-in `rf.weather`, `rf.clutter`, `rf.uncertainty` and

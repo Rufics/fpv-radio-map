@@ -8,7 +8,7 @@
 #include "app.hpp"
 #include "command_line.hpp"
 
-#include <sys/prctl.h>
+#include <sys/resource.h>
 
 #include <atomic>
 #include <csignal>
@@ -28,11 +28,16 @@ void onSignal(int) {
     if (rfmap::Application* app = runningApplication().load()) app->stop();
 }
 
-/// What the process does to itself before it holds secrets: no core dumps and no ptrace
-/// from other users' processes, since memory holds the admin token and session hashes.
+/// What the process does to itself before it holds secrets: no core dumps, since memory holds
+/// the admin token and session hashes. (Not PR_SET_DUMPABLE: that hands /proc/self to root,
+/// and the metrics read the process's own fd table there.)
 class ProcessHardening {
 public:
-    static void apply() { (void)prctl(PR_SET_DUMPABLE, 0, 0, 0, 0); }
+    /// False when the limit could not be set; the server still starts.
+    [[nodiscard]] static bool apply() {
+        const rlimit none{0, 0};
+        return setrlimit(RLIMIT_CORE, &none) == 0;
+    }
 };
 }  // namespace
 
@@ -43,9 +48,10 @@ int main(int argc, char** argv) {
     const auto cmd = rfmap::CommandLine::parse(args, env, RFMAP_DEFAULT_SQL_DIR);
     if (cmd.action() != rfmap::CommandLine::Action::Serve) return cmd.answerWithoutServing(std::cout, std::cerr);
     try {
-        ProcessHardening::apply();
+        const bool hardened = ProcessHardening::apply();
         rfmap::Application app(rfmap::Config::load(cmd.configFile(), env),
                                RFMAP_OWNER_PUBKEY_TEXT, RFMAP_OWNER_KEY_IS_DEV != 0, cmd.sqlDir());
+        if (!hardened) app.log().warn("process", "could not disable core dumps (setrlimit RLIMIT_CORE failed)");
         runningApplication() = &app;
         (void)std::signal(SIGTERM, onSignal);
         (void)std::signal(SIGINT, onSignal);

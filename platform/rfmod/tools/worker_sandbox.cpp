@@ -67,6 +67,7 @@ public:
         denyAll(kProcessSyscalls);
         denyAll(kPrivilegeSyscalls);
         denyAll(kKernelSyscalls);
+        denyAll(kFileMetadataSyscalls);
         denySignalsToOthers();
         denyNewProcesses();
         program_.push_back(BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
@@ -322,6 +323,74 @@ private:
 #endif
 #ifdef __NR_seccomp
         __NR_seccomp,  // no second filter on top of this one, which a module could use to confuse the host
+#endif
+    };
+
+    /// What Landlock does not cover: changing a file's mode, owner, times and attributes, and
+    /// truncation before ABI 3. The module reads files; it never changes them.
+    static constexpr int kFileMetadataSyscalls[] = {
+#ifdef __NR_truncate
+        __NR_truncate,
+#endif
+#ifdef __NR_ftruncate
+        __NR_ftruncate,
+#endif
+#ifdef __NR_fallocate
+        __NR_fallocate,
+#endif
+#ifdef __NR_chmod
+        __NR_chmod,
+#endif
+#ifdef __NR_fchmod
+        __NR_fchmod,
+#endif
+#ifdef __NR_fchmodat
+        __NR_fchmodat,
+#endif
+#ifdef __NR_fchmodat2
+        __NR_fchmodat2,
+#endif
+#ifdef __NR_chown
+        __NR_chown,
+#endif
+#ifdef __NR_fchown
+        __NR_fchown,
+#endif
+#ifdef __NR_lchown
+        __NR_lchown,
+#endif
+#ifdef __NR_fchownat
+        __NR_fchownat,
+#endif
+#ifdef __NR_utime
+        __NR_utime,
+#endif
+#ifdef __NR_utimes
+        __NR_utimes,
+#endif
+#ifdef __NR_futimesat
+        __NR_futimesat,
+#endif
+#ifdef __NR_utimensat
+        __NR_utimensat,
+#endif
+#ifdef __NR_setxattr
+        __NR_setxattr,
+#endif
+#ifdef __NR_lsetxattr
+        __NR_lsetxattr,
+#endif
+#ifdef __NR_fsetxattr
+        __NR_fsetxattr,
+#endif
+#ifdef __NR_removexattr
+        __NR_removexattr,
+#endif
+#ifdef __NR_lremovexattr
+        __NR_lremovexattr,
+#endif
+#ifdef __NR_fremovexattr
+        __NR_fremovexattr,
 #endif
     };
 

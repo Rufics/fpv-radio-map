@@ -26,12 +26,12 @@ rfmod keygen --out acme
 ```
 
 This writes `acme.pub` and `acme.secret`. Give `acme.pub` to the admin of each server that
-should run your modules; they add it under **Admin → Keys**. Keep `acme.secret` off servers and
+should run your modules; they trust it on the server machine with `rfmod trust add`. Keep `acme.secret` off servers and
 out of git: whoever has it can sign as you.
 
 The server has one key built in, the owner's. Modules signed with it run inside the server
 process. Modules signed with any other key run in a separate worker process (section 8).
-The admin can remove a key at any time; modules signed with it stop loading at once.
+The operator can remove a key at any time; modules signed with it stop loading at the next reload.
 
 ## 3. Start a project
 
@@ -277,7 +277,7 @@ operator can also run first-party modules this way (`isolateAll`):
 
 - memory capped at `limits.memoryMb` (address space) and the call time at `limits.timeoutMs`,
   both further capped by the server's `modules.maxMemoryMb` and `modules.maxTimeoutMs`; a
-  reply larger than 16 MiB or a log line above 1 MiB ends the worker;
+  reply larger than 16 MiB ends the worker, and a log line is cut at 1 MiB;
 - no core dumps, no file writes, 32 open files at most;
 - started with an empty environment, in the module's own directory, with every server
   descriptor closed; the host kills the worker's whole process group;
@@ -285,8 +285,9 @@ operator can also run first-party modules this way (`isolateAll`):
 - a Landlock ruleset that leaves the module read access to its own directory and the system
   library directories only, so it can read neither the server's files nor its configuration;
 - a seccomp filter that refuses sockets, new processes (`fork`, `clone` without
-  `CLONE_THREAD`, `execve`), `ptrace`, the mount and module calls, `setuid` and the like, and
-  signals to any process but itself (threads are allowed);
+  `CLONE_THREAD`, `execve`), `ptrace`, the mount and module calls, `setuid` and the like,
+  changes to file modes, owners, times and attributes, truncation, and signals to any process
+  but itself (threads are allowed);
 - a fresh user and network namespace where the kernel allows unprivileged namespaces.
 
 The worker confines itself before it loads the module's library, so the library's
@@ -344,7 +345,8 @@ Packing is reproducible: the same files and key give the same bytes.
 
 Send the `.rfmod` to the operator. They copy it to the server machine and run
 `rfmod trust add acme.pub --label "Acme" --trust-store /var/lib/rfmap/keys.json` once, then
-`rfmod install acme.rain-0.1.0.rfmod --root /var/lib/rfmap/modules`; the CLI repeats every check,
+`rfmod install acme.rain-0.1.0.rfmod --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json`;
+the CLI repeats every check,
 runs the self-test in a sandboxed worker and installs only if everything passed, then
 `POST /api/v1/admin/modules/reload` makes the server pick it up. The report lists each check
 with its result, so a refusal always says why. There is no upload through the API or the

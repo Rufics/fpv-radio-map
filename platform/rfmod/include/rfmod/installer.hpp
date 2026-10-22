@@ -48,6 +48,8 @@ public:
     /// Module ids under these prefixes belong to the platform: only the owner key may sign them.
     static constexpr std::string_view kReservedPrefixes[] = {"fpv.", "rf."};
     [[nodiscard]] static bool reservedId(std::string_view id);
+    /// True for a string of the manifest id alphabet: what a directory under installed/ is named.
+    [[nodiscard]] static bool looksLikeModuleId(std::string_view id);
 
 private:
     using Installed = std::map<std::string, InstalledModule, std::less<>>;

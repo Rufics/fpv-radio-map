@@ -34,6 +34,8 @@ private:
     void apply(const Limits& limits) const;
     void store(const Limits& limits) const;
     [[nodiscard]] static Limits read(Limits limits, const json& request);
+    /// `tier[key]` as a limit, or `current` when absent; HttpError 422 unless a non-negative integer.
+    [[nodiscard]] static std::size_t limit(const json& tier, const char* key, std::size_t current);
 
     Database& db_;
     BlockCache& blocks_;

@@ -25,6 +25,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
 
 namespace rfmap {
@@ -69,6 +70,7 @@ public:
     void reloadModules() const;
 
 private:
+    mutable std::mutex reloadMutex_;
     void checkStartup(bool ownerKeyIsDev) const;
     void openDatabase(const std::filesystem::path& sqlDir);
     void buildStores();

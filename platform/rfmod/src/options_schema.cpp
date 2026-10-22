@@ -20,7 +20,8 @@ public:
     }
 
 private:
-    nlohmann::json_schema::json_validator validator_;
+    /// With the library's format checker, so "format": "date-time" and the like are enforced.
+    nlohmann::json_schema::json_validator validator_{nullptr, nlohmann::json_schema::default_string_format_check};
 };
 
 OptionsSchema::OptionsSchema(const nlohmann::json& schema)

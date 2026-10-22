@@ -324,6 +324,10 @@ PreparedPath LinkService::prepare(const Terminal& ground, const Terminal& air, c
     // steps the middle sample still takes the DEM's own value, nothing is interpolated.
     std::optional<Metres> step;
     if (p.distanceM < 2.0 * dem.nativeResolution().value()) step = Metres(p.distanceM / 2.0);
+    if (p.distanceM / dem.nativeResolution().value() > kMaxProfileSamples) {
+        throw HttpError(422, std::format("the path is too long for this DEM: more than {} samples at {} m",
+                                         kMaxProfileSamples, dem.nativeResolution().value()));
+    }
     rfcore::ProfileResult built = rfcore::ProfileBuilder(dem).build(ground.position, air.position, step);
     p.missing = std::move(built.missing);
     if (!built.profile.has_value()) return p;

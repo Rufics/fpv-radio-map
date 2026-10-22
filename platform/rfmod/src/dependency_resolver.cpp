@@ -32,12 +32,9 @@ bool DependencyResolver::loadable(const std::string& id) const {
 bool DependencyResolver::visit(const std::string& id) {
     const auto mark = marks_.find(id);
     if (mark != marks_.end() && mark->second == Mark::Done) return loadable(id);
-    if (mark != marks_.end()) {
-        // Visiting: the dependency chain came back to this module.
-        steps_.emplace_back(id, ModuleState::Failed, "dependency cycle through " + id);
-        marks_[id] = Mark::Done;
-        return false;
-    }
+    // Visiting: the dependency chain came back to this module. The caller that closed the
+    // cycle reports it; this module's own step is decided when its visit unwinds.
+    if (mark != marks_.end()) return false;
     marks_[id] = Mark::Visiting;
     const Candidate& c = candidates_.at(id);
     Step step{id, ModuleState::Active, {}};
@@ -66,6 +63,11 @@ bool DependencyResolver::requiredDependenciesLoadable(const Candidate& c, Step& 
     for (const Dependency& d : c.manifest->dependencies) {
         const auto dep = candidates_.find(d.id);
         const bool installed = dep != candidates_.end();
+        if (installed && visiting(d.id)) {
+            step.state = ModuleState::Failed;
+            step.detail = "dependency cycle through " + d.id;
+            return false;
+        }
         if (installed && d.range.contains(dep->second.manifest->version) && visit(d.id)) continue;
         step.state = ModuleState::MissingDependency;
         step.detail = "needs " + d.id + " " + d.range.str();
@@ -84,8 +86,14 @@ bool DependencyResolver::requiredDependenciesLoadable(const Candidate& c, Step& 
 void DependencyResolver::visitOptionalDependencies(const Candidate& c) {
     for (const Dependency& d : c.manifest->optionalDependencies) {
         const auto dep = candidates_.find(d.id);
-        if (dep != candidates_.end() && d.range.contains(dep->second.manifest->version)) (void)visit(d.id);
+        // A mutual optional dependency is no cycle to fail on: both modules load.
+        if (dep != candidates_.end() && !visiting(d.id) && d.range.contains(dep->second.manifest->version)) (void)visit(d.id);
     }
+}
+
+bool DependencyResolver::visiting(const std::string& id) const {
+    const auto mark = marks_.find(id);
+    return mark != marks_.end() && mark->second == Mark::Visiting;
 }
 
 }  // namespace rfmod

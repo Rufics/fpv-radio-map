@@ -9,12 +9,12 @@
 
 #include "lru.hpp"
 
-#include <condition_variable>
 #include <functional>
+#include <future>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -100,13 +100,14 @@ private:
             json response;
             TimePoint fetched;
         };
-        /// Waits for a fetch of `key` by another thread, then looks the key up again.
-        [[nodiscard]] std::optional<json> lookup(const std::string& key, TimePoint now, std::unique_lock<std::mutex>& lock);
+        /// Runs `fetch` for `key`, hands its outcome to `promise` and the waiters, and caches a result.
+        json fetchInto(const std::string& key, TimePoint now, const Fetch& fetch, std::promise<json>& promise);
 
         std::chrono::minutes ttl_;
         std::mutex mutex_;
-        std::condition_variable fetched_;
-        std::set<std::string, std::less<>> inFlight_;
+        /// The fetch under way per key: a later miss on the same key waits for its outcome, an
+        /// exception included, instead of starting a fetch of its own.
+        std::map<std::string, std::shared_future<json>, std::less<>> inFlight_;
         LruCache<std::string, Entry> entries_;
     };
 

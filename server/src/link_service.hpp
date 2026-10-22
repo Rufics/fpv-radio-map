@@ -96,7 +96,10 @@ public:
     [[nodiscard]] ResolvedLink resolve(const json& linkSetup, LinkKind kind) const;
 
     /// Builds the profile (missing spans reported, never filled) and applies clutter.
+    /// HttpError 422 for a path that would need more than kMaxProfileSamples DEM samples.
     [[nodiscard]] PreparedPath prepare(const Terminal& ground, const Terminal& air, const CalcContext& ctx) const;
+    /// 3000 km at 30 m: far beyond any link the model is for, and a bound on the profile's size.
+    static constexpr double kMaxProfileSamples = 100'000.0;
 
     /// `withBand`: run the uncertainty analysis (9 evaluations); `withProfile`: put the profile
     /// in the result. The path must be complete.

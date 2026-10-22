@@ -125,6 +125,8 @@ private:
     class Turn;
     void start();
     void stop(bool kill);
+    /// SIGKILL to the worker's process group and to the worker itself.
+    void killWorker() const;
     void send(const json& message) const;
     /// The worker's "ready" message, checked: the library matches the manifest and the sandbox
     /// is as complete as the policy asks.

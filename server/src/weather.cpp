@@ -188,20 +188,24 @@ std::string WeatherService::ForecastCache::key(double lat, double lon, const std
     return std::format("{},{},{}", cell(lat), cell(lon), models);
 }
 
-std::optional<json> WeatherService::ForecastCache::lookup(const std::string& key, TimePoint now,
-                                                          std::unique_lock<std::mutex>& lock) {
-    fetched_.wait(lock, [this, &key] { return !inFlight_.contains(key); });
-    if (const auto hit = entries_.get(key); hit && now - hit->fetched < ttl_) return std::make_optional(hit->response);
-    return std::nullopt;
-}
-
 json WeatherService::ForecastCache::get(double lat, double lon, const std::string& models, TimePoint now,
                                         const Fetch& fetch) {
     const std::string k = key(lat, lon, models);
     std::unique_lock lock(mutex_);
-    if (const auto hit = lookup(k, now, lock)) return *hit;
-    inFlight_.insert(k);
+    if (const auto hit = entries_.get(k); hit && now - hit->fetched < ttl_) return hit->response;
+    if (const auto it = inFlight_.find(k); it != inFlight_.end()) {
+        const std::shared_future<json> pending = it->second;
+        lock.unlock();
+        return pending.get();  // the fetcher's answer, or its exception rethrown
+    }
+    std::promise<json> promise;
+    inFlight_.emplace(k, promise.get_future().share());
     lock.unlock();
+    return fetchInto(k, now, fetch, promise);
+}
+
+json WeatherService::ForecastCache::fetchInto(const std::string& key, TimePoint now, const Fetch& fetch,
+                                              std::promise<json>& promise) {
     // Whatever the fetch does, the key must not stay in flight, or every later request waits.
     struct Done {
         ForecastCache& cache;
@@ -209,12 +213,17 @@ json WeatherService::ForecastCache::get(double lat, double lon, const std::strin
         ~Done() {
             const std::lock_guard guard(cache.mutex_);
             cache.inFlight_.erase(key);
-            cache.fetched_.notify_all();
         }
-    } const done{*this, k};
-    json r = fetch();
-    entries_.put(k, std::make_shared<const Entry>(Entry{r, now}));
-    return r;
+    } const done{*this, key};
+    try {
+        json r = fetch();
+        entries_.put(key, std::make_shared<const Entry>(Entry{r, now}));
+        promise.set_value(r);
+        return r;
+    } catch (...) {
+        promise.set_exception(std::current_exception());
+        throw;
+    }
 }
 
 json WeatherService::fetchCached(double lat, double lon, const Config::WeatherTier& tier) {

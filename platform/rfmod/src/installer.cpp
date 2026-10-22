@@ -3,6 +3,7 @@
 #include "rfmod/options_schema.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <format>
 #include <system_error>
 
@@ -226,6 +227,12 @@ void ModuleInstaller::installStaged(const VerifiedPackage& pkg, std::string_view
     report.pass("installed", m.id + " " + m.version.str() + " in " + store_.installedDir(m.id).string());
 }
 
+bool ModuleInstaller::looksLikeModuleId(std::string_view id) {
+    // One path component of the manifest id alphabet (schemas/rfmod-manifest.schema.json).
+    if (id.empty() || id.size() > 128 || id.find('.') == std::string_view::npos) return false;
+    return std::ranges::all_of(id, [](char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '.' || c == '-'; });
+}
+
 std::vector<std::string> ModuleInstaller::dependentsOf(std::string_view id, const Installed& have) {
     std::vector<std::string> out;
     for (const auto& [otherId, m] : have) {
@@ -241,8 +248,9 @@ void ModuleInstaller::remove(const std::string& id) {
     const Installed have = installed();
     const auto it = have.find(id);
     if (it == have.end()) {
-        // A directory whose package no longer verifies is still removable, by its directory name.
-        if (!store_.isInstalled(id)) throw std::invalid_argument("unknown module " + id);
+        // A directory whose package no longer verifies is still removable, by its directory name,
+        // which must look like a module id: never a path, never the installed root itself.
+        if (!looksLikeModuleId(id) || !store_.isInstalled(id)) throw std::invalid_argument("unknown module " + id);
         store_.remove(store_.installedDir(id));
         return;
     }

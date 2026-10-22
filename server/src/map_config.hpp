@@ -3,6 +3,7 @@
 #include "common.hpp"
 #include "config.hpp"
 #include "raster.hpp"
+#include "tiles_manifest.hpp"
 
 namespace rfmap {
 
@@ -16,7 +17,7 @@ public:
 
 private:
     /// Drops the layers the manifest does not list, so the client shows no view it cannot load.
-    static void dropUnbuiltLayers(json& map, const std::filesystem::path& dem);
+    static void dropUnbuiltLayers(json& map, const TilesManifest& manifest);
 
     const Config& config_;
     const DemSource* dem_;

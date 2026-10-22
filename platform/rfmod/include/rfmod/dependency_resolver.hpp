@@ -45,6 +45,8 @@ private:
     bool mayLoad(const Candidate& c, Step& step) const;
     bool requiredDependenciesLoadable(const Candidate& c, Step& step);
     void visitOptionalDependencies(const Candidate& c);
+    /// True while `id` is on the dependency chain being walked.
+    [[nodiscard]] bool visiting(const std::string& id) const;
     /// The already planned step of `id`, if any, is loadable.
     [[nodiscard]] bool loadable(const std::string& id) const;
 

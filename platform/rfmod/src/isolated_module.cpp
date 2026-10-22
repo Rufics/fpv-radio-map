@@ -142,7 +142,7 @@ void IsolatedModule::start() {
     errBuffer_.clear();
 
     try {
-        send({{"t", "init"}, {"options", options_}});
+        send({{"t", "init"}, {"options", options_}, {"requireSandbox", policy_.requireSandbox}});
         acceptReady(waitFor("ready", 0, nowMs() + kStartupTimeoutMs));
     } catch (...) {
         stop(true);
@@ -151,6 +151,18 @@ void IsolatedModule::start() {
 }
 
 void IsolatedModule::acceptReady(const json& ready) {
+    const json sb = ready.value("sandbox", json::object());
+    sandbox_.noNewPrivileges = sb.value("noNewPrivileges", false);
+    sandbox_.networkIsolated = sb.value("networkIsolated", false);
+    sandbox_.filesystemIsolated = sb.value("filesystemIsolated", false);
+    sandbox_.syscallFilter = sb.value("syscallFilter", false);
+    sandbox_.memoryLimitMb = limits_.memoryMb;
+    // The worker refuses to load the library when the policy requires a sandbox it lacks.
+    if (policy_.requireSandbox && !sandbox_.complete()) {
+        throw ModuleError("sandbox_incomplete",
+                          std::format("{}: the worker could not confine itself ({}); refusing to run an unconfined module",
+                                      manifest_.id, sandbox_.describe()));
+    }
     if (ready.value("status", 1) != 0) {
         throw ModuleError("init_failed", ready.value("message", std::string("module init failed")));
     }
@@ -158,38 +170,32 @@ void IsolatedModule::acceptReady(const json& ready) {
         embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
         throw ModuleError("load_failed", "library manifest does not match manifest.json");
     }
-    const json sb = ready.value("sandbox", json::object());
-    sandbox_.noNewPrivileges = sb.value("noNewPrivileges", false);
-    sandbox_.networkIsolated = sb.value("networkIsolated", false);
-    sandbox_.filesystemIsolated = sb.value("filesystemIsolated", false);
-    sandbox_.syscallFilter = sb.value("syscallFilter", false);
-    sandbox_.memoryLimitMb = limits_.memoryMb;
-    if (policy_.requireSandbox && !sandbox_.complete()) {
-        throw ModuleError("sandbox_incomplete",
-                          std::format("{}: the worker could not confine itself ({}); refusing to run an unconfined module",
-                                      manifest_.id, sandbox_.describe()));
-    }
+}
+
+void IsolatedModule::killWorker() const {
+    // The worker leads its own process group (WorkerExec::detachFromHost), so -pid reaches
+    // anything it managed to spawn as well; the pid itself covers the instant before it led one.
+    ::kill(-pid_, SIGKILL);
+    ::kill(pid_, SIGKILL);
 }
 
 void IsolatedModule::stop(bool kill) {
     if (pid_ <= 0) return;
-    // The worker leads its own process group (WorkerExec::detachFromHost), so -pid reaches
-    // anything it managed to spawn as well.
     if (kill) {
-        ::kill(-pid_, SIGKILL);
+        killWorker();
     } else {
         // Give the worker a moment to shut down cleanly, then make sure it is gone.
         const long long deadline = nowMs() + 2000;
         int status = 0;
         while (waitpid(pid_, &status, WNOHANG) == 0) {
             if (nowMs() > deadline) {
-                ::kill(-pid_, SIGKILL);
+                killWorker();
                 break;
             }
             pollfd none{};
             poll(&none, 0, 20);
         }
-        ::kill(-pid_, SIGKILL);  // whatever the group still holds
+        killWorker();  // whatever the group still holds
     }
     int status = 0;
     waitpid(pid_, &status, 0);
@@ -265,8 +271,13 @@ void IsolatedModule::bufferOutput(std::size_t stream, const char* data, std::siz
         return;
     }
     // Log output is best effort: a module that floods stderr loses the flood, not its worker.
+    // A line that reaches the limit without ending is logged cut, so the buffer never sticks.
     const std::size_t room = policy_.maxLogBytes > errBuffer_.size() ? policy_.maxLogBytes - errBuffer_.size() : 0;
     errBuffer_.append(data, std::min(size, room));
+    if (errBuffer_.size() >= policy_.maxLogBytes && errBuffer_.find('\n') == std::string::npos) {
+        services_.log(manifest_.id, 2, "stderr: " + errBuffer_ + " [line cut]");
+        errBuffer_.clear();
+    }
 }
 
 void IsolatedModule::readWorkerOutput(long long deadlineMs) {
