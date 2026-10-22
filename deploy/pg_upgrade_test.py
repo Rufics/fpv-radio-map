@@ -2,8 +2,8 @@
 import io
 import tempfile
 import unittest
-from unittest import mock
 from pathlib import Path
+from unittest import mock
 
 import pg_upgrade
 from pg_upgrade import Command, Compose, RowCounts, Upgrade, UpgradeError
@@ -75,13 +75,15 @@ class UpgradeTest(unittest.TestCase):
         return Upgrade(docker, compose, self.backup, out=self.messages.append)
 
     def test_refuses_without_the_old_volume(self):
+        upgrade = self.upgrade(FakeDocker())
         with self.assertRaisesRegex(UpgradeError, "nothing to move"):
-            self.upgrade(FakeDocker()).preflight()
+            upgrade.preflight()
 
     def test_refuses_when_the_new_volume_exists(self):
         docker = FakeDocker(volumes={pg_upgrade.OLD_VOLUME, pg_upgrade.NEW_VOLUME})
+        upgrade = self.upgrade(docker)
         with self.assertRaisesRegex(UpgradeError, "has run before"):
-            self.upgrade(docker).preflight()
+            upgrade.preflight()
 
     def test_moves_the_data_in_order(self):
         docker = FakeDocker(volumes={pg_upgrade.OLD_VOLUME})
@@ -109,24 +111,27 @@ class UpgradeTest(unittest.TestCase):
 
     def test_stops_when_the_counts_differ(self):
         docker = FakeDocker(volumes={pg_upgrade.OLD_VOLUME}, counts_after="missions|1\nsessions|1\n")
+        upgrade = self.upgrade(docker)
         with self.assertRaisesRegex(UpgradeError, "missions: 2 before, 1 after"):
-            self.upgrade(docker).run()
+            upgrade.run()
         self.assertNotIn("compose --project-directory /srv/deploy -p rfmap up -d", docker.commands())
 
     def test_stops_the_temporary_container_when_the_dump_fails(self):
         docker = FakeDocker(volumes={pg_upgrade.OLD_VOLUME})
         docker.fail_on = "pg_dump"
+        upgrade = self.upgrade(docker)
         with self.assertRaises(UpgradeError):
-            self.upgrade(docker).run()
+            upgrade.run()
         self.assertEqual(docker.commands()[-1], f"stop {pg_upgrade.OLD_CONTAINER}")
 
     def test_stops_the_temporary_container_when_it_never_gets_ready(self):
         docker = FakeDocker(volumes={pg_upgrade.OLD_VOLUME})
         docker.never_ready = True
+        upgrade = self.upgrade(docker)
         with (mock.patch.object(pg_upgrade, "READY_TIMEOUT_SECONDS", 0),
               mock.patch.object(pg_upgrade, "READY_POLL_SECONDS", 0),
               self.assertRaisesRegex(UpgradeError, "did not get ready")):
-            self.upgrade(docker).run()
+            upgrade.run()
         self.assertEqual(docker.commands()[-1], f"stop {pg_upgrade.OLD_CONTAINER}")
         self.assertFalse(any("pg_dump" in call for call in docker.commands()))
 
