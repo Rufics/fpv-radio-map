@@ -262,8 +262,13 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
     rc.workerExecutable = config_.modules.worker;
     rc.hostVersion = rfmod::Version::parse(RFMAP_HOST_VERSION);
     rc.isolateAll = config_.modules.isolateAll;
-    modules_.registry = std::make_unique<rfmod::ModuleRegistry>(rc, *modules_.trust, *modules_.host);
-    modules_.registry->reload();
+    {
+        // Loading restores the files of a module that differ from its signed package, so a backup
+        // must not read them meanwhile.
+        const ModuleGate::Change gate(modules_.runner->gate());
+        modules_.registry = std::make_unique<rfmod::ModuleRegistry>(rc, *modules_.trust, *modules_.host);
+        modules_.registry->reload();
+    }
     modules_.runner->setRegistry(modules_.registry.get());
     for (const auto& n : modules_.registry->notices()) log_.warn("modules", n);
 

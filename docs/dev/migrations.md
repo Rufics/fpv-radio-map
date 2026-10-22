@@ -59,7 +59,8 @@ missing checksum from the server's step of the same name at the same position, a
 
 A backup holds the module root's lock while it runs, and a migration takes it exclusively, so a
 backup never mixes the rows of one version with the files of another. A start with nothing to
-apply checks that first, with one read and no lock or DDL, so it never waits for a running backup.
+apply checks that first, with one read and no lock or DDL, so its migration never waits for a
+running backup. Loading the modules afterwards does wait, since it may restore a module's files.
 
 A staged file sits next to its target as `<target>.rfmap-restoring`. A file that already has that
 name is never overwritten: the step fails instead.
