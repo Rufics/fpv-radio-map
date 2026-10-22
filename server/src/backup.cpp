@@ -13,6 +13,7 @@
 #include <optional>
 #include <set>
 #include <sstream>
+#include <system_error>
 
 namespace rfmap {
 
@@ -312,8 +313,8 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
             summary.rows += readRows(w, entry, in);
             ++summary.tables;
         } else if (entry.contains("file")) {
-            const auto name = entry.at("file").get<std::string>();
-            if (!destinations.insert(target(name).lexically_normal().string()).second) {
+            if (const auto name = entry.at("file").get<std::string>();
+                !destinations.insert(target(name).lexically_normal().string()).second) {
                 throw BackupError("the backup holds " + name + " twice");
             }
             staged.add(readFile(entry));
@@ -430,7 +431,7 @@ int ServiceCommand::run(const CommandLine& cmd, const Config::Environment& env, 
         err << "rfmap-server: database: " << e.what() << '\n';
     } catch (const ConfigError& e) {
         err << "rfmap-server: configuration: " << e.what() << '\n';
-    } catch (const fs::filesystem_error& e) {
+    } catch (const std::system_error& e) {  // a filesystem_error, or the module lock file
         err << "rfmap-server: " << e.what() << '\n';
     } catch (const json::exception& e) {
         err << "rfmap-server: the backup is damaged: " << e.what() << '\n';

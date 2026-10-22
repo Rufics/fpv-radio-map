@@ -662,7 +662,7 @@ void Calculator::coverageWorker(CoverageRun& run) {
     const RowsExhaustedOnThrow guard(run.nextRow, run.grid.rows);
     for (std::size_t r = run.nextRow++; r < run.grid.rows; r = run.nextRow++) {
         if (run.progress.cancelled()) return;
-        std::shared_lock gate(modules_.gate());
+        const ModuleGate::Read gate(modules_.gate());
         const CalcContextScope scope(run.ctx);
         coverageRow(run, r);
         run.progress.report(static_cast<double>(++run.doneRows) / static_cast<double>(run.grid.rows));
@@ -693,7 +693,7 @@ void Calculator::coverageRow(CoverageRun& run, std::size_t r) const {
 
 void Calculator::runCoverageModules(const json& mission, LinkKind kind, const CalcContext& ctx, std::size_t cells,
                                     json& grid) {
-    std::shared_lock gate(modules_.gate());
+    const ModuleGate::Read gate(modules_.gate());
     const CalcContextScope scope(ctx);
     for (const ModuleRunner::Active& a : modules_.optedIn("coverage.analysis", ctx)) {
         const json req = {{"mission", mission},

@@ -26,19 +26,10 @@ FileLock::~FileLock() {
     ::close(fd_);  // closing the descriptor releases the lock
 }
 
-void ModuleGate::lock() {
-    std::unique_ptr<FileLock> file;
-    if (!lockFile_.empty()) {
-        std::filesystem::create_directories(lockFile_.parent_path());
-        file = std::make_unique<FileLock>(lockFile_, FileLock::Mode::Exclusive);
-    }
-    mutex_.lock();
-    held_ = std::move(file);
-}
-
-void ModuleGate::unlock() {
-    const std::unique_ptr<FileLock> file = std::move(held_);
-    mutex_.unlock();
+std::unique_ptr<FileLock> ModuleGate::lockFile() const {
+    if (lockFile_.empty()) return nullptr;
+    std::filesystem::create_directories(lockFile_.parent_path());
+    return std::make_unique<FileLock>(lockFile_, FileLock::Mode::Exclusive);
 }
 
 }  // namespace rfmap

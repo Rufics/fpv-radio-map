@@ -296,10 +296,10 @@ TEST_F(BackupTest, WaitsForAModuleChangeToFinish) {
     const BackupFiles f = files("source");
     ModuleGate gate;
     gate.attach(f.modulesRoot);
-    std::unique_lock change(gate);
+    auto change = std::make_unique<ModuleGate::Change>(gate);
     auto pending = std::async(std::launch::async, [&] { return backup(from, f); });
     EXPECT_EQ(pending.wait_for(std::chrono::milliseconds(300)), std::future_status::timeout);
-    change.unlock();
+    change.reset();
     const std::string text = pending.get();
     EXPECT_NE(text.find("\"end\":true"), std::string::npos);
     EXPECT_EQ(text.find(std::string(ModuleGate::kLockFile)), std::string::npos) << "the lock file is not backed up";
@@ -331,9 +331,9 @@ TEST_F(BackupTest, RequestsKeepRunningWhileAChangeWaitsForABackup) {
     gate.attach(f.modulesRoot);
     auto backupRunning =
         std::make_unique<FileLock>(f.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
-    auto change = std::async(std::launch::async, [&] { const std::unique_lock held(gate); });
+    auto change = std::async(std::launch::async, [&] { const ModuleGate::Change held(gate); });
     EXPECT_EQ(change.wait_for(std::chrono::milliseconds(200)), std::future_status::timeout);
-    auto request = std::async(std::launch::async, [&] { const std::shared_lock held(gate); });
+    auto request = std::async(std::launch::async, [&] { const ModuleGate::Read held(gate); });
     EXPECT_EQ(request.wait_for(std::chrono::seconds(2)), std::future_status::ready) << "a request waited behind it";
     backupRunning.reset();  // the change goes ahead once the backup is done
     EXPECT_EQ(change.wait_for(std::chrono::seconds(2)), std::future_status::ready);

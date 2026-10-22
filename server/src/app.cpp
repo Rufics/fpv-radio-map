@@ -341,7 +341,7 @@ json Application::moduleList(bool admin) {
     json out = store_.builtins->list();
     json installed;
     {
-        std::shared_lock gate(modules_.runner->gate());
+        const ModuleGate::Read gate(modules_.runner->gate());
         installed = modules_.registry->list();
     }
     for (json& m : installed) {
@@ -703,7 +703,7 @@ void Application::MissionApi::postCalcPath(const Req& req, Res& res) const {
     (void)app.session(req);
     const json b = app.body(req);
     app.store_.schemas->require("calc-path", b);
-    const std::shared_lock gate(app.modules_.runner->gate());
+    const ModuleGate::Read gate(app.modules_.runner->gate());
     sendJson(res, 200, app.calc_->path(b));
 }
 
@@ -717,7 +717,7 @@ void Application::MissionApi::postCalcRoute(const Req& req, Res& res) const {
     }
     json result;
     {
-        const std::shared_lock gate(app.modules_.runner->gate());
+        const ModuleGate::Read gate(app.modules_.runner->gate());
         result = app.calc_->route(mission, revision);
     }
     if (revision.has_value() && p.role == Role::Edit) app.store_.missions->storeResultIfCurrent(p.missionId, mission, result);
@@ -838,7 +838,7 @@ void Application::DataApi::getModuleFile(const Req& req, Res& res) const {
     std::optional<std::filesystem::path> file;
     bool alpha = false;
     {
-        const std::shared_lock gate(app.modules_.runner->gate());
+        const ModuleGate::Read gate(app.modules_.runner->gate());
         // publicFile serves ui/ and the options schema only, never lib/.
         file = app.modules_.registry->publicFile(id, path);
         if (const auto* m = app.modules_.registry->instance(id)) alpha = m->manifest().lifecycle == rfmod::Lifecycle::Alpha;
@@ -864,7 +864,7 @@ void Application::AdminApi::postAdminModule(const Req& req, Res& res) const {
     const bool install = !req.has_param("install") || req.get_param_value("install") != "false";
     rfmod::ValidationReport report;
     {
-        const std::unique_lock gate(app.modules_.runner->gate());
+        const ModuleGate::Change gate(app.modules_.runner->gate());
         report = app.modules_.registry->upload(req.body, install);
     }
     app.log_.info("modules", std::string("upload ") + (report.ok() ? "passed" : "refused") + (install ? ", install" : ", check only"));
@@ -882,7 +882,7 @@ void Application::AdminApi::putAdminModule(const Req& req, Res& res) const {
     if (app.store_.builtins->isBuiltin(id)) {
         app.store_.builtins->set(id, enabled, options);
     } else {
-        const std::unique_lock gate(app.modules_.runner->gate());
+        const ModuleGate::Change gate(app.modules_.runner->gate());
         try {
             if (options.has_value()) app.modules_.registry->setOptions(id, *options);
             if (enabled.has_value()) app.modules_.registry->setEnabled(id, *enabled);
@@ -896,7 +896,7 @@ void Application::AdminApi::putAdminModule(const Req& req, Res& res) const {
 void Application::AdminApi::deleteAdminModule(const Req& req, Res& res) const {
     app.requireAdmin(req);
     if (app.store_.builtins->isBuiltin(req.matches[1])) throw HttpError(422, "built-in modules can be disabled, not removed");
-    const std::unique_lock gate(app.modules_.runner->gate());
+    const ModuleGate::Change gate(app.modules_.runner->gate());
     try {
         app.modules_.registry->remove(req.matches[1]);
     } catch (const std::invalid_argument& e) {
@@ -907,7 +907,7 @@ void Application::AdminApi::deleteAdminModule(const Req& req, Res& res) const {
 
 void Application::AdminApi::getAdminNotices(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    const std::shared_lock gate(app.modules_.runner->gate());
+    const ModuleGate::Read gate(app.modules_.runner->gate());
     sendJson(res, 200, app.modules_.registry->notices());
 }
 
@@ -922,14 +922,14 @@ json Application::trustedKeys() const {
 
 void Application::AdminApi::getAdminKeys(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    const std::shared_lock gate(app.modules_.runner->gate());
+    const ModuleGate::Read gate(app.modules_.runner->gate());
     sendJson(res, 200, app.trustedKeys());
 }
 
 void Application::AdminApi::postAdminKey(const Req& req, Res& res) const {
     app.requireAdmin(req);
     const json b = app.body(req);
-    const std::unique_lock gate(app.modules_.runner->gate());
+    const ModuleGate::Change gate(app.modules_.runner->gate());
     try {
         app.modules_.trust->add(rfmod::PublicKey::fromText(b.at("key").get<std::string>()), b.value("label", ""));
     } catch (const std::invalid_argument& e) {
@@ -941,7 +941,7 @@ void Application::AdminApi::postAdminKey(const Req& req, Res& res) const {
 
 void Application::AdminApi::deleteAdminKey(const Req& req, Res& res) const {
     app.requireAdmin(req);
-    const std::unique_lock gate(app.modules_.runner->gate());
+    const ModuleGate::Change gate(app.modules_.runner->gate());
     try {
         app.modules_.trust->remove(req.matches[1]);
     } catch (const std::invalid_argument& e) {
