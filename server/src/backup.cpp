@@ -173,10 +173,9 @@ bool staysInside(const fs::path& relative) {
 
 BackupSummary BackupWriter::write(std::ostream& out) {
     // Module installs and trust-store changes of a running server wait until the files are read.
-    std::optional<FileLock> filesLock;
-    if (fs::is_directory(files_.modulesRoot)) {
-        filesLock.emplace(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
-    }
+    // The root is created when missing, so a server that installs the first module meanwhile waits too.
+    fs::create_directories(files_.modulesRoot);
+    const FileLock filesLock(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
     // One snapshot for every table, so the backup is consistent while the server keeps writing.
     pqxx::transaction<pqxx::isolation_level::repeatable_read, pqxx::write_policy::read_only> w(connection_);
     std::vector<std::string> migrations;
