@@ -63,7 +63,7 @@ history, so commit messages follow [Conventional Commits 1.0](https://www.conven
 | `feat!`, `fix!` or a `BREAKING CHANGE:` footer | an incompatible change: API, mission or library schema, module ABI or host contract | major |
 | `docs`, `test`, `refactor`, `build`, `ci`, `chore`, `style`, `revert` | everything else | none |
 
-Scopes: `rf-core`, `rf-ext`, `rfmod`, `fpv`, `server`, `web`, `tiles`, `deploy`, `data`,
+Scopes: `rf-core`, `rf-ext`, `rf-flightlog`, `rfmod`, `fpv`, `server`, `web`, `tiles`, `deploy`, `data`,
 `schemas`, `docs`, `ci`, `perf`, `deps`. The scope is optional.
 
 Examples:

@@ -37,6 +37,9 @@ rfmap_fuzzer(signed_package LIBS rfmod_platform LibArchive::LibArchive
 # Radio maths on arbitrary terrain.
 rfmap_fuzzer(link_budget LIBS rf_ext)
 
+# Flight log uploads: the Blackbox decoder and the processing every decoder's answer goes through.
+rfmap_fuzzer(blackbox LIBS fpv_blackbox_core rf_flightlog)
+
 # Server: request bodies and the forecast service's answers.
 if(TARGET rfmap_server_lib)
   rfmap_fuzzer(iso_time LIBS rfmap_server_lib)

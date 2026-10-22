@@ -15,6 +15,7 @@ AddressSanitizer and UndefinedBehaviorSanitizer over the whole tree.
 | `semver` | `Version` and `VersionRange` parsing and comparison | Manifest versions and dependency ranges |
 | `crypto_text` | Base64 and key text (`fromBase64`, `PublicKey::fromText`, `SecretKey::fromText`) | Package signatures, keys pasted into the trust store |
 | `mission_schema` | `SchemaRegistry::check` against the mission and library schemas | Every mission and library item a client sends |
+| `blackbox` | The `fpv.blackbox` decoder (`probe`, `decode`: headers, frame encodings, predictors, resync after corrupt frames), then `rf-flightlog` processing of its answer | Flight logs any user uploads |
 | `iso_time` | `parseIsoUtc` | Times in requests and module host calls |
 | `weather` | `WeatherService::at` and `horizon` over a forecast response | The Open-Meteo service |
 | `link_budget` | rf-core link budget and Bullington diffraction, rf-ext clutter, over generated terrain | DEM and land cover data |

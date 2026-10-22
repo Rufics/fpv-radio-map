@@ -25,13 +25,17 @@ add_custom_command(TARGET test_probe POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:test_probe> ${CMAKE_CURRENT_BINARY_DIR}/probe-stage/lib/)
 
 # Integration: a throw-away PostGIS cluster around one test process.
-add_executable(rfmap_server_integration integration_test.cpp host_calls_test.cpp library_seed_test.cpp backup_test.cpp)
+add_executable(rfmap_server_integration integration_test.cpp host_calls_test.cpp library_seed_test.cpp
+  flight_log_store_test.cpp backup_test.cpp)
 target_link_libraries(rfmap_server_integration PRIVATE rfmap_server_lib GTest::gtest_main)
 target_compile_definitions(rfmap_server_integration PRIVATE ${_defs}
   RFMOD_WORKER="$<TARGET_FILE:rfmod-worker>"
   BODY_SHADOW_STAGE="${PROJECT_BINARY_DIR}/examples/modules/body-shadow/stage"
-  PROBE_STAGE="${CMAKE_CURRENT_BINARY_DIR}/probe-stage")
-add_dependencies(rfmap_server_integration rfmod-worker body_shadow test_probe)
+  PROBE_STAGE="${CMAKE_CURRENT_BINARY_DIR}/probe-stage"
+  BLACKBOX_STAGE="${PROJECT_BINARY_DIR}/modules/fpv/blackbox/stage")
+# The sample log fpv.blackbox checks itself with, to upload in the flight log tests.
+target_include_directories(rfmap_server_integration PRIVATE ${PROJECT_SOURCE_DIR}/modules/fpv/blackbox/src)
+add_dependencies(rfmap_server_integration rfmod-worker body_shadow test_probe fpv_blackbox)
 
 set(RFMAP_TEST_PG_PORT 55433 CACHE STRING "Port of the throw-away PostgreSQL cluster for server tests")
 set(_pgdir "/tmp/rfmap-server-test-pg-${RFMAP_TEST_PG_PORT}")

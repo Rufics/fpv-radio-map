@@ -196,6 +196,7 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
         AuthService::Settings{config_.auth.pinMaxAttempts, std::chrono::minutes(config_.auth.pinLockoutMinutes),
                               std::chrono::hours(config_.auth.sessionTtlHours)});
     store_.missions = std::make_unique<MissionStore>(*store_.db);
+    store_.flightLogs = std::make_unique<FlightLogStore>(*store_.db);
     store_.library = std::make_unique<Library>(*store_.db, *store_.schemas);
     store_.builtins = std::make_unique<BuiltinModules>(store_.db.get(), *store_.schemas, RFMAP_HOST_VERSION);
     if (store_.builtins->enabled(BuiltinModules::kRadioProfiles)) {
@@ -254,6 +255,9 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
                                            modules_.runner.get(), RFMAP_HOST_VERSION);
     calc_ = std::make_unique<Calculator>(*links_, *forecast_.service, *store_.builtins, *modules_.runner,
                                          *resultStore_.cache, log_);
+    flightLogs_ = std::make_unique<FlightLogService>(*modules_.runner, *store_.schemas, store_.flightLogs.get(),
+                                                     *store_.builtins,
+                                                     FlightLogService::Limits{config_.server.maxUploadBytes, 200});
     modules_.host->bind(links_.get(), store_.library.get(), forecast_.service.get(),
                         [this](const json& m) { return calc_->contextFor(m); }, store_.schemas.get());
 
@@ -485,6 +489,27 @@ struct Application::AdminApi {
     void getAdminMetrics(const Req& req, Res& res) const;
 };
 
+/// Flight logs: decode a file to preview it, and the flights kept in a mission.
+struct Application::FlightLogApi {
+    Application& app;
+    void postDecode(const Req& req, Res& res) const;
+    void getList(const Req& req, Res& res) const;
+    void postImport(const Req& req, Res& res) const;
+    void getFlight(const Req& req, Res& res) const;
+    void deleteFlight(const Req& req, Res& res) const;
+
+    /// The session, checked against the mission in the path (and for editing when `edit`).
+    [[nodiscard]] Principal principal(const Req& req, bool edit) const {
+        const Principal p = app.session(req);
+        if (p.missionId != req.matches[1].str()) throw HttpError(403, "this session belongs to another mission");
+        if (edit && p.role != Role::Edit) throw HttpError(403, "this is a read-only link");
+        return p;
+    }
+    [[nodiscard]] static std::string fileName(const Req& req) {
+        return req.has_param("fileName") ? req.get_param_value("fileName") : "flight.log";
+    }
+};
+
 template <typename Run>
 void Application::dispatch(const std::string& rateClass, const Run& run, const Req& req, Res& res) {
     try {
@@ -578,6 +603,14 @@ void Application::routes() {
     s.Get(api + R"(/jobs/([A-Za-z0-9_-]+)/coverage/(control|video)\.json)", route<MissionApi>("default", &MissionApi::getJobGrid));
     s.Get(api + "/elevation/profile", route<MissionApi>("calc", &MissionApi::getElevationProfile));
 
+    // ---- flight logs ----
+    const std::string flightLogs = mission + "/flightlogs";
+    s.Post(api + "/flightlogs/decode", route<FlightLogApi>("calc", &FlightLogApi::postDecode));
+    s.Get(flightLogs, route<FlightLogApi>("default", &FlightLogApi::getList));
+    s.Post(flightLogs, route<FlightLogApi>("calc", &FlightLogApi::postImport));
+    s.Get(flightLogs + R"(/([A-Za-z0-9_-]+))", route<FlightLogApi>("default", &FlightLogApi::getFlight));
+    s.Delete(flightLogs + R"(/([A-Za-z0-9_-]+))", route<FlightLogApi>("default", &FlightLogApi::deleteFlight));
+
     // ---- library ----
     s.Get(library, route<DataApi>("default", &DataApi::getLibraryList));
     s.Get(libraryItem, route<DataApi>("default", &DataApi::getLibraryItem));
@@ -607,6 +640,36 @@ void Application::routes() {
     s.Put(api + "/admin/cache", route<AdminApi>("admin", &AdminApi::putAdminCache));
     s.Delete(api + "/admin/cache", route<AdminApi>("admin", &AdminApi::deleteAdminCache));
     s.Get(api + "/admin/metrics", route<AdminApi>("admin", &AdminApi::getAdminMetrics));
+}
+
+// ---- flight logs ----
+
+void Application::FlightLogApi::postDecode(const Req& req, Res& res) const {
+    (void)app.session(req);
+    sendJson(res, 200, app.flightLogs_->preview(req.body, fileName(req)));
+}
+
+void Application::FlightLogApi::getList(const Req& req, Res& res) const {
+    const Principal p = principal(req, false);
+    sendJson(res, 200, app.flightLogs_->list(p.missionId));
+}
+
+void Application::FlightLogApi::postImport(const Req& req, Res& res) const {
+    const Principal p = principal(req, true);
+    sendJson(res, 201, app.flightLogs_->importFile(p.missionId, req.body, fileName(req)));
+}
+
+void Application::FlightLogApi::getFlight(const Req& req, Res& res) const {
+    const Principal p = principal(req, false);
+    const auto m = app.store_.missions->get(p.missionId);
+    if (!m) throw HttpError(404, "no such mission");
+    sendJson(res, 200, app.flightLogs_->view(*m, req.matches[2]));
+}
+
+void Application::FlightLogApi::deleteFlight(const Req& req, Res& res) const {
+    const Principal p = principal(req, true);
+    app.flightLogs_->remove(p.missionId, req.matches[2]);
+    res.status = 204;
 }
 
 void Application::MissionApi::getHealth(const Req&, Res& res) const {

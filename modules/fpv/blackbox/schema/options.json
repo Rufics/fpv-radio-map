@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Blackbox decoder options",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "sampleHz": {
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 1000,
+      "default": 50,
+      "description": "Main loop samples kept per second. GPS solutions are always all kept."
+    }
+  }
+}

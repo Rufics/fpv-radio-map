@@ -71,6 +71,9 @@ public:
     /// Active modules providing a capability, in dependency order. Pointers stay valid until reload().
     [[nodiscard]] std::vector<IModuleInstance*> withCapability(const std::string& capability) const;
     [[nodiscard]] IModuleInstance* instance(const std::string& id) const;
+    /// Modules that always run in a worker process, first party or not: a flight log decoder
+    /// parses files users upload, so a parser bug must not reach the server's memory.
+    [[nodiscard]] static bool alwaysIsolated(const Manifest& m);
 
     /// Opens a module's UI bundle or other public file, for the server to serve.
     [[nodiscard]] std::optional<std::filesystem::path> publicFile(const std::string& id, const std::string& path) const;

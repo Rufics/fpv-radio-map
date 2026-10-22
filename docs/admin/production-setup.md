@@ -405,10 +405,10 @@ network). The map should show your area with hillshade and the attribution line 
 ## 6. Install the FPV modules
 
 A new server has only the built-in modules (`rf.weather`, `rf.clutter`, `rf.uncertainty`,
-`rf.radio-profiles`). Battery, minimum altitude, failsafe, best launch point, relay and the
-mission tools come as the FPV module pack. Sign it with your owner key and upload it.
+`rf.radio-profiles`, `rf.flightlog`). Battery, minimum altitude, failsafe, best launch point, relay,
+the Blackbox flight log decoder and the mission tools come as the FPV module pack. Sign it with your owner key and upload it.
 
-Build and sign the six modules (about a minute **(estimate)**; the compile reuses the server
+Build and sign the seven modules (about a minute **(estimate)**; the compile reuses the server
 image's build cache):
 
 ```sh
@@ -432,7 +432,7 @@ Upload them, dependencies first (`failsafe` needs `battery` and `min-altitude`):
 ```sh
 cd ~/fpv-radio-map/deploy
 TOKEN=$(sed -n 's/^RFMAP_ADMIN_TOKEN=//p' .env)
-for m in core battery min-altitude failsafe best-launch relay; do
+for m in core battery min-altitude failsafe best-launch relay blackbox; do
   report=$(curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/octet-stream' \
       --data-binary @"$HOME/rfmap-modules/$m.rfmod" \
       'http://127.0.0.1:8088/api/v1/admin/modules?install=true')
@@ -449,8 +449,8 @@ names the check with `"ok":false`. A version that is already installed is refuse
 (`version.upgrade`); that is expected when you run the loop twice. You can also upload the
 files one by one under **Admin → Modules** in the browser.
 
-Check the list: `curl -s http://127.0.0.1:8088/api/v1/modules` shows the four `rf.*` modules and
-the six `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
+Check the list: `curl -s http://127.0.0.1:8088/api/v1/modules` shows the five `rf.*` modules and
+the seven `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
 
 ## 7. Fill the equipment library
 
@@ -574,7 +574,7 @@ mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup
 docker compose exec -T rfmap-server rfmap-server --backup > ~/rfmap-backup/rfmap-$(date +%F).backup.zst
 ```
 
-It prints what it wrote, for example `backed up 8 tables, 120 rows and 3 files`. The file is
+It prints what it wrote, for example `backed up 9 tables, 120 rows and 3 files`. The file is
 compressed with zstd: `zstdcat` shows it as text, one JSON object per line. The first line names
 the schema it was written under (its last migration, how many there are and a fingerprint of
 them), and the last line starts with `{"end":true`. The file holds data only: the rows of each
@@ -633,7 +633,7 @@ docker compose up -d
    docker compose run --rm -T --no-deps rfmap-server --restore < ~/rfmap-backup/rfmap-<date>.backup.zst
    ```
 
-   It prints each migration it applied and `restored 8 tables, 120 rows and 3 files`.
+   It prints each migration it applied and `restored 9 tables, 120 rows and 3 files`.
 
 4. Start the stack (step 5), then do step 8 (TLS). Open a mission you know and check that it is
    there. The modules came back with the backup, so step 6 is not needed.

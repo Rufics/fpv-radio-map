@@ -31,6 +31,7 @@ add_library(rfmap_server_lib STATIC
   src/schemas.cpp
   src/library.cpp
   src/missions.cpp
+  src/flight_logs.cpp
   src/builtins.cpp
   src/raster.cpp
   src/result_cache.cpp
@@ -51,7 +52,7 @@ add_library(rfmap_server_lib STATIC
   src/app.cpp)
 target_include_directories(rfmap_server_lib PUBLIC src)
 target_link_libraries(rfmap_server_lib
-  PUBLIC rf_ext rfmod_platform nlohmann_json::nlohmann_json rfmap_pqxx PkgConfig::SODIUM
+  PUBLIC rf_ext rf_flightlog rfmod_platform nlohmann_json::nlohmann_json rfmap_pqxx PkgConfig::SODIUM
          PkgConfig::HTTPLIB OpenSSL::SSL OpenSSL::Crypto GDAL::GDAL Threads::Threads
   PRIVATE nlohmann_json_schema_validator LibArchive::LibArchive)
 # GDAL, libpqxx and httplib headers are third-party: include them as system headers so our

@@ -5,6 +5,7 @@
 #include "calculator.hpp"
 #include "config.hpp"
 #include "database.hpp"
+#include "flight_logs.hpp"
 #include "host_services.hpp"
 #include "jobs.hpp"
 #include "library.hpp"
@@ -57,6 +58,7 @@ private:
     struct MissionApi;
     struct DataApi;
     struct AdminApi;
+    struct FlightLogApi;
 
     void routes();
     /// Runs `run` under the rate limit of `rateClass` and answers its errors as JSON.
@@ -95,6 +97,7 @@ private:
         std::unique_ptr<PinGate> pinGate;
         std::unique_ptr<AuthService> auth;
         std::unique_ptr<MissionStore> missions;
+        std::unique_ptr<FlightLogStore> flightLogs;
         std::unique_ptr<Library> library;
         std::unique_ptr<BuiltinModules> builtins;
     };
@@ -133,6 +136,7 @@ private:
     Modules modules_;
     std::unique_ptr<LinkService> links_;
     std::unique_ptr<Calculator> calc_;
+    std::unique_ptr<FlightLogService> flightLogs_;
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
     HttpMetrics httpMetrics_;  ///< before http_: its request threads report here until they stop
