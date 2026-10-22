@@ -364,13 +364,15 @@ fs::path BackupRestorer::target(const std::string& name) const {
     if (name == kTrustStoreName) return files_.trustStore;
     const fs::path relative = name.starts_with(kModulesPrefix) ? fs::path(name.substr(kModulesPrefix.size())) : fs::path();
     if (!staysInside(relative)) throw BackupError("the backup names a file outside the module root: " + name);
-    // Replacing the lock file would leave the restore holding a lock on a file no one else opens.
-    if (relative.lexically_normal() == fs::path(ModuleGate::kLockFile)) throw BackupError("the backup names the module lock file: " + name);
-    // A folder already under the root may be a symbolic link that leads out of it.
+    // A folder already under the root may be a symbolic link that leads out of it, or back to the root.
     const fs::path root = fs::weakly_canonical(files_.modulesRoot);
     const fs::path folder = fs::weakly_canonical((files_.modulesRoot / relative).parent_path());
     if (folder != root && !staysInside(folder.lexically_relative(root))) {
         throw BackupError("the backup's file " + name + " would land outside the module root, through " + folder.string());
+    }
+    // Replacing the lock file would leave the restore holding a lock on a file no one else opens.
+    if (folder == root && relative.filename() == fs::path(ModuleGate::kLockFile)) {
+        throw BackupError("the backup names the module lock file: " + name);
     }
     return files_.modulesRoot / relative;
 }
