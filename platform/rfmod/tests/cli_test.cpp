@@ -93,7 +93,7 @@ TEST_F(CliTest, KeygenWritesAPairAndNeverOverwritesIt) {
     ASSERT_EQ(run({"keygen", "--out", name}), 0) << err.str();
     EXPECT_TRUE(fs::exists(name + ".pub"));
     EXPECT_TRUE(fs::exists(name + ".secret"));
-    EXPECT_EQ(fs::status(name + ".secret").permissions() & fs::perms::others_read, fs::perms::none);
+    EXPECT_EQ(fs::status(name + ".secret").permissions(), fs::perms::owner_read | fs::perms::owner_write);
     const PublicKey pub = PublicKey::fromText(readFile(name + ".pub"));
     EXPECT_NE(out.str().find("Key id " + pub.id()), std::string::npos);
     EXPECT_EQ(run({"keygen", "--out", name}), 1);
@@ -115,6 +115,11 @@ TEST_F(CliTest, NewScaffoldsAProjectOnce) {
     EXPECT_EQ(run({"new", "acme.rain", "--dir", project}), 1);
     EXPECT_NE(err.str().find("already exists"), std::string::npos);
     EXPECT_EQ(run({"new"}), 1);
+    for (const char* bad : {"../x", "My Module", "rain", "acme.Rain", "a\"b.c"}) {
+        EXPECT_EQ(run({"new", bad, "--dir", (dir / "bad").string()}), 1) << bad;
+        EXPECT_NE(err.str().find("is not a module id"), std::string::npos) << bad;
+        EXPECT_FALSE(fs::exists(dir / "bad")) << bad;
+    }
 }
 
 TEST_F(CliTest, PackInspectAndCheckAPackage) {

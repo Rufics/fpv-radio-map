@@ -190,7 +190,7 @@ WeatherService::ForecastCache::Found WeatherService::ForecastCache::lookup(const
     const std::lock_guard lock(mutex_);
     if (const auto hit = entries_.get(key); hit && now - hit->fetched < ttl_) return hit->response;
     if (const auto it = inFlight_.find(key); it != inFlight_.end()) return it->second;
-    inFlight_.emplace(key, promise.get_future().share());
+    inFlight_.try_emplace(key, promise.get_future().share());
     return std::monostate{};
 }
 

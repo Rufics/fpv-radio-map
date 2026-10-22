@@ -3,12 +3,15 @@
 #include "rfmod/installer.hpp"
 #include "rfmod/package.hpp"
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <ostream>
@@ -92,14 +95,48 @@ public:
         return s.str();
     }
 
-    static void write(const fs::path& p, const std::string& content, mode_t mode = 0644) {
+    /// Creates or replaces `p` with `mode` applied before any content is written, so a secret
+    /// is never readable by others for an instant. `exclusive` refuses an existing file: the
+    /// creation itself is the check, and no other process can slip a file in between.
+    static void write(const fs::path& p, const std::string& content, mode_t mode = 0644, bool exclusive = false) {
         if (p.has_parent_path()) fs::create_directories(p.parent_path());
-        std::ofstream out(p, std::ios::binary | std::ios::trunc);
-        out << content;
-        if (!out) throw FileError("cannot write " + p.string());
-        out.close();
-        chmod(p.c_str(), mode);
+        const int flags = O_WRONLY | O_CREAT | O_CLOEXEC | (exclusive ? O_EXCL : O_TRUNC);
+        const int fd = ::open(p.c_str(), flags, mode);
+        if (fd < 0) throw FileError("cannot write " + p.string() + ": " + std::strerror(errno));
+        const bool written = ::fchmod(fd, mode) == 0 && writeAll(fd, content);
+        const bool closed = ::close(fd) == 0;
+        if (!written || !closed) throw FileError("cannot write " + p.string());
     }
+
+    static bool writeAll(int fd, std::string_view content) {
+        while (!content.empty()) {
+            const ssize_t n = ::write(fd, content.data(), content.size());
+            if (n < 0 && errno == EINTR) continue;
+            if (n <= 0) return false;
+            content.remove_prefix(static_cast<std::size_t>(n));
+        }
+        return true;
+    }
+};
+
+/// The developer's trust: the --trust keys only, the first in the owner's role.
+class DeveloperTrust {
+public:
+    explicit DeveloperTrust(const std::vector<std::string>& keyFiles) : store_(Files::read(ownerKeyFile(keyFiles)), {}) {
+        for (const std::string& file : keyFiles | std::views::drop(1)) {
+            store_.add(PublicKey::fromText(Files::read(file)), fs::path(file).stem().string());
+        }
+    }
+
+    [[nodiscard]] const TrustStore& store() const { return store_; }
+
+private:
+    static const std::string& ownerKeyFile(const std::vector<std::string>& keyFiles) {
+        if (keyFiles.empty()) throw std::invalid_argument("give at least one --trust KEY.pub");
+        return keyFiles.front();
+    }
+
+    TrustStore store_;
 };
 
 /// Answers a self-test's host calls from a fixtures file and prints its log lines.
@@ -321,17 +358,6 @@ int Cli::printReport(const ValidationReport& r) const {
 
 Version Cli::hostVersion(const CliArgs& args) const { return Version::parse(args.get("--host-version", build_.hostVersion)); }
 
-/// The developer's trust: --trust keys only, the first in the owner's role.
-TrustStore Cli::developerTrust(const CliArgs& args) const {
-    const auto keys = args.all("--trust");
-    if (keys.empty()) throw std::invalid_argument("give at least one --trust KEY.pub");
-    TrustStore store(Files::read(keys.front()), {});
-    for (std::size_t i = 1; i < keys.size(); ++i) {
-        store.add(PublicKey::fromText(Files::read(keys[i])), fs::path(keys[i]).stem().string());
-    }
-    return store;
-}
-
 /// The operator's trust: the owner key of this build plus the server's trust store file, so
 /// third-party modules are seen as the server sees them (a missing store would hide them).
 TrustStore Cli::operatorTrust(const CliArgs& args) const {
@@ -352,7 +378,7 @@ int Cli::keygen(const CliArgs& args) const {
     const std::string out = args.need("--out", "rfmod keygen --out NAME");
     if (fs::exists(out + ".secret")) throw std::invalid_argument(out + ".secret exists; refusing to overwrite a key");
     const SecretKey sk = SecretKey::generate();
-    Files::write(out + ".secret", sk.toText() + "\n", 0600);
+    Files::write(out + ".secret", sk.toText() + "\n", 0600, true);
     Files::write(out + ".pub", sk.publicKey().toText() + "\n");
     out_ << "Key id " << sk.publicKey().id() << "\n"
          << "Public key:  " << out << ".pub  (give this to server admins)\n"
@@ -362,6 +388,10 @@ int Cli::keygen(const CliArgs& args) const {
 
 int Cli::scaffold(const CliArgs& args) const {
     const std::string& id = args.only("rfmod new ID [--dir DIR]");
+    // The id names the directory, the class and the manifest: only a real module id will do.
+    if (!ModuleInstaller::looksLikeModuleId(id)) {
+        throw std::invalid_argument(id + " is not a module id (lower-case words joined by dots, e.g. acme.rain)");
+    }
     const fs::path dir = args.get("--dir", id);
     if (fs::exists(dir)) throw std::invalid_argument(dir.string() + " already exists");
     Scaffold(id, dir).write();
@@ -391,7 +421,8 @@ int Cli::inspect(const CliArgs& args) const {
 
 int Cli::check(const CliArgs& args) const {
     const std::string& file = args.only("rfmod check FILE.rfmod --trust KEY.pub");
-    const TrustStore trust = developerTrust(args);
+    const DeveloperTrust developer(args.all("--trust"));
+    const TrustStore& trust = developer.store();
     ValidationReport r;
     (void)PackageVerifier(trust, hostVersion(args)).verify(Files::read(file), r);
     return printReport(r);
@@ -399,7 +430,8 @@ int Cli::check(const CliArgs& args) const {
 
 int Cli::test(const CliArgs& args) const {
     const std::string& file = args.only("rfmod test FILE.rfmod --trust KEY.pub");
-    const TrustStore trust = developerTrust(args);
+    const DeveloperTrust developer(args.all("--trust"));
+    const TrustStore& trust = developer.store();
     FixtureHost host = FixtureHost::from(args, err_);
     const PrivateDir tmp(fs::current_path() / ".rfmod-test-");
     const ModuleInstaller installer(installerConfig(args, tmp.path()), trust, host);

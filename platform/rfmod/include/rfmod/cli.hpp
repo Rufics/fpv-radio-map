@@ -59,7 +59,6 @@ private:
     [[nodiscard]] int dispatch(const std::string& command, const CliArgs& args) const;
     [[nodiscard]] int printReport(const ValidationReport& r) const;
     [[nodiscard]] Version hostVersion(const CliArgs& args) const;
-    [[nodiscard]] TrustStore developerTrust(const CliArgs& args) const;
     [[nodiscard]] TrustStore operatorTrust(const CliArgs& args) const;
     [[nodiscard]] InstallerConfig installerConfig(const CliArgs& args, const std::filesystem::path& root) const;
 

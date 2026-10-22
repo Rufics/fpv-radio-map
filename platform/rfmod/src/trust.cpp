@@ -16,11 +16,6 @@ TrustStore::TrustStore(std::string_view ownerKeyText, std::filesystem::path stor
     load();
 }
 
-TrustStore::TrustStore(TrustStore&& other) noexcept : storePath_(std::move(other.storePath_)) {
-    const std::lock_guard lock(other.mutex_);
-    keys_ = std::move(other.keys_);
-}
-
 std::vector<TrustedKey> TrustStore::keys() const {
     const std::lock_guard lock(mutex_);
     return keys_;

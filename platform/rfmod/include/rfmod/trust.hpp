@@ -35,11 +35,6 @@ class TrustStore {
 public:
     /// `ownerKeyText` is the RFMAP_OWNER_PUBKEY build value. `storePath` holds admin keys.
     TrustStore(std::string_view ownerKeyText, std::filesystem::path storePath);
-    TrustStore(TrustStore&& other) noexcept;
-    TrustStore& operator=(TrustStore&&) = delete;
-    TrustStore(const TrustStore&) = delete;
-    TrustStore& operator=(const TrustStore&) = delete;
-    ~TrustStore() = default;
 
     /// A snapshot: the keys as they are now.
     [[nodiscard]] std::vector<TrustedKey> keys() const;
