@@ -53,7 +53,7 @@ SchemaVersion SchemaVersion::fromJson(const json& j) {
         if (!m.is_object() || !m.contains("name") || !m.at("name").is_string()) {
             throw MigrationError("a schema version names each migration: " + m.dump().substr(0, 80));
         }
-        ids.push_back({m.at("name").get<std::string>(), m.value("checksum", std::string())});
+        ids.emplace_back(m.at("name").get<std::string>(), m.value("checksum", std::string()));
     }
     return SchemaVersion(std::move(ids));
 }
@@ -67,7 +67,7 @@ std::unique_ptr<SqlMigration> SqlMigration::load(const fs::path& file) {
     const std::string_view firstLine = std::string_view(text).substr(0, text.find('\n'));
     const bool breaking = firstLine.starts_with(kBreakingMark);
     MigrationId id{file.filename().string(), checksumOf(text)};
-    return std::unique_ptr<SqlMigration>(new SqlMigration(std::move(id), breaking, std::move(text)));
+    return std::make_unique<SqlMigration>(std::move(id), breaking, std::move(text));
 }
 
 void SqlMigration::apply(MigrationContext& ctx) const { ctx.work().exec(sql_); }
@@ -106,7 +106,7 @@ SchemaVersion SchemaMigrator::recorded(pqxx::transaction_base& w) {
     std::vector<MigrationId> ids;
     for (const auto& row : w.exec(R"(select name, coalesce(to_jsonb(m) ->> 'checksum', '')
                                      from schema_migrations m order by name collate "C")")) {
-        ids.push_back({row[0].as<std::string>(), row[1].as<std::string>()});
+        ids.emplace_back(row[0].as<std::string>(), row[1].as<std::string>());
     }
     return SchemaVersion(std::move(ids));
 }

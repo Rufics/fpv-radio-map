@@ -125,12 +125,13 @@ public:
     /// Reads the file now, so a step that cannot be read is refused before anything is applied.
     static std::unique_ptr<SqlMigration> load(const std::filesystem::path& file);
 
-    void apply(MigrationContext& ctx) const override;
-
-private:
+    /// A step of `sql` as read; load() reads it from a file.
     SqlMigration(MigrationId id, bool breaking, std::string sql)
         : MigrationStep(std::move(id), breaking), sql_(std::move(sql)) {}
 
+    void apply(MigrationContext& ctx) const override;
+
+private:
     std::string sql_;
 };
 
