@@ -37,14 +37,26 @@ public:
     }
 
     void add(fs::path staged) { staged_.push_back(std::move(staged)); }
+    /// Leaves the files on disk: they are no longer this object's to remove.
+    void keep() { staged_.clear(); }
 
-    /// Moves every file to its place; each move replaces the old file in one step.
+    /// Moves every file to its place; each move replaces the old file in one step. The database
+    /// has committed by then, so a file that cannot move stays staged for the administrator.
     void install() {
         for (const auto& file : staged_) {
             const std::string name = file.string();
-            fs::rename(file, name.substr(0, name.size() - kStagedSuffix.size()));
+            std::error_code failed;
+            fs::rename(file, name.substr(0, name.size() - kStagedSuffix.size()), failed);
+            if (failed) {
+                const std::string message =
+                    std::format("the database is restored, but {} cannot move into place ({}): move the files "
+                                "ending in {} into place by hand",
+                                name, failed.message(), kStagedSuffix);
+                keep();
+                throw BackupError(message);
+            }
         }
-        staged_.clear();
+        keep();
     }
 
 private:
@@ -362,12 +374,15 @@ fs::path BackupRestorer::readFile(const json& entry) const {
     }
     const fs::path file = target(name).string() + std::string(kStagedSuffix);
     fs::create_directories(file.parent_path());
+    StagedFiles written;  // removes a file that is only partly written
+    written.add(file);
     {
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
         out << bytes;
         if (!out.flush()) throw BackupError("cannot write " + file.string());
     }
     fs::permissions(file, static_cast<fs::perms>(entry.at("mode").get<unsigned>()) & fs::perms::mask);
+    written.keep();
     return file;
 }
 

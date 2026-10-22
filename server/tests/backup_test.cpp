@@ -261,3 +261,29 @@ TEST_F(BackupTest, AMissingMigrationFileAppliesNothing) {
     EXPECT_THROW((void)migrations.apply(w, done), fs::filesystem_error);
     EXPECT_FALSE(done.contains("999_test.sql"));
 }
+
+TEST_F(BackupTest, AFileThatFailsHalfWayIsNotLeftBehind) {
+    std::string text = backup(source(), files("source"));
+    const auto at = text.find("\"file\":\"trust-store\",\"mode\":");
+    ASSERT_NE(at, std::string::npos);
+    const auto mode = at + std::string("\"file\":\"trust-store\",\"mode\":").size();
+    text.replace(mode, text.find(',', mode) - mode, "\"rw\"");
+    const std::string to = freshDatabase("rfmap_backup_target");
+    EXPECT_ANY_THROW((void)restore(to, text));
+    EXPECT_EQ(filesUnder(dir_ / "target"), 0u);
+}
+
+TEST_F(BackupTest, AFileThatCannotMoveIntoPlaceStaysStaged) {
+    const std::string text = backup(source(), files("source"));
+    const BackupFiles target = files("target");
+    fs::create_directories(target.trustStore / "in-the-way");
+    const std::string to = freshDatabase("rfmap_backup_target");
+    try {
+        (void)restore(to, text);
+        FAIL() << "moved the trust store over a directory";
+    } catch (const BackupError& e) {
+        EXPECT_NE(std::string(e.what()).find("into place by hand"), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(query(to, "select count(*) from missions"), "2") << "the database committed before the move";
+    EXPECT_EQ(readFile(target.trustStore.string() + ".rfmap-restoring"), R"({"keys": []})");
+}
