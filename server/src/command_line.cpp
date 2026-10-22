@@ -35,11 +35,16 @@ CommandLine CommandLine::parse(const std::vector<std::string_view>& args, const 
             out.invalidArgument_ = a;
         }
     }
-    if (out.planOnly_ && (out.action_ == Serve || out.isServiceAction()) && out.action_ != Migrate) {
-        out.action_ = Invalid;
-        out.invalidArgument_ = "--plan (it goes with --migrate)";
-    }
+    out.requirePlanWithMigrate();
     return out;
+}
+
+void CommandLine::requirePlanWithMigrate() {
+    using enum Action;
+    if (planOnly_ && (action_ == Serve || isServiceAction()) && action_ != Migrate) {
+        action_ = Invalid;
+        invalidArgument_ = "--plan (it goes with --migrate)";
+    }
 }
 
 CommandLine::Action CommandLine::serviceAction(std::string_view arg) {

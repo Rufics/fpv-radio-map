@@ -172,7 +172,7 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
     store_.db = std::make_unique<Database>(config_.database.url, config_.database.poolSize);
     // A breaking step, or a database newer than this server, stops the start: see migrations.hpp.
     const MigrationCatalog migrations(sqlDir);
-    store_.db->with([&](pqxx::connection& c) {
+    store_.db->with([this, &migrations](pqxx::connection& c) {
         return SchemaMigrator(migrations, {config_.modules.root, config_.modules.trustStore},
                               [this](const std::string& line) { log_.info("startup", line); })
             .migrate(c, {});

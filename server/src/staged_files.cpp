@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <format>
 #include <fstream>
-#include <sstream>
 #include <string>
 #include <system_error>
 
@@ -22,7 +21,15 @@ void StagedFiles::write(const fs::path& target, std::string_view bytes, fs::perm
     const fs::path file = stagedPath(target);
     fs::create_directories(file.parent_path());
     // One entry per target: from here on a failure removes it, and install() moves it once.
-    if (std::ranges::find(staged_, file) == staged_.end()) staged_.push_back(file);
+    if (std::ranges::find(staged_, file) == staged_.end()) {
+        // A file already under the staged name is not ours: a module's own file, or one a failed
+        // install left behind. Writing would truncate it, and a failure would remove it.
+        if (fs::symlink_status(file).type() != fs::file_type::not_found) {
+            throw fs::filesystem_error("a file already has the staged name", file,
+                                       std::make_error_code(std::errc::file_exists));
+        }
+        staged_.push_back(file);
+    }
     {
         std::ofstream out(file, std::ios::binary | std::ios::trunc);
         out << bytes;
@@ -36,11 +43,15 @@ void StagedFiles::write(const fs::path& target, std::string_view bytes, fs::perm
 std::optional<std::string> StagedFiles::read(const fs::path& target) const {
     const fs::path staged = stagedPath(target);
     const fs::path& file = std::ranges::find(staged_, staged) != staged_.end() ? staged : target;
+    if (!fs::exists(file)) return std::nullopt;
+    // file_size throws for what is not a regular file; a short read is an error, not an empty file.
+    std::string bytes(fs::file_size(file), '\0');
     std::ifstream in(file, std::ios::binary);
-    if (!in) return std::nullopt;
-    std::ostringstream bytes;
-    bytes << in.rdbuf();
-    return bytes.str();
+    in.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    if (!in || in.gcount() != static_cast<std::streamsize>(bytes.size())) {
+        throw fs::filesystem_error("cannot read", file, std::make_error_code(std::errc::io_error));
+    }
+    return bytes;
 }
 
 void StagedFiles::install() {

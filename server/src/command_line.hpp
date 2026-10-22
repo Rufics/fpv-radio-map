@@ -51,6 +51,8 @@ public:
 private:
     /// The service action an argument names, or Invalid.
     static Action serviceAction(std::string_view arg);
+    /// --plan only goes with --migrate: anything else with it is Invalid.
+    void requirePlanWithMigrate();
     /// For container health checks (the runtime image has no curl): 0 when /api/v1/health answers 200.
     static int health(const std::string& base, std::ostream& err);
 

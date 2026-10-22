@@ -210,6 +210,12 @@ std::vector<std::string> SchemaMigrator::apply(MigrationContext& ctx, const std:
     return applied;
 }
 
+bool SchemaMigrator::upToDate(pqxx::connection& c, const SchemaVersion& pivot, Options options) const {
+    const MigrationPlan p = plan(c, pivot, options);
+    return p.toPivot.empty() && p.afterPivot.empty() &&
+           std::ranges::none_of(p.current.ids(), [](const MigrationId& id) { return id.checksum.empty(); });
+}
+
 std::unique_ptr<FileLock> SchemaMigrator::lockFiles() const {
     if (files_.modulesRoot.empty()) return nullptr;
     fs::create_directories(files_.modulesRoot);
@@ -218,6 +224,8 @@ std::unique_ptr<FileLock> SchemaMigrator::lockFiles() const {
 
 MigrationReport SchemaMigrator::migrateThrough(pqxx::connection& c, const SchemaVersion& pivot, const Action& atPivot,
                                                Options options) const {
+    // Planned again under the locks below: another server may migrate in between.
+    if (!atPivot && upToDate(c, pivot, options)) return {};
     // A backup reads the rows and the files under the shared lock: it waits until both have changed.
     const std::unique_ptr<FileLock> filesLock = lockFiles();
     StagedFiles staged;

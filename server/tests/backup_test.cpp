@@ -569,3 +569,35 @@ TEST_F(BackupTest, ABackupWaitsForARestoreToPutItsFilesInPlace) {
     backupRunning.reset();
     EXPECT_EQ(restoring.get().rows, 5u);
 }
+
+TEST_F(BackupTest, AStartWithNothingToApplyDoesNotWaitForABackup) {
+    const std::string url = source();
+    const ServerFiles f = files("source");
+    fs::create_directories(f.modulesRoot);
+    const FileLock backupRunning(f.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
+    auto start = std::async(std::launch::async, [&] {
+        pqxx::connection c(url);
+        return SchemaMigrator(MigrationCatalog(RFMAP_SQL_DIR), f, {}).migrate(c, {});
+    });
+    ASSERT_EQ(start.wait_for(std::chrono::seconds(10)), std::future_status::ready) << "the start waited for the backup";
+    EXPECT_TRUE(start.get().afterPivot.empty());
+}
+
+TEST_F(BackupTest, AFileUnderTheStagedNameIsNeverOverwritten) {
+    const fs::path target = dir_ / "modules" / "a.so";
+    fs::create_directories(target.parent_path());
+    const fs::path other = target.string() + std::string(StagedFiles::kSuffix);
+    std::ofstream(other) << "a module's own file";
+    {
+        StagedFiles staged;
+        EXPECT_THROW(staged.write(target, "new", fs::perms::owner_read), fs::filesystem_error);
+    }
+    EXPECT_EQ(readFile(other), "a module's own file");
+    EXPECT_FALSE(fs::exists(target));
+}
+
+TEST_F(BackupTest, StagedReadTellsAMissingFileFromAnUnreadableOne) {
+    const StagedFiles staged;
+    EXPECT_EQ(staged.read(dir_ / "missing"), std::nullopt);
+    EXPECT_THROW((void)staged.read(dir_), fs::filesystem_error) << "a directory cannot be read as a file";
+}

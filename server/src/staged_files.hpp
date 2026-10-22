@@ -39,9 +39,10 @@ public:
 
     /// Writes `bytes` with `mode` next to `target`; it replaces `target` at install(). Writing a
     /// target again replaces what was staged for it. A file that fails half way is removed with the others.
+    /// Refuses a target whose staged name another file already has.
     void write(const std::filesystem::path& target, std::string_view bytes, std::filesystem::perms mode);
     /// What `target` will hold after install(): the staged bytes when it is staged, else the file on
-    /// disk; nothing when neither exists.
+    /// disk; nothing when neither exists. A file that exists but cannot be read throws.
     [[nodiscard]] std::optional<std::string> read(const std::filesystem::path& target) const;
     /// Leaves the files on disk: they are no longer this object's to remove.
     void keep() { staged_.clear(); }
