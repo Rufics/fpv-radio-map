@@ -585,7 +585,9 @@ A restore builds the schema with the server's own migrations, loads the rows, pu
 files back, then applies the migrations that came after the backup, all in one transaction. A
 backup therefore restores into the same or a newer server, on any PostgreSQL version, and the
 migrations adapt the data to the new version. It restores only into a database that has no
-schema yet; if it stops, nothing is restored: fix the cause and run it again.
+schema yet. If it stops, nothing is committed to the database, which stays empty: fix the cause
+and run it again. Module files and the trust store (`keys.json`) it wrote before it stopped stay
+on disk, and the next run overwrites them.
 
 1. **On the old server**, stop the server so nothing changes after the snapshot, and back up:
 
@@ -628,17 +630,22 @@ server. The new version keeps its data in a new volume (`rfmap_pgdata18`), and t
 (`rfmap_pgdata`) is not touched:
 
 ```sh
-cd ~/fpv-radio-map
-git pull
-cd deploy
-docker compose build rfmap-server
-backup=~/rfmap-backup/rfmap-$(date +%F).backup
-docker compose stop rfmap-server
-docker compose run --rm -T --no-deps rfmap-server --backup > "$backup"
-docker compose up -d --wait postgis
-docker compose run --rm -T --no-deps rfmap-server --restore < "$backup"
-docker compose up -d --build
+cd ~/fpv-radio-map && git pull && cd deploy &&
+  docker compose build rfmap-server &&
+  mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup &&
+  backup=~/rfmap-backup/rfmap-$(date +%F).backup &&
+  docker compose stop rfmap-server &&
+  docker compose run --rm -T --no-deps rfmap-server --backup > "$backup" &&
+  docker compose up -d --wait postgis &&
+  docker compose run --rm -T --no-deps rfmap-server --restore < "$backup" &&
+  docker compose up -d --build
 ```
+
+Each step runs only when the one before it succeeded, so a failed backup never goes on to the
+new database. If a step before `up -d --wait postgis` fails, fix the cause and run the block
+again. If the restore fails, the new database stays empty: fix the cause and run only the last
+two commands again, with the same `backup=` path. Do not run the backup again at that point, since
+it would now read the new, empty database.
 
 The backup runs before `up` replaces the old `postgis` container, so the new server reads the old
 database. The stack is down from `stop` to the last `up`; on a small database that is under a

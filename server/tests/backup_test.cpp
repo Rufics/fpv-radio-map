@@ -216,3 +216,39 @@ TEST_F(BackupTest, CommandLineBacksUpAndRestores) {
     EXPECT_EQ(ServiceCommand::run(restoreCmd, env, again, out, err), 1);
     EXPECT_NE(err.str().find("already has a schema"), std::string::npos) << err.str();
 }
+
+TEST_F(BackupTest, RefusesABackupWhoseTotalsDoNotMatch) {
+    std::string text = backup(source(), files("source"));
+    const auto at = text.find("\"rows\":5");
+    ASSERT_NE(at, std::string::npos);
+    text.replace(at, std::string("\"rows\":5").size(), "\"rows\":6");
+    const std::string to = freshDatabase("rfmap_backup_target");
+    EXPECT_THROW((void)restore(to, text), BackupError);
+    EXPECT_EQ(query(to, "select to_regclass('public.missions')::text"), "<null>");
+}
+
+TEST_F(BackupTest, ReadsAPartitionedTableThroughItsPartitions) {
+    const std::string from = source();
+    pqxx::connection c(from);
+    pqxx::work w(c);
+    w.exec("create table parted (id int) partition by range (id)");
+    w.exec("create table parted_low partition of parted for values from (0) to (10)");
+    w.exec("insert into parted values (1), (2)");
+    w.commit();
+    const std::string text = backup(from, files("source"));
+    EXPECT_NE(text.find(R"({"columns":["id"],"rows":2,"table":"public.parted"})"), std::string::npos) << text;
+    EXPECT_NE(text.find("[\"1\"]\n[\"2\"]\n"), std::string::npos);
+    EXPECT_EQ(text.find("parted_low"), std::string::npos) << "a partition is read through its parent";
+}
+
+TEST_F(BackupTest, AMissingMigrationFileAppliesNothing) {
+    const fs::path sql = migrationsWith("create table later (id int);");
+    const Migrations migrations(sql);
+    fs::remove(sql / "999_test.sql");
+    const std::string url = freshDatabase("rfmap_backup_target");
+    pqxx::connection c(url);
+    pqxx::work w(c);
+    Migrations::Names done = Migrations::lock(w);
+    EXPECT_THROW((void)migrations.apply(w, done), fs::filesystem_error);
+    EXPECT_FALSE(done.contains("999_test.sql"));
+}

@@ -80,6 +80,10 @@ std::vector<std::string> Migrations::apply(pqxx::work& w, Names& done, std::stri
         const std::string& name = names_[i];
         if (!done.contains(name)) {
             std::ifstream in(files_[i]);
+            if (!in) {
+                throw std::filesystem::filesystem_error("cannot read migration", files_[i],
+                                                        std::make_error_code(std::errc::io_error));
+            }
             std::ostringstream sql;
             sql << in.rdbuf();
             w.exec(sql.str());

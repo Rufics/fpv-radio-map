@@ -63,6 +63,8 @@ private:
     struct Table {
         std::string schema;
         std::string name;
+        /// Partitioned: its rows live in its partitions and are read through it.
+        bool partitioned = false;
         std::vector<std::string> columns;
     };
 
@@ -89,6 +91,8 @@ private:
     /// The last of this server's migrations the backup was written under; refuses a backup
     /// written under migrations this server does not have.
     [[nodiscard]] std::string lastCommonMigration(const json& header) const;
+    /// Refuses a backup whose end line counts other tables, rows or files than it holds.
+    static void checkTotals(const json& end, const BackupSummary& summary);
     static std::size_t readRows(pqxx::work& w, const json& table, std::istream& in);
     void readFile(const json& entry) const;
     [[nodiscard]] std::filesystem::path target(const std::string& name) const;

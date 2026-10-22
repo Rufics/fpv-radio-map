@@ -36,7 +36,7 @@ const NameSet kNotBackedUp = {"public.schema_migrations", "public.result_cache"}
 /// Application tables: every table outside the system schemas that no extension owns (PostGIS
 /// keeps spatial_ref_sys and the topology and tiger tables, which the extensions create themselves).
 constexpr std::string_view kTablesSql = R"(
-    select c.oid::bigint, n.nspname, c.relname
+    select c.oid::bigint, n.nspname, c.relname, c.relkind
     from pg_class c join pg_namespace n on n.oid = c.relnamespace
     where c.relkind in ('r', 'p') and not c.relispartition
       and n.nspname <> 'information_schema' and n.nspname not like 'pg\_%'
@@ -133,7 +133,7 @@ BackupSummary BackupWriter::write(std::ostream& out) {
     // One snapshot for every table, so the backup is consistent while the server keeps writing.
     pqxx::transaction<pqxx::isolation_level::repeatable_read, pqxx::write_policy::read_only> w(connection_);
     std::vector<std::string> migrations;
-    for (const auto& row : w.exec("select name from schema_migrations order by name")) {
+    for (const auto& row : w.exec(R"(select name from schema_migrations order by name collate "C")")) {
         migrations.push_back(row[0].as<std::string>());
     }
     if (migrations.empty()) throw BackupError("the database has no schema yet: nothing to back up");
@@ -161,7 +161,7 @@ std::vector<BackupWriter::Table> BackupWriter::tables(pqxx::transaction_base& w)
     for (const auto& row : w.exec(kTablesSql)) {
         const std::string name = qualified(row[1].as<std::string>(), row[2].as<std::string>());
         if (kNotBackedUp.contains(name)) continue;
-        Table table{row[1].as<std::string>(), row[2].as<std::string>(), {}};
+        Table table{row[1].as<std::string>(), row[2].as<std::string>(), row[3].as<std::string>() == "p", {}};
         for (const auto& c : w.exec(kColumnsSql, pqxx::params{row[0].as<std::int64_t>()})) {
             table.columns.push_back(c[0].as<std::string>());
         }
@@ -186,13 +186,15 @@ std::size_t BackupWriter::writeRows(pqxx::transaction_base& w, const Table& tabl
     const auto& c = w.conn();
     std::string columns;
     for (const auto& name : table.columns) columns += (columns.empty() ? "" : ", ") + c.quote_name(name);
-    const std::string path = c.quote_table({table.schema, table.name});
+    // A partitioned table holds no rows of its own: its partitions do, read through it. A plain
+    // table is read without its inheritance children, which are backed up as tables of their own.
+    const std::string path = (table.partitioned ? "" : "only ") + c.quote_table({table.schema, table.name});
     const std::size_t rows = w.query_value<std::size_t>("select count(*) from " + path);
     out << json{{"table", qualified(table.schema, table.name)}, {"columns", table.columns}, {"rows", rows}}.dump()
         << '\n';
     // Values in their PostgreSQL text form, as the server's own output functions write them, so
     // every type (bytea, jsonb, PostGIS geography) reads back exactly.
-    w.exec(std::format("declare backup_rows no scroll cursor for select {} from only {}", columns, path));
+    w.exec(std::format("declare backup_rows no scroll cursor for select {} from {}", columns, path));
     std::size_t written = 0;
     for (;;) {
         const pqxx::result batch = w.exec(std::format("fetch forward {} from backup_rows", kFetchRows));
@@ -254,7 +256,8 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
     w.exec("set constraints all deferred");
 
     BackupSummary summary;
-    for (json entry = nextLine(in, "the end"); !entry.contains("end"); entry = nextLine(in, "the end")) {
+    json entry = nextLine(in, "the end");
+    for (; !entry.contains("end"); entry = nextLine(in, "the end")) {
         if (entry.contains("table")) {
             summary.rows += readRows(w, entry, in);
             ++summary.tables;
@@ -265,11 +268,22 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
             throw BackupError("the backup holds a line this server does not know: " + entry.dump().substr(0, 80));
         }
     }
+    checkTotals(entry, summary);
     // Then everything that came after, so the migrations adapt the restored rows to this version.
     summary.newerMigrations = migrations_.apply(w, done);
     for (const auto& m : summary.newerMigrations) log_ << "rfmap-server: restore: applied migration " << m << '\n';
     w.commit();
     return summary;
+}
+
+void BackupRestorer::checkTotals(const json& end, const BackupSummary& summary) {
+    const json held = {{"tables", summary.tables}, {"rows", summary.rows}, {"files", summary.files}};
+    for (const auto& [key, count] : held.items()) {
+        if (end.value(key, json()) != count) {
+            throw BackupError(std::format("the backup ends with {} {}, but holds {}", end.value(key, json()).dump(),
+                                          key, count.dump()));
+        }
+    }
 }
 
 std::string BackupRestorer::lastCommonMigration(const json& header) const {
