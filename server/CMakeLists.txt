@@ -13,6 +13,7 @@ target_link_libraries(rfmap_pqxx INTERFACE ${PQXX_ARCHIVE} PkgConfig::PQ)
 # inline, but its pkg-config file lists them for static linking only: link them here.
 pkg_check_modules(HTTPLIB REQUIRED IMPORTED_TARGET cpp-httplib>=0.26)
 find_package(OpenSSL 3 REQUIRED)
+find_package(LibArchive REQUIRED)
 pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
 find_package(GDAL CONFIG REQUIRED)
 find_package(Threads REQUIRED)
@@ -45,13 +46,14 @@ add_library(rfmap_server_lib STATIC
   src/migrations.cpp
   src/staged_files.cpp
   src/backup.cpp
+  src/backup_stream.cpp
   src/file_lock.cpp
   src/app.cpp)
 target_include_directories(rfmap_server_lib PUBLIC src)
 target_link_libraries(rfmap_server_lib
   PUBLIC rf_ext rfmod_platform nlohmann_json::nlohmann_json rfmap_pqxx PkgConfig::SODIUM
          PkgConfig::HTTPLIB OpenSSL::SSL OpenSSL::Crypto GDAL::GDAL Threads::Threads
-  PRIVATE nlohmann_json_schema_validator)
+  PRIVATE nlohmann_json_schema_validator LibArchive::LibArchive)
 # GDAL, libpqxx and httplib headers are third-party: include them as system headers so our
 # warning flags apply to our code only.
 get_target_property(_gdal_inc GDAL::GDAL INTERFACE_INCLUDE_DIRECTORIES)

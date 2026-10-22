@@ -41,6 +41,20 @@ struct MigrationId {
     std::string checksum;
 };
 
+/// A schema version as a backup names it: the last step, how many steps lead up to it, and one
+/// fingerprint of them all. Alembic and golang-migrate name a version by its last step the same way;
+/// the fingerprint adds the check that Flyway makes with each step's checksum.
+/// MigrationCatalog::versionAt turns it back into the steps.
+struct SchemaStamp {
+    std::string version;      ///< the last step's name
+    std::size_t steps = 0;    ///< how many steps, the last one included
+    std::string fingerprint;  ///< SchemaVersion::fingerprint() of those steps
+
+    /// {"version": ..., "steps": ..., "fingerprint": ...}, as a backup's header holds it.
+    [[nodiscard]] json toJson() const;
+    static SchemaStamp fromJson(const json& j);
+};
+
 /// A schema version: the migrations applied, in order.
 class SchemaVersion {
 public:
@@ -65,9 +79,17 @@ public:
     /// How this version stands against `other`.
     [[nodiscard]] Comparison compare(const SchemaVersion& other) const;
 
-    /// [{"name": ..., "checksum": ...}, ...], as a backup's header holds it.
+    /// [{"name": ..., "checksum": ...}, ...], as a backup of format 1 or 2 lists it.
     [[nodiscard]] json toJson() const;
     static SchemaVersion fromJson(const json& j);
+
+    /// SHA-256 hex of every step's name and checksum, in order: one value for the whole history.
+    [[nodiscard]] std::string fingerprint() const;
+    /// Refuses an empty version and one with an unknown checksum, which no fingerprint covers.
+    [[nodiscard]] SchemaStamp stamp() const;
+    /// This version with each unknown checksum taken from `known`, where both have the same step
+    /// at the same position.
+    [[nodiscard]] SchemaVersion withChecksumsFrom(const SchemaVersion& known) const;
 
 private:
     std::vector<MigrationId> ids_;
@@ -157,6 +179,9 @@ public:
 
     [[nodiscard]] const std::vector<std::unique_ptr<MigrationStep>>& steps() const { return steps_; }
     [[nodiscard]] SchemaVersion version() const;
+    /// The catalog's steps up to `stamp`'s. Refuses a stamp past them (a newer server's) and one
+    /// whose steps differ from the catalog's.
+    [[nodiscard]] SchemaVersion versionAt(const SchemaStamp& stamp) const;
 
 private:
     std::vector<std::unique_ptr<MigrationStep>> steps_;

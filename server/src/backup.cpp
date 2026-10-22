@@ -1,5 +1,6 @@
 #include "backup.hpp"
 
+#include "backup_stream.hpp"
 #include "file_lock.hpp"
 #include "security.hpp"
 
@@ -137,11 +138,23 @@ json headerFromFormat1(json header) {
     return header;
 }
 
+/// Format 3 names the version by its last step and a fingerprint. A list with an unknown checksum
+/// (format 1, or rows written before checksums) has no fingerprint, so it stays a list.
+json headerFromFormat2(json header) {
+    const SchemaVersion listed = SchemaVersion::fromJson(header.at("migrations"));
+    if (listed.empty() || std::ranges::any_of(listed.ids(), [](const MigrationId& id) { return id.checksum.empty(); })) {
+        return header;
+    }
+    header["schema"] = listed.stamp().toJson();
+    header.erase("migrations");
+    return header;
+}
+
 }  // namespace
 
 const std::vector<BackupReader::Upgrade>& BackupReader::upgrades() {
     // upgrades()[i] reads format i + 1 as format i + 2. A null line function keeps the lines as they are.
-    static const std::vector<Upgrade> all = {{headerFromFormat1, nullptr}};
+    static const std::vector<Upgrade> all = {{headerFromFormat1, nullptr}, {headerFromFormat2, nullptr}};
     return all;
 }
 
@@ -172,10 +185,10 @@ BackupSummary BackupWriter::write(std::ostream& out) {
     const FileLock filesLock(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
     // One snapshot for every table, so the backup is consistent while the server keeps writing.
     pqxx::transaction<pqxx::isolation_level::repeatable_read, pqxx::write_policy::read_only> w(connection_);
-    const SchemaVersion version = SchemaMigrator::recorded(w);
+    const SchemaVersion version = SchemaMigrator::recorded(w).withChecksumsFrom(catalog_.version());
     if (version.empty()) throw BackupError("the database has no schema yet: nothing to back up");
     out << json{{"format", kFormat}, {"version", kVersion}, {"createdAt", isoUtc(Clock::now())},
-                {"migrations", version.toJson()}}.dump()
+                {"schema", version.stamp().toJson()}}.dump()
         << '\n';
 
     BackupSummary summary;
@@ -281,7 +294,7 @@ void BackupWriter::writeFile(const std::string& name, const fs::path& file, std:
 
 BackupSummary BackupRestorer::restore(std::istream& in) {
     BackupReader reader(in);
-    const SchemaVersion written = SchemaVersion::fromJson(reader.header().at("migrations"));
+    const SchemaVersion written = writtenUnder(reader.header());
     if (written.empty()) throw BackupError("the backup names no migrations");
     BackupSummary summary;
     // The schema the rows were written under, from this server's own migrations; then the rows and
@@ -291,6 +304,11 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
         {.allowBreaking = true, .newDatabaseOnly = true, .pivotName = "the backup"});
     summary.newerMigrations = report.afterPivot;
     return summary;
+}
+
+SchemaVersion BackupRestorer::writtenUnder(const json& header) const {
+    if (header.contains("schema")) return catalog_.versionAt(SchemaStamp::fromJson(header.at("schema")));
+    return SchemaVersion::fromJson(header.at("migrations"));  // an older format with an unknown checksum
 }
 
 BackupSummary BackupRestorer::load(MigrationContext& ctx, BackupReader& reader) const {
@@ -387,7 +405,7 @@ int ServiceCommand::run(const CommandLine& cmd, const Config::Environment& env, 
         const MigrationContext::Note note = [&err](const std::string& line) { err << "rfmap-server: " << line << '\n'; };
         switch (cmd.action()) {
             using enum CommandLine::Action;
-            case Backup: backup(connection, files, out, err); break;
+            case Backup: backup(connection, MigrationCatalog(cmd.sqlDir()), files, out, err); break;
             case Restore: restore(connection, MigrationCatalog(cmd.sqlDir()), files, in, note); break;
             case Migrate: migrate(connection, MigrationCatalog(cmd.sqlDir()), files, cmd.planOnly(), out, note); break;
             case Serve:
@@ -414,15 +432,22 @@ int ServiceCommand::run(const CommandLine& cmd, const Config::Environment& env, 
     return 1;
 }
 
-void ServiceCommand::backup(pqxx::connection& c, const ServerFiles& files, std::ostream& out, std::ostream& err) {
-    const BackupSummary s = BackupWriter(c, files, err).write(out);
-    if (!out.flush()) throw BackupError("cannot write the backup to standard output");
+void ServiceCommand::backup(pqxx::connection& c, const MigrationCatalog& catalog, const ServerFiles& files,
+                            std::ostream& out, std::ostream& err) {
+    BackupCompressor packed(out);
+    std::ostream file(&packed);
+    file.exceptions(std::ios::badbit);  // a failed write throws its own BackupError
+    const BackupSummary s = BackupWriter(c, catalog, files, err).write(file);
+    packed.finish();
     err << "rfmap-server: backed up " << s.tables << " tables, " << s.rows << " rows and " << s.files << " files\n";
 }
 
 void ServiceCommand::restore(pqxx::connection& c, const MigrationCatalog& catalog, const ServerFiles& files,
                              std::istream& in, const MigrationContext::Note& note) {
-    const BackupSummary s = BackupRestorer(c, catalog, files, note).restore(in);
+    BackupDecompressor plain(in);
+    std::istream file(&plain);
+    file.exceptions(std::ios::badbit);  // a damaged file throws its own BackupError
+    const BackupSummary s = BackupRestorer(c, catalog, files, note).restore(file);
     note(std::format("restored {} tables, {} rows and {} files", s.tables, s.rows, s.files));
 }
 

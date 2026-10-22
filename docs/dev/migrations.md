@@ -13,9 +13,8 @@ records each step's name and checksum:
 - An SQL step's checksum is the SHA-256 of its file.
 - A C++ step's checksum comes from its revision string.
 
-A backup's header carries the same list, so a database, a backup and a server's own steps
-(`MigrationCatalog`) all have a version of one type, `SchemaVersion`. Comparing two versions
-position by position gives one of four results:
+A database and a server's own steps (`MigrationCatalog`) have a version of one type,
+`SchemaVersion`. Comparing two versions position by position gives one of four results:
 
 | Result | Meaning |
 |---|---|
@@ -26,6 +25,25 @@ position by position gives one of four results:
 
 Rows written before checksums existed, and backups of format 1, have no checksum. Only their
 names are compared, and the server fills in the missing checksums the next time it starts.
+
+A backup names its version the way Alembic and golang-migrate do, by the last step, and adds the
+check Flyway makes with checksums. The header holds a `SchemaStamp`:
+
+```json
+"schema": {"version": "007_add_notes.sql", "steps": 7, "fingerprint": "<sha256>"}
+```
+
+The fingerprint is the SHA-256 of every step's name and checksum, in order
+(`SchemaVersion::fingerprint`). A restore turns the stamp back into steps with
+`MigrationCatalog::versionAt`, which takes the server's own first `steps` steps and refuses the
+stamp when:
+
+- it counts more steps than the server knows: a newer server wrote it;
+- the last of those steps has another name, or their fingerprint differs: the backup comes from
+  another history.
+
+A database migrated before checksums has no fingerprint of its own. The backup takes each
+missing checksum from the server's step of the same name at the same position, as a start does.
 
 ## One way to change version
 
@@ -96,7 +114,7 @@ steps are in [Updates](../admin/production-setup.md#11-updates).
 ## Backup format versions
 
 The backup format and the schema have separate versions. The header's `version` is the format
-(`BackupWriter::kVersion`, now 2). `BackupReader` brings an older format up to the current one
+(`BackupWriter::kVersion`, now 3). `BackupReader` brings an older format up to the current one
 line by line, through `BackupReader::upgrades()`, so the restore code only ever reads the newest
 format. To change the format:
 
@@ -106,13 +124,20 @@ format. To change the format:
 3. Add a test that restores a backup of the previous format.
 
 Format 1 listed the migrations by name only. Its upgrade adds an empty checksum to each.
+Format 2 listed every migration with its checksum. Its upgrade turns the list into a stamp. A
+list with an unknown checksum has no fingerprint, so it stays a list and is compared step by step.
+
+The command line writes the file compressed with zstd at level 9 (`backup_stream.hpp`, through
+libarchive). A restore reads a zstd file and a plain one alike. The compression is not part of
+the format version.
 
 ## Tests
 
 - `server/tests/migrations_test.cpp` covers `SchemaVersion`.
 - `server/tests/backup_test.cpp` covers the rest on PostgreSQL:
   - an old backup taken through a newer SQL step and a C++ step;
-  - a format 1 backup;
+  - the header's stamp, a format 1 and a format 2 backup, and a backup from another history;
+  - a zstd backup through the command line, a plain one, and a damaged one;
   - a start that refuses a newer database, a changed step or a breaking step;
   - `--migrate --plan` and `--migrate`;
   - two steps with one number.

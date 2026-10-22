@@ -58,6 +58,43 @@ SchemaVersion SchemaVersion::fromJson(const json& j) {
     return SchemaVersion(std::move(ids));
 }
 
+std::string SchemaVersion::fingerprint() const {
+    std::string all;
+    for (const auto& id : ids_) all += id.name + '\n' + id.checksum + '\n';
+    return checksumOf(all);
+}
+
+SchemaStamp SchemaVersion::stamp() const {
+    if (empty()) throw MigrationError("an empty schema version has no stamp");
+    const auto unknown = std::ranges::find_if(ids_, [](const MigrationId& id) { return id.checksum.empty(); });
+    if (unknown != ids_.end()) {
+        throw MigrationError("the checksum of migration " + unknown->name +
+                             " is unknown: back up with the server version that applied it");
+    }
+    return {ids_.back().name, size(), fingerprint()};
+}
+
+SchemaVersion SchemaVersion::withChecksumsFrom(const SchemaVersion& known) const {
+    std::vector<MigrationId> ids = ids_;
+    for (std::size_t i = 0; i < ids.size() && i < known.size(); ++i) {
+        if (ids[i].checksum.empty() && ids[i].name == known.ids_[i].name) ids[i].checksum = known.ids_[i].checksum;
+    }
+    return SchemaVersion(std::move(ids));
+}
+
+json SchemaStamp::toJson() const { return {{"version", version}, {"steps", steps}, {"fingerprint", fingerprint}}; }
+
+SchemaStamp SchemaStamp::fromJson(const json& j) {
+    if (!j.is_object() || !j.contains("version") || !j.at("version").is_string() || !j.contains("steps") ||
+        !j.at("steps").is_number_unsigned() || !j.contains("fingerprint") || !j.at("fingerprint").is_string()) {
+        throw MigrationError("a schema stamp names the last step, the number of steps and their fingerprint");
+    }
+    SchemaStamp stamp{j.at("version").get<std::string>(), j.at("steps").get<std::size_t>(),
+                      j.at("fingerprint").get<std::string>()};
+    if (stamp.steps == 0) throw MigrationError("a schema stamp counts at least one step");
+    return stamp;
+}
+
 std::unique_ptr<SqlMigration> SqlMigration::load(const fs::path& file) {
     std::ifstream in(file, std::ios::binary);
     std::ostringstream sql;
@@ -98,6 +135,23 @@ SchemaVersion MigrationCatalog::version() const {
     ids.reserve(steps_.size());
     for (const auto& s : steps_) ids.push_back(s->id());
     return SchemaVersion(std::move(ids));
+}
+
+SchemaVersion MigrationCatalog::versionAt(const SchemaStamp& stamp) const {
+    const std::string at = std::format("{} (step {})", stamp.version, stamp.steps);
+    if (stamp.steps > steps_.size()) {
+        throw MigrationError(std::format("the schema is at {}, past this server's last migration {}: use the same "
+                                         "or a newer server", at, nameAt(version(), steps_.size() - 1)));
+    }
+    std::vector<MigrationId> ids;
+    ids.reserve(stamp.steps);
+    for (std::size_t i = 0; i < stamp.steps; ++i) ids.push_back(steps_[i]->id());
+    SchemaVersion prefix(std::move(ids));
+    if (prefix.ids().back().name != stamp.version || prefix.fingerprint() != stamp.fingerprint) {
+        throw MigrationError(std::format("the schema at {} has other migrations than this server's up to there: it "
+                                         "comes from a server with another history", at));
+    }
+    return prefix;
 }
 
 SchemaVersion SchemaMigrator::recorded(pqxx::transaction_base& w) {

@@ -2,8 +2,8 @@
 //
 //   rfmap-server [--config /etc/rfmap/server.json] [--sql /usr/share/rfmap/sql]
 //   rfmap-server --health [http://127.0.0.1:8080]   exit 0 if /api/v1/health answers 200
-//   rfmap-server --backup  > rfmap.backup            the data and module files, to standard output
-//   rfmap-server --restore < rfmap.backup            into a new, empty database (backup.hpp)
+//   rfmap-server --backup  > rfmap.backup.zst        the data and module files, zstd, to standard output
+//   rfmap-server --restore < rfmap.backup.zst        into a new, empty database (backup.hpp)
 //   rfmap-server --migrate [--plan]                  applies breaking migrations too (migrations.hpp)
 //
 // The config file is optional (RFMAP_CONFIG names it too); environment variables override it.

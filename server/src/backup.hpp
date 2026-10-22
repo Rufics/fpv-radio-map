@@ -7,8 +7,10 @@
 // that came after. Changing the data for a new version is the job of those steps, so a backup
 // taken by an older server restores into a newer one, on any PostgreSQL version.
 //
-// The format is JSON Lines, one object per line (format 2; a restore reads format 1 too):
-//   {"format":"rfmap-backup","version":2,"createdAt":"...","migrations":[{"name":"001_init.sql","checksum":"..."}]}
+// The format is JSON Lines, one object per line (format 3; a restore reads formats 1 and 2 too).
+// The command line writes it compressed with zstd (backup_stream.hpp):
+//   {"format":"rfmap-backup","version":3,"createdAt":"...",
+//    "schema":{"version":"001_init.sql","steps":1,"fingerprint":"<SchemaVersion::fingerprint>"}}
 //   {"table":"public.missions","columns":["id",...],"rows":2}
 //   ["m1","\\x0102",null,...]                  one array per row, each value in PostgreSQL text form
 //   {"file":"modules/x/lib/x.so","mode":420,"size":1234,"sha256":"...","data":"<base64>"}
@@ -51,10 +53,11 @@ struct BackupSummary {
 class BackupWriter {
 public:
     /// The format it writes.
-    static constexpr int kVersion = 2;
+    static constexpr int kVersion = 3;
 
-    BackupWriter(pqxx::connection& connection, ServerFiles files, std::ostream& log)
-        : connection_(connection), files_(std::move(files)), log_(log) {}
+    /// `catalog` fills the checksums that a database migrated before checksums lacks.
+    BackupWriter(pqxx::connection& connection, const MigrationCatalog& catalog, ServerFiles files, std::ostream& log)
+        : connection_(connection), catalog_(catalog), files_(std::move(files)), log_(log) {}
 
     BackupSummary write(std::ostream& out);
 
@@ -74,6 +77,7 @@ private:
     static void writeFile(const std::string& name, const std::filesystem::path& file, std::ostream& out);
 
     pqxx::connection& connection_;
+    const MigrationCatalog& catalog_;
     ServerFiles files_;
     std::ostream& log_;
 };
@@ -111,6 +115,8 @@ public:
     BackupSummary restore(std::istream& in);
 
 private:
+    /// The version the backup was written under, as this server's steps.
+    [[nodiscard]] SchemaVersion writtenUnder(const json& header) const;
     /// The rows and files, on the schema the backup was written under.
     BackupSummary load(MigrationContext& ctx, BackupReader& reader) const;
     /// Refuses a backup whose end line counts other tables, rows or files than it holds.
@@ -134,7 +140,8 @@ public:
                    std::ostream& err);
 
 private:
-    static void backup(pqxx::connection& c, const ServerFiles& files, std::ostream& out, std::ostream& err);
+    static void backup(pqxx::connection& c, const MigrationCatalog& catalog, const ServerFiles& files,
+                       std::ostream& out, std::ostream& err);
     static void restore(pqxx::connection& c, const MigrationCatalog& catalog, const ServerFiles& files,
                         std::istream& in, const MigrationContext::Note& note);
     /// Applies every step, breaking ones too; with `planOnly`, prints them instead.

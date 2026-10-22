@@ -106,7 +106,8 @@ protected:
         pqxx::connection c(url);
         std::ostringstream out;
         std::ostringstream log;
-        (void)BackupWriter(c, f, log).write(out);
+        const MigrationCatalog catalog(RFMAP_SQL_DIR);
+        (void)BackupWriter(c, catalog, f, log).write(out);
         return out.str();
     }
 
@@ -329,6 +330,58 @@ TEST_F(BackupTest, CommandLineBacksUpAndRestores) {
     EXPECT_NE(err.str().find("already has a schema"), std::string::npos) << err.str();
 }
 
+TEST_F(BackupTest, CommandLineWritesZstdAndReadsAPlainBackupToo) {
+    const std::string from = source();
+    const ServerFiles f = files("source");
+    Config::Environment env{{"RFMAP_DATABASE_URL", from},
+                            {"RFMAP__MODULES__ROOT", f.modulesRoot.string()},
+                            {"RFMAP__MODULES__TRUSTSTORE", f.trustStore.string()}};
+    std::istringstream none;
+    std::ostringstream packed;
+    std::ostringstream err;
+    ASSERT_EQ(ServiceCommand::run(CommandLine::parse({"--backup"}, env, RFMAP_SQL_DIR), env, none, packed, err), 0)
+        << err.str();
+    EXPECT_TRUE(packed.str().starts_with("\x28\xb5\x2f\xfd")) << "a zstd frame";
+    const std::string plain = backup(from, f);
+    EXPECT_LT(packed.str().size(), plain.size());
+
+    const ServerFiles t = files("target");
+    env = {{"RFMAP_DATABASE_URL", freshDatabase("rfmap_backup_target")},
+           {"RFMAP__MODULES__ROOT", t.modulesRoot.string()},
+           {"RFMAP__MODULES__TRUSTSTORE", t.trustStore.string()}};
+    const auto restoreCmd = CommandLine::parse({"--restore"}, env, RFMAP_SQL_DIR);
+    std::istringstream in(plain);
+    std::ostringstream out;
+    EXPECT_EQ(ServiceCommand::run(restoreCmd, env, in, out, err), 0) << err.str();
+    EXPECT_EQ(query(env.at("RFMAP_DATABASE_URL"), "select count(*) from missions"), "2");
+}
+
+TEST_F(BackupTest, CommandLineRefusesADamagedCompressedBackup) {
+    const std::string from = source();
+    const ServerFiles f = files("source");
+    Config::Environment env{{"RFMAP_DATABASE_URL", from},
+                            {"RFMAP__MODULES__ROOT", f.modulesRoot.string()},
+                            {"RFMAP__MODULES__TRUSTSTORE", f.trustStore.string()}};
+    std::istringstream none;
+    std::ostringstream packed;
+    std::ostringstream err;
+    ASSERT_EQ(ServiceCommand::run(CommandLine::parse({"--backup"}, env, RFMAP_SQL_DIR), env, none, packed, err), 0)
+        << err.str();
+    std::string damaged = packed.str();
+    damaged.resize(damaged.size() / 2);
+
+    const ServerFiles t = files("target");
+    env = {{"RFMAP_DATABASE_URL", freshDatabase("rfmap_backup_target")},
+           {"RFMAP__MODULES__ROOT", t.modulesRoot.string()},
+           {"RFMAP__MODULES__TRUSTSTORE", t.trustStore.string()}};
+    std::istringstream in(damaged);
+    std::ostringstream out;
+    err.str("");
+    EXPECT_EQ(ServiceCommand::run(CommandLine::parse({"--restore"}, env, RFMAP_SQL_DIR), env, in, out, err), 1);
+    EXPECT_NE(err.str().find("rfmap-server: "), std::string::npos) << err.str();
+    EXPECT_EQ(query(env.at("RFMAP_DATABASE_URL"), "select to_regclass('public.missions')::text"), "<null>");
+}
+
 TEST_F(BackupTest, RefusesABackupWhoseTotalsDoNotMatch) {
     std::string text = backup(source(), files("source"));
     const auto at = text.find("\"rows\":5");
@@ -499,9 +552,56 @@ TEST_F(BackupTest, ABackupOfFormat1StillRestores) {
         << "taken from this server";
 }
 
+TEST_F(BackupTest, TheHeaderNamesTheVersionByItsLastStepAndAFingerprint) {
+    const std::string text = backup(source(), files("source"));
+    const json header = json::parse(text.substr(0, text.find('\n')));
+    EXPECT_EQ(header.at("version"), 3);
+    EXPECT_FALSE(header.contains("migrations"));
+    EXPECT_EQ(header.at("schema").at("version"), serverVersion().ids().back().name);
+    EXPECT_EQ(header.at("schema").at("steps"), serverVersion().size());
+    EXPECT_EQ(header.at("schema").at("fingerprint"), serverVersion().fingerprint());
+}
+
+TEST_F(BackupTest, ABackupOfFormat2StillRestores) {
+    const std::string text = backup(source(), files("source"));
+    const json header = {{"format", "rfmap-backup"}, {"version", 2}, {"createdAt", "2026-10-21T00:00:00Z"},
+                         {"migrations", serverVersion().toJson()}};
+    const std::string to = freshDatabase("rfmap_backup_target");
+    EXPECT_EQ(restore(to, header.dump() + text.substr(text.find('\n'))).rows, 5u);
+    EXPECT_EQ(query(to, "select count(*) from missions"), "2");
+}
+
+TEST_F(BackupTest, RefusesABackupFromAnotherHistory) {
+    std::string text = backup(source(), files("source"));
+    const std::string fingerprint = serverVersion().fingerprint();
+    text.replace(text.find(fingerprint), fingerprint.size(), std::string(fingerprint.size(), '0'));
+    const std::string to = freshDatabase("rfmap_backup_target");
+    try {
+        (void)restore(to, text);
+        FAIL() << "restored a backup whose steps differ from the server's";
+    } catch (const MigrationError& e) {
+        EXPECT_NE(std::string(e.what()).find("another history"), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(query(to, "select to_regclass('public.schema_migrations')::text"), "<null>");
+}
+
+TEST_F(BackupTest, ADatabaseMigratedBeforeChecksumsBacksUpWithTheServersChecksums) {
+    const std::string from = source();
+    {
+        pqxx::connection c(from);
+        pqxx::work w(c);  // as a server before checksums left it
+        w.exec("alter table schema_migrations drop column checksum");
+        w.commit();
+    }
+    const std::string text = backup(from, files("source"));
+    EXPECT_NE(text.find(serverVersion().fingerprint()), std::string::npos);
+    const std::string to = freshDatabase("rfmap_backup_target");
+    EXPECT_EQ(restore(to, text).rows, 5u);
+}
+
 TEST_F(BackupTest, RefusesABackupFormatNewerThanTheServer) {
     std::string text = backup(source(), files("source"));
-    text.replace(text.find("\"version\":2"), std::string("\"version\":2").size(), "\"version\":3");
+    text.replace(text.find("\"version\":3"), std::string("\"version\":3").size(), "\"version\":4");
     const std::string to = freshDatabase("rfmap_backup_target");
     EXPECT_THROW((void)restore(to, text), BackupError);
 }

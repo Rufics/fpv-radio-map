@@ -39,3 +39,24 @@ TEST(SchemaVersionTest, ReadsBackWhatItWrites) {
     EXPECT_THROW((void)SchemaVersion::fromJson(json::parse(R"(["001_a.sql"])")), MigrationError);
     EXPECT_THROW((void)SchemaVersion::fromJson(json::object()), MigrationError);
 }
+
+TEST(SchemaVersionTest, AStampNamesTheLastStepAndFingerprintsThemAll) {
+    const SchemaVersion v = version({{"001_a.sql", "x"}, {"002_b", "y"}});
+    const SchemaStamp stamp = v.stamp();
+    EXPECT_EQ(stamp.version, "002_b");
+    EXPECT_EQ(stamp.steps, 2u);
+    EXPECT_EQ(stamp.fingerprint, v.fingerprint());
+    EXPECT_NE(version({{"001_a.sql", "x"}, {"002_b", "z"}}).fingerprint(), stamp.fingerprint);
+    EXPECT_EQ(SchemaStamp::fromJson(stamp.toJson()).fingerprint, stamp.fingerprint);
+    EXPECT_THROW((void)version({{"001_a.sql", ""}}).stamp(), MigrationError);
+    EXPECT_THROW((void)SchemaVersion().stamp(), MigrationError);
+    EXPECT_THROW((void)SchemaStamp::fromJson(json::parse(R"({"version":"001_a.sql","steps":0,"fingerprint":"f"})")),
+                 MigrationError);
+}
+
+TEST(SchemaVersionTest, TakesUnknownChecksumsFromTheSameStepOnly) {
+    const SchemaVersion known = version({{"001_a.sql", "x"}, {"002_b", "y"}});
+    const SchemaVersion filled = version({{"001_a.sql", ""}, {"002_c", ""}}).withChecksumsFrom(known);
+    EXPECT_EQ(filled.ids()[0].checksum, "x");
+    EXPECT_EQ(filled.ids()[1].checksum, "");
+}

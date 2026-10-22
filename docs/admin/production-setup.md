@@ -571,13 +571,15 @@ the backup has read the files:
 ```sh
 cd ~/fpv-radio-map/deploy
 mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup
-docker compose exec -T rfmap-server rfmap-server --backup > ~/rfmap-backup/rfmap-$(date +%F).backup
+docker compose exec -T rfmap-server rfmap-server --backup > ~/rfmap-backup/rfmap-$(date +%F).backup.zst
 ```
 
-It prints what it wrote, for example `backed up 8 tables, 120 rows and 3 files`; the last line of
-the file starts with `{"end":true`. The file holds data only: the rows of each table and the
-names of the migrations they were written under, never the schema. The result cache is left out:
-it fills again. Keep the owner key offline (step 4), and copy `~/rfmap-backup` and `deploy/.env`
+It prints what it wrote, for example `backed up 8 tables, 120 rows and 3 files`. The file is
+compressed with zstd: `zstdcat` shows it as text, one JSON object per line. The first line names
+the schema it was written under (its last migration, how many there are and a fingerprint of
+them), and the last line starts with `{"end":true`. The file holds data only: the rows of each
+table, the module files and the trusted keys, never the schema. The result cache is left out: it
+fills again. A restore reads an uncompressed backup of an older version too. Keep the owner key offline (step 4), and copy `~/rfmap-backup` and `deploy/.env`
 to another machine. The map data can always be built again from step 2.
 
 ### 10.1 Restore on a new server
@@ -608,7 +610,7 @@ docker compose up -d
    ```sh
    cd ~/fpv-radio-map/deploy
    docker compose stop rfmap-server
-   docker compose run --rm -T --no-deps rfmap-server --backup > ~/rfmap-backup/rfmap-$(date +%F).backup
+   docker compose run --rm -T --no-deps rfmap-server --backup > ~/rfmap-backup/rfmap-$(date +%F).backup.zst
    ```
 
    Copy the backup and `deploy/.env` to the new server.
@@ -628,7 +630,7 @@ docker compose up -d
 3. Restore (`<date>` is the date in the backup's name):
 
    ```sh
-   docker compose run --rm -T --no-deps rfmap-server --restore < ~/rfmap-backup/rfmap-<date>.backup
+   docker compose run --rm -T --no-deps rfmap-server --restore < ~/rfmap-backup/rfmap-<date>.backup.zst
    ```
 
    It prints each migration it applied and `restored 8 tables, 120 rows and 3 files`.
@@ -647,7 +649,7 @@ server. The new version keeps its data in a new volume (`rfmap_pgdata18`), and t
 cd ~/fpv-radio-map && git pull && cd deploy &&
   docker compose build rfmap-server &&
   mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup &&
-  backup=~/rfmap-backup/rfmap-$(date +%F).backup &&
+  backup=~/rfmap-backup/rfmap-$(date +%F).backup.zst &&
   docker compose stop rfmap-server &&
   docker compose run --rm -T --no-deps rfmap-server --backup > "$backup" &&
   docker compose up -d --wait postgis &&
@@ -697,7 +699,7 @@ To apply a breaking migration, back up with the running version, then migrate wi
 ```sh
 cd ~/fpv-radio-map/deploy &&
   mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup &&
-  backup=~/rfmap-backup/rfmap-$(date +%F).backup &&
+  backup=~/rfmap-backup/rfmap-$(date +%F).backup.zst &&
   docker compose stop rfmap-server &&
   docker compose run --rm -T --no-deps rfmap-server --backup > "$backup" &&
   cd .. && git pull && cd deploy &&
