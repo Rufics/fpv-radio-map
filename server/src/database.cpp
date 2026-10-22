@@ -66,15 +66,15 @@ Migrations::Migrations(const std::filesystem::path& sqlDir) {
     for (const auto& f : files_) names_.push_back(f.filename().string());
 }
 
-std::set<std::string> Migrations::lock(pqxx::work& w) {
+Migrations::Names Migrations::lock(pqxx::work& w) {
     w.exec("select pg_advisory_xact_lock(7461001)");
     w.exec("create table if not exists schema_migrations (name text primary key, applied_at timestamptz not null default now())");
-    std::set<std::string> done;
+    Names done;
     for (const auto& row : w.exec("select name from schema_migrations")) done.insert(row[0].as<std::string>());
     return done;
 }
 
-std::vector<std::string> Migrations::apply(pqxx::work& w, std::set<std::string>& done, std::string_view last) const {
+std::vector<std::string> Migrations::apply(pqxx::work& w, Names& done, std::string_view last) const {
     std::vector<std::string> applied;
     for (std::size_t i = 0; i < files_.size(); ++i) {
         const std::string& name = names_[i];
@@ -95,7 +95,7 @@ std::vector<std::string> Migrations::apply(pqxx::work& w, std::set<std::string>&
 std::vector<std::string> Database::migrate(const std::filesystem::path& sqlDir) {
     const Migrations migrations(sqlDir);
     return tx([&migrations](pqxx::work& w) {
-        std::set<std::string> done = Migrations::lock(w);
+        Migrations::Names done = Migrations::lock(w);
         return migrations.apply(w, done);
     });
 }

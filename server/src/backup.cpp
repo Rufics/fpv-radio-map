@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <format>
 #include <fstream>
 #include <map>
 #include <optional>
@@ -21,12 +22,16 @@ namespace fs = std::filesystem;
 constexpr std::string_view kFormat = "rfmap-backup";
 constexpr std::string_view kModulesPrefix = "modules/";
 constexpr std::string_view kTrustStoreName = "trust-store";
+template <class V>
+using ByName = std::map<std::string, V, std::less<>>;
+using NameSet = std::set<std::string, std::less<>>;
+
 /// Rows fetched per round trip while writing.
 constexpr int kFetchRows = 1000;
 
 /// Tables a backup leaves out: schema_migrations is the header's "migrations", and result_cache
 /// is a cache keyed by the server version, so its rows would not be used after a restore anyway.
-const std::set<std::string, std::less<>> kNotBackedUp = {"public.schema_migrations", "public.result_cache"};
+const NameSet kNotBackedUp = {"public.schema_migrations", "public.result_cache"};
 
 /// Application tables: every table outside the system schemas that no extension owns (PostGIS
 /// keeps spatial_ref_sys and the topology and tiger tables, which the extensions create themselves).
@@ -51,9 +56,9 @@ std::string qualified(const std::string& schema, const std::string& name) { retu
 /// Orders `names` so each comes after every name it points at in `parents` (Kahn's algorithm,
 /// alphabetical among equals). Refuses a cycle, which no load order can satisfy.
 std::vector<std::string> parentsFirst(const std::vector<std::string>& names,
-                                      const std::map<std::string, std::set<std::string>>& parents) {
-    std::map<std::string, std::size_t> waitingFor;
-    std::map<std::string, std::vector<std::string>> children;
+                                      const ByName<NameSet>& parents) {
+    ByName<std::size_t> waitingFor;
+    ByName<std::vector<std::string>> children;
     for (const auto& n : names) waitingFor[n] = 0;
     for (const auto& [child, ps] : parents) {
         for (const auto& p : ps) {
@@ -61,7 +66,7 @@ std::vector<std::string> parentsFirst(const std::vector<std::string>& names,
             children[p].push_back(child);
         }
     }
-    std::set<std::string> ready;
+    NameSet ready;
     for (const auto& [n, count] : waitingFor) {
         if (count == 0) ready.insert(n);
     }
@@ -86,12 +91,12 @@ std::string base64(std::string_view bytes) {
     return out;
 }
 
-std::string unbase64(const std::string& text, const std::string& what) {
+std::string unbase64(const std::string& text, std::string_view what) {
     std::string out(text.size() / 4 * 3 + 3, '\0');
     std::size_t length = 0;
     if (sodium_base642bin(reinterpret_cast<unsigned char*>(out.data()), out.size(), text.data(), text.size(), nullptr,
                           &length, nullptr, sodium_base64_VARIANT_ORIGINAL) != 0) {
-        throw BackupError(what + ": the data is not base64");
+        throw BackupError(std::format("{}: the data is not base64", what));
     }
     out.resize(length);
     return out;
@@ -151,20 +156,20 @@ BackupSummary BackupWriter::write(std::ostream& out) {
 }
 
 std::vector<BackupWriter::Table> BackupWriter::tables(pqxx::transaction_base& w) {
-    std::map<std::string, Table> byName;
+    ByName<Table> byName;
     std::map<std::int64_t, std::string> nameOf;
-    for (const auto& row : w.exec(std::string(kTablesSql))) {
+    for (const auto& row : w.exec(kTablesSql)) {
         const std::string name = qualified(row[1].as<std::string>(), row[2].as<std::string>());
         if (kNotBackedUp.contains(name)) continue;
         Table table{row[1].as<std::string>(), row[2].as<std::string>(), {}};
-        for (const auto& c : w.exec(std::string(kColumnsSql), pqxx::params{row[0].as<std::int64_t>()})) {
+        for (const auto& c : w.exec(kColumnsSql, pqxx::params{row[0].as<std::int64_t>()})) {
             table.columns.push_back(c[0].as<std::string>());
         }
         nameOf[row[0].as<std::int64_t>()] = name;
-        byName.emplace(name, std::move(table));
+        byName.try_emplace(name, std::move(table));
     }
-    std::map<std::string, std::set<std::string>> parents;
-    for (const auto& row : w.exec(std::string(kForeignKeysSql))) {
+    ByName<NameSet> parents;
+    for (const auto& row : w.exec(kForeignKeysSql)) {
         const auto child = nameOf.find(row[0].as<std::int64_t>());
         const auto parent = nameOf.find(row[1].as<std::int64_t>());
         if (child != nameOf.end() && parent != nameOf.end()) parents[child->second].insert(parent->second);
@@ -187,10 +192,10 @@ std::size_t BackupWriter::writeRows(pqxx::transaction_base& w, const Table& tabl
         << '\n';
     // Values in their PostgreSQL text form, as the server's own output functions write them, so
     // every type (bytea, jsonb, PostGIS geography) reads back exactly.
-    w.exec("declare backup_rows no scroll cursor for select " + columns + " from only " + path);
+    w.exec(std::format("declare backup_rows no scroll cursor for select {} from only {}", columns, path));
     std::size_t written = 0;
     for (;;) {
-        const pqxx::result batch = w.exec("fetch forward " + std::to_string(kFetchRows) + " from backup_rows");
+        const pqxx::result batch = w.exec(std::format("fetch forward {} from backup_rows", kFetchRows));
         if (batch.empty()) break;
         for (const auto& row : batch) {
             json values = json::array();
@@ -242,7 +247,7 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
     const std::string last = lastCommonMigration(header);
 
     pqxx::work w(connection_);
-    std::set<std::string> done = Migrations::lock(w);
+    Migrations::Names done = Migrations::lock(w);
     if (!done.empty()) throw BackupError("the database already has a schema: restore needs a new, empty database");
     // The schema the rows were written under, from this server's own migrations.
     (void)migrations_.apply(w, done, last);
@@ -288,14 +293,14 @@ std::size_t BackupRestorer::readRows(pqxx::work& w, const json& table, std::istr
     const auto columns = table.at("columns").get<std::vector<std::string>>();
     const auto rows = table.at("rows").get<std::size_t>();
     const auto& c = w.conn();
-    auto stream = pqxx::stream_to::raw_table(w, c.quote_table({name.substr(0, dot), name.substr(dot + 1)}),
+    const std::string_view qualifiedName(name);
+    auto stream = pqxx::stream_to::raw_table(w, c.quote_table({qualifiedName.substr(0, dot), qualifiedName.substr(dot + 1)}),
                                              c.quote_columns(columns));
     std::vector<std::optional<std::string>> values;
     for (std::size_t i = 0; i < rows; ++i) {
-        const json row = nextLine(in, "row " + std::to_string(i + 1) + " of " + name);
-        if (!row.is_array() || row.size() != columns.size()) {
-            throw BackupError("row " + std::to_string(i + 1) + " of " + name + " does not match its columns");
-        }
+        const std::string where = std::format("row {} of {}", i + 1, name);
+        const json row = nextLine(in, where);
+        if (!row.is_array() || row.size() != columns.size()) throw BackupError(where + " does not match its columns");
         values.clear();
         for (const auto& v : row) values.push_back(v.is_null() ? std::nullopt : std::optional(v.get<std::string>()));
         stream.write_row(values);

@@ -28,6 +28,9 @@ namespace rfmap {
 /// schema_migrations. Both the start of the server and a restore build the schema from these files.
 class Migrations {
 public:
+    /// Names of migrations, as schema_migrations records them.
+    using Names = std::set<std::string, std::less<>>;
+
     explicit Migrations(const std::filesystem::path& sqlDir);
 
     /// The file names, in the order they apply.
@@ -35,11 +38,11 @@ public:
 
     /// Takes the migration lock for the rest of `w` (one server migrates at a time, even with
     /// several replicas starting together), creates schema_migrations, and returns what it records.
-    static std::set<std::string> lock(pqxx::work& w);
+    static Names lock(pqxx::work& w);
 
     /// Applies, in order, the files not in `done`, up to and including `last` (all when empty),
     /// and records each in schema_migrations and in `done`. Returns the names applied.
-    std::vector<std::string> apply(pqxx::work& w, std::set<std::string>& done, std::string_view last = {}) const;
+    std::vector<std::string> apply(pqxx::work& w, Names& done, std::string_view last = {}) const;
 
 private:
     std::vector<std::filesystem::path> files_;
