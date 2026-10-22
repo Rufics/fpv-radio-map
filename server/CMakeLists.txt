@@ -42,6 +42,8 @@ add_library(rfmap_server_lib STATIC
   src/jobs.cpp
   src/metrics.cpp
   src/logger.cpp
+  src/migrations.cpp
+  src/staged_files.cpp
   src/backup.cpp
   src/file_lock.cpp
   src/app.cpp)

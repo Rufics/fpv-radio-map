@@ -8,7 +8,8 @@ set(_defs
   RFMAP_EXAMPLE_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/../config/server.example.json")
 
 add_executable(rfmap_server_tests auth_test.cpp pin_gate_test.cpp cache_test.cpp validation_test.cpp
-  host_services_test.cpp weather_test.cpp raster_test.cpp command_line_test.cpp metrics_test.cpp)
+  host_services_test.cpp weather_test.cpp raster_test.cpp command_line_test.cpp metrics_test.cpp
+  migrations_test.cpp)
 target_link_libraries(rfmap_server_tests PRIVATE rfmap_server_lib GTest::gtest_main)
 target_compile_definitions(rfmap_server_tests PRIVATE ${_defs})
 gtest_discover_tests(rfmap_server_tests PROPERTIES LABELS server)

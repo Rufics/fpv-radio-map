@@ -66,7 +66,7 @@ public:
           library_(db_, schemas_),
           blocks_(16u << 20, [](const RasterBlock& b) { return b.values.size() * sizeof(float) + sizeof(RasterBlock); }),
           weather_(weatherConfig_, &forecast_, clock_) {
-        (void)db_.migrate(RFMAP_SQL_DIR);
+        rfmap::test::migrate(db_, RFMAP_SQL_DIR);
         builtins_ = std::make_unique<BuiltinModules>(&db_, schemas_, "test");
         (void)library_.seed(RFMAP_SEED_DIR);
         (void)library_.add("antennas", antenna("hc-ground", 0.5), "test");

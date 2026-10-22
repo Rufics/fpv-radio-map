@@ -154,6 +154,18 @@ TEST_F(CommandLineTest, BackupAndRestoreReadTheFilesOnEitherSide) {
     EXPECT_FALSE(parse({}).isServiceAction());
 }
 
+TEST_F(CommandLineTest, MigratePlansOrApplies) {
+    const auto migrate = parse({"--migrate", "--config", "c.json"});
+    EXPECT_EQ(migrate.action(), Action::Migrate);
+    EXPECT_TRUE(migrate.isServiceAction());
+    EXPECT_FALSE(migrate.planOnly());
+    EXPECT_TRUE(parse({"--plan", "--migrate"}).planOnly());
+    EXPECT_TRUE(parse({"--migrate", "--plan"}).planOnly());
+    for (const auto& alone : {parse({"--plan"}), parse({"--backup", "--plan"}), parse({"--migrate", "--plan", "--plan"})}) {
+        EXPECT_EQ(alone.action(), Action::Invalid);
+    }
+}
+
 TEST_F(CommandLineTest, OneServiceActionAtATime) {
     const auto both = parse({"--backup", "--restore"});
     EXPECT_EQ(both.action(), Action::Invalid);

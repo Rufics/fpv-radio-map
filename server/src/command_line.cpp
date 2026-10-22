@@ -21,8 +21,10 @@ CommandLine CommandLine::parse(const std::vector<std::string_view>& args, const 
             out.configFile_ = args[i++];
         } else if (a == "--sql" && hasValue) {
             out.sqlDir_ = args[i++];
-        } else if ((a == "--backup" || a == "--restore") && out.action_ == Serve) {
-            out.action_ = a == "--backup" ? Backup : Restore;
+        } else if (const Action service = serviceAction(a); service != Invalid && out.action_ == Serve) {
+            out.action_ = service;
+        } else if (a == "--plan" && !out.planOnly_) {
+            out.planOnly_ = true;
         } else if (a == "--health" && out.action_ == Serve) {
             out.action_ = Health;
             out.healthUrl_ = hasValue ? args[i] : kDefaultHealthUrl;
@@ -33,7 +35,19 @@ CommandLine CommandLine::parse(const std::vector<std::string_view>& args, const 
             out.invalidArgument_ = a;
         }
     }
+    if (out.planOnly_ && (out.action_ == Serve || out.isServiceAction()) && out.action_ != Migrate) {
+        out.action_ = Invalid;
+        out.invalidArgument_ = "--plan (it goes with --migrate)";
+    }
     return out;
+}
+
+CommandLine::Action CommandLine::serviceAction(std::string_view arg) {
+    using enum Action;
+    if (arg == "--backup") return Backup;
+    if (arg == "--restore") return Restore;
+    if (arg == "--migrate") return Migrate;
+    return Invalid;
 }
 
 int CommandLine::answerWithoutServing(std::ostream& out, std::ostream& err) const {
@@ -44,7 +58,8 @@ int CommandLine::answerWithoutServing(std::ostream& out, std::ostream& err) cons
         case Invalid: err << "unknown argument " << invalidArgument_ << "\n"; return 2;
         case Serve:
         case Backup:
-        case Restore: break;
+        case Restore:
+        case Migrate: break;
     }
     return 0;
 }

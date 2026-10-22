@@ -18,6 +18,7 @@
 **Extending it**
 
 - [Writing a module](modules/developer-guide.md)
+- [Database migrations](dev/migrations.md)
 - [Fuzz testing](dev/fuzzing.md)
 - [Contributing](../CONTRIBUTING.md)
 - [Repository settings](maintainers/repository-settings.md)

@@ -24,46 +24,6 @@ namespace fs = std::filesystem;
 constexpr std::string_view kFormat = "rfmap-backup";
 constexpr std::string_view kModulesPrefix = "modules/";
 constexpr std::string_view kTrustStoreName = "trust-store";
-/// Restored files are written next to their place under this suffix until the database commits.
-constexpr std::string_view kStagedSuffix = ".rfmap-restoring";
-
-/// The files of a restore that wait for its commit: installed together after it, removed when it fails.
-class StagedFiles {
-public:
-    StagedFiles() = default;
-    StagedFiles(const StagedFiles&) = delete;
-    StagedFiles& operator=(const StagedFiles&) = delete;
-    ~StagedFiles() {
-        std::error_code ignored;
-        for (const auto& file : staged_) fs::remove(file, ignored);
-    }
-
-    void add(fs::path staged) { staged_.push_back(std::move(staged)); }
-    /// Leaves the files on disk: they are no longer this object's to remove.
-    void keep() { staged_.clear(); }
-
-    /// Moves every file to its place; each move replaces the old file in one step. The database
-    /// has committed by then, so a file that cannot move stays staged for the administrator.
-    void install() {
-        for (const auto& file : staged_) {
-            const std::string name = file.string();
-            std::error_code failed;
-            fs::rename(file, name.substr(0, name.size() - kStagedSuffix.size()), failed);
-            if (failed) {
-                const std::string message =
-                    std::format("the database is restored, but {} cannot move into place ({}): move the files "
-                                "ending in {} into place by hand",
-                                name, failed.message(), kStagedSuffix);
-                keep();
-                throw BackupError(message);
-            }
-        }
-        keep();
-    }
-
-private:
-    std::vector<fs::path> staged_;
-};
 template <class V>
 using ByName = std::map<std::string, V, std::less<>>;
 using NameSet = std::set<std::string, std::less<>>;
@@ -169,7 +129,41 @@ bool staysInside(const fs::path& relative) {
     return std::ranges::none_of(relative, [](const fs::path& part) { return part == ".."; });
 }
 
+/// Format 1 named the migrations only: [name, ...]. Format 2 adds each one's checksum.
+json headerFromFormat1(json header) {
+    json migrations = json::array();
+    for (const auto& name : header.at("migrations")) migrations.push_back({{"name", name}, {"checksum", ""}});
+    header["migrations"] = std::move(migrations);
+    return header;
+}
+
 }  // namespace
+
+const std::vector<BackupReader::Upgrade>& BackupReader::upgrades() {
+    // upgrades()[i] reads format i + 1 as format i + 2. A null line function keeps the lines as they are.
+    static const std::vector<Upgrade> all = {{headerFromFormat1, nullptr}};
+    return all;
+}
+
+BackupReader::BackupReader(std::istream& in) : in_(in) {
+    header_ = nextLine(in_, "the header");
+    if (header_.value("format", "") != kFormat) throw BackupError("this is not an rfmap backup");
+    const json version = header_.value("version", json());
+    if (!version.is_number_integer() || version.get<int>() < 1 || version.get<int>() > BackupWriter::kVersion) {
+        throw BackupError("unknown backup version " + version.dump() + ": restore it with the same or a newer server");
+    }
+    format_ = version.get<int>();
+    for (int v = format_; v < BackupWriter::kVersion; ++v) header_ = upgrades().at(v - 1).header(std::move(header_));
+    header_["version"] = BackupWriter::kVersion;
+}
+
+json BackupReader::next(std::string_view expected) {
+    json line = nextLine(in_, expected);
+    for (int v = format_; v < BackupWriter::kVersion; ++v) {
+        if (const auto upgrade = upgrades().at(v - 1).line) line = upgrade(std::move(line));
+    }
+    return line;
+}
 
 BackupSummary BackupWriter::write(std::ostream& out) {
     // Module installs and trust-store changes of a running server wait until the files are read.
@@ -178,13 +172,10 @@ BackupSummary BackupWriter::write(std::ostream& out) {
     const FileLock filesLock(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
     // One snapshot for every table, so the backup is consistent while the server keeps writing.
     pqxx::transaction<pqxx::isolation_level::repeatable_read, pqxx::write_policy::read_only> w(connection_);
-    std::vector<std::string> migrations;
-    for (const auto& row : w.exec(R"(select name from schema_migrations order by name collate "C")")) {
-        migrations.push_back(row[0].as<std::string>());
-    }
-    if (migrations.empty()) throw BackupError("the database has no schema yet: nothing to back up");
+    const SchemaVersion version = SchemaMigrator::recorded(w);
+    if (version.empty()) throw BackupError("the database has no schema yet: nothing to back up");
     out << json{{"format", kFormat}, {"version", kVersion}, {"createdAt", isoUtc(Clock::now())},
-                {"migrations", migrations}}.dump()
+                {"migrations", version.toJson()}}.dump()
         << '\n';
 
     BackupSummary summary;
@@ -289,66 +280,41 @@ void BackupWriter::writeFile(const std::string& name, const fs::path& file, std:
 }
 
 BackupSummary BackupRestorer::restore(std::istream& in) {
-    const json header = nextLine(in, "the header");
-    if (header.value("format", "") != kFormat) throw BackupError("this is not an rfmap backup");
-    if (header.value("version", 0) != BackupWriter::kVersion) {
-        throw BackupError("unknown backup version " + header.value("version", json()).dump());
-    }
-    const std::string last = lastCommonMigration(header);
-
-    pqxx::work w(connection_);
-    Migrations::Names done = Migrations::lock(w);
-    if (!done.empty()) throw BackupError("the database already has a schema: restore needs a new, empty database");
-    requireNoTables(w);
-    // The schema the rows were written under, from this server's own migrations.
-    (void)migrations_.apply(w, done, last);
-    w.exec("set constraints all deferred");
-
+    BackupReader reader(in);
+    const SchemaVersion written = SchemaVersion::fromJson(reader.header().at("migrations"));
+    if (written.empty()) throw BackupError("the backup names no migrations");
     BackupSummary summary;
-    StagedFiles staged;
+    // The schema the rows were written under, from this server's own migrations; then the rows and
+    // files; then the migrations that came after, which adapt the restored rows to this version.
+    const MigrationReport report = SchemaMigrator(catalog_, files_, note_).migrateThrough(
+        connection_, written, [this, &reader, &summary](MigrationContext& ctx) { summary = load(ctx, reader); },
+        {.allowBreaking = true, .newDatabaseOnly = true, .pivotName = "the backup"});
+    summary.newerMigrations = report.afterPivot;
+    return summary;
+}
+
+BackupSummary BackupRestorer::load(MigrationContext& ctx, BackupReader& reader) const {
+    ctx.work().exec("set constraints all deferred");
+    BackupSummary summary;
     NameSet destinations;
-    json entry = nextLine(in, "the end");
-    for (; !entry.contains("end"); entry = nextLine(in, "the end")) {
+    json entry = reader.next("the end");
+    for (; !entry.contains("end"); entry = reader.next("the end")) {
         if (entry.contains("table")) {
-            summary.rows += readRows(w, entry, in);
+            summary.rows += readRows(ctx.work(), entry, reader);
             ++summary.tables;
         } else if (entry.contains("file")) {
             if (const auto name = entry.at("file").get<std::string>();
                 !destinations.insert(target(name).lexically_normal().string()).second) {
                 throw BackupError("the backup holds " + name + " twice");
             }
-            staged.add(readFile(entry));
+            readFile(entry, ctx.staged());
             ++summary.files;
         } else {
             throw BackupError("the backup holds a line this server does not know: " + entry.dump().substr(0, 80));
         }
     }
     checkTotals(entry, summary);
-    // Then everything that came after, so the migrations adapt the restored rows to this version.
-    summary.newerMigrations = migrations_.apply(w, done);
-    for (const auto& m : summary.newerMigrations) log_ << "rfmap-server: restore: applied migration " << m << '\n';
-    w.commit();
-    staged.install();
     return summary;
-}
-
-void BackupRestorer::requireNoTables(pqxx::work& w) {
-    // Tables of an extension (PostGIS's spatial_ref_sys) come with the extension, not with data.
-    const auto found = w.exec(R"(
-        select format('%I.%I', n.nspname, c.relname)
-        from pg_class c
-        join pg_namespace n on n.oid = c.relnamespace
-        where n.nspname not like 'pg\_%' and n.nspname <> 'information_schema'
-          and c.relkind in ('r', 'p', 'v', 'm', 'f', 'S')
-          and (n.nspname, c.relname) <> ('public', 'schema_migrations')
-          and not exists (select 1 from pg_depend d
-                          where d.classid = 'pg_class'::regclass and d.objid = c.oid and d.deptype = 'e')
-        order by 1
-        limit 1)");
-    if (!found.empty()) {
-        throw BackupError("the database already holds " + found[0][0].as<std::string>() +
-                          ": restore needs a new, empty database");
-    }
 }
 
 void BackupRestorer::checkTotals(const json& end, const BackupSummary& summary) {
@@ -361,21 +327,7 @@ void BackupRestorer::checkTotals(const json& end, const BackupSummary& summary) 
     }
 }
 
-std::string BackupRestorer::lastCommonMigration(const json& header) const {
-    const auto& theirs = header.at("migrations");
-    const auto& ours = migrations_.names();
-    if (theirs.empty()) throw BackupError("the backup names no migrations");
-    for (std::size_t i = 0; i < theirs.size(); ++i) {
-        const auto name = theirs[i].get<std::string>();
-        if (i >= ours.size() || ours[i] != name) {
-            throw BackupError("the backup was written under migration " + name +
-                              ", which this server does not have: restore it with the same or a newer server");
-        }
-    }
-    return theirs.back().get<std::string>();
-}
-
-std::size_t BackupRestorer::readRows(pqxx::work& w, const json& table, std::istream& in) {
+std::size_t BackupRestorer::readRows(pqxx::work& w, const json& table, BackupReader& reader) {
     const auto name = table.at("table").get<std::string>();
     const auto dot = name.find('.');
     if (dot == std::string::npos) throw BackupError("table " + name + " has no schema");
@@ -388,7 +340,7 @@ std::size_t BackupRestorer::readRows(pqxx::work& w, const json& table, std::istr
     std::vector<std::optional<std::string>> values;
     for (std::size_t i = 0; i < rows; ++i) {
         const std::string where = std::format("row {} of {}", i + 1, name);
-        const json row = nextLine(in, where);
+        const json row = reader.next(where);
         if (!row.is_array() || row.size() != columns.size()) throw BackupError(where + " does not match its columns");
         values.clear();
         for (const auto& v : row) values.push_back(v.is_null() ? std::nullopt : std::optional(v.get<std::string>()));
@@ -398,25 +350,14 @@ std::size_t BackupRestorer::readRows(pqxx::work& w, const json& table, std::istr
     return rows;
 }
 
-fs::path BackupRestorer::readFile(const json& entry) const {
+void BackupRestorer::readFile(const json& entry, StagedFiles& staged) const {
     const auto name = entry.at("file").get<std::string>();
     const std::string bytes = unbase64(entry.at("data").get<std::string>(), name);
     if (bytes.size() != entry.at("size").get<std::size_t>() ||
         Secrets::hex(Secrets::sha256(bytes)) != entry.at("sha256").get<std::string>()) {
         throw BackupError(name + " does not match its checksum");
     }
-    const fs::path file = target(name).string() + std::string(kStagedSuffix);
-    fs::create_directories(file.parent_path());
-    StagedFiles written;  // removes a file that is only partly written
-    written.add(file);
-    {
-        std::ofstream out(file, std::ios::binary | std::ios::trunc);
-        out << bytes;
-        if (!out.flush()) throw BackupError("cannot write " + file.string());
-    }
-    fs::permissions(file, static_cast<fs::perms>(entry.at("mode").get<unsigned>()) & fs::perms::mask);
-    written.keep();
-    return file;
+    staged.write(target(name), bytes, static_cast<fs::perms>(entry.at("mode").get<unsigned>()));
 }
 
 fs::path BackupRestorer::target(const std::string& name) const {
@@ -432,19 +373,24 @@ int ServiceCommand::run(const CommandLine& cmd, const Config::Environment& env, 
         Secrets::init();
         const Config config = Config::load(cmd.configFile(), env);
         pqxx::connection connection(config.database.url);
-        BackupFiles files{config.modules.root, config.modules.trustStore};
-        BackupSummary summary;
-        if (cmd.action() == CommandLine::Action::Backup) {
-            summary = BackupWriter(connection, std::move(files), err).write(out);
-            if (!out.flush()) throw BackupError("cannot write the backup to standard output");
-        } else {
-            const Migrations migrations(cmd.sqlDir());
-            summary = BackupRestorer(connection, migrations, std::move(files), err).restore(in);
+        const ServerFiles files{config.modules.root, config.modules.trustStore};
+        const MigrationContext::Note note = [&err](const std::string& line) { err << "rfmap-server: " << line << '\n'; };
+        switch (cmd.action()) {
+            using enum CommandLine::Action;
+            case Backup: backup(connection, files, out, err); break;
+            case Restore: restore(connection, MigrationCatalog(cmd.sqlDir()), files, in, note); break;
+            case Migrate: migrate(connection, MigrationCatalog(cmd.sqlDir()), files, cmd.planOnly(), out, note); break;
+            case Serve:
+            case Health:
+            case Help:
+            case Invalid: break;
         }
-        err << "rfmap-server: " << (cmd.action() == CommandLine::Action::Backup ? "backed up " : "restored ")
-            << summary.tables << " tables, " << summary.rows << " rows and " << summary.files << " files\n";
         return 0;
     } catch (const BackupError& e) {
+        err << "rfmap-server: " << e.what() << '\n';
+    } catch (const MigrationError& e) {
+        err << "rfmap-server: " << e.what() << '\n';
+    } catch (const StagedFiles::InstallError& e) {
         err << "rfmap-server: " << e.what() << '\n';
     } catch (const pqxx::failure& e) {
         err << "rfmap-server: database: " << e.what() << '\n';
@@ -456,6 +402,35 @@ int ServiceCommand::run(const CommandLine& cmd, const Config::Environment& env, 
         err << "rfmap-server: the backup is damaged: " << e.what() << '\n';
     }
     return 1;
+}
+
+void ServiceCommand::backup(pqxx::connection& c, const ServerFiles& files, std::ostream& out, std::ostream& err) {
+    const BackupSummary s = BackupWriter(c, files, err).write(out);
+    if (!out.flush()) throw BackupError("cannot write the backup to standard output");
+    err << "rfmap-server: backed up " << s.tables << " tables, " << s.rows << " rows and " << s.files << " files\n";
+}
+
+void ServiceCommand::restore(pqxx::connection& c, const MigrationCatalog& catalog, const ServerFiles& files,
+                             std::istream& in, const MigrationContext::Note& note) {
+    const BackupSummary s = BackupRestorer(c, catalog, files, note).restore(in);
+    note(std::format("restored {} tables, {} rows and {} files", s.tables, s.rows, s.files));
+}
+
+void ServiceCommand::migrate(pqxx::connection& c, const MigrationCatalog& catalog, const ServerFiles& files,
+                             bool planOnly, std::ostream& out, const MigrationContext::Note& note) {
+    const SchemaMigrator migrator(catalog, files, note);
+    const SchemaMigrator::Options options{.allowBreaking = true};
+    if (!planOnly) {
+        const MigrationReport report = migrator.migrate(c, options);
+        note(std::format("the database is at this server's version; applied {} migrations", report.afterPivot.size()));
+        return;
+    }
+    const MigrationPlan plan = migrator.plan(c, SchemaVersion(), options);
+    out << "database: " << plan.current.size() << " migrations applied\n";
+    if (plan.afterPivot.empty()) out << "nothing to apply\n";
+    for (const MigrationStep* s : plan.afterPivot) {
+        out << "apply: " << s->id().name << (s->breaking() ? " (breaking)" : "") << '\n';
+    }
 }
 
 }  // namespace rfmap

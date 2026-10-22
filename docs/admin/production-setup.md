@@ -680,7 +680,37 @@ cd deploy && docker compose up -d --build
 
 Migrations run at start. A pull that moves the database to a new PostgreSQL major version (16 to
 18 is one) moves the data with a backup and a restore: see
-[Move to a new PostgreSQL major version](#102-move-to-a-new-postgresql-major-version). When a
+[Move to a new PostgreSQL major version](#102-move-to-a-new-postgresql-major-version).
+
+The server refuses to start, and says why in `docker compose logs rfmap-server`, in three cases:
+
+- **A breaking migration.** It changes existing data so that the previous version can no longer
+  read it, so the server waits for you to take a backup first. See the commands below.
+- **A database newer than the server.** You checked out an older version after a newer one had
+  migrated the database. Go forward again, or restore the backup you took before that update
+  into a new, empty database with the older version (§10.1).
+- **A migration that was changed after it was applied.** That is a bug in the release; report it
+  and stay on the previous version.
+
+To apply a breaking migration, back up with the running version, then migrate with the new one:
+
+```sh
+cd ~/fpv-radio-map/deploy &&
+  mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup &&
+  backup=~/rfmap-backup/rfmap-$(date +%F).backup &&
+  docker compose stop rfmap-server &&
+  docker compose run --rm -T --no-deps rfmap-server --backup > "$backup" &&
+  cd .. && git pull && cd deploy &&
+  docker compose build rfmap-server &&
+  docker compose run --rm -T --no-deps rfmap-server --migrate --plan &&
+  docker compose run --rm -T --no-deps rfmap-server --migrate &&
+  docker compose up -d
+```
+
+`--migrate --plan` lists the migrations it would apply and changes nothing. `--migrate` applies
+them all in one transaction: if it fails, the database stays as it was. To go back after
+`--migrate`, check out the previous version and restore `$backup` into a new, empty database
+(§10.1). When a
 module's version in `modules/fpv/*/manifest.json` goes up, repeat step 6 with your offline owner key; the server takes only versions newer than the
 installed one.
 

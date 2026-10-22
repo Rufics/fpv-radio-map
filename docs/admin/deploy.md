@@ -56,9 +56,12 @@ docker compose up -d --build
 docker compose logs -f rfmap-server
 ```
 
-At start the server applies the SQL migrations in `/usr/share/rfmap/sql` (once, under an
-advisory lock) and seeds the reference library from `data/library/<kind>/seed*.json` (radio
-profiles, antennas, batteries and drones; see the README next to each file:
+At start the server applies the migrations in `/usr/share/rfmap/sql` that the database does
+not have yet (once, under an advisory lock). It refuses to start on a database that a newer
+version migrated, and it leaves a breaking migration to `rfmap-server --migrate`
+([Updates](production-setup.md#11-updates)). It also seeds the reference library from
+`data/library/<kind>/seed*.json` (radio profiles, antennas, batteries and drones; see the README
+next to each file:
 [radio profiles](../../data/library/radio-profiles/README.md),
 [antennas](../../data/library/antennas/README.md),
 [batteries](../../data/library/batteries/README.md),

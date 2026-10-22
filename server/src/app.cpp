@@ -1,5 +1,7 @@
 #include "app.hpp"
 
+#include "migrations.hpp"
+
 #include <httplib.h>
 
 #include <charconv>
@@ -168,7 +170,13 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
     else if (config_.adminToken.size() < 24) log_.warn("startup", "admin.token is shorter than 24 characters");
 
     store_.db = std::make_unique<Database>(config_.database.url, config_.database.poolSize);
-    for (const auto& m : store_.db->migrate(sqlDir)) log_.info("startup", "applied migration " + m);
+    // A breaking step, or a database newer than this server, stops the start: see migrations.hpp.
+    const MigrationCatalog migrations(sqlDir);
+    store_.db->with([&](pqxx::connection& c) {
+        return SchemaMigrator(migrations, {config_.modules.root, config_.modules.trustStore},
+                              [this](const std::string& line) { log_.info("startup", line); })
+            .migrate(c, {});
+    });
 
     store_.schemas = std::make_unique<SchemaRegistry>(config_.schemasDir);
     store_.schemas->addInline("calc-path", calcPathSchema());
