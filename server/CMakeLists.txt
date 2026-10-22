@@ -43,6 +43,7 @@ add_library(rfmap_server_lib STATIC
   src/metrics.cpp
   src/logger.cpp
   src/backup.cpp
+  src/file_lock.cpp
   src/app.cpp)
 target_include_directories(rfmap_server_lib PUBLIC src)
 target_link_libraries(rfmap_server_lib

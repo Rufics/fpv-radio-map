@@ -2,11 +2,14 @@
 // the other integration tests keep theirs. Linked into the integration binary.
 
 #include "backup.hpp"
+#include "file_lock.hpp"
 #include "test_support.hpp"
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <fstream>
+#include <future>
 #include <sstream>
 
 using namespace rfmap;
@@ -286,4 +289,18 @@ TEST_F(BackupTest, AFileThatCannotMoveIntoPlaceStaysStaged) {
     }
     EXPECT_EQ(query(to, "select count(*) from missions"), "2") << "the database committed before the move";
     EXPECT_EQ(readFile(target.trustStore.string() + ".rfmap-restoring"), R"({"keys": []})");
+}
+
+TEST_F(BackupTest, WaitsForAModuleChangeToFinish) {
+    const std::string from = source();
+    const BackupFiles f = files("source");
+    ModuleGate gate;
+    gate.attach(f.modulesRoot);
+    std::unique_lock change(gate);
+    auto pending = std::async(std::launch::async, [&] { return backup(from, f); });
+    EXPECT_EQ(pending.wait_for(std::chrono::milliseconds(300)), std::future_status::timeout);
+    change.unlock();
+    const std::string text = pending.get();
+    EXPECT_NE(text.find("\"end\":true"), std::string::npos);
+    EXPECT_EQ(text.find(std::string(ModuleGate::kLockFile)), std::string::npos) << "the lock file is not backed up";
 }

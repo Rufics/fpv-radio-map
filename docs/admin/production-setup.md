@@ -565,7 +565,8 @@ Every variable should come back with numbers, not `null`. Use your area's coordi
 
 Two things cannot be rebuilt: the database and the `rfmap-state` volume (installed modules and
 trusted keys). The server writes both into one file. It reads one consistent snapshot, so the
-stack keeps running while it works:
+stack keeps running while it works; a module upload or a key change made meanwhile waits until
+the backup has read the files:
 
 ```sh
 cd ~/fpv-radio-map/deploy

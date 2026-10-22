@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.hpp"
+#include "file_lock.hpp"
 #include "link_service.hpp"
 
 #include <rfcore/link_budget.hpp>
@@ -87,13 +88,13 @@ public:
     /// Versions of opted-in modules, for result cache keys.
     [[nodiscard]] json versions(const CalcContext& ctx) const;
 
-    std::shared_mutex& gate() { return gate_; }
+    ModuleGate& gate() { return gate_; }
     void setRegistry(rfmod::ModuleRegistry* r) { registry_ = r; }
     [[nodiscard]] rfmod::ModuleRegistry* registry() const { return registry_; }
 
 private:
     rfmod::ModuleRegistry* registry_;
-    std::shared_mutex gate_;
+    ModuleGate gate_;
 };
 
 }  // namespace rfmap

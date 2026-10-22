@@ -1,5 +1,6 @@
 #include "backup.hpp"
 
+#include "file_lock.hpp"
 #include "security.hpp"
 
 #include <sodium.h>
@@ -170,6 +171,11 @@ bool staysInside(const fs::path& relative) {
 }  // namespace
 
 BackupSummary BackupWriter::write(std::ostream& out) {
+    // Module installs and trust-store changes of a running server wait until the files are read.
+    std::optional<FileLock> filesLock;
+    if (fs::is_directory(files_.modulesRoot)) {
+        filesLock.emplace(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
+    }
     // One snapshot for every table, so the backup is consistent while the server keeps writing.
     pqxx::transaction<pqxx::isolation_level::repeatable_read, pqxx::write_policy::read_only> w(connection_);
     std::vector<std::string> migrations;
@@ -256,7 +262,9 @@ std::size_t BackupWriter::writeFiles(std::ostream& out) const {
     if (fs::is_directory(files_.modulesRoot)) {
         std::vector<fs::path> found;
         for (const auto& e : fs::recursive_directory_iterator(files_.modulesRoot)) {
-            if (e.is_regular_file() && !e.is_symlink()) found.push_back(e.path());
+            if (e.is_regular_file() && !e.is_symlink() && e.path().filename() != ModuleGate::kLockFile) {
+                found.push_back(e.path());
+            }
         }
         std::ranges::sort(found);
         for (const auto& file : found) {

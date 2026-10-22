@@ -241,6 +241,7 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
     modules_.host = std::make_unique<ServerHostServices>(nullptr, nullptr, nullptr, nullptr, log_);
     modules_.trust = std::make_unique<rfmod::TrustStore>(ownerKeyText, config_.modules.trustStore);
     modules_.runner = std::make_unique<ModuleRunner>(nullptr);
+    modules_.runner->gate().attach(config_.modules.root);
     links_ = std::make_unique<LinkService>(terrain_.dem, terrain_.landcover, *store_.library, *store_.builtins,
                                            modules_.runner.get(), RFMAP_HOST_VERSION);
     calc_ = std::make_unique<Calculator>(*links_, *forecast_.service, *store_.builtins, *modules_.runner,
