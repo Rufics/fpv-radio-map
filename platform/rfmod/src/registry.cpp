@@ -149,6 +149,10 @@ void ModuleRegistry::unpack(const PackageFiles& files, const fs::path& dir) cons
     }
 }
 
+bool ModuleRegistry::alwaysIsolated(const Manifest& m) {
+    return std::ranges::find(m.provides, "flightlog.decoder") != m.provides.end();
+}
+
 std::unique_ptr<IModuleInstance> ModuleRegistry::load(const Manifest& m, const TrustedKey& signer, const fs::path& dir,
                                                       const json& options, bool forceIsolated) {
     const fs::path library = root_.confine(dir / m.entry.at(currentPlatform()));
@@ -493,7 +497,7 @@ bool ModuleRegistry::start(const std::string& id, Entry& e, std::unique_lock<std
     std::string error;
     lock.unlock();
     try {
-        instance = load(e.manifest, e.signer, e.dir, e.options, false);
+        instance = load(e.manifest, e.signer, e.dir, e.options, alwaysIsolated(e.manifest));
     } catch (const ModuleError& ex) {
         error = ex.what();
     } catch (const json::exception& ex) {  // a malformed manifest or worker reply
@@ -557,7 +561,8 @@ json ModuleRegistry::list() const {
                      {"lifecycle", toString(m.lifecycle)},
                      {"provides", m.provides},
                      {"signedBy", e.signer.label + " (" + e.signer.key.id() + ")"},
-                     {"isolated", e.instance ? e.instance->isolated() : !(e.signer.firstParty() && !config_.isolateAll)},
+                     {"isolated", e.instance ? e.instance->isolated()
+                                             : !(e.signer.firstParty() && !config_.isolateAll && !alwaysIsolated(m))},
                      {"state", toString(e.state)}};
         if (!e.stateDetail.empty()) info["stateDetail"] = e.stateDetail;
         json req = json::array();

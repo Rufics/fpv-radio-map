@@ -90,3 +90,8 @@ fpv_module(core fpv_core
 fpv_module(relay fpv_relay
   SOURCES relay/src/relay.cpp
   TESTS relay/tests/relay_test.cpp relay/tests/module_test.cpp)
+
+fpv_module(blackbox fpv_blackbox
+  SOURCES blackbox/src/log_header.cpp blackbox/src/frame_decoder.cpp blackbox/src/frame_parser.cpp
+          blackbox/src/firmware_model.cpp blackbox/src/log_builder.cpp blackbox/src/decoder.cpp
+  TESTS blackbox/tests/decoder_test.cpp blackbox/tests/module_test.cpp)

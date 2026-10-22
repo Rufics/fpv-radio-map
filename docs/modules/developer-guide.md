@@ -53,7 +53,7 @@ The fields that matter most:
 | `abi` | Always `2` for now (the `RFMOD_ABI_VERSION` in `abi.h`). |
 | `host` | Range of host versions you support, for example `>=0.1.0 <1.0.0`. |
 | `requires` / `optional` | Other modules, with version ranges (`^1.2.0`, `>=1.0.0 <2.0.0`, `~1.4.0`, `a || b`). Required ones must be installed first. Optional ones may be missing; check with the host at run time. |
-| `provides` | What you add: `loss.contributor`, `route.analysis`, `coverage.analysis`, `library.kind`, `ui.panel`. |
+| `provides` | What you add: `loss.contributor`, `route.analysis`, `coverage.analysis`, `flightlog.decoder`, `library.kind`, `ui.panel`. |
 | `methods` | Methods you answer, for documentation and the admin page. |
 | `entry` | Library per platform: `{"linux-x86_64": "lib/libacme_rain.so"}`. |
 | `optionsSchema` | JSON Schema (draft-07) of the options the admin can set. The server validates against it. |
@@ -207,6 +207,29 @@ called once per link grid. Response: `{ "reasons": [...], "layers": [ { "id": "a
 "title": "...", "values": [...] } ], "data": {} }`, with `values` laid out like the grid's
 `marginDb` (row-major from the north-west corner `origin`, `cellLatDeg` × `cellLonDeg` cells).
 The server stores `{layers, data}` under your id in `CoverageGrid.modules`.
+
+### flightlog.decoder → `flightlog.probe`, `flightlog.decode`
+
+A decoder turns one flight log format (Betaflight Blackbox, DJI, ...) into the normalized flight
+log, [`schemas/flightlog.schema.json`](../../schemas/flightlog.schema.json) (`flightlog/v1`).
+It only reads the file: the server's `rf-flightlog` core turns the normalized log into the
+replay, the story and plan against fact, the same way for every format. A decoder always runs
+isolated (section 8), even when it is signed with the owner key, because it parses files that
+users upload.
+
+Both methods take `{ "file": "<base64>", "fileName": "LOG00007.BFL" }`.
+
+- `flightlog.probe` gets only the first 64 KiB of the file and answers
+  `{ "match": true|false, "format": "...", ... }`. Tell the format from those bytes. The server
+  asks each installed decoder in turn and uses the first that matches.
+- `flightlog.decode` gets the whole file and answers the normalized document, one entry in
+  `logs` per flight in the file. A flight with no data (only a header, an unsupported firmware) is still an entry, with
+  its `status` and a `notes` entry that says why and what to do. Read the format as the
+  firmware writes it, per version, and say in `firmware.supported` when a version is outside
+  what you know. Never guess a field you could not read: leave it out, so the UI shows "not
+  logged" rather than a wrong number. A file you cannot read is a `BadRequest` (the user sees
+  422 with your message); the server checks the answer against the schema and refuses a
+  document that does not match.
 
 ## 6. Host calls
 

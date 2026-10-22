@@ -95,6 +95,7 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 | 📍 | Best launch point inside an area you draw | `fpv.best-launch` |
 | 🔁 | Relay placement: budget per hop and the best relay spot | `fpv.relay` |
 | ⚖️ | Scenario compare, KML and GPX export | `fpv.core` |
+| 🎞️ | Flight replay from Betaflight Blackbox logs: track, battery, altitude, speed, link, modes and failsafe on the map, the flight's story, a logbook, and plan against fact | `fpv.blackbox`, `rf-flightlog` |
 | 🔗 | Read-only share links with a PIN; only the owner key revokes them | server |
 | 📚 | Equipment library: radios, antennas, batteries, drones, with sources and admin-verified flags | server, web |
 
@@ -133,6 +134,7 @@ flowchart LR
 |---|---|
 | [`core/rf-core`](core/rf-core) | Units, WGS-84 geodesy, exact Fresnel integrals, Bullington diffraction, link budget |
 | [`core/rf-ext`](core/rf-ext) | Refraction, rain, clutter, uncertainty analysis |
+| [`core/rf-flightlog`](core/rf-flightlog) | Normalized flight logs into the replay timeline, the flight's story and plan against fact |
 | [`platform/rfmod`](platform/rfmod) | Module ABI, signed package format, registry, sandboxed worker, `rfmod` CLI |
 | [`modules/fpv`](modules/fpv) | The FPV module pack |
 | [`server`](server) | HTTP API, PostGIS storage, raster access, weather, result cache |

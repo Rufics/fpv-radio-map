@@ -1,6 +1,9 @@
 import { Component, computed, inject } from '@angular/core';
 import { PillComponent, RfFormat } from '@rfmap/ui-kit';
+import { FlightReplay } from '../core/flight-replay.service';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
+import { FlightImportComponent } from '../replay/flight-import.component';
+import { ReplaySheetComponent } from '../replay/replay-sheet.component';
 import { exampleMissionFor } from '../core/example-mission';
 import { WhyDrawerComponent } from '../panels/why-drawer.component';
 import { PreviewPanelComponent } from '../panels/preview-panel.component';
@@ -11,7 +14,7 @@ import { MapStageComponent } from './map-stage.component';
 /** Layout C (phone, view-oriented): full map + bottom sheet; "why" opens full screen. */
 @Component({
   selector: 'fpv-phone-layout',
-  imports: [PillComponent, MapStageComponent, WhyDrawerComponent, PreviewPanelComponent, WeatherCardComponent, WeatherBriefingComponent],
+  imports: [PillComponent, MapStageComponent, WhyDrawerComponent, PreviewPanelComponent, WeatherCardComponent, WeatherBriefingComponent, ReplaySheetComponent, FlightImportComponent],
   host: { class: 'phone' },
   template: `
     @if (ws.briefingOpen() && ws.mission()) {
@@ -48,6 +51,8 @@ import { MapStageComponent } from './map-stage.component';
           <button type="button" class="rf-btn rf-btn--primary" (click)="example()" [disabled]="!ws.data.loaded()">Use example route</button>
         } @else if (ws.store.preview()) {
           <fpv-preview-panel />
+        } @else if (replay.mode() !== 'plan') {
+          <fpv-replay-sheet />
         } @else {
           @if (ws.pills().length) {
             <div class="pills">
@@ -77,9 +82,13 @@ import { MapStageComponent } from './map-stage.component';
           @if (ws.batteryFailure()) {
             <div class="note bad">Battery check did not finish; the battery verdict is missing, not assumed fine.</div>
           }
+          <button type="button" class="rf-btn rf-btn--secondary" (click)="replay.setMode('replay')">Replay a flight</button>
           <div class="foot">{{ ws.store.canEdit() ? 'Editing the route works best on a laptop.' : 'View-only link. Ask the mission owner to change the route.' }}</div>
         }
       </section>
+    }
+    @if (replay.importOpen()) {
+      <fpv-flight-import />
     }
   `,
   styles: `
@@ -109,6 +118,7 @@ import { MapStageComponent } from './map-stage.component';
 })
 export class PhoneLayoutComponent {
   protected readonly ws = inject(FpvWorkspace);
+  protected readonly replay = inject(FlightReplay);
   protected readonly padding = { top: 70, bottom: 70, left: 70, right: 90 };
   protected readonly busy = computed(() => ['saving', 'running'].includes(this.ws.store.calcState()));
 

@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "fpv.blackbox",
+  "version": "1.0.0",
+  "title": "Betaflight Blackbox decoder",
+  "description": "Reads Betaflight Blackbox logs (.bbl, .bfl, .txt) as each firmware release writes them and turns every flight in the file into the normalized flight log: track, battery, altitude, speed, satellites, link, flight modes and failsafe.",
+  "author": "rfmap",
+  "license": "MIT",
+  "lifecycle": "beta",
+  "abi": 2,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["flightlog.decoder"],
+  "methods": ["flightlog.probe", "flightlog.decode"],
+  "entry": { "linux-x86_64": "lib/libfpv_blackbox.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 1024, "timeoutMs": 120000 }
+}

@@ -29,8 +29,10 @@ BUILD = SRC.parent / "build-fuzz"
 WORK = BUILD / "fuzz-work"
 
 # Extra libFuzzer flags per target: dictionaries, and room for the long inputs that found bugs.
-JSON_DICT = "-dict=" + str(SRC / "dict" / "json.dict")
-SEMVER_DICT = "-dict=" + str(SRC / "dict" / "semver.dict")
+DICT_FLAG = "-dict="
+JSON_DICT = DICT_FLAG + str(SRC / "dict" / "json.dict")
+SEMVER_DICT = DICT_FLAG + str(SRC / "dict" / "semver.dict")
+BLACKBOX_DICT = DICT_FLAG + str(SRC / "dict" / "blackbox.dict")
 LONG_INPUTS = "-max_len=65536"
 OPTIONS = {
     "semver": [SEMVER_DICT],
@@ -40,6 +42,7 @@ OPTIONS = {
     "signed_package": [JSON_DICT],
     "iso_time": [LONG_INPUTS],
     "package": [LONG_INPUTS],
+    "blackbox": [BLACKBOX_DICT, LONG_INPUTS],
 }
 
 

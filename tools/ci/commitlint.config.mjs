@@ -5,7 +5,7 @@ export default {
     'scope-enum': [
       2,
       'always',
-      ['rf-core', 'rf-ext', 'rfmod', 'fpv', 'server', 'web', 'tiles', 'deploy', 'data', 'schemas', 'docs', 'ci', 'perf', 'deps'],
+      ['rf-core', 'rf-ext', 'rf-flightlog', 'rfmod', 'fpv', 'server', 'web', 'tiles', 'deploy', 'data', 'schemas', 'docs', 'ci', 'perf', 'deps'],
     ],
     'subject-case': [0],
     'body-max-line-length': [0],
