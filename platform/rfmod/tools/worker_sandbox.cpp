@@ -8,6 +8,7 @@
 #include <sched.h>
 #include <stddef.h>
 #include <sys/prctl.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -410,6 +411,11 @@ private:
     std::vector<sock_filter> program_;
 };
 
+/// Where glibc's loader looks for a library's dependencies when no path is given: the cache and
+/// the system library directories (multiarch directories lie beneath /usr/lib). Read-only and
+/// world-readable anyway; whichever of them exist are allowed.
+constexpr const char* kLoaderPaths[] = {"/etc/ld.so.cache", "/lib", "/lib64", "/usr/lib", "/usr/lib64", "/usr/local/lib"};
+
 }  // namespace
 
 WorkerSandbox::WorkerSandbox(std::string moduleDir) : moduleDir_(std::move(moduleDir)) {}
@@ -477,18 +483,27 @@ bool WorkerSandbox::landlock() {
         note("landlock", std::strerror(errno));
         return false;
     }
-    // The module may read its own directory (data files next to the library); nothing else is
-    // reachable. The library itself is already mapped.
-    const int dir = open(moduleDir_.c_str(), O_PATH | O_CLOEXEC | O_DIRECTORY);
-    bool ok = dir >= 0;
-    if (ok) {
-        const PathBeneathAttr rule{LANDLOCK_ACCESS_FS_READ_FILE | LANDLOCK_ACCESS_FS_READ_DIR, dir};
-        ok = syscall(SYS_landlock_add_rule, ruleset, LANDLOCK_RULE_PATH_BENEATH, &rule, 0) == 0;
-        close(dir);
-    }
+    // The module may read its own directory (its library and the data files next to it) and the
+    // system libraries the dynamic loader resolves its dependencies from; nothing else is
+    // reachable, and nothing is writable. The loader runs after this, so it needs these.
+    bool ok = allowRead(ruleset, moduleDir_.c_str(), true);
+    for (const char* path : kLoaderPaths) ok = ok && allowRead(ruleset, path, false);
     ok = ok && syscall(SYS_landlock_restrict_self, ruleset, 0) == 0;
     if (!ok) note("landlock", std::strerror(errno));
     close(ruleset);
+    return ok;
+}
+
+bool WorkerSandbox::allowRead(int ruleset, const char* path, bool mustExist) {
+    const int fd = open(path, O_PATH | O_CLOEXEC);
+    if (fd < 0) return !mustExist && errno == ENOENT;
+    // A directory rule may also grant reading it; on a file that right is refused (EINVAL).
+    struct stat st {};
+    __u64 access = LANDLOCK_ACCESS_FS_READ_FILE;
+    if (fstat(fd, &st) == 0 && S_ISDIR(st.st_mode)) access |= LANDLOCK_ACCESS_FS_READ_DIR;
+    const PathBeneathAttr rule{access, fd};
+    const bool ok = syscall(SYS_landlock_add_rule, ruleset, LANDLOCK_RULE_PATH_BENEATH, &rule, 0) == 0;
+    close(fd);
     return ok;
 }
 

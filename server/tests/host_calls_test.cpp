@@ -15,6 +15,7 @@
 
 #include <cmath>
 #include <memory>
+#include <thread>
 
 using namespace rfmap;
 namespace fs = std::filesystem;
@@ -364,5 +365,33 @@ TEST_F(HostServices, HostCallsAreBudgeted) {
     const InvocationScope scope(rig_->environment(), ctx);
     const json req = {{"from", point(50.0, 30.0)}, {"to", point(50.0, 31.0)}};
     for (int i = 0; i < InvocationScope::kMaxHostCalls; ++i) (void)rig_->host().call("fpv.test", "geodesy.inverse", req);
+    EXPECT_THROW((void)rig_->host().call("fpv.test", "geodesy.inverse", req), HostCallBudgetError);
+}
+
+TEST_F(HostServices, ThreadsJoiningARequestShareItsBudget) {
+    // A coverage worker joins the request on its own thread: the budget is the request's, not a
+    // fresh one per thread.
+    CalcContext ctx;
+    ctx.time = Clock::now();
+    const InvocationScope scope(rig_->environment(), ctx);
+    const json req = {{"from", point(50.0, 30.0)}, {"to", point(50.0, 31.0)}};
+    for (int i = 0; i < InvocationScope::kMaxHostCalls - 1; ++i) (void)rig_->host().call("fpv.test", "geodesy.inverse", req);
+    int answered = 0;
+    int refused = 0;
+    std::thread worker([&] {
+        EXPECT_EQ(InvocationScope::current(), nullptr) << "a new thread starts outside every request";
+        const InvocationScope joined(InvocationScope::FromThread{}, scope);
+        for (int i = 0; i < 3; ++i) {
+            try {
+                (void)rig_->host().call("fpv.test", "geodesy.inverse", req);
+                ++answered;
+            } catch (const HostCallBudgetError&) {
+                ++refused;
+            }
+        }
+    });
+    worker.join();
+    EXPECT_EQ(answered, 1);
+    EXPECT_EQ(refused, 2);
     EXPECT_THROW((void)rig_->host().call("fpv.test", "geodesy.inverse", req), HostCallBudgetError);
 }

@@ -9,12 +9,13 @@ public:
     struct Report {
         bool noNewPrivileges = false;
         bool networkIsolated = false;    ///< no sockets: a namespace without routes, or the syscall filter
-        bool filesystemIsolated = false; ///< Landlock: the module directory is readable, nothing else is reachable
+        bool filesystemIsolated = false; ///< Landlock: the module directory and the system libraries are readable, nothing else is reachable
         bool syscallFilter = false;      ///< seccomp: no sockets, processes, signals to others, ptrace, mounts, ...
         std::string notes;               ///< why a measure failed, for the host log
     };
 
-    /// `moduleDir` is the only directory that stays readable.
+    /// `moduleDir` stays readable, with the system library directories the dynamic loader
+    /// searches; the sandbox is applied before the module's library is loaded.
     explicit WorkerSandbox(std::string moduleDir);
 
     /// Applies every measure in the order they depend on each other and returns what held.
@@ -24,6 +25,8 @@ private:
     bool unshareNetwork();
     bool noNewPrivileges();
     bool landlock();
+    /// Grants read access beneath `path` (a directory or a file); a missing path is not an error.
+    static bool allowRead(int ruleset, const char* path, bool mustExist);
     bool seccomp();
     void note(const char* measure, const char* detail);
 

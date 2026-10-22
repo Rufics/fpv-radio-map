@@ -69,7 +69,7 @@ struct ModulePolicy {
 struct SandboxInfo {
     bool noNewPrivileges = false;
     bool networkIsolated = false;
-    bool filesystemIsolated = false;  ///< Landlock: the module reads its own directory, nothing else
+    bool filesystemIsolated = false;  ///< Landlock: the module reads its own directory and the system libraries, nothing else
     bool syscallFilter = false;       ///< seccomp: no sockets, processes, signals, ptrace, mounts
     unsigned memoryLimitMb = 0;
 

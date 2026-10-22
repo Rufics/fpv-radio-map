@@ -2,6 +2,7 @@
 
 #include "link_service.hpp"
 
+#include <atomic>
 #include <stdexcept>
 #include <string>
 
@@ -53,6 +54,10 @@ public:
     explicit InvocationScope(const CalcContext& context);
     /// A nested scope while the module `contributor` answers loss.contribute.
     explicit InvocationScope(std::string contributor);
+    /// Joins `request` from another thread (a coverage worker): the same environment, context
+    /// and host-call budget as the thread that started the request.
+    struct FromThread {};
+    InvocationScope(FromThread, const InvocationScope& request);
     ~InvocationScope();
     InvocationScope(const InvocationScope&) = delete;
     InvocationScope& operator=(const InvocationScope&) = delete;
@@ -90,8 +95,8 @@ private:
     const HostEnvironment& environment_;
     const CalcContext& context_;
     std::string contributor_;
-    mutable int depth_ = 0;  ///< host calls open in this scope and its parents
-    mutable int calls_ = 0;  ///< on the root only: host calls made in the whole chain
+    mutable int depth_ = 0;                ///< host calls open in this scope and its parents
+    mutable std::atomic<int> calls_ = 0;  ///< on the root only: host calls made in the whole chain, over every thread
 };
 
 /// A host call refused because the request used up its nesting depth or its call budget.

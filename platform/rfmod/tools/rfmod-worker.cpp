@@ -135,6 +135,13 @@ int run(const char* library) {
     };
     if (init.value("t", "") != "init") return fail("expected init");
 
+    // Confine first: dlopen runs the library's constructors, which are module code. Each
+    // measure is reported to the host as it is, and the host decides whether that is enough for
+    // the module's signer. The host started the worker in the module's directory: the only
+    // directory it keeps read access to, besides the system libraries the module links.
+    const WorkerSandbox::Report sandbox = WorkerSandbox(".").apply();
+    if (!sandbox.notes.empty()) std::cerr << "rfmod-worker: sandbox: " << sandbox.notes << '\n';
+
     void* handle = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (!handle) return fail(std::string("dlopen: ") + dlerror());
     // POSIX guarantees a function symbol's address round-trips through dlsym's void*, and
@@ -144,13 +151,6 @@ int run(const char* library) {
     if (!entry) return fail(std::string("library does not export ") + RFMOD_ENTRY_SYMBOL);
     const rfmod_module* api = entry();
     if (!api || api->abi_version != RFMOD_ABI_VERSION) return fail("library speaks a different rfmod ABI");
-
-    // The library is mapped; from here on the process confines itself before any module code
-    // runs. Each measure is reported to the host as it is, and the host decides whether that is
-    // enough for the module's signer.
-    // The host started the worker in the module's directory: the only one it keeps read access to.
-    const WorkerSandbox::Report sandbox = WorkerSandbox(".").apply();
-    if (!sandbox.notes.empty()) std::cerr << "rfmod-worker: sandbox: " << sandbox.notes << '\n';
 
     if (const std::string options = init.value("options", json::object()).dump();
         api->init(&host, options.c_str()) != RFMOD_OK) {

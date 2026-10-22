@@ -265,7 +265,8 @@ under **Admin**.
 ### Module sandbox in containers
 
 Modules not signed with the owner key run in `rfmod-worker` with a memory cap, no file writes,
-`no_new_privs`, a Landlock ruleset (read access to the module's own directory only) and a
+`no_new_privs`, a Landlock ruleset (read access to the module's own directory and the system
+libraries only) and a
 seccomp filter that refuses sockets, new processes and signals to other processes. The worker
 reports what took effect; a third-party module loads only when everything did
 (`modules.requireSandbox`). A separate network namespace needs unprivileged user namespaces,

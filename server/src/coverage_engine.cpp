@@ -97,8 +97,9 @@ void CoverageEngine::worker(Run& run) const {
     // A failing row ends the whole calculation: its exception reaches run() through this
     // worker's future, and the guard hands out the remaining rows so the other workers stop.
     const RowsExhaustedOnThrow guard(run.nextRow, run.grid.rows());
-    // Modules called from this thread work for the same request as the thread that started it.
-    const InvocationScope scope(run.scope.environment(), run.request.ctx);
+    // Modules called from this thread work for the same request, on the same host-call budget,
+    // as the thread that started it.
+    const InvocationScope scope(InvocationScope::FromThread{}, run.scope);
     for (std::size_t r = run.nextRow++; r < run.grid.rows(); r = run.nextRow++) {
         if (run.progress.cancelled()) return;
         row(run, r);

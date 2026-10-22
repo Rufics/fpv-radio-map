@@ -120,6 +120,7 @@ void IsolatedModule::start() {
     const std::array<char*, 4> argv = {workerPath.data(), libraryPath.data(), memory.data(), nullptr};
     const std::array<char*, 2> envp = {locale.data(), nullptr};
     const rlim_t memBytes = static_cast<rlim_t>(limits_.memoryMb) << 20;
+    const pid_t hostPid = getpid();
 
     const pid_t pid = fork();
     if (pid < 0) {
@@ -129,7 +130,7 @@ void IsolatedModule::start() {
         close(err[1]);
         throw ModuleError("load_failed", std::string("fork: ") + std::strerror(errno));
     }
-    if (pid == 0) WorkerExec::run({argv.data(), envp.data(), dir.c_str(), sock[1], err[1], memBytes});
+    if (pid == 0) WorkerExec::run({argv.data(), envp.data(), dir.c_str(), sock[1], err[1], memBytes, hostPid});
 
     close(sock[1]);
     close(err[1]);

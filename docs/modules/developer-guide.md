@@ -278,17 +278,19 @@ operator can also run first-party modules this way (`isolateAll`):
 - memory capped at `limits.memoryMb` (address space) and the call time at `limits.timeoutMs`,
   both further capped by the server's `modules.maxMemoryMb` and `modules.maxTimeoutMs`; a
   reply larger than 16 MiB or a log line above 1 MiB ends the worker;
-- no core dumps, no file writes, no child processes (`RLIMIT_NPROC` 0), 32 open files at most;
+- no core dumps, no file writes, 32 open files at most;
 - started with an empty environment, in the module's own directory, with every server
   descriptor closed; the host kills the worker's whole process group;
 - `no_new_privs` set;
-- a Landlock ruleset that leaves the module read access to its own directory only, so it can
-  read neither the server's files nor `/etc`;
-- a seccomp filter that refuses sockets, `fork`, `execve`, `ptrace`, the mount and module
-  calls, `setuid` and the like, and signals to any process but itself (threads are allowed);
+- a Landlock ruleset that leaves the module read access to its own directory and the system
+  library directories only, so it can read neither the server's files nor its configuration;
+- a seccomp filter that refuses sockets, new processes (`fork`, `clone` without
+  `CLONE_THREAD`, `execve`), `ptrace`, the mount and module calls, `setuid` and the like, and
+  signals to any process but itself (threads are allowed);
 - a fresh user and network namespace where the kernel allows unprivileged namespaces.
 
-The worker reports which of these took effect; the host assumes none. A module that is not
+The worker confines itself before it loads the module's library, so the library's
+constructors already run inside. It reports which of these took effect; the host assumes none. A module that is not
 signed with the owner key loads only when all of them did (`modules.requireSandbox`, on by
 default), so a kernel without Landlock or seccomp runs first-party modules only. Owner-signed
 modules run in-process and cannot be stopped mid-call, so keep their calls short.
