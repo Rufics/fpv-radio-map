@@ -578,6 +578,10 @@ TEST_F(BackupTest, AStartWithNothingToApplyDoesNotWaitForABackup) {
     const ServerFiles f = files("source");
     fs::create_directories(f.modulesRoot);
     const FileLock backupRunning(f.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
+    // A backup's snapshot transaction holds a read lock on schema_migrations until it ends.
+    pqxx::connection backupConnection(url);
+    pqxx::transaction<pqxx::isolation_level::repeatable_read, pqxx::write_policy::read_only> snapshot(backupConnection);
+    (void)SchemaMigrator::recorded(snapshot);
     auto start = std::async(std::launch::async, [&] {
         pqxx::connection c(url);
         return SchemaMigrator(MigrationCatalog(RFMAP_SQL_DIR), f, {}).migrate(c, {});

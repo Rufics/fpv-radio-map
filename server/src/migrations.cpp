@@ -210,10 +210,12 @@ std::vector<std::string> SchemaMigrator::apply(MigrationContext& ctx, const std:
     return applied;
 }
 
-bool SchemaMigrator::upToDate(pqxx::connection& c, const SchemaVersion& pivot, Options options) const {
-    const MigrationPlan p = plan(c, pivot, options);
-    return p.toPivot.empty() && p.afterPivot.empty() &&
-           std::ranges::none_of(p.current.ids(), [](const MigrationId& id) { return id.checksum.empty(); });
+bool SchemaMigrator::upToDate(pqxx::connection& c) const {
+    // Reads only: the DDL in lock() would wait for a backup's transaction, which reads schema_migrations.
+    pqxx::read_transaction r(c);
+    const SchemaVersion current = recorded(r);
+    return current.compare(catalog_.version()).relation == SchemaVersion::Relation::Same &&
+           std::ranges::none_of(current.ids(), [](const MigrationId& id) { return id.checksum.empty(); });
 }
 
 std::unique_ptr<FileLock> SchemaMigrator::lockFiles() const {
@@ -225,7 +227,7 @@ std::unique_ptr<FileLock> SchemaMigrator::lockFiles() const {
 MigrationReport SchemaMigrator::migrateThrough(pqxx::connection& c, const SchemaVersion& pivot, const Action& atPivot,
                                                Options options) const {
     // Planned again under the locks below: another server may migrate in between.
-    if (!atPivot && upToDate(c, pivot, options)) return {};
+    if (!atPivot && pivot.empty() && upToDate(c)) return {};
     // A backup reads the rows and the files under the shared lock: it waits until both have changed.
     const std::unique_ptr<FileLock> filesLock = lockFiles();
     StagedFiles staged;
