@@ -532,7 +532,10 @@ TEST_F(BackupTest, ChecksumsAreFilledForRowsWrittenBeforeThem) {
 TEST_F(BackupTest, MigrateCommandPlansThenApplies) {
     const std::string url = source();
     const fs::path sql = migrationsWith("-- rfmap: breaking\ndelete from sessions;");
-    Config::Environment env{{"RFMAP_DATABASE_URL", url}};
+    const ServerFiles f = files("source");
+    Config::Environment env{{"RFMAP_DATABASE_URL", url},
+                            {"RFMAP__MODULES__ROOT", f.modulesRoot.string()},
+                            {"RFMAP__MODULES__TRUSTSTORE", f.trustStore.string()}};
     std::istringstream none;
     std::ostringstream out;
     std::ostringstream err;
