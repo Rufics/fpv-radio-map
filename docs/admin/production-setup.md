@@ -587,7 +587,9 @@ git pull
 cd deploy && docker compose up -d --build
 ```
 
-Migrations run at start. When a module's version in `modules/fpv/*/manifest.json` goes up,
+Migrations run at start. A pull that moves the database to a new PostgreSQL major version (16
+to 18) needs one step before `docker compose up`: see
+[PostgreSQL major upgrades](deploy.md#postgresql-major-upgrades). When a module's version in `modules/fpv/*/manifest.json` goes up,
 repeat step 6 with your offline owner key; the server takes only versions newer than the
 installed one.
 

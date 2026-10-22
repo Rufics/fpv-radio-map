@@ -53,7 +53,8 @@ JOB_NAMES = {"clang-tidy": "C++ static analysis", "cpp": "C++ build and tests", 
 # Jobs that only orchestrate the run; they are not results worth a row.
 HIDDEN_JOBS = {"changes", "report", "Changed parts", "Test report"}
 SUITES = {"cpp.xml": "C++", "web-ui-kit.xml": "Web: ui-kit", "web-fpv-app.xml": "Web: fpv-app",
-          "python-ci.xml": "Python: tools/ci", "python-perf.xml": "Python: tools/perf"}
+          "python-ci.xml": "Python: tools/ci", "python-perf.xml": "Python: tools/perf",
+          "python-deploy.xml": "Python: deploy"}
 # CTest labels (the module of a C++ test) in the order of the coverage areas.
 TEST_MODULE_ORDER = ("rf-core", "rf-ext", "rfmod", "fpv", "server", "example")
 # The failure excerpts of one report, so the comment stays far below GitHub's 65536 characters.

@@ -7,7 +7,7 @@ The stack has four parts, described in [`deploy/docker-compose.yml`](../../deplo
 
 | Service | What it does |
 |---|---|
-| `postgis` | PostgreSQL 16 + PostGIS 3.4. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
+| `postgis` | PostgreSQL 18 + PostGIS 3.6. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
 | `open-meteo`, `open-meteo-init`, `open-meteo-sync` | Your own Open-Meteo. `open-meteo-init` downloads a first copy of the model data and exits, `open-meteo-sync` then keeps it fresh, and the API answers rfmap-server. No request leaves your network for a forecast. |
 | `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly. |
 | `web` | nginx with the built client, `/tiles` (PMTiles over HTTP Range) and a reverse proxy for `/api`. The only service with a published port. |
@@ -272,17 +272,45 @@ not time-limited.
 - Mission owner keys, share-link tokens and session tokens are stored only as hashes, and
   PINs only as argon2id hashes. A lost owner key cannot be recovered.
 
+### PostgreSQL major upgrades
+
+A new PostgreSQL major version cannot open the data folder of the previous one, so a `git pull`
+that moves `postgis` to a new major needs one extra step. The move from PostgreSQL 16 to 18 is
+done by [`deploy/pg_upgrade.py`](../../deploy/pg_upgrade.py). Run it after `git pull` and before
+`docker compose up`:
+
+```sh
+cd ~/fpv-radio-map
+git pull
+python3 -I deploy/pg_upgrade.py --backup-dir ~/rfmap-backup
+```
+
+It stops rfmap-server and postgis, dumps the database with a temporary PostgreSQL 16 container
+that has no network, starts PostgreSQL 18 on a new volume (`rfmap_pgdata18`), restores the dump
+in one transaction, checks that every table has the same number of rows, and starts the stack.
+The stack is down for the whole move; on a small database that is well under a minute. Then
+rebuild the images as usual (`docker compose up -d --build`).
+
+The old volume `rfmap_pgdata` is opened only by PostgreSQL 16 and stays as it was. To go back, check out the previous
+`deploy/docker-compose.yml` and run `docker compose up -d`: it opens the old volume again. Once
+the new database has run for a while, remove the old one with `docker volume rm rfmap_pgdata`.
+Never use `docker compose down -v` here: it can remove both volumes.
+
+If a step fails, the tool says which and how to go back or try again. A fresh install needs none
+of this: it starts on PostgreSQL 18 directly.
+
 ## 7. Updating base images
 
 Each `FROM` in the Dockerfiles is pinned by its version tag. Each `image:` in the compose file is
-pinned by tag and by the digest of its multi-arch index, read from the registry on 2026-10-17:
+pinned by tag and by the digest of its multi-arch index, read from the registry on 2026-10-17
+(`postgis/postgis` on 2026-10-22):
 
 | Image | Tag |
 |---|---|
 | `ubuntu` | `26.04` (build and runtime of rfmap-server; it matches the GDAL 3.12, libpqxx 7.10 and cpp-httplib 0.26 the code is tested with in CI) |
 | `node` | `24-trixie-slim` (client build, Debian 13) |
 | `nginx` | `1.28-alpine` |
-| `postgis/postgis` | `16-3.5` |
+| `postgis/postgis` | `18-3.6` |
 | `ghcr.io/open-meteo/open-meteo` | `1.7.0` |
 
 Dependabot (`.github/dependabot.yml`) opens pull requests for new minor and patch tags of the
@@ -292,7 +320,7 @@ hand. A tag can be republished with security fixes, so a rebuild picks up the cu
 that tag; rebuild, and run the test suite (`ctest` in a build tree) before you deploy.
 
 To update a compose image by hand, resolve the tag's current digest yourself, for example with
-`docker buildx imagetools inspect postgis/postgis:16-3.5`, replace the digest, and restart.
+`docker buildx imagetools inspect postgis/postgis:18-3.6`, replace the digest, and restart.
 
 The server image and an API smoke test (missions, share link and PIN, `/calc/route`, module
 upload) were run against these pins on 2026-10-17. The web image was built on
