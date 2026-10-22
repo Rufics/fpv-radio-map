@@ -4,7 +4,7 @@
 // to it share the module files, and an in-process mutex does not reach the second process.
 
 #include <filesystem>
-#include <optional>
+#include <memory>
 #include <shared_mutex>
 #include <string_view>
 
@@ -27,7 +27,8 @@ private:
 
 /// The gate of the installed modules. Requests hold it shared and admin changes exclusively, as
 /// with a shared_mutex; an exclusive hold also takes the lock file in the module root, so a
-/// backup in another process (which takes it shared) never reads the files half-changed.
+/// backup in another process (which takes it shared) never reads the files half-changed. The lock
+/// file comes first, so requests keep running while an admin change waits for a backup.
 class ModuleGate {
 public:
     static constexpr std::string_view kLockFile = ".rfmap-lock";
@@ -43,7 +44,7 @@ public:
 private:
     std::shared_mutex mutex_;
     std::filesystem::path lockFile_;
-    std::optional<FileLock> held_;
+    std::unique_ptr<FileLock> held_;
 };
 
 }  // namespace rfmap

@@ -27,19 +27,17 @@ FileLock::~FileLock() {
 }
 
 void ModuleGate::lock() {
-    mutex_.lock();
-    if (lockFile_.empty()) return;
-    try {
+    std::unique_ptr<FileLock> file;
+    if (!lockFile_.empty()) {
         std::filesystem::create_directories(lockFile_.parent_path());
-        held_.emplace(lockFile_, FileLock::Mode::Exclusive);
-    } catch (const std::system_error&) {
-        mutex_.unlock();
-        throw;
+        file = std::make_unique<FileLock>(lockFile_, FileLock::Mode::Exclusive);
     }
+    mutex_.lock();
+    held_ = std::move(file);
 }
 
 void ModuleGate::unlock() {
-    held_.reset();
+    const std::unique_ptr<FileLock> file = std::move(held_);
     mutex_.unlock();
 }
 
