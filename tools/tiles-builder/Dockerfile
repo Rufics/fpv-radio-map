@@ -60,8 +60,8 @@ RUN --mount=type=secret,id=extra_ca,required=false \
       "gdal-bin=${GDAL_VERSION}" \
       "git=${GIT_VERSION}" \
       "openjdk-21-jre-headless=${OPENJDK_VERSION}" \
-      "python3=${PYTHON3_VERSION}" \
       "python3-gdal=${GDAL_VERSION}" \
+      "python3=${PYTHON3_VERSION}" \
       "sqlite3=${SQLITE3_VERSION}"; \
     rm -f /usr/local/share/ca-certificates/build-extra-ca.crt; update-ca-certificates --fresh >/dev/null; \
     rm -rf /var/lib/apt/lists/*; \
