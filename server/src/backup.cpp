@@ -299,6 +299,7 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
     pqxx::work w(connection_);
     Migrations::Names done = Migrations::lock(w);
     if (!done.empty()) throw BackupError("the database already has a schema: restore needs a new, empty database");
+    requireNoTables(w);
     // The schema the rows were written under, from this server's own migrations.
     (void)migrations_.apply(w, done, last);
     w.exec("set constraints all deferred");
@@ -329,6 +330,25 @@ BackupSummary BackupRestorer::restore(std::istream& in) {
     w.commit();
     staged.install();
     return summary;
+}
+
+void BackupRestorer::requireNoTables(pqxx::work& w) {
+    // Tables of an extension (PostGIS's spatial_ref_sys) come with the extension, not with data.
+    const auto found = w.exec(R"(
+        select format('%I.%I', n.nspname, c.relname)
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where n.nspname not like 'pg\_%' and n.nspname <> 'information_schema'
+          and c.relkind in ('r', 'p', 'v', 'm', 'f', 'S')
+          and (n.nspname, c.relname) <> ('public', 'schema_migrations')
+          and not exists (select 1 from pg_depend d
+                          where d.classid = 'pg_class'::regclass and d.objid = c.oid and d.deptype = 'e')
+        order by 1
+        limit 1)");
+    if (!found.empty()) {
+        throw BackupError("the database already holds " + found[0][0].as<std::string>() +
+                          ": restore needs a new, empty database");
+    }
 }
 
 void BackupRestorer::checkTotals(const json& end, const BackupSummary& summary) {

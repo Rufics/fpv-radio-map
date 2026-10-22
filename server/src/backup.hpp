@@ -93,6 +93,8 @@ private:
     /// The last of this server's migrations the backup was written under; refuses a backup
     /// written under migrations this server does not have.
     [[nodiscard]] std::string lastCommonMigration(const json& header) const;
+    /// Refuses a database that holds tables of its own, which the restore would mix with the backup.
+    static void requireNoTables(pqxx::work& w);
     /// Refuses a backup whose end line counts other tables, rows or files than it holds.
     static void checkTotals(const json& end, const BackupSummary& summary);
     static std::size_t readRows(pqxx::work& w, const json& table, std::istream& in);

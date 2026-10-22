@@ -169,6 +169,23 @@ TEST_F(BackupTest, RefusesADatabaseThatHasASchema) {
     EXPECT_EQ(query(from, "select count(*) from missions"), "2");
 }
 
+TEST_F(BackupTest, RefusesADatabaseThatHoldsOtherTables) {
+    const std::string text = backup(source(), files("source"));
+    const std::string to = freshDatabase("rfmap_backup_target");
+    {
+        pqxx::connection c(to);
+        pqxx::nontransaction n(c);
+        n.exec("create table leftover (id int)");
+    }
+    try {
+        (void)restore(to, text);
+        FAIL() << "restored into a database that holds a table";
+    } catch (const BackupError& e) {
+        EXPECT_NE(std::string(e.what()).find("public.leftover"), std::string::npos) << e.what();
+    }
+    EXPECT_EQ(query(to, "select to_regclass('public.missions')::text"), "<null>");
+}
+
 TEST_F(BackupTest, RefusesABackupFromANewerServerAndChangesNothing) {
     const std::string newer = freshDatabase("rfmap_backup_newer");
     Database(newer, 1).migrate(migrationsWith("create table later (id int);"));
