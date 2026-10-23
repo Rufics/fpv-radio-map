@@ -409,6 +409,27 @@ TEST_F(RegistryTest, AnInstallWithoutAReloadNeverServesTheNewVersionsFiles) {
     EXPECT_EQ(after->lifecycle, Lifecycle::Alpha);
 }
 
+TEST_F(RegistryTest, AFileBehindASymlinkInsideTheModuleIsNotServed) {
+    // O_NOFOLLOW guards only the last path part. A symlinked directory under ui/ must not lead
+    // a public path to a file outside ui/ (here the module's own library) or outside the module.
+    auto m = baseManifest("test.alpha", "1.0.0");
+    m["provides"].push_back("ui.panel");
+    m["ui"] = {{"bundle", "ui/x.js"}, {"slots", {"side.panels"}}};
+    PackageFiles files = packageWith(m, RFMOD_LIB_ALPHA);
+    files.files["ui/x.js"] = "export const version = 1;";
+    ASSERT_TRUE(install(PackageWriter::pack(files, ownerSecret())).ok());
+    const fs::path ui = config.root / "installed" / "test.alpha" / "ui";
+    fs::create_directory_symlink("../lib", ui / "sub");
+    fs::create_symlink("x.js", ui / "alias.js");
+    ASSERT_TRUE(fs::exists(ui / "sub" / "libmod.so"));
+
+    EXPECT_FALSE(registry->publicFile("test.alpha", "ui/sub/libmod.so"));
+    EXPECT_FALSE(registry->publicFile("test.alpha", "ui/alias.js"));
+    const auto direct = registry->publicFile("test.alpha", "ui/x.js");
+    ASSERT_TRUE(direct.has_value());
+    EXPECT_EQ(direct->content, "export const version = 1;");
+}
+
 TEST_F(RegistryTest, OptionsAreValidated) {
     auto m = baseManifest("test.alpha", "1.0.0");
     m["optionsSchema"] = "schema/options.json";

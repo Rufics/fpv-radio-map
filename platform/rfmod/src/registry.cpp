@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <format>
+#include <iterator>
 #include <ranges>
 #include <system_error>
 
@@ -73,6 +74,10 @@ ModuleRegistry::Entries ModuleRegistry::readEntries(std::vector<std::string>& no
                 notices.push_back(id + ": options schema is unusable: " + ex.what());
             } catch (const json::exception& ex) {  // the schema is not JSON
                 notices.push_back(id + ": options schema is not JSON: " + ex.what());
+            } catch (const PathEscapeError& ex) {  // the manifest points outside the module
+                notices.push_back(id + ": options schema path is invalid: " + ex.what());
+            } catch (const std::system_error& ex) {  // the file system refused the read
+                notices.push_back(id + ": options schema cannot be read: " + ex.what());
             }
         }
         // Options from state.json are checked again on every load: the file is the admin's,
@@ -322,13 +327,22 @@ std::optional<fs::path> ModuleRegistry::servablePath(const Entry& e, const std::
 
 namespace {
 
-/// A regular file opened under `dir` without following a symlink in its last part; none otherwise.
+/// A regular file opened under `dir` one path part at a time: no part may be a symlink, every
+/// part but the last must be a directory, and the last must be a regular file; none otherwise.
+/// O_NONBLOCK keeps a FIFO from stalling the open before fstat can reject it.
 FileDescriptor openRegular(const FileDescriptor& dir, const fs::path& rel) {
-    FileDescriptor fd(::openat(dir.get(), rel.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
-    if (!fd.valid()) return {};
+    constexpr int kFlags = O_RDONLY | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK;
+    FileDescriptor current;
+    for (auto it = rel.begin(); it != rel.end(); ++it) {
+        const bool last = std::next(it) == rel.end();
+        const int parent = current.valid() ? current.get() : dir.get();
+        FileDescriptor next(::openat(parent, it->c_str(), last ? kFlags : (kFlags | O_DIRECTORY)));
+        if (!next.valid()) return {};
+        current = std::move(next);
+    }
     struct stat st{};
-    if (::fstat(fd.get(), &st) != 0 || !S_ISREG(st.st_mode)) return {};
-    return fd;
+    if (!current.valid() || ::fstat(current.get(), &st) != 0 || !S_ISREG(st.st_mode)) return {};
+    return current;
 }
 
 std::string readAll(const FileDescriptor& fd) {
