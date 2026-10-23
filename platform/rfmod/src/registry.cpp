@@ -340,8 +340,7 @@ FileDescriptor openRegular(const FileDescriptor& dir, const fs::path& rel) {
         if (!next.valid()) return {};
         current = std::move(next);
     }
-    struct stat st{};
-    if (!current.valid() || ::fstat(current.get(), &st) != 0 || !S_ISREG(st.st_mode)) return {};
+    if (struct stat st{}; !current.valid() || ::fstat(current.get(), &st) != 0 || !S_ISREG(st.st_mode)) return {};
     return current;
 }
 
