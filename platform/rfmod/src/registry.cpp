@@ -85,12 +85,14 @@ ModuleRegistry::Entries ModuleRegistry::readEntries(std::vector<std::string>& no
 }
 
 void ModuleRegistry::reloadLocked() {
-    shutdownAll();
+    // Read and plan first: a read that throws (an unpack that fails, say) leaves the running
+    // modules in place. Only once the new state is planned do the old instances go.
     std::vector<std::string> notices;
     Entries entries = readEntries(notices);
     DependencyResolver::Candidates candidates;
     for (const auto& [id, e] : entries) candidates.try_emplace(id, &e.installed.manifest, e.installed.settings.enabled);
     const std::vector<DependencyResolver::Step> plan = DependencyResolver(candidates, config_.hostVersion).plan();
+    shutdownAll();
     {
         const std::lock_guard lock(mutex_);
         entries_ = std::move(entries);

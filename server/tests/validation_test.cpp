@@ -156,6 +156,9 @@ TEST(ConfigTest, EnvironmentOverridesTheFile) {
     EXPECT_EQ(c.raw["admin"]["token"], "(set)");  // never echoed
     std::filesystem::remove(file);
     EXPECT_THROW(Config::fromJson({{"server", {{"port", 70000}}}}), std::invalid_argument);
+    // A zero cap would silently become the policy's 1 MB / 1 ms floor and time every call out.
+    EXPECT_THROW(Config::fromJson({{"modules", {{"maxMemoryMb", 0}}}}), std::invalid_argument);
+    EXPECT_THROW(Config::fromJson({{"modules", {{"maxTimeoutMs", 0}}}}), std::invalid_argument);
 }
 
 TEST(ConfigTest, MetricsAreOffUnlessEnabled) {

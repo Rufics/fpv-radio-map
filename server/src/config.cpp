@@ -201,6 +201,9 @@ Config Config::fromJson(json doc) {
     if (c.data.demStatedErrorM.has_value() && !(*c.data.demStatedErrorM >= 0.0)) {
         throw std::invalid_argument("data.demStatedErrorM must be >= 0");
     }
+    if (c.modules.maxMemoryMb == 0 || c.modules.maxTimeoutMs == 0) {
+        throw std::invalid_argument("modules.maxMemoryMb and modules.maxTimeoutMs must be >= 1");
+    }
 
     c.raw = doc;
     if (c.raw.contains("admin")) c.raw["admin"]["token"] = "(set)";
