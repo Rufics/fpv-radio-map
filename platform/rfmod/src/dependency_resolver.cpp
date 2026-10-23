@@ -32,18 +32,19 @@ bool DependencyResolver::loadable(const std::string& id) const {
 }
 
 bool DependencyResolver::visit(const std::string& id) {
+    using enum Mark;
     const auto mark = marks_.find(id);
-    if (mark != marks_.end() && mark->second == Mark::Done) return loadable(id);
+    if (mark != marks_.end() && mark->second == Done) return loadable(id);
     // Visiting: the dependency chain came back to this module. The caller that closed the
     // cycle reports it; this module's own step is decided when its visit unwinds.
     if (mark != marks_.end()) return false;
-    marks_[id] = Mark::Visiting;
+    marks_[id] = Visiting;
     const Candidate& c = candidates_.at(id);
     Step step{id, ModuleState::Active, {}};
     if (mayLoad(c, step) && requiredDependenciesLoadable(c, step)) visitOptionalDependencies(c);
     // A cycle may already have appended a step for this id.
     if (std::ranges::find(steps_, id, &Step::id) == steps_.end()) steps_.push_back(std::move(step));
-    marks_[id] = Mark::Done;
+    marks_[id] = Done;
     return loadable(id);
 }
 
@@ -87,8 +88,9 @@ bool DependencyResolver::requiredDependenciesLoadable(const Candidate& c, Step& 
 
 void DependencyResolver::visitOptionalDependencies(const Candidate& c) {
     for (const Dependency& d : c.manifest->optionalDependencies) {
-        const auto dep = candidates_.find(d.id);
-        if (dep == candidates_.end() || !d.range.contains(dep->second.manifest->version)) continue;
+        if (const auto dep = candidates_.find(d.id); dep == candidates_.end() || !d.range.contains(dep->second.manifest->version)) {
+            continue;
+        }
         // An optional dependency that is on the chain, or requires a module on it, is no cycle to
         // fail on: it is planned after the chain unwinds, and both modules load.
         std::set<std::string_view> seen;

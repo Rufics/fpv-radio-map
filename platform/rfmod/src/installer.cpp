@@ -237,8 +237,10 @@ bool ModuleInstaller::looksLikeModuleId(std::string_view id) {
     for (const auto word : id | std::views::split('.')) {
         const std::string_view w(word.begin(), word.end());
         if (w.empty() || !std::islower(static_cast<unsigned char>(w.front()))) return false;
-        const bool plain = std::ranges::all_of(w, [](char c) { return std::islower(static_cast<unsigned char>(c)) || std::isdigit(static_cast<unsigned char>(c)) || c == '-'; });
-        if (!plain) return false;
+        if (const bool plain = std::ranges::all_of(w, [](char c) { return std::islower(static_cast<unsigned char>(c)) || std::isdigit(static_cast<unsigned char>(c)) || c == '-'; });
+            !plain) {
+            return false;
+        }
         ++words;
     }
     return words >= 2;

@@ -132,32 +132,33 @@ bool ModuleRegistry::requiredDependenciesActive(const Entry& e, std::string& det
 
 bool ModuleRegistry::loadOne(Entry& e) {
     // mutex_ is not held while the module loads: its init is module code and may read the registry.
+    using enum ModuleState;
     std::string detail;
     std::shared_ptr<IModuleInstance> instance;
-    ModuleState state = ModuleState::MissingDependency;
+    ModuleState state = MissingDependency;
     if (requiredDependenciesActive(e, detail)) {
         try {
             instance = loader_.load(e.installed.manifest, e.installed.signer, e.installed.dir, e.installed.settings.options, false);
-            state = ModuleState::Active;
+            state = Active;
         } catch (const ModuleError& ex) {
             detail = ex.what();
-            state = ModuleState::Failed;
+            state = Failed;
         } catch (const json::exception& ex) {  // a malformed manifest or worker reply
             detail = ex.what();
-            state = ModuleState::Failed;
+            state = Failed;
         } catch (const PathEscapeError& ex) {  // a library path that leaves the module root
             detail = ex.what();
-            state = ModuleState::Failed;
+            state = Failed;
         } catch (const std::system_error& ex) {  // no worker process could be started
             detail = ex.what();
-            state = ModuleState::Failed;
+            state = Failed;
         }
     }
     const std::lock_guard lock(mutex_);
     e.instance = std::move(instance);
     e.state = state;
     e.stateDetail = detail;
-    return state == ModuleState::Active;
+    return state == Active;
 }
 
 void ModuleRegistry::addNotices(const std::string& id, const Entry& e) {
@@ -307,8 +308,9 @@ std::optional<fs::path> ModuleRegistry::publicFile(const std::string& id, const 
         fs::path p = store_.root().confine(dir / path);
         const auto& schema = it->second.installed.manifest.optionsSchema;
         const bool isSchema = schema && p == store_.root().confine(dir / *schema);
-        const bool isUi = p.string().starts_with((dir / "ui" / "").string());
-        if ((!isUi && !isSchema) || !fs::is_regular_file(p)) return std::nullopt;
+        if (const bool isUi = p.string().starts_with((dir / "ui" / "").string()); (!isUi && !isSchema) || !fs::is_regular_file(p)) {
+            return std::nullopt;
+        }
         return p;
     } catch (const PathEscapeError&) {
         return std::nullopt;

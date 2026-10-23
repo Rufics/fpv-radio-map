@@ -69,8 +69,8 @@ void GdalRaster::open() {
     if (blockW_ < 1 || blockH_ < 1) throw RasterError(file_.string() + " has an empty block size");
     // Each block index must fit its part of the cache key.
     const std::uint64_t blocksAcross = static_cast<std::uint64_t>(width_ / blockW_) + 1;
-    const std::uint64_t blocksDown = static_cast<std::uint64_t>(height_ / blockH_) + 1;
-    if (blocksAcross > kBlockIndexMask || blocksDown > kBlockIndexMask) {
+    if (const std::uint64_t blocksDown = static_cast<std::uint64_t>(height_ / blockH_) + 1;
+        blocksAcross > kBlockIndexMask || blocksDown > kBlockIndexMask) {
         throw RasterError(file_.string() + " has more blocks than the block cache can address");
     }
     int hasNoData = 0;

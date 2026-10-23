@@ -120,8 +120,9 @@ AttemptOutcome PgAuthStore::beginAttempt(const std::string& linkId, int maxAttem
         if (r.empty()) throw StoredDataError("link vanished");
         const auto& row = r[0];
         const bool refused = row[1].as<bool>();
-        const bool pausedNow = row[2].as<bool>();
-        if (!pausedNow) return AttemptOutcome{false, maxAttempts - row[0].as<int>(), std::nullopt};
+        if (const bool pausedNow = row[2].as<bool>(); !pausedNow) {
+            return AttemptOutcome{false, maxAttempts - row[0].as<int>(), std::nullopt};
+        }
         return AttemptOutcome{refused, 0, fromEpochSeconds(row[3].as<double>())};
     });
 }

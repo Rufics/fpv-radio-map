@@ -91,8 +91,10 @@ public:
         const double height = world.inverse(sw, {n, w}).distanceM;
         // The loops visit every cell of the bounding box, inside the area or not: a thin diagonal
         // area over a wide box costs the box, so the box is bounded as well as the points.
-        const double widest = std::max(world.inverse(sw, {s, e}).distanceM, world.inverse({n, w}, {n, e}).distanceM);
-        if ((height / cellM) * (widest / cellM) > kMaxGridCells) throw tooManyCells(cellM);
+        if (const double widest = std::max(world.inverse(sw, {s, e}).distanceM, world.inverse({n, w}, {n, e}).distanceM);
+            (height / cellM) * (widest / cellM) > kMaxGridCells) {
+            throw tooManyCells(cellM);
+        }
         std::vector<LatLon> out;
         // The estimate above uses the box's edges; rows between them can be wider (a box across
         // the equator is widest in the middle), so the cells visited are counted as well.

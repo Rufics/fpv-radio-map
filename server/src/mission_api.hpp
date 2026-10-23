@@ -3,6 +3,8 @@
 #include "request.hpp"
 #include "services.hpp"
 
+#include <string_view>
+
 namespace rfmap {
 
 /// Health, missions, share links, calculations, jobs and the elevation profile.
@@ -31,7 +33,7 @@ private:
     /// The session behind the bearer token; HttpError 401 without one.
     [[nodiscard]] Principal session(const HttpRequest& req) const;
     /// session(), and HttpError 403 unless it belongs to the mission in the path.
-    [[nodiscard]] Principal missionSession(const HttpRequest& req, const std::string& missionId) const;
+    [[nodiscard]] Principal missionSession(const HttpRequest& req, std::string_view missionId) const;
     /// The mission's name for a link holder, or empty.
     [[nodiscard]] std::string missionName(const std::string& missionId) const;
     /// HttpError 422 when the grid would be larger than the server allows.

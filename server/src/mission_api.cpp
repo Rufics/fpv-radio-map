@@ -6,7 +6,7 @@ namespace rfmap {
 
 Principal MissionApi::session(const HttpRequest& req) const { return s_.auth().authenticate(req.bearer()); }
 
-Principal MissionApi::missionSession(const HttpRequest& req, const std::string& missionId) const {
+Principal MissionApi::missionSession(const HttpRequest& req, std::string_view missionId) const {
     const Principal p = session(req);
     if (p.missionId != missionId) throw HttpError(403, "this session belongs to another mission");
     return p;
@@ -50,8 +50,7 @@ void MissionApi::getMission(const HttpRequest& req, HttpReply& res) const {
 
 void MissionApi::putMission(const HttpRequest& req, HttpReply& res) const {
     const std::string id = req.match(1);
-    const Principal p = missionSession(req, id);
-    if (p.role != Role::Edit) throw HttpError(403, "this is a read-only link");
+    if (const Principal p = missionSession(req, id); p.role != Role::Edit) throw HttpError(403, "this is a read-only link");
     const int expected = req.ifMatchRevision();
     const json doc = req.body();
     s_.schemas().require("mission", doc);

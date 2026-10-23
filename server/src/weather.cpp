@@ -181,7 +181,7 @@ double WeatherService::geometricHeight(double z) {
 }
 
 std::string WeatherService::ForecastCache::key(double lat, double lon, const std::string& models) {
-    const auto cell = [](double deg) { return static_cast<long long>(std::llround(deg / kGridDeg)); };
+    const auto cell = [](double deg) { return std::llround(deg / kGridDeg); };
     return std::format("{},{},{}", cell(lat), cell(lon), models);
 }
 

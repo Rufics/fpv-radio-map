@@ -124,8 +124,9 @@ public:
 class DeveloperTrust {
 public:
     explicit DeveloperTrust(const std::vector<std::string>& keyFiles) : store_(Files::read(ownerKeyFile(keyFiles)), {}) {
-        for (const std::string& file : keyFiles | std::views::drop(1)) {
-            store_.add(PublicKey::fromText(Files::read(file)), fs::path(file).stem().string());
+        for (const std::string& keyFile : keyFiles | std::views::drop(1)) {
+            const fs::path file(keyFile);
+            store_.add(PublicKey::fromText(Files::read(file)), file.stem().string());
         }
     }
 

@@ -615,8 +615,10 @@ bool WorkerSandbox::allowRead(int ruleset, const char* path, bool mustExist) {
 
 bool WorkerSandbox::seccomp() {
     std::vector<sock_filter> program = SyscallFilter(getpid()).build();
-    const sock_fprog prog{static_cast<unsigned short>(program.size()), program.data()};
-    if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog, 0, 0) == 0) return true;
+    if (const sock_fprog prog{static_cast<unsigned short>(program.size()), program.data()};
+        prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog, 0, 0) == 0) {
+        return true;
+    }
     note("seccomp", std::strerror(errno));
     return false;
 }
