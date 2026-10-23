@@ -6,6 +6,7 @@
 #include <archive_entry.h>
 
 #include <cerrno>
+#include <memory>
 #include <string>
 
 namespace rfmap {
@@ -24,6 +25,10 @@ std::string archiveError(archive* a) {
 void check(archive* a, int status, const char* what) {
     if (status != ARCHIVE_OK) throw BackupError(std::string(what) + ": " + archiveError(a));
 }
+
+struct EntryFree {
+    void operator()(archive_entry* e) const { archive_entry_free(e); }
+};
 
 }  // namespace
 
@@ -44,7 +49,7 @@ BackupCompressor::BackupCompressor(std::ostream& out) : out_(out), archive_(arch
         return sink ? static_cast<la_ssize_t>(n) : la_ssize_t{-1};
     };
     check(a, archive_write_open(a, this, nullptr, write, nullptr), "backup file");
-    std::unique_ptr<archive_entry, decltype(&archive_entry_free)> entry(archive_entry_new(), archive_entry_free);
+    const std::unique_ptr<archive_entry, EntryFree> entry(archive_entry_new());
     archive_entry_set_filetype(entry.get(), AE_IFREG);
     archive_entry_set_pathname(entry.get(), "backup.jsonl");
     check(a, archive_write_header(a, entry.get()), "backup file");
