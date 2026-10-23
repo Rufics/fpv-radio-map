@@ -4,6 +4,7 @@
 #include <GeographicLib/GeodesicLine.hpp>
 
 #include <cmath>
+#include <format>
 #include <stdexcept>
 
 namespace rfcore {
@@ -41,7 +42,12 @@ std::vector<GeoPoint> Geodesy::sample(const GeoPoint& from, const GeoPoint& to, 
     const GeographicLib::GeodesicLine line = geod.InverseLine(
         from.latitudeDeg, from.longitudeDeg, to.latitudeDeg, to.longitudeDeg);
     const double total = line.Distance();
-    const auto intervals = static_cast<std::size_t>(std::max(1.0, std::ceil(total / maxStep.value())));
+    const double wanted = std::max(1.0, std::ceil(total / maxStep.value()));
+    if (!(wanted <= static_cast<double>(kMaxIntervals))) {
+        throw std::invalid_argument(
+            std::format("Geodesy::sample: more than {} intervals; use a larger step", kMaxIntervals));
+    }
+    const auto intervals = static_cast<std::size_t>(wanted);
 
     std::vector<GeoPoint> points;
     points.reserve(intervals + 1);

@@ -11,7 +11,6 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -59,14 +58,32 @@ public:
     [[nodiscard]] std::string dataType() const;
 
 private:
+    /// Closes a dataset; GDAL hands them out as raw pointers.
+    struct DatasetCloser {
+        void operator()(GDALDataset* dataset) const;
+    };
+    struct TransformationDestroyer {
+        void operator()(OGRCoordinateTransformation* transformation) const;
+    };
+    using Dataset = std::unique_ptr<GDALDataset, DatasetCloser>;
+    using Transformation = std::unique_ptr<OGRCoordinateTransformation, TransformationDestroyer>;
+
+    /// Opens the file and reads the band's shape. Throws RasterError.
+    void open();
+    /// The transformation from WGS84 into the raster's own system, or none when it is WGS84.
+    void readProjection(const std::array<double, 6>& geoTransform);
+    /// The smallest pixel pitch over the raster and its centre, measured on the ellipsoid.
+    void measurePitch(const std::array<double, 6>& geoTransform, OGRCoordinateTransformation* toWgs);
     std::shared_ptr<const RasterBlock> block(int bx, int by) const;
+    /// The block cache key of a block: the raster's id and the block's position, each in its own bits.
+    [[nodiscard]] std::uint64_t blockKey(int bx, int by) const;
 
     std::filesystem::path file_;
     BlockCache& cache_;
     std::uint64_t id_;
-    GDALDataset* dataset_ = nullptr;
-    GDALRasterBand* band_ = nullptr;
-    OGRCoordinateTransformation* toRaster_ = nullptr;  ///< null when the raster is in WGS84 lon/lat
+    Dataset dataset_;
+    GDALRasterBand* band_ = nullptr;  ///< owned by the dataset
+    Transformation toRaster_;         ///< empty when the raster is in WGS84 lon/lat
     std::array<double, 6> inverse_{};
     int width_ = 0;
     int height_ = 0;
@@ -113,11 +130,5 @@ private:
     std::string name_;
 };
 
-/// Name of a tiles-builder output from the manifest.json next to it, if there is one.
-std::string manifestSourceName(const std::filesystem::path& file);
-/// Distinct per-file attributions from the tiles-builder manifest next to `file`; empty without one.
-std::vector<std::string> manifestAttributions(const std::filesystem::path& file);
-/// File names the tiles-builder manifest next to `file` lists; nullopt without a readable manifest.
-std::optional<std::set<std::string, std::less<>>> manifestFiles(const std::filesystem::path& file);
 
 }  // namespace rfmap

@@ -32,8 +32,8 @@ std::string PrometheusText::escape(std::string_view value) {
     std::string out;
     out.reserve(value.size());
     for (const char c : value) {
-        if (c == '\\') out += "\\\\";
-        else if (c == '"') out += "\\\"";
+        if (c == '\\') out += R"(\\)";
+        else if (c == '"') out += R"(\")";
         else if (c == '\n') out += "\\n";
         else out += c;
     }

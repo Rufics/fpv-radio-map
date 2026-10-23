@@ -10,6 +10,7 @@
     // true only behind a reverse proxy you run: the last X-Forwarded-For hop becomes the
     // client address for rate limits and logs.
     "trustProxy": true,
+    // JSON bodies, and the largest file the API takes (a flight log).
     "maxBodyBytes": 1048576,
     "maxUploadBytes": 67108864
   },
@@ -41,7 +42,15 @@
     "root": "/var/lib/rfmap/modules",
     "worker": "/usr/lib/rfmap/rfmod-worker",
     "trustStore": "/var/lib/rfmap/keys.json",
-    "isolateAll": false
+    // Run first-party modules in sandboxed workers too (slower, stricter).
+    "isolateAll": false,
+    // A build with the public development owner key refuses to start unless this is true.
+    "allowDevOwnerKey": false,
+    // Third-party modules load only when their worker confined itself (Landlock, seccomp).
+    "requireSandbox": true,
+    // Caps on what a module's manifest may ask for.
+    "maxMemoryMb": 2048,
+    "maxTimeoutMs": 60000
   },
   "weather": {
     // Your own Open-Meteo instance. Empty = no forecasts (k = 4/3, results say so).

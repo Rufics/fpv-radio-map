@@ -12,7 +12,7 @@ void Logger::write(Level level, const std::string& source, const std::string& me
     if (quiet_ && level < Level::Warn) return;
     static constexpr std::array<std::string_view, 4> names = {"debug", "info", "WARN", "ERROR"};
     std::lock_guard lock(mutex_);
-    std::cerr << isoUtc(Clock::now()) << ' ' << names.at(static_cast<std::size_t>(level)) << ' ' << source << ": "
+    std::cerr << UtcTime::format(Clock::now()) << ' ' << names.at(static_cast<std::size_t>(level)) << ' ' << source << ": "
               << message << '\n';
 }
 

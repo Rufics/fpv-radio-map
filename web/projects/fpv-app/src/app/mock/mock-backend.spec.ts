@@ -142,22 +142,10 @@ describe('MockBackend through the API client', () => {
     const off = await settle(api.setModule('fpv.relay', { enabled: false }));
     expect(off.filter((m) => m.id === 'fpv.relay').every((m) => m.state === 'disabled')).toBe(true);
     expect((await rejection(api.setModule('nope', { enabled: true }))).status).toBe(422);
-    expect((await rejection(api.removeModule('rf-core'))).message).toContain('Built-in');
-    expect((await rejection(api.removeModule('fpv.core'))).message).toContain('Required by');
-    await settle(api.removeModule('fpv.example'));
-    expect((await rejection(api.removeModule('fpv.example'))).status).toBe(422);
     expect(await settle(api.moduleNotices())).toEqual([]);
-
-    const notZip = await settle(api.uploadModule(new Blob(['nope']), false));
-    expect(notZip.ok).toBe(false);
-    const zip = await settle(api.uploadModule(new Blob([new Uint8Array([0x50, 0x4b, 3, 4])]), false));
-    expect(zip.ok).toBe(true);
-
-    const keys = await settle(api.addKey('rfmod-ed25519 0123456789abcdef', 'Lab'));
-    expect(keys.some((k) => k.id === '01234567')).toBe(true);
-    expect((await rejection(api.addKey('ssh-rsa AAAA'))).status).toBe(422);
-    await settle(api.deleteKey('01234567'));
-    expect((await rejection(api.deleteKey('01234567'))).status).toBe(409);
+    // Installing and trusting happen on the server machine; the API only reloads and lists.
+    const reloaded = await settle(api.reloadModules());
+    expect(reloaded.modules?.length).toBe(off.length);
     expect((await settle(api.adminKeys())).length).toBeGreaterThan(0);
 
     const tiers = await settle(api.adminCache());

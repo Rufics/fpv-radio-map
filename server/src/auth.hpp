@@ -43,11 +43,12 @@ struct SessionRecord {
     TimePoint expiresAt;
 };
 
-/// Outcome of a wrong PIN, decided atomically by the store so parallel guesses cannot each see
-/// the same remaining count.
-struct FailureOutcome {
-    int remaining{};
-    std::optional<TimePoint> lockedUntil;
+/// What the store decided about a PIN attempt before the PIN is checked: counted atomically,
+/// so parallel guesses cannot each see the same remaining count or slip in while a pause starts.
+struct AttemptOutcome {
+    bool refused = false;  ///< the link was already paused: the attempt was not counted
+    int remaining{};       ///< attempts left after this one; 0 when it was the last before a pause
+    std::optional<TimePoint> lockedUntil;  ///< the pause: in force already, or started by this attempt
 };
 
 /// Persistence for credentials. PostgreSQL in the server, memory in unit tests.
@@ -58,9 +59,12 @@ public:
     virtual void insertLink(const LinkRecord& link) = 0;
     [[nodiscard]] virtual std::vector<LinkRecord> links(const std::string& missionId) = 0;
     [[nodiscard]] virtual std::optional<LinkRecord> linkByToken(const Digest& tokenHash) = 0;
-    /// Adds one failure; at `maxAttempts` locks until now + lockout·2^lockouts and resets the count.
-    virtual FailureOutcome recordFailure(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
-                                         TimePoint now) = 0;
+    /// Counts one attempt, before the PIN is checked. A paused link is reported as such and not
+    /// counted; the attempt that reaches `maxAttempts` starts a pause of lockout·2^lockouts and
+    /// resets the count. One atomic statement, whatever runs in parallel.
+    virtual AttemptOutcome beginAttempt(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
+                                        TimePoint now) = 0;
+    /// A right PIN: clears the count and any pause this attempt started.
     virtual void recordSuccess(const std::string& linkId, TimePoint now) = 0;
     /// Marks the link revoked and deletes its sessions. False if the link is not the mission's.
     virtual bool revokeLink(const std::string& missionId, const std::string& linkId) = 0;
@@ -77,8 +81,8 @@ public:
     void insertLink(const LinkRecord& link) override;
     std::vector<LinkRecord> links(const std::string& missionId) override;
     std::optional<LinkRecord> linkByToken(const Digest& tokenHash) override;
-    FailureOutcome recordFailure(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
-                                 TimePoint now) override;
+    AttemptOutcome beginAttempt(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
+                                TimePoint now) override;
     void recordSuccess(const std::string& linkId, TimePoint now) override;
     bool revokeLink(const std::string& missionId, const std::string& linkId) override;
     void insertSession(const SessionRecord& s) override;
@@ -134,7 +138,8 @@ public:
         Role role;
     };
     /// 401 wrong PIN (body: triesLeft), 404 unknown token, 410 revoked or expired, 429 paused (body: retryAfterS),
-    /// 503 too many PIN checks running (body: retryAfterS; the attempt is not counted).
+    /// 503 too many PIN checks running (body: retryAfterS; the attempt is not counted). The
+    /// attempt is counted before the PIN is checked, so parallel guesses cannot outrun the pause.
     Opened openLink(const std::string& token, const std::string& pin);
     /// The link behind a token, before the PIN: 404 unknown, 410 revoked or expired. Changes nothing.
     LinkRecord peekLink(const std::string& token);
@@ -148,6 +153,9 @@ public:
     [[nodiscard]] static json linkJson(const LinkRecord& l);
 
 private:
+    /// The 429 for a link paused until `until`.
+    [[nodiscard]] static HttpError paused(TimePoint until, TimePoint now);
+
     IAuthStore& store_;
     const PinHasher& pins_;
     PinGate& gate_;

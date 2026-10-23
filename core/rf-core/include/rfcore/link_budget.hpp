@@ -49,13 +49,19 @@ struct PathContext {
     Hertz frequency;
 };
 
+/// What one contributor adds to a link budget: its terms and the uncertainty it brings.
+struct LossContribution {
+    std::vector<BudgetTerm> terms;
+    std::vector<UncertaintyNote> notes;
+};
+
 /// Extension point for RF extensions (weather, clutter, ...). Each contributes zero or more
-/// named terms; the core never knows what they model.
+/// named terms; the core never knows what they model. One call per path, so a contributor
+/// keeps no state between the terms and the notes of the same evaluation.
 class ILossContributor {
 public:
     virtual ~ILossContributor() = default;
-    [[nodiscard]] virtual std::vector<BudgetTerm> contribute(const PathContext& context) const = 0;
-    [[nodiscard]] virtual std::vector<UncertaintyNote> notes(const PathContext& context) const { (void)context; return {}; }
+    [[nodiscard]] virtual LossContribution contribute(const PathContext& context) const = 0;
 };
 
 struct LinkResult {

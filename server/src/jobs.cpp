@@ -148,7 +148,7 @@ json JobManager::toJson(const Job& j) const {
         if (!p.error.empty()) pj["error"] = p.error;
         parts.push_back(pj);
     }
-    return {{"jobId", j.id}, {"state", j.state}, {"parts", parts}, {"createdAt", isoUtc(j.created)}};
+    return {{"jobId", j.id}, {"state", j.state}, {"parts", parts}, {"createdAt", UtcTime::format(j.created)}};
 }
 
 json JobManager::status(const std::string& missionId, const std::string& jobId) {

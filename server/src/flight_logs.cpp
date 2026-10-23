@@ -197,13 +197,12 @@ FlightLogService::Decoded FlightLogService::decode(std::string_view bytes, const
     }
     const auto* data = reinterpret_cast<const std::uint8_t*>(bytes.data());
     const json question = {{"file", rfmod::toBase64(data, std::min(bytes.size(), kProbeBytes))}, {"fileName", fileName}};
-    const ModuleGate::Read gate(modules_.gate());
-    const rfmod::ModuleRegistry* registry = modules_.registry();
-    const std::vector<rfmod::IModuleInstance*> decoders =
-        registry ? registry->withCapability("flightlog.decoder") : std::vector<rfmod::IModuleInstance*>{};
+    // The instances are shared with the registry: a decode keeps the decoder it started with
+    // even if the admin reloads the modules meanwhile.
+    const auto decoders = modules_.registry().withCapability("flightlog.decoder");
     if (decoders.empty()) throw HttpError(422, "no flight log decoder module is installed on this server");
     json tried = json::array();
-    for (rfmod::IModuleInstance* d : decoders) {
+    for (const std::shared_ptr<rfmod::IModuleInstance>& d : decoders) {
         tried.push_back(d->manifest().id);
         if (!probe(*d, question)) continue;
         json document = decodeWith(*d, {{"file", rfmod::toBase64(data, bytes.size())}, {"fileName", fileName}});

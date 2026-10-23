@@ -162,7 +162,7 @@ TEST_F(AuthTest, OpenCountAndExpiry) {
     (void)auth.openLink(link.token, "454545");
     const json listed = AuthService::linkJson(auth.listLinks("m1", owner.plain).front());
     EXPECT_EQ(listed.at("openCount").get<int>(), 2);
-    EXPECT_EQ(listed.at("expiresAt").get<std::string>(), isoUtc(until));
+    EXPECT_EQ(listed.at("expiresAt").get<std::string>(), UtcTime::format(until));
     // The session never outlives the link, although the session TTL is 24 h.
     clock.advance(std::chrono::hours(2));
     expectStatus(401, [this, &first] { (void)auth.authenticate(first.session); });

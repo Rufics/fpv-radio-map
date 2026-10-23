@@ -276,12 +276,14 @@ jobs:
 
   # Fuzzes each target for a minute, and only once the C++ build and tests passed. The fuzz
   # binaries are its own small build, taken from the cache when the sources did not change.
+  # The limit leaves room for a slow apt mirror on top of a cache miss: installing the
+  # dependencies alone has taken 40 minutes on a bad day.
   fuzz:
     name: Fuzz C++
     needs: cpp
     if: needs.cpp.result == 'success'
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

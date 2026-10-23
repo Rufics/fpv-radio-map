@@ -406,7 +406,9 @@ network). The map should show your area with hillshade and the attribution line 
 
 A new server has only the built-in modules (`rf.weather`, `rf.clutter`, `rf.uncertainty`,
 `rf.radio-profiles`, `rf.flightlog`). Battery, minimum altitude, failsafe, best launch point, relay,
-the Blackbox flight log decoder and the mission tools come as the FPV module pack. Sign it with your owner key and upload it.
+the Blackbox flight log decoder and the mission tools come as the FPV module pack. Sign it with
+your owner key and install it on the server machine with the `rfmod` CLI: modules never enter a
+server through the API.
 
 Build and sign the seven modules (about a minute **(estimate)**; the compile reuses the server
 image's build cache):
@@ -427,27 +429,27 @@ docker run --rm -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
       chown -R "$HOST_UID:$HOST_GID" /out'
 ```
 
-Upload them, dependencies first (`failsafe` needs `battery` and `min-altitude`):
+Install them, dependencies first (`failsafe` needs `battery` and `min-altitude`). The packages
+go into the server's state volume, the CLI inside the server container installs them, and one
+API call makes the running server pick them up:
 
 ```sh
 cd ~/fpv-radio-map/deploy
-TOKEN=$(sed -n 's/^RFMAP_ADMIN_TOKEN=//p' .env)
+docker compose cp "$HOME/rfmap-modules/." rfmap-server:/var/lib/rfmap/incoming/
 for m in core battery min-altitude failsafe best-launch relay blackbox; do
-  report=$(curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/octet-stream' \
-      --data-binary @"$HOME/rfmap-modules/$m.rfmod" \
-      'http://127.0.0.1:8088/api/v1/admin/modules?install=true')
-  case "$report" in
-    *'],"ok":true}') echo "$m: installed" ;;
-    *) echo "$m: NOT installed"; echo "$report" ;;
-  esac
+  docker compose exec rfmap-server rfmod install "/var/lib/rfmap/incoming/$m.rfmod" \
+      --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json
 done
+docker compose exec rfmap-server rm -r /var/lib/rfmap/incoming
+TOKEN=$(sed -n 's/^RFMAP_ADMIN_TOKEN=//p' .env)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8088/api/v1/admin/modules/reload
 ```
 
-Every line must say `installed`. The server checks the signature, manifest, ABI, dependencies
-and sandbox and runs each module's self-test before it installs it. On a failure the report
-names the check with `"ok":false`. A version that is already installed is refused
-(`version.upgrade`); that is expected when you run the loop twice. You can also upload the
-files one by one under **Admin → Modules** in the browser.
+Every `rfmod install` must end with `installed`. The CLI checks the signature, manifest, ABI,
+dependencies and lifecycle and runs each module's self-test in a sandboxed worker before it
+installs it. On a failure the report names the check with `ok: false`. A version that is
+already installed is refused (`version.upgrade`); that is expected when you run the loop twice.
+The browser's **Admin → Modules** page shows the result after **Reload**; it has no upload.
 
 Check the list: `curl -s http://127.0.0.1:8088/api/v1/modules` shows the five `rf.*` modules and
 the seven `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
@@ -565,8 +567,8 @@ Every variable should come back with numbers, not `null`. Use your area's coordi
 
 Two things cannot be rebuilt: the database and the `rfmap-state` volume (installed modules and
 trusted keys). The server writes both into one file. It reads one consistent snapshot, so the
-stack keeps running while it works; a module upload or a key change made meanwhile waits until
-the backup has read the files:
+stack keeps running while it works. An `rfmod install` or `rfmod remove`, a **Reload** and a
+module setting saved meanwhile wait until the backup has read the files:
 
 ```sh
 cd ~/fpv-radio-map/deploy
@@ -756,4 +758,5 @@ After a `git pull` that changes `tools/tiles-builder`, build its image again (st
 | Image build: `certificate verify failed` | A TLS-intercepting proxy. Pass its CA as a build secret, see [Start](deploy.md#2-start). |
 | `health` shows `"dem":false` | `RFMAP_TILES_DIR` does not point at the directory that holds `dem.cog.tif`, or `data.dem` (`RFMAP_DEM`) in the server configuration names another path. Write the full path (`/home/<you>/rfmap-data/out`, not `~/...`) and run `docker compose up -d`. |
 | Map is empty, `/tiles/...` answers 404 | `RFMAP_TILES_DIR` is wrong for the `web` container, or the file was not built: `docker compose exec web ls /tiles` must list it. |
-| Module upload: `signature` check fails | The module was signed with a different key than the one the server was built with. Sign it with your `owner.secret` (step 6). |
+| `rfmod install`: `signature` check fails | The module was signed with a different key than the one the server was built with. Sign it with your `owner.secret` (step 6). |
+| The server exits at start with `development owner key` | The image was built without `RFMAP_OWNER_PUBKEY`. Build it with your `owner.pub` (step 4); `modules.allowDevOwnerKey` is for development machines only. |

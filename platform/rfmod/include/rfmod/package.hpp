@@ -65,13 +65,19 @@ struct VerifiedPackage {
     TrustedKey signer;
 };
 
+/// The full package check for one host: archive safety, file list, signature by a trusted key,
+/// manifest schema and rules, and every file the manifest references.
 class PackageVerifier {
 public:
-    /// The full upload check: archive safety, file list, signature by a trusted key, manifest
-    /// schema and rules, and every file the manifest references.
-    static std::optional<VerifiedPackage> verify(const std::string& archive, const TrustStore& trust,
-                                                 const Version& hostVersion, ValidationReport& report,
-                                                 const PackageLimits& limits = {});
+    PackageVerifier(const TrustStore& trust, Version hostVersion, PackageLimits limits = {})
+        : trust_(trust), hostVersion_(std::move(hostVersion)), limits_(limits) {}
+
+    [[nodiscard]] std::optional<VerifiedPackage> verify(std::string_view archive, ValidationReport& report) const;
+
+private:
+    const TrustStore& trust_;
+    Version hostVersion_;
+    PackageLimits limits_;
 };
 
 }  // namespace rfmod

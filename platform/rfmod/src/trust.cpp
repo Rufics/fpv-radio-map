@@ -16,7 +16,17 @@ TrustStore::TrustStore(std::string_view ownerKeyText, std::filesystem::path stor
     load();
 }
 
+std::vector<TrustedKey> TrustStore::keys() const {
+    const std::lock_guard lock(mutex_);
+    return keys_;
+}
+
 std::optional<TrustedKey> TrustStore::find(std::string_view keyId) const {
+    const std::lock_guard lock(mutex_);
+    return findUnlocked(keyId);
+}
+
+std::optional<TrustedKey> TrustStore::findUnlocked(std::string_view keyId) const {
     for (const TrustedKey& k : keys_) {
         if (k.key.id() == keyId) return k;
     }
@@ -24,7 +34,8 @@ std::optional<TrustedKey> TrustStore::find(std::string_view keyId) const {
 }
 
 const TrustedKey& TrustStore::add(const PublicKey& key, std::string label) {
-    if (find(key.id())) throw std::invalid_argument("key " + key.id() + " is already trusted");
+    const std::lock_guard lock(mutex_);
+    if (findUnlocked(key.id())) throw std::invalid_argument("key " + key.id() + " is already trusted");
     if (label.empty()) throw std::invalid_argument("a key needs a label");
     keys_.emplace_back(key, std::move(label), false);
     save();
@@ -32,11 +43,26 @@ const TrustedKey& TrustStore::add(const PublicKey& key, std::string label) {
 }
 
 void TrustStore::remove(const std::string& keyId) {
+    const std::lock_guard lock(mutex_);
     const auto it = std::ranges::find_if(keys_, [&keyId](const TrustedKey& k) { return k.key.id() == keyId; });
     if (it == keys_.end()) throw std::invalid_argument("unknown key " + keyId);
     if (it->builtIn) throw std::invalid_argument("the built-in owner key cannot be removed");
     keys_.erase(it);
     save();
+}
+
+void TrustStore::reload() {
+    const std::lock_guard lock(mutex_);
+    // A store file that cannot be read (half-written by the CLI, or damaged) changes nothing:
+    // the keys trusted so far stay, and the caller hears why.
+    std::vector<TrustedKey> previous = keys_;
+    std::erase_if(keys_, [](const TrustedKey& k) { return !k.builtIn; });
+    try {
+        load();
+    } catch (...) {
+        keys_ = std::move(previous);
+        throw;
+    }
 }
 
 void TrustStore::load() {
@@ -45,7 +71,7 @@ void TrustStore::load() {
     const json doc = json::parse(in);
     for (const json& k : doc.at("keys")) {
         const PublicKey key = PublicKey::fromText(k.at("key").get<std::string>());
-        if (!find(key.id())) keys_.emplace_back(key, k.at("label").get<std::string>(), false);
+        if (!findUnlocked(key.id())) keys_.emplace_back(key, k.at("label").get<std::string>(), false);
     }
 }
 

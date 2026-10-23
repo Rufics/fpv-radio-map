@@ -23,9 +23,13 @@
 #include <string_view>
 #include <vector>
 
+namespace rfmod {
+class FileLock;
+}  // namespace rfmod
+
 namespace rfmap {
 
-class FileLock;
+using rfmod::FileLock;
 
 /// A database, a backup or a step that does not fit this server's migrations. Thrown inside the
 /// migration transaction, so nothing it would have changed is committed.

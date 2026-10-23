@@ -156,7 +156,7 @@ std::optional<TimePoint> OpenMeteoSource::runTime() {
 }
 
 WeatherService::WeatherService(const Config::Weather& cfg, IForecastSource* source, const IClock& clock)
-    : cfg_(cfg), source_(source), clock_(clock) {}
+    : cfg_(cfg), source_(source), clock_(clock), cache_(std::chrono::minutes(cfg.cacheMinutes), source) {}
 
 double WeatherService::meanRadius(double latitudeDeg) {
     const double m = rfcore::EarthModel::radiusOfCurvature(latitudeDeg, 0.0).value();
@@ -180,21 +180,62 @@ double WeatherService::geometricHeight(double z) {
     return kRe * z / (kRe - z);
 }
 
-json WeatherService::fetchCached(double lat, double lon, const Config::WeatherTier& tier) {
-    const std::string key = num(lat) + "," + num(lon) + "," + tier.models;
-    const TimePoint now = clock_.now();
-    {
-        std::lock_guard lock(mutex_);
-        const auto it = cache_.find(key);
-        if (it != cache_.end() && now - it->second.fetched < std::chrono::minutes(cfg_.cacheMinutes)) {
-            return it->second.response;
-        }
+std::string WeatherService::ForecastCache::key(double lat, double lon, const std::string& models) {
+    const auto cell = [](double deg) { return std::llround(deg / kGridDeg); };
+    return std::format("{},{},{}", cell(lat), cell(lon), models);
+}
+
+WeatherService::ForecastCache::Found WeatherService::ForecastCache::lookup(const std::string& key, TimePoint now,
+                                                                            std::promise<json>& promise) {
+    const std::lock_guard lock(mutex_);
+    if (const auto hit = entries_.get(key); hit && now - hit->fetched < ttl_) return hit->response;
+    if (const auto it = inFlight_.find(key); it != inFlight_.end()) return it->second;
+    inFlight_.try_emplace(key, promise.get_future().share());
+    return std::monostate{};
+}
+
+json WeatherService::ForecastCache::get(const Query& q) {
+    const std::string k = key(q.lat, q.lon, q.models);
+    std::promise<json> promise;
+    Found found = lookup(k, q.now, promise);
+    if (auto* hit = std::get_if<json>(&found)) return std::move(*hit);
+    if (const auto* pending = std::get_if<std::shared_future<json>>(&found)) {
+        return pending->get();  // the fetcher's answer, or its exception rethrown
     }
-    json r = source_->fetch(lat, lon, tier.models);
-    std::lock_guard lock(mutex_);
-    if (cache_.size() > 5000) cache_.clear();
-    cache_[key] = {r, now};
-    return r;
+    return fetchInto(k, q, promise);
+}
+
+json WeatherService::ForecastCache::fetchInto(const std::string& key, const Query& q, std::promise<json>& promise) {
+    // Whatever the fetch does, the key must not stay in flight, or every later request waits.
+    class Done {
+    public:
+        Done(ForecastCache& cache, const std::string& key) : cache_(cache), key_(key) {}
+        ~Done() {
+            const std::lock_guard guard(cache_.mutex_);
+            cache_.inFlight_.erase(key_);
+        }
+        Done(const Done&) = delete;
+        Done& operator=(const Done&) = delete;
+
+    private:
+        ForecastCache& cache_;
+        const std::string& key_;
+    };
+    const Done done(*this, key);
+    try {
+        if (!source_) throw ForecastUnavailableError("no forecast service is configured");
+        json r = source_->fetch(q.lat, q.lon, q.models);
+        entries_.put(key, std::make_shared<const Entry>(r, q.now));
+        promise.set_value(r);
+        return r;
+    } catch (...) {
+        promise.set_exception(std::current_exception());
+        throw;
+    }
+}
+
+json WeatherService::fetchCached(double lat, double lon, const Config::WeatherTier& tier) {
+    return cache_.get({lat, lon, tier.models, clock_.now()});
 }
 
 std::optional<json> WeatherService::fetchOrError(double lat, double lon, const Config::WeatherTier& tier,
@@ -283,10 +324,10 @@ std::optional<ForecastAt> WeatherService::fromResponse(const json& r, const Conf
     out.rainMmPerHour = valueAt(hourly, "precipitation", i);
 
     const std::string models = tier.models.empty() ? "default models" : tier.models;
-    out.sourceLabel = "Open-Meteo " + models + ", valid " + isoUtc(valid) + (run ? ", run " + isoUtc(*run) : "");
+    out.sourceLabel = "Open-Meteo " + models + ", valid " + UtcTime::format(valid) + (run ? ", run " + UtcTime::format(*run) : "");
     json& p = out.point;
     p = {{"model", "Open-Meteo " + models},
-         {"validUtc", isoUtc(valid)},
+         {"validUtc", UtcTime::format(valid)},
          {"tier", tier.name},
          {"temperatureC", air->temperatureC},
          {"pressureHpa", air->pressureHpa},
@@ -298,7 +339,7 @@ std::optional<ForecastAt> WeatherService::fromResponse(const json& r, const Conf
     setIfPresent(p, "windFromDeg", valueAt(hourly, "wind_direction_10m", i));
     setIfPresent(p, "precipitationMmPerHour", out.rainMmPerHour);
     if (run) {
-        p["runUtc"] = isoUtc(*run);
+        p["runUtc"] = UtcTime::format(*run);
         p["stale"] = secondsBetween(*run, clock_.now()) > std::int64_t{cfg_.staleAfterHours} * 3600;
     }
     if (const auto est = rfext::refractionForPath(out.column, rfext::Metres(surface))) {
@@ -334,27 +375,27 @@ ForecastAt WeatherService::at(double lat, double lon, TimePoint time) {
             lastError = unreadable(e);  // a time the clock cannot hold
         }
     }
-    out.point["requestedUtc"] = isoUtc(time);
+    out.point["requestedUtc"] = UtcTime::format(time);
     if (!lastError.empty() && !reach) {
         out.notes.emplace_back("Weather", std::format("forecast unavailable ({}); standard atmosphere k = 4/3 used, "
                                                       "no rain term",
                                                       lastError));
         out.point["error"] = lastError;
     } else {
-        const std::string reaches = reach ? std::format(" (it reaches {})", isoUtc(*reach)) : "";
+        const std::string reaches = reach ? std::format(" (it reaches {})", UtcTime::format(*reach)) : "";
         out.notes.emplace_back("Weather", std::format("the requested time {} is outside the forecast{}; standard "
                                                       "atmosphere k = 4/3 used, no rain term",
-                                                      isoUtc(time), reaches));
-        if (reach) out.point["forecastUntilUtc"] = isoUtc(*reach);
+                                                      UtcTime::format(time), reaches));
+        if (reach) out.point["forecastUntilUtc"] = UtcTime::format(*reach);
     }
-    if (run) out.point["runUtc"] = isoUtc(*run);
+    if (run) out.point["runUtc"] = UtcTime::format(*run);
     return out;
 }
 
 json WeatherService::horizon(double lat, double lon) {
     json out = json::object();
     if (!source_) return {{"configured", false}};
-    if (const auto run = runTimeCached()) out["runUtc"] = isoUtc(*run);
+    if (const auto run = runTimeCached()) out["runUtc"] = UtcTime::format(*run);
     for (const Config::WeatherTier& tier : cfg_.tiers) {
         std::string error;
         const std::optional<json> r = fetchOrError(lat, lon, tier, error);
@@ -367,7 +408,7 @@ json WeatherService::horizon(double lat, double lon) {
             const json times = timesOf(hourly);
             if (!times.is_array()) continue;
             if (const auto last = lastCoveredHour(hourly, times)) {
-                out[tier.name == "long-range" ? "longRangeUntilUtc" : "hourlyUntilUtc"] = isoUtc(*last);
+                out[tier.name == "long-range" ? "longRangeUntilUtc" : "hourlyUntilUtc"] = UtcTime::format(*last);
             }
         } catch (const json::exception& e) {
             out["error"] = unreadable(e);

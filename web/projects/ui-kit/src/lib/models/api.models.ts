@@ -399,15 +399,10 @@ export interface ModuleInfo {
   stateDetail?: string;
 }
 
-export interface ValidationCheck {
-  name?: string;
-  ok?: boolean;
-  detail?: string;
-}
-
-export interface ValidationReport {
-  ok?: boolean;
-  checks?: ValidationCheck[];
+/** POST /admin/modules/reload: the listing after the server re-read its module root. */
+export interface ModuleReload {
+  modules?: ModuleInfo[];
+  notices?: string[];
 }
 
 export interface CalcPathRequest {

@@ -477,21 +477,6 @@ TEST_F(BackupTest, RefusesAFileThatComesTwice) {
     EXPECT_EQ(query(to, "select to_regclass('public.missions')::text"), "<null>");
 }
 
-TEST_F(BackupTest, RequestsKeepRunningWhileAChangeWaitsForABackup) {
-    const ServerFiles f = files("source");
-    fs::create_directories(f.modulesRoot);
-    ModuleGate gate;
-    gate.attach(f.modulesRoot);
-    auto backupRunning =
-        std::make_unique<FileLock>(f.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
-    auto change = std::async(std::launch::async, [&] { const ModuleGate::Change held(gate); });
-    EXPECT_EQ(change.wait_for(std::chrono::milliseconds(200)), std::future_status::timeout);
-    auto request = std::async(std::launch::async, [&] { const ModuleGate::Read held(gate); });
-    EXPECT_EQ(request.wait_for(std::chrono::seconds(2)), std::future_status::ready) << "a request waited behind it";
-    backupRunning.reset();  // the change goes ahead once the backup is done
-    EXPECT_EQ(change.wait_for(std::chrono::seconds(2)), std::future_status::ready);
-}
-
 namespace {
 
 /// A C++ step as a future version would add one: it rewrites rows with code and adds a module file.

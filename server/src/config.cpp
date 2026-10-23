@@ -35,7 +35,8 @@ std::string matchKey(const json& obj, const std::string& wanted) {
     static constexpr auto known = std::to_array<std::string_view>({
         "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "maxUploadBytes", "database", "url",
         "poolSize", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
-        "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "weather",
+        "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "allowDevOwnerKey", "requireSandbox", "maxMemoryMb",
+        "maxTimeoutMs", "weather",
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
@@ -146,6 +147,10 @@ Config Config::fromJson(json doc) {
     readPath(m, "worker", c.modules.worker);
     readPath(m, "trustStore", c.modules.trustStore);
     read(m, "isolateAll", c.modules.isolateAll);
+    read(m, "allowDevOwnerKey", c.modules.allowDevOwnerKey);
+    read(m, "requireSandbox", c.modules.requireSandbox);
+    read(m, "maxMemoryMb", c.modules.maxMemoryMb);
+    read(m, "maxTimeoutMs", c.modules.maxTimeoutMs);
 
     const json& w = doc.value("weather", json::object());
     read(w, "baseUrl", c.weather.baseUrl);
@@ -195,6 +200,9 @@ Config Config::fromJson(json doc) {
     }
     if (c.data.demStatedErrorM.has_value() && !(*c.data.demStatedErrorM >= 0.0)) {
         throw std::invalid_argument("data.demStatedErrorM must be >= 0");
+    }
+    if (c.modules.maxMemoryMb == 0 || c.modules.maxTimeoutMs == 0) {
+        throw std::invalid_argument("modules.maxMemoryMb and modules.maxTimeoutMs must be >= 1");
     }
 
     c.raw = doc;

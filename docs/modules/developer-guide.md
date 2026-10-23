@@ -3,10 +3,11 @@
 A module adds something to the radio map without touching the core: an extra loss term
 (rain, foliage, body shadow), an analysis of a route (battery, minimum altitude, relay), a
 library kind, or a UI panel. Modules are shared libraries with a C ABI, packed into a signed
-`.rfmod` file and installed by the server admin.
+`.rfmod` file and installed by the server operator with the `rfmod` CLI on the server machine.
+The HTTP API only lists, enables and configures modules; it cannot add one.
 
 The worked example is [`examples/modules/body-shadow`](../../examples/modules/body-shadow).
-It builds, packs and passes the server's upload checks in CI.
+It builds, packs and passes the install checks in CI.
 
 ## 1. Tools
 
@@ -25,12 +26,12 @@ rfmod keygen --out acme
 ```
 
 This writes `acme.pub` and `acme.secret`. Give `acme.pub` to the admin of each server that
-should run your modules; they add it under **Admin → Keys**. Keep `acme.secret` off servers and
+should run your modules; they trust it on the server machine with `rfmod trust add`. Keep `acme.secret` off servers and
 out of git: whoever has it can sign as you.
 
 The server has one key built in, the owner's. Modules signed with it run inside the server
 process. Modules signed with any other key run in a separate worker process (section 8).
-The admin can remove a key at any time; modules signed with it stop loading at once.
+The operator can remove a key at any time; modules signed with it stop loading at the next reload.
 
 ## 3. Start a project
 
@@ -48,7 +49,7 @@ The fields that matter most:
 | Field | Meaning |
 |---|---|
 | `id` | Namespaced, lower case: `acme.rain`. The `fpv.*`, `rf.*` and `example.*` prefixes belong to the owner. |
-| `version` | SemVer. An upload must be newer than what is installed. |
+| `version` | SemVer. An install must be newer than what is installed. |
 | `lifecycle` | `alpha`, `beta`, `stable` or `deprecated` (section 8). |
 | `abi` | Always `2` for now (the `RFMOD_ABI_VERSION` in `abi.h`). |
 | `host` | Range of host versions you support, for example `>=0.1.0 <1.0.0`. |
@@ -84,8 +85,8 @@ RFMOD_DEFINE_MODULE(RainModule)
 - `invoke` answers methods. Throw `rfmod::UnknownMethod`, `rfmod::BadRequest`, or any
   `std::exception`; the SDK turns them into error codes. Nothing crosses the ABI as a C++
   exception.
-- `selftest` runs when the admin uploads the package, in a worker, before anything is
-  installed. Check your maths against cases you know the answer to. Return
+- `selftest` runs when the operator installs the package (`rfmod install`), in a sandboxed
+  worker, before anything is installed. Check your maths against cases you know the answer to. Return
   `{"ok": bool, "checks": [{"name": "...", "ok": bool, "detail": "..."}]}`. Host calls are not
   available during the self-test.
 - `host()` gives the `HostClient` for calls back into the server (section 5).
@@ -294,26 +295,42 @@ through the registry's public-file lookup; `lib/` is never served.
 
 ## 8. Isolation
 
-Modules not signed with the owner key run in `rfmod-worker`, one process per module. The admin
-can also run first-party modules this way (`isolateAll`):
+Modules not signed with the owner key run in `rfmod-worker`, one process per module. The
+operator can also run first-party modules this way (`isolateAll`):
 
-- memory capped at `limits.memoryMb` (address space), no core dumps, no file writes,
-  32 open files at most;
+- memory capped at `limits.memoryMb` (address space) and the call time at `limits.timeoutMs`,
+  both further capped by the server's `modules.maxMemoryMb` and `modules.maxTimeoutMs`; a
+  reply larger than 16 MiB ends the worker, and a log line is cut at 1 MiB;
+- no core dumps, no file writes, 32 open files at most;
 - started with an empty environment, in the module's own directory, with every server
-  descriptor closed;
-- `no_new_privs` set, and a fresh network namespace so the module has no network, where the
-  kernel allows unprivileged namespaces. The upload report says which of these took effect on
-  that server; it is not assumed;
-- a call that runs past `limits.timeoutMs` kills the worker; a crash kills only the worker.
-  The next call starts a fresh one. The time limit applies to isolated modules only: an
-  owner-signed module running in-process cannot be stopped mid-call, so keep its calls short.
+  descriptor closed; the host kills the worker's whole process group;
+- `no_new_privs` set;
+- a Landlock ruleset that leaves the module read access to its own directory and the system
+  library directories only, so it can read neither the server's files nor its configuration;
+- a seccomp filter that refuses sockets, new processes (`fork`, `clone` without
+  `CLONE_THREAD`, `execve`), `ptrace`, the mount and module calls, `setuid` and the like,
+  changes to file modes, owners, times and attributes, truncation, and signals to any process
+  but itself (threads are allowed);
+- a fresh user and network namespace where the kernel allows unprivileged namespaces.
 
-This is a sandbox against mistakes and against greedy code, not a guarantee against a
-determined attacker: the module still runs as the server's user and can read what that user
-can read. That is why only the admin installs modules and only signed packages are accepted.
+The worker confines itself before it loads the module's library, so the library's
+constructors already run inside. It reports which of these took effect; the host assumes none. A module that is not
+signed with the owner key loads only when all of them did (`modules.requireSandbox`, on by
+default), so a kernel without Landlock or seccomp runs first-party modules only. Owner-signed
+modules run in-process and cannot be stopped mid-call, so keep their calls short.
+
+This is a sandbox against mistakes and against greedy code; a module still runs as the
+server's user. That is why only the operator installs modules, only signed packages are
+accepted, and the server's own module ids (`rf.*`, `fpv.*`) need the owner key.
 
 Write to stdout or stderr freely; it goes to the server log under your module id. Use
-`host().log(level, text)` for messages the admin should see.
+`host().log(level, text)` for messages the operator should see.
+
+Host calls are answered only while the server evaluates a request: a module that calls the host
+from `init` or from a thread of its own gets an error. Each request allows 10 000 host calls in
+all, nested at most 4 deep, and `link.evaluate` is refused inside `loss.contribute`, where it
+would run the caller again. Every request field is checked for shape and range before it reaches
+a service, and the error names the field.
 
 ## 9. Versions and deprecation
 
@@ -337,7 +354,7 @@ To retire a module or a major version, Kubernetes style:
 cmake -B build -DRFMOD_SDK=/path/to/fpv-radio-map/platform/rfmod/include && cmake --build build
 mkdir -p stage/lib && cp manifest.json stage/ && cp -r schema stage/ && cp build/libacme_rain.so stage/lib/
 rfmod pack stage --key acme.secret                  # → acme.rain-0.1.0.rfmod
-rfmod check acme.rain-0.1.0.rfmod --trust acme.pub  # every upload check except the self-test
+rfmod check acme.rain-0.1.0.rfmod --trust acme.pub  # every install check except the self-test
 rfmod test  acme.rain-0.1.0.rfmod --trust acme.pub  # also runs the self-test in a worker
 # add --with dep-1.0.0.rfmod for each required module
 ```
@@ -349,9 +366,14 @@ current directory and removes it when it finishes.
 
 Packing is reproducible: the same files and key give the same bytes.
 
-Send the `.rfmod` to the admin. They upload it under **Admin → Modules**; the server repeats
-every check, runs the self-test, and installs only if everything passed. The report lists each
-check with its result, so a refusal always says why.
+Send the `.rfmod` to the operator. They copy it to the server machine and run
+`rfmod trust add acme.pub --label "Acme" --trust-store /var/lib/rfmap/keys.json` once, then
+`rfmod install acme.rain-0.1.0.rfmod --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json`;
+the CLI repeats every check,
+runs the self-test in a sandboxed worker and installs only if everything passed, then
+`POST /api/v1/admin/modules/reload` makes the server pick it up. The report lists each check
+with its result, so a refusal always says why. There is no upload through the API or the
+browser: a module reaches a server only through someone who can log in to its machine.
 
 ## Package format
 

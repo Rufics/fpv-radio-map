@@ -53,7 +53,7 @@ function executorFor(persona) {
 }
 
 function thresholds() {
-  const found = { ...(plan.thresholds || {}) };
+  const found = { ...plan.thresholds };
   const keep = (name) => { if (!(name in found)) found[name] = ["count>=0"]; };
   const keepTrend = (name) => { if (!(name in found)) found[name] = ["avg>=0"]; };
   for (const persona of plan.personas) {
@@ -84,7 +84,7 @@ const personas = Object.fromEntries(plan.personas.map((p) => {
   const steps = p.steps.map((s) => {
     total += s.weight;
     // expect: one status or several; only those count as answered well (also for http_req_failed).
-    const statuses = [].concat(s.expect || 200);
+    const statuses = [s.expect || 200].flat();
     const responseCallback = s.expect === undefined ? undefined : http.expectedStatuses(...statuses);
     return { ...s, upTo: total, statuses, responseCallback };
   });

@@ -4,13 +4,13 @@
 // on fd 3; the module's own stdout and stderr go to the host log. Usage (host only):
 //   rfmod-worker <library.so> <memoryMb>
 
+#include "worker_sandbox.hpp"
+
 #include "rfmod/abi.h"
 
 #include <nlohmann/json.hpp>
 
 #include <dlfcn.h>
-#include <sched.h>
-#include <sys/prctl.h>
 #include <unistd.h>
 
 #include <array>
@@ -124,23 +124,36 @@ void serve(const rfmod_module* api, Channel& channel) {
 
 /// The worker after its arguments are checked. Returns the exit code.
 int run(const char* library) {
-
-    // Hardening that does not need privileges. Each result is reported to the host as it is.
-    const bool noNewPrivs = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0;
-    // A new user+network namespace leaves the module with only a loopback device and no route out.
-    // Where the kernel or container forbids unprivileged namespaces this fails and we say so.
-    const bool netIsolated = unshare(CLONE_NEWUSER | CLONE_NEWNET) == 0;
-
     // Both outlive every module call: the module keeps the host pointer from init until shutdown.
     rfmod_host_context context;
     const rfmod_host host{RFMOD_ABI_VERSION, &context, &hostCall, &hostLog};
 
     const json init = context.channel.receive();
-    auto fail = [&context](const std::string& message) {
-        context.channel.send({{"t", "ready"}, {"status", 1}, {"message", message}});
+    json sandboxJson;  // null until the sandbox has been applied
+    // A failure reply carries the sandbox report once there is one, so the host can tell a
+    // module that failed to load from a worker that could not confine itself.
+    auto fail = [&context, &sandboxJson](const std::string& message) {
+        json ready = {{"t", "ready"}, {"status", 1}, {"message", message}};
+        if (!sandboxJson.is_null()) ready["sandbox"] = sandboxJson;
+        context.channel.send(ready);
         return 1;
     };
     if (init.value("t", "") != "init") return fail("expected init");
+
+    // Confine first: dlopen runs the library's constructors, which are module code. Each
+    // measure is reported to the host as it is, and the host decides whether that is enough for
+    // the module's signer. The host started the worker in the module's directory: the only
+    // directory it keeps read access to, besides the system libraries the module links.
+    const WorkerSandbox::Report sandbox = WorkerSandbox(".").apply();
+    if (!sandbox.notes.empty()) std::cerr << "rfmod-worker: sandbox: " << sandbox.notes << '\n';
+    sandboxJson = {{"noNewPrivileges", sandbox.noNewPrivileges},
+                   {"networkIsolated", sandbox.networkIsolated},
+                   {"filesystemIsolated", sandbox.filesystemIsolated},
+                   {"syscallFilter", sandbox.syscallFilter}};
+    // When the host requires every measure, the library is not even loaded without them.
+    if (init.value("requireSandbox", true) && !sandbox.complete()) {
+        return fail("the worker could not confine itself: " + sandbox.notes);
+    }
 
     void* handle = dlopen(library, RTLD_NOW | RTLD_LOCAL);
     if (!handle) return fail(std::string("dlopen: ") + dlerror());
@@ -157,10 +170,8 @@ int run(const char* library) {
         return fail("module init returned an error");
     }
 
-    context.channel.send({{"t", "ready"},
-                          {"status", 0},
-                          {"manifest", std::string(api->manifest_json())},
-                          {"sandbox", {{"noNewPrivileges", noNewPrivs}, {"networkIsolated", netIsolated}}}});
+    context.channel.send(
+        {{"t", "ready"}, {"status", 0}, {"manifest", std::string(api->manifest_json())}, {"sandbox", sandboxJson}});
 
     serve(api, context.channel);
     api->shutdown();

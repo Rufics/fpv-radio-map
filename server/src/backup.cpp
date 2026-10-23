@@ -187,7 +187,7 @@ BackupSummary BackupWriter::write(std::ostream& out) {
     pqxx::transaction<pqxx::isolation_level::repeatable_read, pqxx::write_policy::read_only> w(connection_);
     const SchemaVersion version = SchemaMigrator::recorded(w).withChecksumsFrom(catalog_.version());
     if (version.empty()) throw BackupError("the database has no schema yet: nothing to back up");
-    out << json{{"format", kFormat}, {"version", kVersion}, {"createdAt", isoUtc(Clock::now())},
+    out << json{{"format", kFormat}, {"version", kVersion}, {"createdAt", UtcTime::format(Clock::now())},
                 {"schema", version.stamp().toJson()}}.dump()
         << '\n';
 

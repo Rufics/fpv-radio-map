@@ -3,6 +3,7 @@
 #include "rfmod/crypto.hpp"
 
 #include <filesystem>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -27,14 +28,16 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-/// The signing keys this host accepts. The owner key is compiled in; the admin adds or
-/// removes the others, which are kept in a JSON file.
+/// The signing keys this host accepts. The owner key is compiled in; the operator adds or
+/// removes the others with the CLI, which keeps them in a JSON file the server re-reads on
+/// reload. Safe to read from any thread while another reloads.
 class TrustStore {
 public:
     /// `ownerKeyText` is the RFMAP_OWNER_PUBKEY build value. `storePath` holds admin keys.
     TrustStore(std::string_view ownerKeyText, std::filesystem::path storePath);
 
-    [[nodiscard]] const std::vector<TrustedKey>& keys() const { return keys_; }
+    /// A snapshot: the keys as they are now.
+    [[nodiscard]] std::vector<TrustedKey> keys() const;
     [[nodiscard]] std::optional<TrustedKey> find(std::string_view keyId) const;
 
     /// Adds an admin key. Throws std::invalid_argument for a bad key or a duplicate.
@@ -42,11 +45,16 @@ public:
     /// Removes an admin key. Throws std::invalid_argument for the owner key or an unknown id.
     void remove(const std::string& keyId);
 
+    /// Re-reads the store file: keys added or removed by the rfmod CLI since the last read.
+    void reload();
+
 private:
     void load();
     void save() const;
+    [[nodiscard]] std::optional<TrustedKey> findUnlocked(std::string_view keyId) const;
 
     std::filesystem::path storePath_;
+    mutable std::mutex mutex_;
     std::vector<TrustedKey> keys_;
 };
 

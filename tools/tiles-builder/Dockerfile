@@ -87,7 +87,8 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     git init -q /tmp/fonts; cd /tmp/fonts; \
     git remote add origin https://github.com/protomaps/basemaps-assets.git; \
     git config core.sparseCheckout true; \
-    printf 'fonts/Noto Sans Regular/\nfonts/Noto Sans Medium/\nfonts/Noto Sans Italic/\nfonts/OFL.txt\n' > .git/info/sparse-checkout; \
+    printf 'fonts/Noto Sans Regular/\nfonts/Noto Sans Medium/\nfonts/Noto Sans Italic/\nfonts/OFL.txt\n' \
+      > .git/info/sparse-checkout; \
     git fetch -q --depth 1 --filter=blob:none origin "${FONTS_COMMIT}"; \
     git checkout -q FETCH_HEAD; \
     test "$(git rev-parse HEAD)" = "${FONTS_COMMIT}"; \

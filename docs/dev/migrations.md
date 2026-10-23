@@ -61,6 +61,10 @@ A backup holds the module root's lock while it runs, and a migration takes it ex
 backup never mixes the rows of one version with the files of another. A start with nothing to
 apply checks that first, with one read and no lock or DDL, so its migration never waits for a
 running backup. Loading the modules afterwards does wait, since it may restore a module's files.
+Everything else that writes under the module root takes the same lock exclusively: the rfmod
+CLI's install and remove (`ModuleInstaller`), and the server's reload and settings changes
+(`ModuleGate::Change`). Requests take nothing, since they keep the module instances they started
+with.
 
 A staged file sits next to its target as `<target>.rfmap-restoring`. A file that already has that
 name is never overwritten: the step fails instead.
