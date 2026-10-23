@@ -75,14 +75,12 @@ bool DataApi::mayReadAlpha(const HttpRequest& req, const std::string& moduleId) 
 
 void DataApi::getModuleFile(const HttpRequest& req, HttpReply& res) const {
     const std::string id = req.match(1);
-    const auto file = s_.catalog().file(id, req.match(2));
+    auto file = s_.catalog().file(id, req.match(2));
     if (!file.has_value() || (file->alpha && !mayReadAlpha(req, id))) throw HttpError(404, "no such module file");
-    const std::ifstream in(file->path, std::ios::binary);
-    // The file may have gone between the lookup and here (a reload or CLI removal): never send
-    // an empty body the browser would cache as the module.
-    if (!in) throw HttpError(404, "no such module file");
+    // The stream was opened with the lookup, so a reload or CLI replacement in between changes
+    // nothing here: the bytes are the ones the alpha flag was decided for.
     std::ostringstream content;
-    content << in.rdbuf();
+    content << file->content.rdbuf();
     // A module file is a resource the app imports, never a page: no sniffing, no scripts if a
     // browser is pointed at it directly, no use from another origin.
     res.header("X-Content-Type-Options", "nosniff");

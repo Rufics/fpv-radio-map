@@ -311,7 +311,9 @@ std::optional<ModuleRegistry::PublicFile> ModuleRegistry::publicFile(const std::
         if (const bool isUi = p.string().starts_with((dir / "ui" / "").string()); (!isUi && !isSchema) || !fs::is_regular_file(p)) {
             return std::nullopt;
         }
-        return PublicFile{std::move(p), it->second.installed.manifest.lifecycle};
+        std::ifstream content(p, std::ios::binary);
+        if (!content) return std::nullopt;
+        return PublicFile{std::move(p), it->second.installed.manifest.lifecycle, std::move(content)};
     } catch (const PathEscapeError&) {
         return std::nullopt;
     }

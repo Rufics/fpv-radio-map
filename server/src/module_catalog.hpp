@@ -6,7 +6,7 @@
 
 #include <rfmod/registry.hpp>
 
-#include <filesystem>
+#include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,12 +26,12 @@ public:
     [[nodiscard]] json list(bool admin) const;
 
     struct PublicFile {
-        std::filesystem::path path;
+        std::ifstream content;  ///< open on the file the alpha flag was decided for
         std::string contentType;
         bool alpha = false;  ///< needs the admin or a grant
     };
-    /// A module's public file, or nothing: lib/ and anything outside ui/ or the options schema
-    /// is never served, whatever the path says.
+    /// A module's public file, open, or nothing: lib/ and anything outside ui/ or the options
+    /// schema is never served, whatever the path says.
     [[nodiscard]] std::optional<PublicFile> file(const std::string& id, const std::string& path) const;
     [[nodiscard]] bool grantValid(const std::string& id, std::string_view grant, TimePoint now) const;
 

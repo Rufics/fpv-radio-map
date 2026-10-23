@@ -10,6 +10,7 @@
 #include "rfmod/trust.hpp"
 
 #include <filesystem>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -68,15 +69,17 @@ public:
     [[nodiscard]] std::vector<std::shared_ptr<IModuleInstance>> withCapability(const std::string& capability) const;
     [[nodiscard]] std::shared_ptr<IModuleInstance> instance(const std::string& id) const;
 
-    /// A file the server may serve, with the lifecycle of the module version it belongs to.
+    /// A file the server may serve, open, with the lifecycle of the module version it belongs to.
     struct PublicFile {
-        std::filesystem::path path;
+        std::filesystem::path path;  ///< where it was found; the name gives the content type
         Lifecycle lifecycle;
+        std::ifstream content;  ///< bound to the file as it was when the lifecycle was read
     };
 
     /// A module's UI bundle or options schema file, for the server to serve; never lib/ and
-    /// never outside the module's directory. The path and the lifecycle come from one snapshot
-    /// of the registry, so a reload cannot pair a new version's file with an old version's lifecycle.
+    /// never outside the module's directory. The file is opened and the lifecycle read in one
+    /// snapshot of the registry, so neither a reload nor an install that replaces the module's
+    /// directory can pair a new version's bytes with an old version's lifecycle.
     [[nodiscard]] std::optional<PublicFile> publicFile(const std::string& id, const std::string& path) const;
 
 private:

@@ -393,6 +393,7 @@ TEST_F(RegistryTest, OptionsAreValidated) {
     const auto schema = registry->publicFile("test.alpha", "schema/options.json");
     ASSERT_TRUE(schema.has_value());
     EXPECT_EQ(schema->path.filename(), "options.json");
+    EXPECT_TRUE(schema->content.is_open());  // opened under the same snapshot as the lifecycle
     EXPECT_EQ(schema->lifecycle, Lifecycle::Beta);  // the file and its module's lifecycle come as one snapshot
     EXPECT_FALSE(registry->publicFile("test.alpha", "lib/libmod.so"));
     EXPECT_FALSE(registry->publicFile("test.alpha", "ui/../lib/libmod.so"));

@@ -45,11 +45,12 @@ json ModuleCatalog::list(bool admin) const {
 }
 
 std::optional<ModuleCatalog::PublicFile> ModuleCatalog::file(const std::string& id, const std::string& path) const {
-    // One registry call gives the path and the lifecycle from the same snapshot, so a reload
-    // that swaps the module's version cannot pair a new alpha bundle with an old public lifecycle.
-    const auto found = registry_.publicFile(id, path);
+    // One registry call opens the file and reads the lifecycle from the same snapshot, so neither
+    // a reload nor an install that swaps the module's version can pair a new alpha bundle with an
+    // old public lifecycle: the open stream stays on the bytes the flag was decided for.
+    auto found = registry_.publicFile(id, path);
     if (!found) return std::nullopt;
-    return PublicFile{found->path, contentType(found->path.extension().string()), found->lifecycle == rfmod::Lifecycle::Alpha};
+    return PublicFile{std::move(found->content), contentType(found->path.extension().string()), found->lifecycle == rfmod::Lifecycle::Alpha};
 }
 
 bool ModuleCatalog::grantValid(const std::string& id, std::string_view grant, TimePoint now) const {
