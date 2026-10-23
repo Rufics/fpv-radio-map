@@ -1,6 +1,10 @@
 #include "rfmod/registry.hpp"
 
+#include <fcntl.h>
+#include <sys/stat.h>
+
 #include <algorithm>
+#include <array>
 #include <format>
 #include <ranges>
 #include <system_error>
@@ -60,7 +64,8 @@ void ModuleRegistry::shutdownAll() {
 ModuleRegistry::Entries ModuleRegistry::readEntries(std::vector<std::string>& notices) const {
     Entries entries;
     for (auto& [id, installed] : InstalledReader(store_, verifier_).all(notices)) {
-        Entry e{std::move(installed), ModuleState::Disabled, {}, nullptr, nullptr};
+        Entry e{std::move(installed), ModuleState::Disabled, {}, nullptr, nullptr, {}};
+        e.dir = openDir(id, e.installed.dir, notices);
         if (const auto& schema = e.installed.manifest.optionsSchema) {
             try {
                 e.optionsSchema = std::make_shared<const OptionsSchema>(json::parse(store_.readFile(e.installed.dir / *schema)));
@@ -297,26 +302,66 @@ std::shared_ptr<IModuleInstance> ModuleRegistry::instance(const std::string& id)
     return it == entries_.end() ? nullptr : it->second.instance;
 }
 
-std::optional<ModuleRegistry::PublicFile> ModuleRegistry::publicFile(const std::string& id, const std::string& path) const {
-    const std::lock_guard lock(mutex_);
-    const auto it = entries_.find(id);
-    if (it == entries_.end() || it->second.state != ModuleState::Active) return std::nullopt;
-    try {
-        // Canonical, so ".." and symlinks are resolved before the check: the file must be the
-        // options schema itself or lie under ui/; never lib/ or anything outside the module.
-        const fs::path dir = store_.root().confine(it->second.installed.dir);
-        fs::path p = store_.root().confine(dir / path);
-        const auto& schema = it->second.installed.manifest.optionsSchema;
-        const bool isSchema = schema && p == store_.root().confine(dir / *schema);
-        if (const bool isUi = p.string().starts_with((dir / "ui" / "").string()); (!isUi && !isSchema) || !fs::is_regular_file(p)) {
-            return std::nullopt;
-        }
-        std::ifstream content(p, std::ios::binary);
-        if (!content) return std::nullopt;
-        return PublicFile{std::move(p), it->second.installed.manifest.lifecycle, std::move(content)};
-    } catch (const PathEscapeError&) {
-        return std::nullopt;
+FileDescriptor ModuleRegistry::openDir(const std::string& id, const fs::path& dir, std::vector<std::string>& notices) const {
+    FileDescriptor fd(::open(store_.root().confine(dir).c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW));
+    if (!fd.valid()) notices.push_back(id + ": its directory cannot be opened, so its files are not served");
+    return fd;
+}
+
+std::optional<fs::path> ModuleRegistry::servablePath(const Entry& e, const std::string& path) {
+    // Normalised lexically, never canonically: the directory on disk may already be another
+    // version's, and the descriptor in the entry is the one the path is opened against.
+    const fs::path rel = fs::path(path).lexically_normal();
+    if (rel.empty() || rel.is_absolute() || !rel.has_filename()) return std::nullopt;
+    if (std::ranges::any_of(rel, [](const fs::path& part) { return part == ".."; })) return std::nullopt;
+    const auto& schema = e.installed.manifest.optionsSchema;
+    const bool isSchema = schema && rel == fs::path(*schema).lexically_normal();
+    const bool isUi = *rel.begin() == "ui" && rel != "ui";
+    return (isUi || isSchema) ? std::optional(rel) : std::nullopt;
+}
+
+namespace {
+
+/// A regular file opened under `dir` without following a symlink in its last part; none otherwise.
+FileDescriptor openRegular(const FileDescriptor& dir, const fs::path& rel) {
+    FileDescriptor fd(::openat(dir.get(), rel.c_str(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW));
+    if (!fd.valid()) return {};
+    struct stat st{};
+    if (::fstat(fd.get(), &st) != 0 || !S_ISREG(st.st_mode)) return {};
+    return fd;
+}
+
+std::string readAll(const FileDescriptor& fd) {
+    std::string out;
+    std::array<char, 65536> buf{};
+    for (;;) {
+        const ssize_t n = ::read(fd.get(), buf.data(), buf.size());
+        if (n < 0) throw std::system_error(errno, std::generic_category(), "read module file");
+        if (n == 0) return out;
+        out.append(buf.data(), static_cast<std::size_t>(n));
     }
+}
+
+}  // namespace
+
+std::optional<ModuleRegistry::PublicFile> ModuleRegistry::publicFile(const std::string& id, const std::string& path) const {
+    FileDescriptor file;
+    fs::path rel;
+    Lifecycle lifecycle{};
+    {
+        const std::lock_guard lock(mutex_);
+        const auto it = entries_.find(id);
+        if (it == entries_.end() || it->second.state != ModuleState::Active || !it->second.dir.valid()) return std::nullopt;
+        const auto servable = servablePath(it->second, path);
+        if (!servable) return std::nullopt;
+        // Opened relative to the directory the entry was loaded from: an install that renamed a
+        // new version into place since then is not visible through this descriptor.
+        file = openRegular(it->second.dir, *servable);
+        if (!file.valid()) return std::nullopt;
+        rel = *servable;
+        lifecycle = it->second.installed.manifest.lifecycle;
+    }
+    return PublicFile{std::move(rel), lifecycle, readAll(file)};
 }
 
 }  // namespace rfmod

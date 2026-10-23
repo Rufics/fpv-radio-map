@@ -6,7 +6,6 @@
 
 #include <rfmod/registry.hpp>
 
-#include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -26,7 +25,7 @@ public:
     [[nodiscard]] json list(bool admin) const;
 
     struct PublicFile {
-        std::ifstream content;  ///< open on the file the alpha flag was decided for
+        std::string content;  ///< the bytes of the version the alpha flag was decided for
         std::string contentType;
         bool alpha = false;  ///< needs the admin or a grant
     };

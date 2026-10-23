@@ -1,8 +1,5 @@
 #include "data_api.hpp"
 
-#include <fstream>
-#include <sstream>
-
 namespace rfmap {
 
 // ---- library ----
@@ -77,17 +74,14 @@ void DataApi::getModuleFile(const HttpRequest& req, HttpReply& res) const {
     const std::string id = req.match(1);
     auto file = s_.catalog().file(id, req.match(2));
     if (!file.has_value() || (file->alpha && !mayReadAlpha(req, id))) throw HttpError(404, "no such module file");
-    // The stream was opened with the lookup, so a reload or CLI replacement in between changes
-    // nothing here: the bytes are the ones the alpha flag was decided for.
-    std::ostringstream content;
-    content << file->content.rdbuf();
+    // The bytes came with the lookup, from the version the alpha flag was decided for.
     // A module file is a resource the app imports, never a page: no sniffing, no scripts if a
     // browser is pointed at it directly, no use from another origin.
     res.header("X-Content-Type-Options", "nosniff");
     res.header("Content-Security-Policy", "default-src 'none'; sandbox");
     res.header("Cross-Origin-Resource-Policy", "same-origin");
     res.header("Cache-Control", file->alpha ? "private, no-store" : "public, max-age=300");
-    res.text(200, content.str(), file->contentType.c_str());
+    res.text(200, file->content, file->contentType.c_str());
 }
 
 }  // namespace rfmap

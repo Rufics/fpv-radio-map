@@ -374,6 +374,41 @@ TEST_F(RegistryTest, UnreadableStateFileFallsBackToDefaults) {
     EXPECT_NE(registry->notices().front().find("state.json"), std::string::npos);
 }
 
+TEST_F(RegistryTest, AnInstallWithoutAReloadNeverServesTheNewVersionsFiles) {
+    // The server serves what it loaded. `rfmod install` swaps the directory on disk in its own
+    // process; until the admin reloads, the loaded version's files (or none) are served, never
+    // the new version's bytes under the loaded version's lifecycle.
+    auto v1 = baseManifest("test.alpha", "1.0.0");
+    v1["provides"].push_back("ui.panel");
+    v1["ui"] = {{"bundle", "ui/x.js"}, {"slots", {"side.panels"}}};
+    PackageFiles one = packageWith(v1, RFMOD_LIB_ALPHA);
+    one.files["ui/x.js"] = "export const version = 1;";
+    ASSERT_TRUE(install(PackageWriter::pack(one, ownerSecret())).ok());
+    const auto before = registry->publicFile("test.alpha", "ui/x.js");
+    ASSERT_TRUE(before.has_value());
+    EXPECT_EQ(before->content, "export const version = 1;");
+    EXPECT_EQ(before->lifecycle, Lifecycle::Beta);
+
+    auto v2 = v1;
+    v2["version"] = "1.1.0";
+    v2["lifecycle"] = "alpha";
+    PackageFiles two = packageWith(v2, RFMOD_LIB_ALPHA2);
+    two.files["ui/x.js"] = "export const version = 2;";
+    const auto upgraded = installer->install(PackageWriter::pack(two, ownerSecret()));  // the CLI; no reload yet
+    ASSERT_TRUE(upgraded.ok()) << upgraded.toJson().dump(2);
+    if (const auto during = registry->publicFile("test.alpha", "ui/x.js")) {
+        EXPECT_EQ(during->content, "export const version = 1;");
+        EXPECT_EQ(during->lifecycle, Lifecycle::Beta);
+    }
+    EXPECT_FALSE(registry->publicFile("test.alpha", "ui/../lib/libmod.so"));
+
+    registry->reload();
+    const auto after = registry->publicFile("test.alpha", "ui/x.js");
+    ASSERT_TRUE(after.has_value());
+    EXPECT_EQ(after->content, "export const version = 2;");
+    EXPECT_EQ(after->lifecycle, Lifecycle::Alpha);
+}
+
 TEST_F(RegistryTest, OptionsAreValidated) {
     auto m = baseManifest("test.alpha", "1.0.0");
     m["optionsSchema"] = "schema/options.json";
@@ -393,7 +428,7 @@ TEST_F(RegistryTest, OptionsAreValidated) {
     const auto schema = registry->publicFile("test.alpha", "schema/options.json");
     ASSERT_TRUE(schema.has_value());
     EXPECT_EQ(schema->path.filename(), "options.json");
-    EXPECT_TRUE(schema->content.is_open());  // opened under the same snapshot as the lifecycle
+    EXPECT_NE(schema->content.find("failInit"), std::string::npos);  // read with the lifecycle, from the same version
     EXPECT_EQ(schema->lifecycle, Lifecycle::Beta);  // the file and its module's lifecycle come as one snapshot
     EXPECT_FALSE(registry->publicFile("test.alpha", "lib/libmod.so"));
     EXPECT_FALSE(registry->publicFile("test.alpha", "ui/../lib/libmod.so"));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rfmod/dependency_resolver.hpp"
+#include "rfmod/file_descriptor.hpp"
 #include "rfmod/host.hpp"
 #include "rfmod/installed.hpp"
 #include "rfmod/loader.hpp"
@@ -10,7 +11,6 @@
 #include "rfmod/trust.hpp"
 
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -41,6 +41,11 @@ public:
         std::string stateDetail;
         std::shared_ptr<IModuleInstance> instance;
         std::shared_ptr<const OptionsSchema> optionsSchema;  ///< null when the manifest names none
+        /// The module's directory as it was when this entry was read. Public files are opened
+        /// relative to it, so an `rfmod install` that swaps the directory on disk before the next
+        /// reload serves this version's files (or none), never the new version's under this
+        /// version's lifecycle.
+        FileDescriptor dir;
     };
 
     ModuleRegistry(RegistryConfig config, const TrustStore& trust, IHostServices& services);
@@ -69,17 +74,18 @@ public:
     [[nodiscard]] std::vector<std::shared_ptr<IModuleInstance>> withCapability(const std::string& capability) const;
     [[nodiscard]] std::shared_ptr<IModuleInstance> instance(const std::string& id) const;
 
-    /// A file the server may serve, open, with the lifecycle of the module version it belongs to.
+    /// A file the server may serve, with the lifecycle of the module version it belongs to.
     struct PublicFile {
-        std::filesystem::path path;  ///< where it was found; the name gives the content type
+        std::filesystem::path path;  ///< package-relative; the name gives the content type
         Lifecycle lifecycle;
-        std::ifstream content;  ///< bound to the file as it was when the lifecycle was read
+        std::string content;  ///< the bytes of the version the lifecycle belongs to
     };
 
     /// A module's UI bundle or options schema file, for the server to serve; never lib/ and
-    /// never outside the module's directory. The file is opened and the lifecycle read in one
-    /// snapshot of the registry, so neither a reload nor an install that replaces the module's
-    /// directory can pair a new version's bytes with an old version's lifecycle.
+    /// never outside the module's directory. The bytes come from the directory the entry was
+    /// loaded from and the lifecycle from the same entry, so neither a reload nor an `rfmod
+    /// install` that replaces the directory on disk can pair one version's bytes with another's
+    /// lifecycle.
     [[nodiscard]] std::optional<PublicFile> publicFile(const std::string& id, const std::string& path) const;
 
 private:
@@ -92,6 +98,10 @@ private:
     void shutdownLogged(IModuleInstance& instance) const;
     /// The entries for what is installed, with their options schemas compiled.
     [[nodiscard]] Entries readEntries(std::vector<std::string>& notices) const;
+    /// A descriptor on the module directory, or an invalid one with a notice.
+    [[nodiscard]] FileDescriptor openDir(const std::string& id, const std::filesystem::path& dir, std::vector<std::string>& notices) const;
+    /// The package-relative path a request may name: normalised, inside the package, ui/ or the schema.
+    [[nodiscard]] static std::optional<std::filesystem::path> servablePath(const Entry& e, const std::string& path);
     /// Loads the planned modules in order, recording each outcome.
     void loadAll(const std::vector<DependencyResolver::Step>& plan);
     /// Loads one module whose dependencies are active; true if it is.
