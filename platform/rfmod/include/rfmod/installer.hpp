@@ -1,5 +1,6 @@
 #pragma once
 
+#include "rfmod/file_lock.hpp"
 #include "rfmod/host.hpp"
 #include "rfmod/installed.hpp"
 #include "rfmod/loader.hpp"
@@ -11,6 +12,7 @@
 #include <array>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -30,6 +32,8 @@ struct InstallerConfig {
 /// server's. Every package is verified, checked against what is installed, self-tested in a
 /// worker and only then moved into place. The server picks the result up with
 /// ModuleRegistry::reload().
+/// Every call holds the root's lock file (kRootLockFile) exclusively, so a backup of the root
+/// never reads it half-changed.
 class ModuleInstaller {
 public:
     /// `selfTestHost` answers the host calls a self-test makes.
@@ -54,6 +58,11 @@ public:
 
 private:
     using Installed = std::map<std::string, InstalledModule, std::less<>>;
+
+    /// The root's lock file, held exclusively: create it before anything under the root changes.
+    [[nodiscard]] std::unique_ptr<FileLock> lockRoot() const;
+    /// installed() without the lock, for a caller that holds it.
+    [[nodiscard]] Installed readInstalled() const;
 
     [[nodiscard]] ValidationReport run(std::string_view archive, bool install) const;
     /// The checks against what is installed: signer, version upgrade, dependents, dependencies, lifecycle.

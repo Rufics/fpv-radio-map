@@ -15,9 +15,8 @@ The settings are in [`sonar-project.properties`](../../sonar-project.properties)
 - **C++.** An instrumented Debug build (`-DRFMAP_COVERAGE=ON`) provides
   `build-sonar/compile_commands.json` for the analyser and the coverage, collected with `gcovr`
   using the same filters as the CI report.
-- **Python.** Analysed as Python 3.14, the version on Ubuntu 26.04 that CI uses, and 3.12, the
-  version in the tiles-builder image (Ubuntu 24.04). Coverage comes from the
-  `tools/ci` unit tests.
+- **Python.** Analysed as Python 3.14, the version on Ubuntu 26.04 that both CI and the
+  tiles-builder image use. Coverage comes from the `tools/ci` unit tests.
 - **TypeScript.** Coverage of the `ui-kit` and `fpv-app` unit tests, merged into one LCOV report by
   `tools/ci/sonar_lcov.py`, which makes the paths relative to the repository root.
 

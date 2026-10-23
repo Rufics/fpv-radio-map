@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.hpp"
+#include "migrations.hpp"
 
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
@@ -19,6 +20,12 @@ inline std::filesystem::path scratchDir(const std::string& name) {
     const std::filesystem::path dir = std::filesystem::current_path() / "test-scratch" / name;
     std::filesystem::create_directories(dir);
     return dir;
+}
+
+/// Brings `db` to the schema of `sqlDir`, as the start of the server does.
+inline void migrate(Database& db, const std::filesystem::path& sqlDir) {
+    const MigrationCatalog catalog(sqlDir);
+    db.with([&catalog](pqxx::connection& c) { return SchemaMigrator(catalog, {}, {}).migrate(c, {}); });
 }
 
 class FakeClock final : public IClock {

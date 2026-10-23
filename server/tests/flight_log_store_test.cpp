@@ -3,6 +3,7 @@
 // ctest gives a throw-away database.
 
 #include "flight_logs.hpp"
+#include "test_support.hpp"
 
 #include <gtest/gtest.h>
 
@@ -17,7 +18,7 @@ namespace {
 class StoreRig {
 public:
     explicit StoreRig(const std::string& url) : db_(prepare(url), 1), store_(db_) {
-        (void)db_.migrate(RFMAP_SQL_DIR);
+        rfmap::test::migrate(db_, RFMAP_SQL_DIR);
         db_.tx([](pqxx::work& w) {
             w.exec("insert into missions(id, owner_key_hash, name, doc) values ('m1', '\\x00', 'test', '{}')");
             return 0;

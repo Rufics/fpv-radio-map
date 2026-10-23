@@ -53,6 +53,7 @@ endif()
 
 add_library(rfmod_platform
   src/semver.cpp
+  src/file_lock.cpp
   src/crypto.cpp
   src/manifest.cpp
   src/trust.cpp

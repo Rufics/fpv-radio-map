@@ -566,22 +566,122 @@ Every variable should come back with numbers, not `null`. Use your area's coordi
 ## 10. Backups
 
 Two things cannot be rebuilt: the database and the `rfmap-state` volume (installed modules and
-trusted keys). Back them up regularly, and keep the owner key offline (step 4).
+trusted keys). The server writes both into one file. It reads one consistent snapshot, so the
+stack keeps running while it works. An `rfmod install` or `rfmod remove`, a **Reload** and a
+module setting saved meanwhile wait until the backup has read the files:
 
 ```sh
 cd ~/fpv-radio-map/deploy
-mkdir -p ~/rfmap-backup
-docker compose exec -T postgis pg_dump -U rfmap -Fc rfmap > ~/rfmap-backup/rfmap-$(date +%F).dump
-docker run --rm -v rfmap_rfmap-state:/state:ro -v "$HOME/rfmap-backup:/backup" alpine:3.20 \
-    tar -czf "/backup/rfmap-state-$(date +%F).tgz" -C /state .
+mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup
+docker compose exec -T rfmap-server rfmap-server --backup > ~/rfmap-backup/rfmap-$(date +%F).backup.zst
 ```
 
-Copy `~/rfmap-backup` and `deploy/.env` to another machine. The map data can always be built
-again from step 2.
+It prints what it wrote, for example `backed up 9 tables, 120 rows and 3 files`. The file is
+compressed with zstd: `zstdcat` shows it as text, one JSON object per line. The first line names
+the schema it was written under (its last migration, how many there are and a fingerprint of
+them), and the last line starts with `{"end":true`. The file holds data only: the rows of each
+table, the module files and the trusted keys, never the schema. The result cache is left out: it
+fills again. A restore reads an uncompressed backup of an older version too. Keep the owner key offline (step 4), and copy `~/rfmap-backup` and `deploy/.env`
+to another machine. The map data can always be built again from step 2.
+
+### 10.1 Restore on a new server
+
+A restore builds the schema with the server's own migrations, loads the rows and applies the
+migrations that came after the backup, all in one transaction, then puts the module files back
+once that transaction has committed. A backup therefore restores into the same or a newer
+server, on any PostgreSQL version, and the migrations adapt the data to the new version. It
+restores only into a database that has no schema yet. If it stops, nothing is committed to the database, which stays empty, and no module
+file or trust store (`keys.json`) is changed: fix the cause and run it again. The files go into
+place only after the database has committed, each replacing the file of the same name.
+
+One failure comes after that commit: a file that cannot move into place, for example because a
+directory of the same name is in the way. The rows are then restored, and the error names the
+file. Do not run the restore again, since the database now has a schema. Clear what is in the
+way, move each file that
+ends in `.rfmap-restoring` to the same name without that ending, in the `rfmap-state` volume,
+and start the stack:
+
+```sh
+docker compose run --rm --no-deps --entrypoint sh rfmap-server -c \
+  'find /var/lib/rfmap -name "*.rfmap-restoring" -exec sh -c "mv \"\$1\" \"\${1%.rfmap-restoring}\"" _ {} \;'
+docker compose up -d
+```
+
+1. **On the old server**, stop the server so nothing changes after the snapshot, and back up:
+
+   ```sh
+   cd ~/fpv-radio-map/deploy
+   docker compose stop rfmap-server
+   docker compose run --rm -T --no-deps rfmap-server --backup > ~/rfmap-backup/rfmap-$(date +%F).backup.zst
+   ```
+
+   Copy the backup and `deploy/.env` to the new server.
+
+2. **On the new server**, do steps 0–2 as for a first install (Docker, code, map data). Skip
+   steps 3 and 4: put the old `.env` in `deploy/` instead. It holds the database password, the
+   admin token and the owner public key the backup belongs to; correct `RFMAP_TILES_DIR` if the
+   map data lives in another path here. Then build the server image and start only the
+   database, which comes up empty:
+
+   ```sh
+   cd ~/fpv-radio-map/deploy
+   docker compose build rfmap-server
+   docker compose up -d --wait postgis
+   ```
+
+3. Restore (`<date>` is the date in the backup's name):
+
+   ```sh
+   docker compose run --rm -T --no-deps rfmap-server --restore < ~/rfmap-backup/rfmap-<date>.backup.zst
+   ```
+
+   It prints each migration it applied and `restored 9 tables, 120 rows and 3 files`.
+
+4. Start the stack (step 5), then do step 8 (TLS). Open a mission you know and check that it is
+   there. The modules came back with the backup, so step 6 is not needed.
+
+### 10.2 Move to a new PostgreSQL major version
+
+A new PostgreSQL major version cannot open the data folder of the previous one, so the pull that
+moves `postgis` to it (16 to 18 is one) moves the data with a backup and a restore on the same
+server. The new version keeps its data in a new volume (`rfmap_pgdata18`), and the old one
+(`rfmap_pgdata`) is not touched:
+
+```sh
+cd ~/fpv-radio-map && git pull && cd deploy &&
+  docker compose build rfmap-server &&
+  mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup &&
+  backup=~/rfmap-backup/rfmap-$(date +%F).backup.zst &&
+  docker compose stop rfmap-server &&
+  docker compose run --rm -T --no-deps rfmap-server --backup > "$backup" &&
+  docker compose up -d --wait postgis &&
+  docker compose run --rm -T --no-deps rfmap-server --restore < "$backup" &&
+  docker compose up -d --build
+```
+
+Each step runs only when the one before it succeeded, so a failed backup never goes on to the
+new database. If a step before `up -d --wait postgis` fails, fix the cause and run the block
+again. If the restore fails, the new database stays empty: fix the cause and run only the last
+two commands again, with the same `backup=` path. Do not run the backup again at that point, since
+it would now read the new, empty database.
+
+The backup runs before `up` replaces the old `postgis` container, so the new server reads the old
+database. `rfmap-server` is down from `stop` to the last `up`: the web container keeps running,
+but its `/api` requests cannot reach the server. On a small database that is under a minute. To go back, check out the previous version and run `docker compose up -d`: it opens the old
+volume again, without anything written after the move. Remove the old volume
+(`docker volume rm rfmap_pgdata`) once the new database has run for a while and you have a backup
+of it. Never use `docker compose down -v`: it removes the volumes.
 
 ## 11. Updates
 
 **The application:**
+
+**First check whether the pull moves `postgis` to a new PostgreSQL major version** (16 to 18 is
+one): run `git fetch && git diff HEAD..@{u} -- deploy/docker-compose.yml` and look at the
+`postgis` image line. If it does, skip the commands
+below and follow [Move to a new PostgreSQL major version](#102-move-to-a-new-postgresql-major-version).
+The commands below would start the server on a new, empty database, and a restore into it is then
+refused.
 
 ```sh
 cd ~/fpv-radio-map
@@ -589,8 +689,43 @@ git pull
 cd deploy && docker compose up -d --build
 ```
 
-Migrations run at start. When a module's version in `modules/fpv/*/manifest.json` goes up,
-repeat step 6 with your offline owner key; the server takes only versions newer than the
+Migrations run at start.
+
+If you ran them by mistake on such a pull, your data is still in the old volume. Check out the previous version
+(`git checkout <previous commit>`) and run `docker compose up -d` in `deploy/`: the server opens
+the old volume again. Remove the new, empty volume with `docker volume rm rfmap_pgdata18`, then
+follow §10.2. Never use `docker compose down -v`.
+
+The server refuses to start, and says why in `docker compose logs rfmap-server`, in three cases:
+
+- **A breaking migration.** It changes existing data so that the previous version can no longer
+  read it, so the server waits for you to take a backup first. See the commands below.
+- **A database newer than the server.** You checked out an older version after a newer one had
+  migrated the database. Go forward again, or restore the backup you took before that update
+  into a new, empty database with the older version (§10.1).
+- **A migration that was changed after it was applied.** That is a bug in the release; report it
+  and stay on the previous version.
+
+To apply a breaking migration, back up with the running version, then migrate with the new one:
+
+```sh
+cd ~/fpv-radio-map/deploy &&
+  mkdir -p ~/rfmap-backup && chmod 700 ~/rfmap-backup &&
+  backup=~/rfmap-backup/rfmap-$(date +%F).backup.zst &&
+  docker compose stop rfmap-server &&
+  docker compose run --rm -T --no-deps rfmap-server --backup > "$backup" &&
+  cd .. && git pull && cd deploy &&
+  docker compose build rfmap-server &&
+  docker compose run --rm -T --no-deps rfmap-server --migrate --plan &&
+  docker compose run --rm -T --no-deps rfmap-server --migrate &&
+  docker compose up -d --build
+```
+
+`--migrate --plan` lists the migrations it would apply and changes nothing. `--migrate` applies
+them all in one transaction: if it fails, the database stays as it was. To go back after
+`--migrate`, check out the previous version and restore `$backup` into a new, empty database
+(§10.1). When a
+module's version in `modules/fpv/*/manifest.json` goes up, repeat step 6 with your offline owner key; the server takes only versions newer than the
 installed one.
 
 **New OSM data** (monthly is plenty), with the same `--bbox` and options as in step 2:

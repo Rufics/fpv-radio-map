@@ -12,7 +12,6 @@
 
 #include <atomic>
 #include <condition_variable>
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -54,10 +53,6 @@ public:
             }
         });
     }
-
-    /// Applies server/sql/NNN_*.sql files not yet recorded in schema_migrations, in order.
-    /// Returns the names applied.
-    std::vector<std::string> migrate(const std::filesystem::path& sqlDir);
 
     [[nodiscard]] DbPoolStats stats();
 

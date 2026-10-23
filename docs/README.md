@@ -24,6 +24,8 @@ This folder is the project's documentation. It is reviewed in pull requests like
 
 - [Writing a module](modules/developer-guide.md)
 - [HTTP API (OpenAPI)](api/openapi.yaml)
+- [Database migrations](dev/migrations.md): how the schema and the data move to a new version, and how
+  to write a migration.
 - [Fuzz testing](dev/fuzzing.md): how the C++ input parsers are fuzzed.
 - [SonarQube Cloud](dev/sonarcloud.md): what the static analysis covers and how it is set up.
 - [Contributing](../CONTRIBUTING.md)

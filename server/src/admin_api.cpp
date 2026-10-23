@@ -3,6 +3,7 @@
 namespace rfmap {
 
 void AdminApi::updateInstalled(const std::string& id, const json& b) const {
+    const ModuleGate::Change gate(s_.moduleGate());  // the settings are a file under the module root
     try {
         if (b.contains("options")) s_.registry().setOptions(id, b.at("options"));
         if (b.contains("enabled")) s_.registry().setEnabled(id, b.at("enabled").get<bool>());

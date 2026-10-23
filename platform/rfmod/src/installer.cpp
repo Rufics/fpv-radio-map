@@ -1,10 +1,12 @@
 #include "rfmod/installer.hpp"
 
+#include "rfmod/file_lock.hpp"
 #include "rfmod/options_schema.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <format>
+#include <memory>
 #include <ranges>
 #include <system_error>
 
@@ -55,7 +57,12 @@ ModuleInstaller::ModuleInstaller(InstallerConfig config, const TrustStore& trust
       verifier_(trust_, config_.hostVersion, config_.limits),
       loader_(LoaderConfig{config_.workerExecutable, true, config_.policy}, store_.root(), selfTestHost) {
     // Staging directories are the installer's; whatever an earlier run left behind is garbage.
+    const auto lock = lockRoot();
     store_.clearStaging();
+}
+
+std::unique_ptr<FileLock> ModuleInstaller::lockRoot() const {
+    return std::make_unique<FileLock>(config_.root / kRootLockFile, FileLock::Mode::Exclusive);
 }
 
 bool ModuleInstaller::reservedId(std::string_view id) {
@@ -63,6 +70,11 @@ bool ModuleInstaller::reservedId(std::string_view id) {
 }
 
 std::map<std::string, InstalledModule, std::less<>> ModuleInstaller::installed() const {
+    const auto lock = lockRoot();  // reading restores a file that differs from its signed package
+    return readInstalled();
+}
+
+ModuleInstaller::Installed ModuleInstaller::readInstalled() const {
     std::vector<std::string> notices;
     return InstalledReader(store_, verifier_).all(notices);
 }
@@ -76,7 +88,8 @@ ValidationReport ModuleInstaller::run(std::string_view archive, bool install) co
     auto pkg = verifier_.verify(archive, report);
     if (!pkg) return report;
 
-    const Installed have = installed();
+    const auto lock = lockRoot();
+    const Installed have = readInstalled();
     checkAgainstInstalled(*pkg, have, report);
     if (!report.ok()) return report;
 
@@ -258,7 +271,8 @@ std::vector<std::string> ModuleInstaller::dependentsOf(std::string_view id, cons
 }
 
 void ModuleInstaller::remove(const std::string& id) const {
-    const Installed have = installed();
+    const auto lock = lockRoot();
+    const Installed have = readInstalled();
     const auto it = have.find(id);
     if (it == have.end()) {
         // A directory whose package no longer verifies is still removable, by its directory name,

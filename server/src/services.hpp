@@ -6,6 +6,7 @@
 #include "calculator.hpp"
 #include "config.hpp"
 #include "database.hpp"
+#include "file_lock.hpp"
 #include "flight_logs.hpp"
 #include "host_services.hpp"
 #include "jobs.hpp"
@@ -26,7 +27,6 @@
 
 #include <filesystem>
 #include <memory>
-#include <mutex>
 #include <string>
 
 namespace rfmap {
@@ -70,15 +70,17 @@ public:
 
     /// Re-reads the trust store and the module root: what the rfmod CLI installed or removed.
     void reloadModules() const;
+    /// Held around every change the server makes to the module files, see ModuleGate.
+    [[nodiscard]] ModuleGate& moduleGate() const { return *moduleGate_; }
 
 private:
-    mutable std::mutex reloadMutex_;
+    // Also runs reloads from parallel admin requests in turn.
+    std::unique_ptr<ModuleGate> moduleGate_ = std::make_unique<ModuleGate>();
     void checkStartup(bool ownerKeyIsDev) const;
     void openDatabase(const std::filesystem::path& sqlDir);
     void buildStores();
     void openTerrain();
     void buildCaches();
-    void buildForecast();
     void buildModules(const std::string& ownerKeyText);
 
     /// Persistent state: the database and the stores and services built on it.
@@ -108,6 +110,7 @@ private:
     };
     /// The forecast source (absent without weather.baseUrl) and the service over it.
     struct Forecast {
+        Forecast(const Config::Weather& weather, Logger& log, const IClock& clock);
         std::unique_ptr<OpenMeteoSource> source;
         std::unique_ptr<WeatherService> service;
     };

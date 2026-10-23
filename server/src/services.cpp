@@ -1,5 +1,6 @@
 #include "services.hpp"
 
+#include "migrations.hpp"
 #include "tiles_manifest.hpp"
 
 #include <format>
@@ -44,14 +45,13 @@ json linkCreateSchema() {
 
 Services::Services(const Config& config, Logger& log, const std::string& ownerKeyText, bool ownerKeyIsDev,
                    const std::filesystem::path& sqlDir)
-    : config_(config), log_(log) {
+    : config_(config), log_(log), forecast_(config.weather, log, clock_) {
     Secrets::init();
     checkStartup(ownerKeyIsDev);
     openDatabase(sqlDir);
     buildStores();
     openTerrain();
     buildCaches();
-    buildForecast();
     buildModules(ownerKeyText);
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
@@ -79,7 +79,13 @@ void Services::checkStartup(bool ownerKeyIsDev) const {
 
 void Services::openDatabase(const std::filesystem::path& sqlDir) {
     store_.db = std::make_unique<Database>(config_.database.url, config_.database.poolSize);
-    for (const auto& m : store_.db->migrate(sqlDir)) log_.info("startup", "applied migration " + m);
+    // A breaking step, or a database newer than this server, stops the start: see migrations.hpp.
+    const MigrationCatalog migrations(sqlDir);
+    store_.db->with([this, &migrations](pqxx::connection& c) {
+        return SchemaMigrator(migrations, {config_.modules.root, config_.modules.trustStore},
+                              [this](const std::string& line) { log_.info("startup", line); })
+            .migrate(c, {});
+    });
 }
 
 namespace {
@@ -178,10 +184,10 @@ void Services::buildCaches() {
     resultStore_.admin->loadStoredLimits();
 }
 
-void Services::buildForecast() {
-    if (!config_.weather.baseUrl.empty()) forecast_.source = std::make_unique<OpenMeteoSource>(config_.weather);
-    else log_.warn("weather", "weather.baseUrl is not set: no forecasts, k = 4/3 everywhere");
-    forecast_.service = std::make_unique<WeatherService>(config_.weather, forecast_.source.get(), clock_);
+Services::Forecast::Forecast(const Config::Weather& weather, Logger& log, const IClock& clock) {
+    if (!weather.baseUrl.empty()) source = std::make_unique<OpenMeteoSource>(weather);
+    else log.warn("weather", "weather.baseUrl is not set: no forecasts, k = 4/3 everywhere");
+    service = std::make_unique<WeatherService>(weather, source.get(), clock);
 }
 
 void Services::buildModules(const std::string& ownerKeyText) {
@@ -189,8 +195,15 @@ void Services::buildModules(const std::string& ownerKeyText) {
     // service of its own: the registry can load modules before the calculations exist.
     modules_.host = std::make_unique<ServerHostServices>(log_);
     modules_.trust = std::make_unique<rfmod::TrustStore>(ownerKeyText, config_.modules.trustStore);
-    modules_.registry = std::make_unique<rfmod::ModuleRegistry>(registryConfig(config_.modules), *modules_.trust, *modules_.host);
-    modules_.registry->reload();
+    moduleGate_->attach(config_.modules.root);
+    {
+        // Loading restores the files of a module that differ from its signed package, so a backup
+        // must not read them meanwhile.
+        const ModuleGate::Change gate(*moduleGate_);
+        modules_.registry =
+            std::make_unique<rfmod::ModuleRegistry>(registryConfig(config_.modules), *modules_.trust, *modules_.host);
+        modules_.registry->reload();
+    }
     for (const auto& n : modules_.registry->notices()) log_.warn("modules", n);
     modules_.runner = std::make_unique<ModuleRunner>(*modules_.registry);
     modules_.catalog = std::make_unique<ModuleCatalog>(*store_.builtins, *modules_.registry, modules_.grants);
@@ -204,7 +217,7 @@ void Services::buildModules(const std::string& ownerKeyText) {
 }
 
 void Services::reloadModules() const {
-    const std::lock_guard lock(reloadMutex_);  // reloads from parallel admin requests run in turn
+    const ModuleGate::Change gate(*moduleGate_);
     modules_.trust->reload();
     modules_.registry->reload();
     for (const auto& n : modules_.registry->notices()) log_.warn("modules", n);

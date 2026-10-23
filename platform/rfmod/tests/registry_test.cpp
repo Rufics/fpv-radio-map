@@ -1,3 +1,4 @@
+#include "rfmod/file_lock.hpp"
 #include "rfmod/installer.hpp"
 #include "rfmod/module_store.hpp"
 #include "rfmod/registry.hpp"
@@ -6,6 +7,8 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
+#include <future>
 
 using namespace rfmod;
 using namespace rfmod::test;
@@ -89,6 +92,19 @@ TEST_F(RegistryTest, FirstPartyInstallsAndRunsInProcess) {
     EXPECT_EQ(registry->list().at(0).at("state"), "active");
     EXPECT_EQ(registry->withCapability("loss.contributor").size(), 1u);
     EXPECT_TRUE(registry->withCapability("route.analysis").empty());
+}
+
+TEST_F(RegistryTest, AnInstallWaitsForABackupOfTheRoot) {
+    // rfmap-server --backup holds the root's lock file shared while it reads the module files.
+    auto backupRunning = std::make_unique<FileLock>(config.root / kRootLockFile, FileLock::Mode::Shared);
+    const std::string archive = pack(baseManifest("test.alpha", "1.0.0"), RFMOD_LIB_ALPHA, ownerSecret());
+    auto pending = std::async(std::launch::async, [&] { return installer->install(archive); });
+    EXPECT_EQ(pending.wait_for(std::chrono::milliseconds(300)), std::future_status::timeout);
+    EXPECT_FALSE(ModuleStore(config.root).isInstalled("test.alpha")) << "nothing moved while the backup read";
+    backupRunning.reset();
+    const ValidationReport r = pending.get();
+    EXPECT_TRUE(r.ok()) << failed(r);
+    EXPECT_TRUE(ModuleStore(config.root).isInstalled("test.alpha"));
 }
 
 TEST_F(RegistryTest, FlightLogDecodersAlwaysRunIsolated) {

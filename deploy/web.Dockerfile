@@ -4,7 +4,7 @@
 #
 # Base images are pinned by version tag; Dependabot proposes newer ones (docs/admin/deploy.md).
 
-FROM node:24-bookworm-slim AS build
+FROM node:24-trixie-slim AS build
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
 # Behind a TLS-intercepting proxy pass its CA: --secret id=build_ca,src=/path/ca.crt

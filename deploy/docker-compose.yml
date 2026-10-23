@@ -3,22 +3,28 @@
 #   cp .env.example .env   # then fill it in
 #   docker compose up -d --build
 #
-# Base images are pinned by digest (multi-arch index), read from the registries on 2026-10-17.
+# Base images are pinned by digest (multi-arch index), read from the registries on 2026-10-17
+# (postgis/postgis on 2026-10-22).
 
 name: rfmap
 
 services:
   postgis:
-    image: postgis/postgis:16-3.5@sha256:94146ac37bc61e2322f88016056c5920729cb8c64c8542ed590af8fc2abdac07
+    image: postgis/postgis:18-3.6@sha256:b4466ea2ba7e3af54fcbba996d45325720f4b3ecb4f43f99b2f41367dc196f23
     environment:
       POSTGRES_DB: rfmap
       POSTGRES_USER: rfmap
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # PostgreSQL 18 keeps its data in a versioned folder below this mount
+      # (/var/lib/postgresql/18/docker). The PostgreSQL 16 volume was pgdata: move its data with
+      # rfmap-server --backup and --restore (docs/admin/production-setup.md, step 10.2).
+      - pgdata18:/var/lib/postgresql
     networks: [backend]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rfmap -d rfmap"]
+      # Over TCP: while the image initialises a new database, its temporary server listens on the
+      # socket only, and a socket check would pass before the extensions are created.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U rfmap -d rfmap"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -129,6 +135,6 @@ networks:
   egress: {}
 
 volumes:
-  pgdata:
+  pgdata18:
   open-meteo-data:
   rfmap-state:

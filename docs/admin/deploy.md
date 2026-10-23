@@ -7,7 +7,7 @@ The stack has four parts, described in [`deploy/docker-compose.yml`](../../deplo
 
 | Service | What it does |
 |---|---|
-| `postgis` | PostgreSQL 16 + PostGIS 3.4. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
+| `postgis` | PostgreSQL 18 + PostGIS 3.6. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
 | `open-meteo`, `open-meteo-init`, `open-meteo-sync` | Your own Open-Meteo. `open-meteo-init` downloads a first copy of the model data and exits, `open-meteo-sync` then keeps it fresh, and the API answers rfmap-server. No request leaves your network for a forecast. |
 | `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly. |
 | `web` | nginx with the built client, `/tiles` (PMTiles over HTTP Range) and a reverse proxy for `/api`. The only service with a published port. |
@@ -56,9 +56,12 @@ docker compose up -d --build
 docker compose logs -f rfmap-server
 ```
 
-At start the server applies the SQL migrations in `/usr/share/rfmap/sql` (once, under an
-advisory lock) and seeds the reference library from `data/library/<kind>/seed*.json` (radio
-profiles, antennas, batteries and drones; see the README next to each file:
+At start the server applies the migrations in `/usr/share/rfmap/sql` that the database does
+not have yet (once, under an advisory lock). It refuses to start on a database that a newer
+version migrated, and it leaves a breaking migration to `rfmap-server --migrate`
+([Updates](production-setup.md#11-updates)). It also seeds the reference library from
+`data/library/<kind>/seed*.json` (radio profiles, antennas, batteries and drones; see the README
+next to each file:
 [radio profiles](../../data/library/radio-profiles/README.md),
 [antennas](../../data/library/antennas/README.md),
 [batteries](../../data/library/batteries/README.md),
@@ -237,7 +240,8 @@ under **Admin**.
 
 - **Keys** (`GET /admin/keys`): the trusted signing keys. Adding or removing one is done on
   the server machine: `rfmod trust add author.pub --label "Author" --trust-store
-  /var/lib/rfmap/keys.json`, `rfmod trust remove <keyId> ...`, then `POST /admin/modules/reload`.
+  /var/lib/rfmap/keys.json`, `rfmod trust remove <keyId> ...`, then
+  `POST /admin/modules/reload`. A change waits for a running backup, like `rfmod install`.
   The built-in owner key cannot be removed. Removing a key unloads the modules signed with it
   at the next reload.
 - **Modules**: installing and removing is a local operation on the server machine, never an
@@ -281,25 +285,39 @@ not time-limited.
 
 ## 6. Backups and upgrades
 
-- Back up the `pgdata` volume (or `pg_dump rfmap`) and the `rfmap-state` volume (installed
-  modules and `keys.json`). Everything else can be rebuilt.
-- Upgrade: `git pull`, then `docker compose up -d --build`. Migrations run at start. Results
+- Back up with `docker compose exec -T rfmap-server rfmap-server --backup > rfmap.backup`: one
+  file with the database rows, the installed modules and `keys.json`. Everything else can be
+  rebuilt. Restoring it is in [Restore on a new server](production-setup.md#101-restore-on-a-new-server).
+- Upgrade: `git pull`, then `docker compose up -d --build` from `deploy/` (a pull that moves
+  PostgreSQL to a new major needs [a backup and restore](#postgresql-major-upgrades) instead).
+  Migrations run at start. Results
   cached under the old version are keyed by input hash, which includes the server version,
   so they are not reused.
 - Mission owner keys, share-link tokens and session tokens are stored only as hashes, and
   PINs only as argon2id hashes. A lost owner key cannot be recovered.
 
+### PostgreSQL major upgrades
+
+A new PostgreSQL major version cannot open the data folder of the previous one, so a `git pull`
+that moves `postgis` to a new major (16 to 18 is one) moves the data with the server's own
+backup and restore (`rfmap-server --backup` and `--restore`) into the new version's empty volume
+(`rfmap_pgdata18`). The backup holds data only; the restore builds the schema with the server's
+migrations, which also adapt the data to a newer version. The commands are in
+[Move to a new PostgreSQL major version](production-setup.md#102-move-to-a-new-postgresql-major-version).
+A fresh install needs none of this: it starts on PostgreSQL 18 directly.
+
 ## 7. Updating base images
 
 Each `FROM` in the Dockerfiles is pinned by its version tag. Each `image:` in the compose file is
-pinned by tag and by the digest of its multi-arch index, read from the registry on 2026-10-17:
+pinned by tag and by the digest of its multi-arch index, read from the registry on 2026-10-17
+(`postgis/postgis` on 2026-10-22):
 
 | Image | Tag |
 |---|---|
 | `ubuntu` | `26.04` (build and runtime of rfmap-server; it matches the GDAL 3.12, libpqxx 7.10 and cpp-httplib 0.26 the code is tested with in CI) |
-| `node` | `24-bookworm-slim` (client build) |
+| `node` | `24-trixie-slim` (client build, Debian 13) |
 | `nginx` | `1.28-alpine` |
-| `postgis/postgis` | `16-3.5` |
+| `postgis/postgis` | `18-3.6` |
 | `ghcr.io/open-meteo/open-meteo` | `1.7.0` |
 
 Dependabot (`.github/dependabot.yml`) opens pull requests for new minor and patch tags of the
@@ -309,9 +327,12 @@ hand. A tag can be republished with security fixes, so a rebuild picks up the cu
 that tag; rebuild, and run the test suite (`ctest` in a build tree) before you deploy.
 
 To update a compose image by hand, resolve the tag's current digest yourself, for example with
-`docker buildx imagetools inspect postgis/postgis:16-3.5`, replace the digest, and restart.
+`docker buildx imagetools inspect postgis/postgis:18-3.6`, and replace the digest. Then pull and
+recreate the containers from `deploy/` with `docker compose pull && docker compose up -d`;
+`docker compose restart` keeps the old image.
 
 The server image and an API smoke test (missions, share link and PIN, `/calc/route`, module
-upload) were run against these pins on 2026-10-17. The web image could not be built then
-because Docker Hub rate-limited the pull, and the Open-Meteo image could not be pulled through
-the test network. Build and check both once in your environment.
+upload) were run against the pins of 2026-10-17. The `postgis/postgis:18-3.6` pin came later, on
+2026-10-22, and was not part of that test; run the smoke test once on it. The web image was built on
+`node:24-trixie-slim` and served the client on 2026-10-21. The Open-Meteo image could not be
+pulled through the test network; build and check it once in your environment.

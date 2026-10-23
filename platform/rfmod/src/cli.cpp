@@ -1,5 +1,6 @@
 #include "rfmod/cli.hpp"
 
+#include "rfmod/file_lock.hpp"
 #include "rfmod/installer.hpp"
 #include "rfmod/package.hpp"
 
@@ -14,6 +15,7 @@
 #include <cstring>
 #include <fstream>
 #include <map>
+#include <memory>
 #include <ostream>
 #include <ranges>
 #include <sstream>
@@ -484,7 +486,15 @@ int Cli::trust(const CliArgs& args) const {
     const auto& words = args.positional();
     const char* usage = "rfmod trust list|add KEY.pub --label TEXT|remove KEY_ID --trust-store KEYS.json";
     if (words.empty()) throw std::invalid_argument(usage);
-    TrustStore store(build_.ownerKey, args.need("--trust-store", usage));
+    const std::filesystem::path storePath = args.need("--trust-store", usage);
+    // A change holds the store's lock from load to save: two changes cannot drop each other's key,
+    // and a backup reads the store from one state.
+    std::unique_ptr<FileLock> lock;
+    if (words[0] != "list") {
+        if (storePath.has_parent_path()) std::filesystem::create_directories(storePath.parent_path());
+        lock = std::make_unique<FileLock>(trustStoreLockFile(storePath), FileLock::Mode::Exclusive);
+    }
+    TrustStore store(build_.ownerKey, storePath);
     if (words[0] == "add" && words.size() == 2) {
         const TrustedKey& k = store.add(PublicKey::fromText(Files::read(words[1])), args.need("--label", usage));
         out_ << "Trusted " << k.key.id() << " (" << k.label << ")\n";
