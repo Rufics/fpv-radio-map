@@ -676,15 +676,25 @@ of it. Never use `docker compose down -v`: it removes the volumes.
 
 **The application:**
 
+**First check whether the pull moves `postgis` to a new PostgreSQL major version** (16 to 18 is
+one): run `git fetch && git diff HEAD..@{u} -- deploy/docker-compose.yml` and look at the
+`postgis` image line. If it does, skip the commands
+below and follow [Move to a new PostgreSQL major version](#102-move-to-a-new-postgresql-major-version).
+The commands below would start the server on a new, empty database, and a restore into it is then
+refused.
+
 ```sh
 cd ~/fpv-radio-map
 git pull
 cd deploy && docker compose up -d --build
 ```
 
-Migrations run at start. A pull that moves the database to a new PostgreSQL major version (16 to
-18 is one) moves the data with a backup and a restore: see
-[Move to a new PostgreSQL major version](#102-move-to-a-new-postgresql-major-version).
+Migrations run at start.
+
+If you ran them by mistake on such a pull, your data is still in the old volume. Check out the previous version
+(`git checkout <previous commit>`) and run `docker compose up -d` in `deploy/`: the server opens
+the old volume again. Remove the new, empty volume with `docker volume rm rfmap_pgdata18`, then
+follow §10.2. Never use `docker compose down -v`.
 
 The server refuses to start, and says why in `docker compose logs rfmap-server`, in three cases:
 

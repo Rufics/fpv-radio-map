@@ -231,18 +231,19 @@ TEST_F(CliTest, TrustAddsListsAndRemovesKeys) {
     EXPECT_NE(out.str().find(owner + "  "), std::string::npos);
     EXPECT_NE(out.str().find("(built in)"), std::string::npos);
 
-    ASSERT_EQ(run({"trust", "add", thirdPartyPub(), "--label", "Acme", "--trust-store", keys()}), 0) << err.str();
+    ASSERT_EQ(run({"trust", "add", thirdPartyPub(), "--label", "Acme", "--root", root(), "--trust-store", keys()}), 0) << err.str();
     const std::string third = thirdPartySecret().publicKey().id();
     EXPECT_EQ(out.str(), "Trusted " + third + " (Acme)\n");
     ASSERT_EQ(run({"trust", "list", "--trust-store", keys()}), 0);
     EXPECT_NE(out.str().find(third + "  Acme\n"), std::string::npos);
 
-    ASSERT_EQ(run({"trust", "remove", third, "--trust-store", keys()}), 0) << err.str();
+    ASSERT_EQ(run({"trust", "remove", third, "--root", root(), "--trust-store", keys()}), 0) << err.str();
     ASSERT_EQ(run({"trust", "list", "--trust-store", keys()}), 0);
     EXPECT_EQ(out.str().find(third), std::string::npos);
 
     EXPECT_EQ(run({"trust", "--trust-store", keys()}), 1);
     EXPECT_EQ(run({"trust", "add", thirdPartyPub(), "--trust-store", keys()}), 1);
+    EXPECT_EQ(run({"trust", "remove", third, "--trust-store", keys()}), 1);  // a change needs --root to lock
     EXPECT_EQ(run({"trust", "frob", "--trust-store", keys()}), 1);
     EXPECT_NE(err.str().find("rfmod trust list|add"), std::string::npos);
 }

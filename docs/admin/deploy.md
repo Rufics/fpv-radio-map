@@ -239,8 +239,9 @@ All under `/api/v1/admin` with `Authorization: Bearer <RFMAP_ADMIN_TOKEN>`, or i
 under **Admin**.
 
 - **Keys** (`GET /admin/keys`): the trusted signing keys. Adding or removing one is done on
-  the server machine: `rfmod trust add author.pub --label "Author" --trust-store
-  /var/lib/rfmap/keys.json`, `rfmod trust remove <keyId> ...`, then `POST /admin/modules/reload`.
+  the server machine: `rfmod trust add author.pub --label "Author" --root /var/lib/rfmap/modules
+  --trust-store /var/lib/rfmap/keys.json`, `rfmod trust remove <keyId> ...`, then
+  `POST /admin/modules/reload`. A change waits for a running backup, like `rfmod install`.
   The built-in owner key cannot be removed. Removing a key unloads the modules signed with it
   at the next reload.
 - **Modules**: installing and removing is a local operation on the server machine, never an
@@ -326,9 +327,12 @@ hand. A tag can be republished with security fixes, so a rebuild picks up the cu
 that tag; rebuild, and run the test suite (`ctest` in a build tree) before you deploy.
 
 To update a compose image by hand, resolve the tag's current digest yourself, for example with
-`docker buildx imagetools inspect postgis/postgis:18-3.6`, replace the digest, and restart.
+`docker buildx imagetools inspect postgis/postgis:18-3.6`, and replace the digest. Then pull and
+recreate the containers from `deploy/` with `docker compose pull && docker compose up -d`;
+`docker compose restart` keeps the old image.
 
 The server image and an API smoke test (missions, share link and PIN, `/calc/route`, module
-upload) were run against these pins on 2026-10-17. The web image was built on
+upload) were run against the pins of 2026-10-17. The `postgis/postgis:18-3.6` pin came later, on
+2026-10-22, and was not part of that test; run the smoke test once on it. The web image was built on
 `node:24-trixie-slim` and served the client on 2026-10-21. The Open-Meteo image could not be
 pulled through the test network; build and check it once in your environment.
