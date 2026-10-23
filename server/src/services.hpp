@@ -81,7 +81,6 @@ private:
     void buildStores();
     void openTerrain();
     void buildCaches();
-    void buildForecast();
     void buildModules(const std::string& ownerKeyText);
 
     /// Persistent state: the database and the stores and services built on it.
@@ -111,6 +110,7 @@ private:
     };
     /// The forecast source (absent without weather.baseUrl) and the service over it.
     struct Forecast {
+        Forecast(const Config::Weather& weather, Logger& log, const IClock& clock);
         std::unique_ptr<OpenMeteoSource> source;
         std::unique_ptr<WeatherService> service;
     };

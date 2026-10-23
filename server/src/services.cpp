@@ -45,14 +45,13 @@ json linkCreateSchema() {
 
 Services::Services(const Config& config, Logger& log, const std::string& ownerKeyText, bool ownerKeyIsDev,
                    const std::filesystem::path& sqlDir)
-    : config_(config), log_(log) {
+    : config_(config), log_(log), forecast_(config.weather, log, clock_) {
     Secrets::init();
     checkStartup(ownerKeyIsDev);
     openDatabase(sqlDir);
     buildStores();
     openTerrain();
     buildCaches();
-    buildForecast();
     buildModules(ownerKeyText);
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
@@ -185,10 +184,10 @@ void Services::buildCaches() {
     resultStore_.admin->loadStoredLimits();
 }
 
-void Services::buildForecast() {
-    if (!config_.weather.baseUrl.empty()) forecast_.source = std::make_unique<OpenMeteoSource>(config_.weather);
-    else log_.warn("weather", "weather.baseUrl is not set: no forecasts, k = 4/3 everywhere");
-    forecast_.service = std::make_unique<WeatherService>(config_.weather, forecast_.source.get(), clock_);
+Services::Forecast::Forecast(const Config::Weather& weather, Logger& log, const IClock& clock) {
+    if (!weather.baseUrl.empty()) source = std::make_unique<OpenMeteoSource>(weather);
+    else log.warn("weather", "weather.baseUrl is not set: no forecasts, k = 4/3 everywhere");
+    service = std::make_unique<WeatherService>(weather, source.get(), clock);
 }
 
 void Services::buildModules(const std::string& ownerKeyText) {
