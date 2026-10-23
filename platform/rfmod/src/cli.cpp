@@ -102,6 +102,7 @@ public:
         if (p.has_parent_path()) fs::create_directories(p.parent_path());
         const int flags = O_WRONLY | O_CREAT | O_CLOEXEC | (exclusive ? O_EXCL : O_TRUNC);
         const int fd = ::open(p.c_str(), flags, mode);
+        if (fd < 0 && exclusive && errno == EEXIST) throw FileError(p.string() + " exists; refusing to overwrite it");
         if (fd < 0) throw FileError("cannot write " + p.string() + ": " + std::strerror(errno));
         const bool written = ::fchmod(fd, mode) == 0 && writeAll(fd, content);
         const bool closed = ::close(fd) == 0;
@@ -376,7 +377,7 @@ InstallerConfig Cli::installerConfig(const CliArgs& args, const fs::path& root) 
 
 int Cli::keygen(const CliArgs& args) const {
     const std::string out = args.need("--out", "rfmod keygen --out NAME");
-    if (fs::exists(out + ".secret")) throw std::invalid_argument(out + ".secret exists; refusing to overwrite a key");
+    // No separate existence check: the exclusive create below is the check, with no window.
     const SecretKey sk = SecretKey::generate();
     Files::write(out + ".secret", sk.toText() + "\n", 0600, true);
     Files::write(out + ".pub", sk.publicKey().toText() + "\n");
