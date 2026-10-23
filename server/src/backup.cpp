@@ -268,7 +268,10 @@ std::size_t BackupWriter::writeFiles(std::ostream& out) const {
     if (fs::is_directory(files_.modulesRoot)) {
         std::vector<fs::path> found;
         for (const auto& e : fs::recursive_directory_iterator(files_.modulesRoot)) {
-            if (e.is_regular_file() && !e.is_symlink() && e.path().filename() != ModuleGate::kLockFile) {
+            // Not the lock file, and not a file a failed restore left staged for the operator.
+            const std::string name = e.path().filename().string();
+            if (e.is_regular_file() && !e.is_symlink() && name != ModuleGate::kLockFile &&
+                !name.ends_with(StagedFiles::kSuffix)) {
                 found.push_back(e.path());
             }
         }

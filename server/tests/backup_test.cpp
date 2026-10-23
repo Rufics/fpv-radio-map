@@ -446,6 +446,15 @@ TEST_F(BackupTest, AFileThatCannotMoveIntoPlaceStaysStaged) {
     EXPECT_EQ(readFile(target.trustStore.string() + ".rfmap-restoring"), R"({"keys": []})");
 }
 
+TEST_F(BackupTest, AFileLeftStagedIsNotBackedUp) {
+    const std::string from = source();
+    const ServerFiles f = files("source");
+    std::ofstream(f.modulesRoot / "fpv.osd" / "lib" / ("osd.so" + std::string(StagedFiles::kSuffix))) << "kept";
+    const std::string text = backup(from, f);
+    EXPECT_EQ(text.find(std::string(StagedFiles::kSuffix)), std::string::npos);
+    EXPECT_NE(text.find("\"end\":true"), std::string::npos);
+}
+
 TEST_F(BackupTest, WaitsForAModuleChangeToFinish) {
     const std::string from = source();
     const ServerFiles f = files("source");
