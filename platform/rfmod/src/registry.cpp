@@ -297,7 +297,7 @@ std::shared_ptr<IModuleInstance> ModuleRegistry::instance(const std::string& id)
     return it == entries_.end() ? nullptr : it->second.instance;
 }
 
-std::optional<fs::path> ModuleRegistry::publicFile(const std::string& id, const std::string& path) const {
+std::optional<ModuleRegistry::PublicFile> ModuleRegistry::publicFile(const std::string& id, const std::string& path) const {
     const std::lock_guard lock(mutex_);
     const auto it = entries_.find(id);
     if (it == entries_.end() || it->second.state != ModuleState::Active) return std::nullopt;
@@ -311,7 +311,7 @@ std::optional<fs::path> ModuleRegistry::publicFile(const std::string& id, const 
         if (const bool isUi = p.string().starts_with((dir / "ui" / "").string()); (!isUi && !isSchema) || !fs::is_regular_file(p)) {
             return std::nullopt;
         }
-        return p;
+        return PublicFile{std::move(p), it->second.installed.manifest.lifecycle};
     } catch (const PathEscapeError&) {
         return std::nullopt;
     }

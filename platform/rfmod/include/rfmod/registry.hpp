@@ -68,9 +68,16 @@ public:
     [[nodiscard]] std::vector<std::shared_ptr<IModuleInstance>> withCapability(const std::string& capability) const;
     [[nodiscard]] std::shared_ptr<IModuleInstance> instance(const std::string& id) const;
 
+    /// A file the server may serve, with the lifecycle of the module version it belongs to.
+    struct PublicFile {
+        std::filesystem::path path;
+        Lifecycle lifecycle;
+    };
+
     /// A module's UI bundle or options schema file, for the server to serve; never lib/ and
-    /// never outside the module's directory.
-    [[nodiscard]] std::optional<std::filesystem::path> publicFile(const std::string& id, const std::string& path) const;
+    /// never outside the module's directory. The path and the lifecycle come from one snapshot
+    /// of the registry, so a reload cannot pair a new version's file with an old version's lifecycle.
+    [[nodiscard]] std::optional<PublicFile> publicFile(const std::string& id, const std::string& path) const;
 
 private:
     using Entries = std::map<std::string, Entry, std::less<>>;

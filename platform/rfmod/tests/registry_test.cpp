@@ -390,7 +390,10 @@ TEST_F(RegistryTest, OptionsAreValidated) {
     EXPECT_EQ(registry->list().at(0).at("state"), "failed");
     registry->setOptions("test.alpha", {{"failInit", false}});
     EXPECT_EQ(registry->list().at(0).at("state"), "active");
-    EXPECT_TRUE(registry->publicFile("test.alpha", "schema/options.json"));
+    const auto schema = registry->publicFile("test.alpha", "schema/options.json");
+    ASSERT_TRUE(schema.has_value());
+    EXPECT_EQ(schema->path.filename(), "options.json");
+    EXPECT_EQ(schema->lifecycle, Lifecycle::Beta);  // the file and its module's lifecycle come as one snapshot
     EXPECT_FALSE(registry->publicFile("test.alpha", "lib/libmod.so"));
     EXPECT_FALSE(registry->publicFile("test.alpha", "ui/../lib/libmod.so"));
     EXPECT_FALSE(registry->publicFile("test.alpha", "ui/../../other/ui/x.js"));

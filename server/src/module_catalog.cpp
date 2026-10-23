@@ -45,13 +45,11 @@ json ModuleCatalog::list(bool admin) const {
 }
 
 std::optional<ModuleCatalog::PublicFile> ModuleCatalog::file(const std::string& id, const std::string& path) const {
-    // The instance is looked up first and the file second: a reload between the two can only
-    // take the module away, never serve an alpha bundle as public.
-    const auto instance = registry_.instance(id);
-    if (!instance) return std::nullopt;
+    // One registry call gives the path and the lifecycle from the same snapshot, so a reload
+    // that swaps the module's version cannot pair a new alpha bundle with an old public lifecycle.
     const auto found = registry_.publicFile(id, path);
     if (!found) return std::nullopt;
-    return PublicFile{*found, contentType(found->extension().string()), instance->manifest().lifecycle == rfmod::Lifecycle::Alpha};
+    return PublicFile{found->path, contentType(found->path.extension().string()), found->lifecycle == rfmod::Lifecycle::Alpha};
 }
 
 bool ModuleCatalog::grantValid(const std::string& id, std::string_view grant, TimePoint now) const {
