@@ -367,7 +367,7 @@ current directory and removes it when it finishes.
 Packing is reproducible: the same files and key give the same bytes.
 
 Send the `.rfmod` to the operator. They copy it to the server machine and run
-`rfmod trust add acme.pub --label "Acme" --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json` once, then
+`rfmod trust add acme.pub --label "Acme" --trust-store /var/lib/rfmap/keys.json` once, then
 `rfmod install acme.rain-0.1.0.rfmod --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json`;
 the CLI repeats every check,
 runs the self-test in a sandboxed worker and installs only if everything passed, then

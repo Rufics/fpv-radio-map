@@ -239,8 +239,8 @@ All under `/api/v1/admin` with `Authorization: Bearer <RFMAP_ADMIN_TOKEN>`, or i
 under **Admin**.
 
 - **Keys** (`GET /admin/keys`): the trusted signing keys. Adding or removing one is done on
-  the server machine: `rfmod trust add author.pub --label "Author" --root /var/lib/rfmap/modules
-  --trust-store /var/lib/rfmap/keys.json`, `rfmod trust remove <keyId> ...`, then
+  the server machine: `rfmod trust add author.pub --label "Author" --trust-store
+  /var/lib/rfmap/keys.json`, `rfmod trust remove <keyId> ...`, then
   `POST /admin/modules/reload`. A change waits for a running backup, like `rfmod install`.
   The built-in owner key cannot be removed. Removing a key unloads the modules signed with it
   at the next reload.

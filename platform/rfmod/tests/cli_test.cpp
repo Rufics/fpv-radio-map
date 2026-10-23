@@ -1,10 +1,13 @@
 #include "rfmod/cli.hpp"
+#include "rfmod/file_lock.hpp"
 #include "rfmod/installer.hpp"
 #include "test_support.hpp"
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <fstream>
+#include <future>
 #include <sstream>
 
 using namespace rfmod;
@@ -225,25 +228,38 @@ TEST_F(CliTest, InstallRefusesAFailingSelfTest) {
     EXPECT_FALSE(fs::exists(fs::path(root()) / "installed" / "test.broken"));
 }
 
+TEST_F(CliTest, ATrustChangeWaitsForABackupOfTheStore) {
+    // rfmap-server --backup holds the store's lock file shared while it reads the store.
+    ASSERT_EQ(run({"trust", "list", "--trust-store", keys()}), 0) << err.str();
+    auto backupRunning = std::make_unique<FileLock>(trustStoreLockFile(keys()), FileLock::Mode::Shared);
+    auto pending = std::async(std::launch::async, [&] {
+        return run({"trust", "add", thirdPartyPub(), "--label", "Acme", "--trust-store", keys()});
+    });
+    EXPECT_EQ(pending.wait_for(std::chrono::milliseconds(300)), std::future_status::timeout);
+    backupRunning.reset();
+    EXPECT_EQ(pending.get(), 0);
+    ASSERT_EQ(run({"trust", "list", "--trust-store", keys()}), 0);
+    EXPECT_NE(out.str().find("Acme"), std::string::npos);
+}
+
 TEST_F(CliTest, TrustAddsListsAndRemovesKeys) {
     ASSERT_EQ(run({"trust", "list", "--trust-store", keys()}), 0) << err.str();
     const std::string owner = PublicKey::fromText(ownerPublicText()).id();
     EXPECT_NE(out.str().find(owner + "  "), std::string::npos);
     EXPECT_NE(out.str().find("(built in)"), std::string::npos);
 
-    ASSERT_EQ(run({"trust", "add", thirdPartyPub(), "--label", "Acme", "--root", root(), "--trust-store", keys()}), 0) << err.str();
+    ASSERT_EQ(run({"trust", "add", thirdPartyPub(), "--label", "Acme", "--trust-store", keys()}), 0) << err.str();
     const std::string third = thirdPartySecret().publicKey().id();
     EXPECT_EQ(out.str(), "Trusted " + third + " (Acme)\n");
     ASSERT_EQ(run({"trust", "list", "--trust-store", keys()}), 0);
     EXPECT_NE(out.str().find(third + "  Acme\n"), std::string::npos);
 
-    ASSERT_EQ(run({"trust", "remove", third, "--root", root(), "--trust-store", keys()}), 0) << err.str();
+    ASSERT_EQ(run({"trust", "remove", third, "--trust-store", keys()}), 0) << err.str();
     ASSERT_EQ(run({"trust", "list", "--trust-store", keys()}), 0);
     EXPECT_EQ(out.str().find(third), std::string::npos);
 
     EXPECT_EQ(run({"trust", "--trust-store", keys()}), 1);
     EXPECT_EQ(run({"trust", "add", thirdPartyPub(), "--trust-store", keys()}), 1);
-    EXPECT_EQ(run({"trust", "remove", third, "--trust-store", keys()}), 1);  // a change needs --root to lock
     EXPECT_EQ(run({"trust", "frob", "--trust-store", keys()}), 1);
     EXPECT_NE(err.str().find("rfmod trust list|add"), std::string::npos);
 }

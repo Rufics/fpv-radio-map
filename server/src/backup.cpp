@@ -183,6 +183,8 @@ BackupSummary BackupWriter::write(std::ostream& out) {
     // The root is created when missing, so a server that installs the first module meanwhile waits too.
     fs::create_directories(files_.modulesRoot);
     const FileLock filesLock(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Shared);
+    if (files_.trustStore.has_parent_path()) fs::create_directories(files_.trustStore.parent_path());
+    const FileLock keysLock(rfmod::trustStoreLockFile(files_.trustStore), FileLock::Mode::Shared);
     // One snapshot for every table, so the backup is consistent while the server keeps writing.
     pqxx::transaction<pqxx::isolation_level::repeatable_read, pqxx::write_policy::read_only> w(connection_);
     const SchemaVersion version = SchemaMigrator::recorded(w).withChecksumsFrom(catalog_.version());

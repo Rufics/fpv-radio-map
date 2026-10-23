@@ -322,8 +322,7 @@ void Cli::usage(std::ostream& err) {
            "  rfmod install FILE.rfmod --root DIR --trust-store KEYS.json [--fixtures FILE.json]\n"
            "  rfmod remove ID --root DIR --trust-store KEYS.json\n"
            "  rfmod list --root DIR --trust-store KEYS.json\n"
-           "  rfmod trust list --trust-store KEYS.json\n"
-           "  rfmod trust add KEY.pub --label TEXT|remove KEY_ID --root DIR --trust-store KEYS.json\n";
+           "  rfmod trust list|add KEY.pub --label TEXT|remove KEY_ID --trust-store KEYS.json\n";
 }
 
 int Cli::run(std::span<const std::string> words) const {
@@ -485,16 +484,17 @@ int Cli::list(const CliArgs& args) const {
 
 int Cli::trust(const CliArgs& args) const {
     const auto& words = args.positional();
-    const char* usage = "rfmod trust list|add KEY.pub --label TEXT|remove KEY_ID --root DIR --trust-store KEYS.json";
+    const char* usage = "rfmod trust list|add KEY.pub --label TEXT|remove KEY_ID --trust-store KEYS.json";
     if (words.empty()) throw std::invalid_argument(usage);
-    // A change holds the module root's lock, so a backup copies the keys and the modules from one state.
+    const std::filesystem::path storePath = args.need("--trust-store", usage);
+    // A change holds the store's lock from load to save: two changes cannot drop each other's key,
+    // and a backup reads the store from one state.
     std::unique_ptr<FileLock> lock;
     if (words[0] != "list") {
-        const std::filesystem::path root = args.need("--root", usage);
-        std::filesystem::create_directories(root);
-        lock = std::make_unique<FileLock>(root / kRootLockFile, FileLock::Mode::Exclusive);
+        if (storePath.has_parent_path()) std::filesystem::create_directories(storePath.parent_path());
+        lock = std::make_unique<FileLock>(trustStoreLockFile(storePath), FileLock::Mode::Exclusive);
     }
-    TrustStore store(build_.ownerKey, args.need("--trust-store", usage));
+    TrustStore store(build_.ownerKey, storePath);
     if (words[0] == "add" && words.size() == 2) {
         const TrustedKey& k = store.add(PublicKey::fromText(Files::read(words[1])), args.need("--label", usage));
         out_ << "Trusted " << k.key.id() << " (" << k.label << ")\n";
