@@ -27,6 +27,7 @@ import {
   ModuleReload,
   WeatherPoint,
 } from '../models/api.models';
+import { FlightLogImport, FlightLogPreview, FlightLogRow, FlightView } from '../models/flightlog.models';
 import { LibraryKind } from '../models/library.models';
 import { LinkKind, Mission } from '../models/mission.models';
 import { CredentialStore } from './credential-store';
@@ -257,6 +258,40 @@ export class RfmapApiClient {
   clearCache(tier: 'all' | CacheTier['id'] = 'all'): Promise<void> {
     const params = new HttpParams().set('tier', tier);
     return this.run(this.http.delete(this.url('/admin/cache'), { headers: this.adminHeaders(), params }).pipe(map(() => undefined)));
+  }
+
+  // ---- flight logs ----
+  private logHeaders(missionId: string | null): HttpHeaders {
+    return this.sessionHeaders(missionId).set('Content-Type', 'application/octet-stream');
+  }
+
+  /** POST /flightlogs/decode: the replay of every flight in a file, nothing stored. */
+  decodeFlightLog(missionId: string | null, file: Blob, fileName: string): Promise<FlightLogPreview> {
+    const params = new HttpParams().set('fileName', fileName);
+    return this.run(this.http.post<FlightLogPreview>(this.url('/flightlogs/decode'), file, { headers: this.logHeaders(missionId), params }));
+  }
+
+  /** POST /missions/{id}/flightlogs: decodes the file and keeps its flights in the mission. */
+  importFlightLog(missionId: string, file: Blob, fileName: string): Promise<FlightLogImport> {
+    const params = new HttpParams().set('fileName', fileName);
+    return this.run(
+      this.http.post<FlightLogImport>(this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs`), file, { headers: this.logHeaders(missionId), params }),
+    );
+  }
+
+  listFlightLogs(missionId: string): Promise<FlightLogRow[]> {
+    return this.run(this.http.get<FlightLogRow[]>(this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs`), { headers: this.sessionHeaders(missionId) }));
+  }
+
+  /** One stored flight, with plan against fact for the mission's route. */
+  getFlightLog(missionId: string, logId: string): Promise<FlightView> {
+    const url = this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs/${encodeURIComponent(logId)}`);
+    return this.run(this.http.get<FlightView>(url, { headers: this.sessionHeaders(missionId) }));
+  }
+
+  deleteFlightLog(missionId: string, logId: string): Promise<void> {
+    const url = this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs/${encodeURIComponent(logId)}`);
+    return this.run(this.http.delete(url, { headers: this.sessionHeaders(missionId) }).pipe(map(() => undefined)));
   }
 
   /** GET /config/map. Falls back to the app environment when the server cannot be reached. */

@@ -25,6 +25,7 @@ tags:
   - name: library
   - name: weather
   - name: modules
+  - name: flightlogs
   - name: admin
 
 paths:
@@ -563,6 +564,107 @@ paths:
         '200': { description: 'The file, as a resource only: X-Content-Type-Options nosniff, Content-Security-Policy "default-src ''none''; sandbox", Cross-Origin-Resource-Policy same-origin' }
         '404': { description: No such public file (also for alpha files without a grant) }
 
+  /flightlogs/decode:
+    post:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: Replay of every flight in a log file, nothing stored.
+      description: |
+        The server asks each installed module that provides `flightlog.decoder` whether it reads the
+        file (`flightlog.probe`), lets the first that does decode it into schemas/flightlog.schema.json,
+        checks that answer, and builds the replay with rf-flightlog. Decoders always run in a worker
+        process. A file with only a header, or from firmware the decoder does not know, answers a
+        flight with `status` header-only or unsupported and notes saying why.
+      parameters:
+        - { name: fileName, in: query, schema: { type: string }, description: 'Shown and kept without directories' }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: The replay of every flight
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decoder: { type: string }
+                  source: { type: object, description: 'source of the flightlog/v1 document' }
+                  flights: { type: array, items: { $ref: '#/components/schemas/FlightView' } }
+        '400': { description: Empty body }
+        '403': { description: Flight log replay (rf.flightlog) is switched off on this server }
+        '413': { description: The file is larger than the server takes }
+        '422': { description: No decoder is installed, none recognises the file, or the decoder could not read it }
+        '502': { description: The decoder failed or answered a document that does not match the schema }
+
+  /missions/{missionId}/flightlogs:
+    parameters:
+      - { name: missionId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: The mission's logbook, newest first
+      responses:
+        '200':
+          description: One row per flight
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/FlightLogRow' } }
+        '403': { description: The session belongs to another mission }
+    post:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: Decode a log file and keep its flights in the mission (edit session)
+      description: The same file imported again keeps its flights and answers their ids.
+      parameters:
+        - { name: fileName, in: query, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '201':
+          description: The flights kept
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decoder: { type: string }
+                  fileName: { type: string }
+                  flights: { type: array, items: { $ref: '#/components/schemas/FlightLogRow' } }
+        '403': { description: Read-only (view) session, a session of another mission, or replay switched off }
+        '409': { description: The mission already keeps as many flights as the server allows }
+        '413': { description: The file is larger than the server takes }
+        '422': { description: No decoder recognises the file, or it could not be read }
+
+  /missions/{missionId}/flightlogs/{logId}:
+    parameters:
+      - { name: missionId, in: path, required: true, schema: { type: string } }
+      - { name: logId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: The replay of one kept flight, with plan against fact for the mission's route
+      responses:
+        '200':
+          description: The replay
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FlightView' }
+        '404': { description: No such flight in this mission }
+    delete:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: Remove a flight from the logbook (edit session)
+      responses:
+        '204': { description: Removed }
+        '403': { description: Read-only (view) session }
+        '404': { description: No such flight in this mission }
+
   /admin/modules/reload:
     post:
       tags: [admin]
@@ -1092,3 +1194,105 @@ components:
         evictions: { type: integer }
         hitRate: { type: number }
 
+    FlightLogRow:
+      type: object
+      description: A logbook row, built by rf-flightlog from the decoder's flightlog/v1 entry.
+      required: [index, status, durationS, firmware, summary, bands, warnings]
+      properties:
+        id: { type: string, description: 'Only for a flight kept in a mission' }
+        index: { type: integer, minimum: 1, description: 'Flight number in the file, from 1' }
+        status: { enum: [ok, partial, header-only, unsupported] }
+        durationS: { type: number }
+        firmware: { type: object, properties: { name: { type: string }, version: { type: string }, revision: { type: string }, target: { type: string }, supported: { type: boolean } } }
+        craft: { type: string }
+        startedAt: { type: string, description: 'Wall time the log started, when the flight controller had a clock' }
+        summary:
+          type: object
+          description: Only what the log could tell; energy needs a current sensor, distances a GPS.
+          properties:
+            durationS: { type: number }
+            armedS: { type: number }
+            cells: { type: integer }
+            distanceM: { type: number }
+            maxHomeDistM: { type: number }
+            maxAltM: { type: number }
+            maxSpeedMps: { type: number }
+            maxCurrentA: { type: number }
+            usedMah: { type: number }
+            usedWh: { type: number }
+            startVoltageV: { type: number }
+            minVoltageV: { type: number }
+            minCellV: { type: number }
+            minLinkPct: { type: number }
+            linkChannel: { enum: [linkQualityPct, rssiPct] }
+            disarmReason: { type: string }
+        bands:
+          type: array
+          items:
+            type: object
+            properties:
+              from: { type: number }
+              to: { type: number }
+              band: { enum: [DISARMED, ACRO, ANGLE, HORIZON, ALTHOLD, POSHOLD, GPS_RESCUE, FAILSAFE] }
+        warnings: { type: array, items: { type: string }, description: 'Titles of the story events that need attention' }
+        fileName: { type: string }
+        decoder: { type: string }
+        importedAt: { type: string }
+
+    FlightView:
+      description: The replay of one flight (flightview/v1).
+      allOf:
+        - { $ref: '#/components/schemas/FlightLogRow' }
+        - type: object
+          properties:
+            schema: { const: flightview/v1 }
+            channels: { type: object, additionalProperties: { type: boolean }, description: 'What the log recorded' }
+            notes: { type: array, items: { type: object, properties: { code: { type: string }, severity: { enum: [info, warn, blocked] }, message: { type: string }, fix: { type: string } } } }
+            radio: { type: object, properties: { protocol: { type: string } } }
+            homes: { type: array, items: { type: object, properties: { t: { type: number }, lat: { type: number }, lon: { type: number } } } }
+            story:
+              type: array
+              items:
+                type: object
+                required: [t, type, severity, title]
+                properties:
+                  t: { type: number, description: 'Seconds from the start of the log' }
+                  type: { type: string }
+                  severity: { enum: [info, warn, blocked] }
+                  title: { type: string }
+                  detail: { type: string }
+                  lat: { type: number }
+                  lon: { type: number }
+            timeline:
+              type: object
+              description: Every channel on one even time base; null where the log has no value (a gap stays a gap).
+              properties:
+                hz: { type: number }
+                t: { type: array, items: { type: number } }
+                channels:
+                  type: object
+                  description: 'lat, lon, altM, altMslM, homeDistM, distanceM, speedMps, climbMps, voltageV, cellV, currentA, usedMah, usedWh, rssiPct, linkQualityPct, rssiDbm, throttlePct, baroAltM, sats, gpsFix, armed: each only when the log has it'
+                  additionalProperties: { type: array, items: { type: [number, 'null'] } }
+            plan:
+              type: object
+              description: Plan against fact, for a flight kept in a mission
+              properties:
+                evaluated: { type: boolean, description: 'The mission had a route result to compare with' }
+                rows: { type: array, items: { type: object, properties: { metric: { type: string }, label: { type: string }, unit: { type: string }, plan: { type: [number, 'null'] }, fact: { type: [number, 'null'] }, deltaPct: { type: number } } } }
+                legs: { type: array, items: { type: object } }
+                findings: { type: array, items: { type: object, properties: { severity: { enum: [info, warn, blocked] }, text: { type: string } } } }
+                offRouteM: { type: array, items: { type: [number, 'null'] } }
+                furthest: { type: object }
+
+    ValidationReport:
+      type: object
+      properties:
+        ok: { type: boolean }
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              ok: { type: boolean }
+              detail: { type: string }

@@ -3,6 +3,7 @@
 #include "admin_api.hpp"
 #include "config.hpp"
 #include "data_api.hpp"
+#include "flight_log_api.hpp"
 #include "logger.hpp"
 #include "metrics.hpp"
 #include "mission_api.hpp"
@@ -23,7 +24,7 @@ struct Response;
 
 namespace rfmap {
 
-/// The HTTP server: the services, the three API controllers and the routes that lead to them.
+/// The HTTP server: the services, the four API controllers and the routes that lead to them.
 /// Every handler runs inside dispatch(): rate limit, uniform JSON errors, request metrics.
 class Application {
 public:
@@ -44,9 +45,6 @@ public:
     [[nodiscard]] Logger& log() { return log_; }
     [[nodiscard]] const Config& config() const { return config_; }
 
-    /// Bodies above this are refused before a handler sees them: nothing the API takes is larger.
-    static constexpr std::size_t kMaxPayloadBytes = 1u << 20;
-
 private:
     using Handler = std::function<void(const HttpRequest&, HttpReply&)>;
     using RawHandler = std::function<void(const httplib::Request&, httplib::Response&)>;
@@ -54,6 +52,7 @@ private:
     void configureServer();
     void routes();
     void missionRoutes(const std::string& api);
+    void flightLogRoutes(const std::string& api);
     void dataRoutes(const std::string& api);
     void adminRoutes(const std::string& api);
     /// The httplib handler that runs `handler` under the rate limit of `rateClass`, answers
@@ -78,6 +77,7 @@ private:
     Services services_;
     AdminToken admin_;
     MissionApi missionApi_;
+    FlightLogApi flightLogApi_;
     DataApi dataApi_;
     AdminApi adminApi_;
     HttpMetrics httpMetrics_;  ///< before http_: its request threads report here until they stop

@@ -245,7 +245,7 @@ json ModuleRegistry::describe(const Entry& e) const {
                  {"lifecycle", toString(m.lifecycle)},
                  {"provides", m.provides},
                  {"signedBy", e.installed.signer.label + " (" + e.installed.signer.key.id() + ")"},
-                 {"isolated", e.instance ? e.instance->isolated() : loader_.isolates(e.installed.signer)},
+                 {"isolated", e.instance ? e.instance->isolated() : loader_.isolates(e.installed.manifest, e.installed.signer)},
                  {"enabled", e.installed.settings.enabled},
                  {"state", toString(e.state)}};
     if (!e.stateDetail.empty()) info["stateDetail"] = e.stateDetail;

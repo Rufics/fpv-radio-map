@@ -5,6 +5,7 @@
 export * from './lib/models/mission.models';
 export * from './lib/models/api.models';
 export * from './lib/models/library.models';
+export * from './lib/models/flightlog.models';
 // formatting
 export * from './lib/format/rf-format';
 export * from './lib/format/rf-number.pipe';
@@ -33,6 +34,9 @@ export * from './lib/charts/link-view';
 // tools
 export * from './lib/tools/geo';
 export * from './lib/tools/route-tool';
+// flight log replay
+export * from './lib/replay/flight-replay';
+export * from './lib/replay/flight-track-layer';
 // weather along the route
 export * from './lib/weather/wind';
 export * from './lib/weather/route-timeline';

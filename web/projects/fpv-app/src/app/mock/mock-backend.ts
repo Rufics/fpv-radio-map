@@ -12,6 +12,7 @@ import {
   CacheTier,
   CoverageGrid,
   CreateLinkRequest,
+  FlightView,
   Job,
   LIBRARY_KINDS,
   LibraryKind,
@@ -34,6 +35,7 @@ import {
   weatherAt,
 } from './reference-case';
 import { baseMap, contourLines } from './mock-terrain';
+import { MockFlights } from './mock-flights';
 
 interface StoredMission {
   id: string;
@@ -41,6 +43,7 @@ interface StoredMission {
   revision: number;
   ownerKey: string;
   lastResult?: RouteResult;
+  flights?: FlightView[];
   links: (ShareLink & { token: string; pin: string; wrong: number; pausedUntilMs?: number })[];
 }
 
@@ -112,6 +115,11 @@ export class MockBackend {
     r('DELETE', /^\/jobs\/([^/]+)$/, (_req, m) => this.cancelJob(m[1]));
     r('GET', /^\/jobs\/([^/]+)\/coverage\/(control|video)\.json$/, (_req, m) => this.coverage(m[1], m[2] as LinkKind));
     r('GET', /^\/elevation\/profile$/, (req) => this.profile(req));
+    r('POST', /^\/flightlogs\/decode$/, (req) => this.decodeLog(req));
+    r('GET', /^\/missions\/([^/]+)\/flightlogs$/, (req, m) => this.withSession(req, m[1], false, (s) => this.ok((s.flights ?? []).map(MockFlights.row))));
+    r('POST', /^\/missions\/([^/]+)\/flightlogs$/, (req, m) => this.withSession(req, m[1], true, (s) => this.importLog(req, s)));
+    r('GET', /^\/missions\/([^/]+)\/flightlogs\/([^/]+)$/, (req, m) => this.withSession(req, m[1], false, (s) => this.flightView(s, m[2])));
+    r('DELETE', /^\/missions\/([^/]+)\/flightlogs\/([^/]+)$/, (req, m) => this.withSession(req, m[1], true, (s) => this.deleteLog(s, m[2])));
     r('GET', /^\/library\/([a-z-]+)$/, (_req, m) => this.ok(this.library[m[1] as LibraryKind] ?? []));
     r('POST', /^\/library\/([a-z-]+)$/, (req, m) => this.admin(req, () => this.saveLibrary(m[1] as LibraryKind, null, req.body)));
     r('GET', /^\/library\/([a-z-]+)\/([^/]+)\/history$/, (_req, m) => this.ok(this.history.get(`${m[1]}/${m[2]}`) ?? []));
@@ -200,6 +208,50 @@ export class MockBackend {
     if (!s) throw this.error(404, 'No such mission');
     if (req.headers.get('X-Owner-Key') !== s.ownerKey) throw this.error(403, 'Owner key required');
     return fn(s);
+  }
+
+  private withSession(req: HttpRequest<unknown>, id: string, edit: boolean, fn: (s: StoredMission) => HttpResponse<unknown>) {
+    const s = this.missions.get(id);
+    const sess = this.sessionOf(req);
+    if (!s) throw this.error(404, 'No such mission');
+    if (!sess) throw this.error(401, 'Session required');
+    if (sess.missionId !== id) throw this.error(403, 'this session is for another mission');
+    if (edit && sess.role !== 'edit') throw this.error(403, 'this is a read-only link');
+    return fn(s);
+  }
+
+  // ---- flight logs (see mock-flights.ts: a synthetic flight along the route) ----
+  private static logFile(req: HttpRequest<unknown>): { name: string; bytes: number } {
+    const body = req.body as Blob | ArrayBuffer | null;
+    const bytes = body instanceof Blob ? body.size : (body?.byteLength ?? 0);
+    return { name: req.params.get('fileName') ?? 'flight.log', bytes };
+  }
+
+  private decodeLog(req: HttpRequest<unknown>): HttpResponse<unknown> {
+    const { name, bytes } = MockBackend.logFile(req);
+    if (bytes === 0) throw this.error(400, 'the request body is empty: send the log file\'s bytes');
+    const mission = this.missions.get(this.sessionOf(req)?.missionId ?? '')?.mission ?? null;
+    const flights = MockFlights.decode(name, bytes, mission);
+    return this.ok({ decoder: 'fpv.blackbox', source: { decoder: 'fpv.blackbox', decoderVersion: '1.0.0', format: 'betaflight-blackbox', fileName: name, bytes }, flights });
+  }
+
+  private importLog(req: HttpRequest<unknown>, s: StoredMission): HttpResponse<unknown> {
+    const { name, bytes } = MockBackend.logFile(req);
+    const flights = MockFlights.decode(name, bytes, s.mission).map((v) => ({ ...v, id: `fl-${rnd(10)}` }));
+    s.flights = [...flights, ...(s.flights ?? [])];
+    return this.ok({ decoder: 'fpv.blackbox', fileName: name, flights: flights.map(MockFlights.row) }, 201);
+  }
+
+  private flightView(s: StoredMission, logId: string): HttpResponse<unknown> {
+    const v = s.flights?.find((f) => f.id === logId);
+    if (!v) throw this.error(404, 'no such flight log in this mission');
+    return this.ok({ ...v, plan: MockFlights.planFact(v, s.mission, s.lastResult) });
+  }
+
+  private deleteLog(s: StoredMission, logId: string): HttpResponse<unknown> {
+    if (!s.flights?.some((f) => f.id === logId)) throw this.error(404, 'no such flight log in this mission');
+    s.flights = s.flights.filter((f) => f.id !== logId);
+    return this.ok(null, 204);
   }
 
   private createMission(mission: Mission): HttpResponse<unknown> {
@@ -474,6 +526,8 @@ export const MODULES: ModuleInfo[] = [
   { id: 'rf.clutter', version: '0.9.2', title: 'Land cover clutter', lifecycle: 'beta', requires: ['rf-core>=1.2'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.core', version: '1.0.0', title: 'FPV core', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.battery', version: '1.0.4', title: 'Battery range', lifecycle: 'stable', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'rf.flightlog', version: '1.3.0', title: 'Flight log replay', builtIn: true, lifecycle: 'stable', provides: ['flightlog.processor'], signedBy: 'built in', isolated: false, state: 'active' },
+  { id: 'fpv.blackbox', version: '1.0.0', title: 'Betaflight Blackbox decoder', lifecycle: 'beta', provides: ['flightlog.decoder'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.min-altitude', version: '0.4.0', title: 'Minimum altitude', lifecycle: 'alpha', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   {
     id: 'fpv.relay', version: '1.1.0', title: 'Relay planning', lifecycle: 'deprecated', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active',

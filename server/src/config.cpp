@@ -33,7 +33,7 @@ std::string matchKey(const json& obj, const std::string& wanted) {
     }
     // Keys absent from the file still get their proper spelling.
     static constexpr auto known = std::to_array<std::string_view>({
-        "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "database", "url",
+        "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "maxUploadBytes", "database", "url",
         "poolSize", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
         "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "allowDevOwnerKey", "requireSandbox", "maxMemoryMb",
         "maxTimeoutMs", "weather",
@@ -120,6 +120,7 @@ Config Config::fromJson(json doc) {
     read(s, "threads", c.server.threads);
     read(s, "trustProxy", c.server.trustProxy);
     read(s, "maxBodyBytes", c.server.maxBodyBytes);
+    read(s, "maxUploadBytes", c.server.maxUploadBytes);
 
     const json& db = doc.value("database", json::object());
     read(db, "url", c.database.url);

@@ -91,6 +91,18 @@ TEST_F(RegistryTest, FirstPartyInstallsAndRunsInProcess) {
     EXPECT_TRUE(registry->withCapability("route.analysis").empty());
 }
 
+TEST_F(RegistryTest, FlightLogDecodersAlwaysRunIsolated) {
+    json manifest = baseManifest("test.alpha", "1.0.0");
+    manifest["provides"] = json::array({"flightlog.decoder"});
+    const auto r = install(pack(manifest, RFMOD_LIB_ALPHA, ownerSecret()));
+    ASSERT_TRUE(r.ok()) << r.toJson().dump(2);
+    const std::shared_ptr<IModuleInstance> m = registry->instance("test.alpha");
+    ASSERT_NE(m, nullptr);
+    EXPECT_TRUE(m->isolated()) << "first party, but it parses uploaded files";
+    EXPECT_TRUE(registry->list().at(0).at("isolated").get<bool>());
+    EXPECT_EQ(registry->withCapability("flightlog.decoder").size(), 1u);
+}
+
 TEST_F(RegistryTest, ThirdPartyRunsIsolatedAndSurvivesCrashes) {
     const auto r = install(pack(baseManifest("test.alpha", "1.0.0"), RFMOD_LIB_ALPHA, thirdPartySecret()));
     ASSERT_TRUE(r.ok()) << r.toJson().dump(2);

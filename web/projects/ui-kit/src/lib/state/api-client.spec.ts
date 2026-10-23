@@ -54,6 +54,12 @@ const cases: Case[] = [
   { name: 'adminCache', call: (a) => a.adminCache(), method: 'GET', url: '/api/x/admin/cache', auth: 'Bearer admin' },
   { name: 'putAdminCache', call: (a) => a.putAdminCache([]), method: 'PUT', url: '/api/x/admin/cache', auth: 'Bearer admin' },
   { name: 'clearCache', call: (a) => a.clearCache(), method: 'DELETE', url: '/api/x/admin/cache?tier=all', auth: 'Bearer admin' },
+  { name: 'decodeFlightLog', call: (a) => a.decodeFlightLog(null, new Blob(['x']), 'a b.bbl'), method: 'POST', url: '/api/x/flightlogs/decode?fileName=a%20b.bbl' },
+  { name: 'decodeFlightLog in a mission', call: (a) => a.decodeFlightLog('m 1', new Blob(['x']), 'a.bbl'), method: 'POST', url: '/api/x/flightlogs/decode?fileName=a.bbl', auth: 'Bearer s1' },
+  { name: 'importFlightLog', call: (a) => a.importFlightLog('m 1', new Blob(['x']), 'a.bbl'), method: 'POST', url: '/api/x/missions/m%201/flightlogs?fileName=a.bbl', auth: 'Bearer s1' },
+  { name: 'listFlightLogs', call: (a) => a.listFlightLogs('m 1'), method: 'GET', url: '/api/x/missions/m%201/flightlogs', auth: 'Bearer s1' },
+  { name: 'getFlightLog', call: (a) => a.getFlightLog('m 1', 'f/1'), method: 'GET', url: '/api/x/missions/m%201/flightlogs/f%2F1', auth: 'Bearer s1' },
+  { name: 'deleteFlightLog', call: (a) => a.deleteFlightLog('m 1', 'f1'), method: 'DELETE', url: '/api/x/missions/m%201/flightlogs/f1', auth: 'Bearer s1' },
   { name: 'mapConfig', call: (a) => a.mapConfig(), method: 'GET', url: '/api/x/config/map' },
 ];
 
@@ -92,6 +98,15 @@ describe('RfmapApiClient', () => {
       await done;
     });
   }
+
+  it('uploads a flight log as raw bytes', async () => {
+    const done = api.importFlightLog('m 1', new Blob(['abc']), 'a.bbl');
+    const req = http.expectOne((r) => r.url === '/api/x/missions/m%201/flightlogs');
+    expect(req.request.headers.get('Content-Type')).toBe('application/octet-stream');
+    expect(req.request.body).toBeInstanceOf(Blob);
+    req.flush({ flights: [] });
+    expect(await done).toEqual({ flights: [] });
+  });
 
   it('saves with If-Match and reads the new revision from the ETag', async () => {
     const saved = api.saveMission('m 1', mission, 3);

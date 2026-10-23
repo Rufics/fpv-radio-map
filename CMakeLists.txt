@@ -50,6 +50,7 @@ endif()
 
 add_subdirectory(core/rf-core)
 add_subdirectory(core/rf-ext)
+add_subdirectory(core/rf-flightlog)
 add_subdirectory(platform/rfmod)
 add_subdirectory(examples/modules/body-shadow)
 if(RFMAP_BUILD_SERVER)

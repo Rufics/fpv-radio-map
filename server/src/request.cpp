@@ -87,6 +87,11 @@ json HttpRequest::body() const {
     }
 }
 
+const std::string& HttpRequest::file() const {
+    if (request_.body.size() > server_.maxUploadBytes) throw HttpError(413, "the file is larger than this server takes");
+    return request_.body;
+}
+
 std::string HttpRequest::client() const {
     if (server_.trustProxy && request_.has_header("X-Forwarded-For")) {
         // The proxy appends the address it saw; earlier entries are the client's own claims.

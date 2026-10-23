@@ -41,6 +41,8 @@ public:
     [[nodiscard]] int ifMatchRevision() const;
     /// The body as JSON: 413 above the configured size, 400 when not JSON.
     [[nodiscard]] json body() const;
+    /// The body as the bytes of an uploaded file, bounded by the server's upload limit.
+    [[nodiscard]] const std::string& file() const;
     /// The client's address: the last X-Forwarded-For hop behind a trusted proxy, else the peer.
     [[nodiscard]] std::string client() const;
     /// The path with link tokens replaced, for the log.

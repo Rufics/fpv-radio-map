@@ -405,11 +405,12 @@ network). The map should show your area with hillshade and the attribution line 
 ## 6. Install the FPV modules
 
 A new server has only the built-in modules (`rf.weather`, `rf.clutter`, `rf.uncertainty`,
-`rf.radio-profiles`). Battery, minimum altitude, failsafe, best launch point, relay and the
-mission tools come as the FPV module pack. Sign it with your owner key and install it on the
-server machine with the `rfmod` CLI: modules never enter a server through the API.
+`rf.radio-profiles`, `rf.flightlog`). Battery, minimum altitude, failsafe, best launch point, relay,
+the Blackbox flight log decoder and the mission tools come as the FPV module pack. Sign it with
+your owner key and install it on the server machine with the `rfmod` CLI: modules never enter a
+server through the API.
 
-Build and sign the six modules (about a minute **(estimate)**; the compile reuses the server
+Build and sign the seven modules (about a minute **(estimate)**; the compile reuses the server
 image's build cache):
 
 ```sh
@@ -435,7 +436,7 @@ API call makes the running server pick them up:
 ```sh
 cd ~/fpv-radio-map/deploy
 docker compose cp "$HOME/rfmap-modules/." rfmap-server:/var/lib/rfmap/incoming/
-for m in core battery min-altitude failsafe best-launch relay; do
+for m in core battery min-altitude failsafe best-launch relay blackbox; do
   docker compose exec rfmap-server rfmod install "/var/lib/rfmap/incoming/$m.rfmod" \
       --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json
 done
@@ -450,8 +451,8 @@ installs it. On a failure the report names the check with `ok: false`. A version
 already installed is refused (`version.upgrade`); that is expected when you run the loop twice.
 The browser's **Admin → Modules** page shows the result after **Reload**; it has no upload.
 
-Check the list: `curl -s http://127.0.0.1:8088/api/v1/modules` shows the four `rf.*` modules and
-the six `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
+Check the list: `curl -s http://127.0.0.1:8088/api/v1/modules` shows the five `rf.*` modules and
+the seven `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
 
 ## 7. Fill the equipment library
 

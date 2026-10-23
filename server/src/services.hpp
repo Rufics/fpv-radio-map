@@ -6,6 +6,7 @@
 #include "calculator.hpp"
 #include "config.hpp"
 #include "database.hpp"
+#include "flight_logs.hpp"
 #include "host_services.hpp"
 #include "jobs.hpp"
 #include "library.hpp"
@@ -63,6 +64,7 @@ public:
     [[nodiscard]] const ModuleCatalog& catalog() const { return *modules_.catalog; }
     [[nodiscard]] LinkService& links() const { return *links_; }
     [[nodiscard]] Calculator& calc() const { return *calc_; }
+    [[nodiscard]] FlightLogService& flightLogs() const { return *flightLogs_; }
     [[nodiscard]] JobManager& jobs() const { return *jobs_; }
     [[nodiscard]] RateLimiter& limiter() const { return *limiter_; }
 
@@ -88,6 +90,7 @@ private:
         std::unique_ptr<PinGate> pinGate;
         std::unique_ptr<AuthService> auth;
         std::unique_ptr<MissionStore> missions;
+        std::unique_ptr<FlightLogStore> flightLogs;
         std::unique_ptr<Library> library;
         std::unique_ptr<BuiltinModules> builtins;
     };
@@ -129,6 +132,7 @@ private:
     Modules modules_;
     std::unique_ptr<LinkService> links_;
     std::unique_ptr<Calculator> calc_;
+    std::unique_ptr<FlightLogService> flightLogs_;
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
 };

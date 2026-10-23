@@ -131,6 +131,7 @@ void Services::buildStores() {
         AuthService::Settings{config_.auth.pinMaxAttempts, std::chrono::minutes(config_.auth.pinLockoutMinutes),
                               std::chrono::hours(config_.auth.sessionTtlHours)});
     store_.missions = std::make_unique<MissionStore>(*store_.db);
+    store_.flightLogs = std::make_unique<FlightLogStore>(*store_.db);
     store_.library = std::make_unique<Library>(*store_.db, *store_.schemas);
     store_.builtins = std::make_unique<BuiltinModules>(store_.db.get(), *store_.schemas, RFMAP_HOST_VERSION);
     if (store_.builtins->enabled(BuiltinModules::kRadioProfiles)) {
@@ -197,6 +198,9 @@ void Services::buildModules(const std::string& ownerKeyText) {
                                            modules_.runner.get(), RFMAP_HOST_VERSION);
     calc_ = std::make_unique<Calculator>(*links_, *forecast_.service, *store_.builtins, *modules_.runner,
                                          *resultStore_.cache, *store_.schemas);
+    flightLogs_ = std::make_unique<FlightLogService>(*modules_.runner, *store_.schemas, store_.flightLogs.get(),
+                                                     *store_.builtins,
+                                                     FlightLogService::Limits{config_.server.maxUploadBytes, 200});
 }
 
 void Services::reloadModules() const {

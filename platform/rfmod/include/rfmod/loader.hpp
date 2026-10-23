@@ -22,10 +22,16 @@ class ModuleLoader {
 public:
     ModuleLoader(LoaderConfig config, const ConfinedRoot& root, IHostServices& services);
 
-    [[nodiscard]] bool isolates(const TrustedKey& signer) const;
+    /// Whether this module runs in a worker: every module not signed by the owner, every module
+    /// when isolateAll is set, and every module that alwaysIsolated() names.
+    [[nodiscard]] bool isolates(const Manifest& manifest, const TrustedKey& signer) const;
+    /// Modules that run in a worker whoever signed them: a flight log decoder parses files users
+    /// upload, so a parser bug must not reach the server's memory.
+    [[nodiscard]] static bool alwaysIsolated(const Manifest& manifest);
 
     /// Starts the module from `dir` (inside the root). `forceIsolated` puts even an owner-signed
-    /// module in a worker, which is how a package is self-tested before it is trusted.
+    /// module in a worker, which is how a package is self-tested before it is trusted; a module
+    /// that alwaysIsolated() names gets a worker either way.
     /// Throws ModuleError, PathEscapeError, json::exception or std::system_error.
     [[nodiscard]] std::shared_ptr<IModuleInstance> load(const Manifest& manifest, const TrustedKey& signer,
                                                         const std::filesystem::path& dir, const json& options,

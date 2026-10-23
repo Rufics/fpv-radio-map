@@ -58,6 +58,7 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
       services_(config_, log_, ownerKeyText, ownerKeyIsDev, sqlDir),
       admin_(config_.adminToken),
       missionApi_(services_),
+      flightLogApi_(services_),
       dataApi_(services_, admin_),
       adminApi_(services_, admin_, [this] { return metricsText(); }),
       startTimeSeconds_(std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count()),
@@ -136,7 +137,7 @@ void Application::configureServer() {
     s.new_task_queue = [this, threads] {
         return std::make_unique<CountingTaskQueue>(static_cast<std::size_t>(threads), httpMetrics_).release();
     };
-    s.set_payload_max_length(kMaxPayloadBytes);
+    s.set_payload_max_length(config_.server.maxUploadBytes);
     s.set_read_timeout(30, 0);
     s.set_write_timeout(120, 0);
     s.set_logger([this](const Req& req, const Res& res) {
@@ -154,6 +155,7 @@ void Application::configureServer() {
 void Application::routes() {
     const std::string api = "/api/v1";
     missionRoutes(api);
+    flightLogRoutes(api);
     dataRoutes(api);
     adminRoutes(api);
 }
@@ -182,6 +184,17 @@ void Application::missionRoutes(const std::string& api) {
     s.Delete(api + R"(/jobs/([A-Za-z0-9_-]+))", route("default", on(m, &MissionApi::deleteJob)));
     s.Get(api + R"(/jobs/([A-Za-z0-9_-]+)/coverage/(control|video)\.json)", route("default", on(m, &MissionApi::getJobGrid)));
     s.Get(api + "/elevation/profile", route("calc", on(m, &MissionApi::getElevationProfile)));
+}
+
+void Application::flightLogRoutes(const std::string& api) {
+    httplib::Server& s = *http_;
+    const FlightLogApi& f = flightLogApi_;
+    const std::string flightLogs = api + R"(/missions/([A-Za-z0-9_-]+)/flightlogs)";
+    s.Post(api + "/flightlogs/decode", route("calc", on(f, &FlightLogApi::postDecode)));
+    s.Get(flightLogs, route("default", on(f, &FlightLogApi::getList)));
+    s.Post(flightLogs, route("calc", on(f, &FlightLogApi::postImport)));
+    s.Get(flightLogs + R"(/([A-Za-z0-9_-]+))", route("default", on(f, &FlightLogApi::getFlight)));
+    s.Delete(flightLogs + R"(/([A-Za-z0-9_-]+))", route("default", on(f, &FlightLogApi::deleteFlight)));
 }
 
 void Application::dataRoutes(const std::string& api) {

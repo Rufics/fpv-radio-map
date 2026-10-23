@@ -37,7 +37,8 @@ public:
         int port = 8080;
         int threads = 16;
         bool trustProxy = false;  ///< use the last X-Forwarded-For hop as the client address
-        std::size_t maxBodyBytes = 1u << 20;
+        std::size_t maxBodyBytes = 1u << 20;    ///< JSON bodies
+        std::size_t maxUploadBytes = 64u << 20;  ///< files the API takes: flight logs
     };
     Server server;
 

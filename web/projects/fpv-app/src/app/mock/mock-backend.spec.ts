@@ -157,4 +157,37 @@ describe('MockBackend through the API client', () => {
     expect((await rejection(api.putAdminCache([{ id: 'nope' as never }]))).status).toBe(400);
     await settle(api.clearCache());
   });
+  it('decodes, keeps, replays against the plan and deletes flight logs', async () => {
+    const created = await settle(api.createMission(exampleMission()));
+    creds.setSession(created.missionId, created.session);
+    const big = new Blob([new Uint8Array(32 * 1024)]);
+
+    const preview = await settle(api.decodeFlightLog(created.missionId, big, 'LOG00007.BFL'));
+    expect(preview.flights[0].status).toBe('ok');
+    expect(preview.flights[0].index).toBe(1);
+    expect(preview.flights[0].story.length).toBeGreaterThan(0);
+    const headerOnly = await settle(api.decodeFlightLog(null, new Blob(['H Product:Blackbox']), 'btfl_016.bbl'));
+    expect(headerOnly.flights[0].status).toBe('header-only');
+    expect((await rejection(api.decodeFlightLog(null, new Blob([]), 'empty.bbl'))).status).toBe(400);
+
+    const kept = await settle(api.importFlightLog(created.missionId, big, 'LOG00007.BFL'));
+    const id = kept.flights[0].id ?? '';
+    expect(id).not.toBe('');
+    const rows = await settle(api.listFlightLogs(created.missionId));
+    expect(rows.map((r) => r.id)).toEqual([id]);
+    expect((rows[0] as unknown as Record<string, unknown>)['timeline']).toBeUndefined();
+
+    const view = await settle(api.getFlightLog(created.missionId, id));
+    expect(view.plan?.rows.map((r) => r.metric)).toEqual(['distance', 'energy', 'whPerKm', 'weakestLink', 'maxOffRoute']);
+    expect(view.plan?.offRouteM).toHaveLength(view.timeline.t.length);
+
+    await settle(api.deleteFlightLog(created.missionId, id));
+    expect(await settle(api.listFlightLogs(created.missionId))).toEqual([]);
+    expect((await rejection(api.getFlightLog(created.missionId, id))).status).toBe(404);
+    const other = await settle(api.createMission(exampleMission()));
+    creds.setSession(created.missionId, other.session);
+    expect((await rejection(api.listFlightLogs(created.missionId))).status).toBe(403);
+    creds.setSession(created.missionId, null);
+    expect((await rejection(api.listFlightLogs(created.missionId))).status).toBe(401);
+  });
 });

@@ -10,7 +10,9 @@
     // true only behind a reverse proxy you run: the last X-Forwarded-For hop becomes the
     // client address for rate limits and logs.
     "trustProxy": true,
-    "maxBodyBytes": 1048576
+    // JSON bodies, and the largest file the API takes (a flight log).
+    "maxBodyBytes": 1048576,
+    "maxUploadBytes": 67108864
   },
   "database": {
     // Prefer RFMAP_DATABASE_URL so the password stays out of the file.
