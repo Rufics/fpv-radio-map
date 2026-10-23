@@ -121,7 +121,7 @@ class BuildProbe(Probe):
             return {}
         entries = {}
         for line in lines:
-            match = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):[A-Z]+=(.*)$", line)
+            match = re.match(r"^([A-Za-z_]\w*):[A-Z]+=(.*)$", line)
             if match:
                 entries[match.group(1)] = match.group(2)
         return entries
