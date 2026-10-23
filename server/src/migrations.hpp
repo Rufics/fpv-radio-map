@@ -252,9 +252,15 @@ private:
     /// nothing to write: a start then does not wait for a running backup.
     /// Only reads: it takes no lock and runs no DDL.
     [[nodiscard]] bool upToDate(pqxx::connection& c) const;
-    /// The module root's lock, exclusive, so a backup never reads the rows of one version and the
-    /// files of another; none when the migrator has no files.
-    [[nodiscard]] std::unique_ptr<FileLock> lockFiles() const;
+    /// The file locks a migration holds, exclusive: the module root's, then the trust store's, in
+    /// the order a backup takes them.
+    struct FilesLocks {
+        std::unique_ptr<FileLock> root;
+        std::unique_ptr<FileLock> keys;
+    };
+    /// The locks of the files this migrator has, so a backup never reads the rows of one version
+    /// and the files of another, and a trust change never overwrites a restored store.
+    [[nodiscard]] FilesLocks lockFiles() const;
     /// Fills the checksums that rows written before checksums lack.
     void recordChecksums(pqxx::work& w, const SchemaVersion& current) const;
 

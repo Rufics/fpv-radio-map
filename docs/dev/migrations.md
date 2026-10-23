@@ -64,8 +64,8 @@ running backup. Loading the modules afterwards does wait, since it may restore a
 Everything else that writes under the module root takes the same lock exclusively: the rfmod
 CLI's install and remove (`ModuleInstaller`), and the server's reload and settings changes
 (`ModuleGate::Change`). The trust store has its own lock file next to it (`KEYS.json.lock`):
-`rfmod trust add` and `remove` take it exclusively, and a backup holds it shared with the root's
-lock. Requests take nothing, since they keep the module instances they started
+`rfmod trust add` and `remove` take it exclusively, a migration or restore takes it exclusively
+after the root's lock, and a backup holds it shared after the root's lock. Requests take nothing, since they keep the module instances they started
 with.
 
 A staged file sits next to its target as `<target>.rfmap-restoring`. A file that already has that

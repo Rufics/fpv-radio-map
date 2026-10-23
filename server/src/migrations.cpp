@@ -272,10 +272,17 @@ bool SchemaMigrator::upToDate(pqxx::connection& c) const {
            std::ranges::none_of(current.ids(), [](const MigrationId& id) { return id.checksum.empty(); });
 }
 
-std::unique_ptr<FileLock> SchemaMigrator::lockFiles() const {
-    if (files_.modulesRoot.empty()) return nullptr;
-    fs::create_directories(files_.modulesRoot);
-    return std::make_unique<FileLock>(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Exclusive);
+SchemaMigrator::FilesLocks SchemaMigrator::lockFiles() const {
+    FilesLocks locks;
+    if (!files_.modulesRoot.empty()) {
+        fs::create_directories(files_.modulesRoot);
+        locks.root = std::make_unique<FileLock>(files_.modulesRoot / ModuleGate::kLockFile, FileLock::Mode::Exclusive);
+    }
+    if (!files_.trustStore.empty()) {
+        if (files_.trustStore.has_parent_path()) fs::create_directories(files_.trustStore.parent_path());
+        locks.keys = std::make_unique<FileLock>(rfmod::trustStoreLockFile(files_.trustStore), FileLock::Mode::Exclusive);
+    }
+    return locks;
 }
 
 MigrationReport SchemaMigrator::migrateThrough(pqxx::connection& c, const SchemaVersion& pivot, const Action& atPivot,
@@ -283,7 +290,7 @@ MigrationReport SchemaMigrator::migrateThrough(pqxx::connection& c, const Schema
     // Planned again under the locks below: another server may migrate in between.
     if (!atPivot && pivot.empty() && upToDate(c)) return {};
     // A backup reads the rows and the files under the shared lock: it waits until both have changed.
-    const std::unique_ptr<FileLock> filesLock = lockFiles();
+    const FilesLocks filesLocks = lockFiles();
     StagedFiles staged;
     pqxx::work w(c);
     const MigrationPlan plan = planFor(w, pivot, options);

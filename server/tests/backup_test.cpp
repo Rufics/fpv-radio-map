@@ -157,12 +157,14 @@ protected:
         return dir;
     }
 
-    /// The files under `dir`, leaving out the module lock file that migrations and backups share.
+    /// The files under `dir`, leaving out the lock files that migrations and backups share: the
+    /// module root's and the trust store's.
     static std::size_t filesUnder(const fs::path& dir) {
         if (!fs::exists(dir)) return 0;
         std::size_t n = 0;
         for (const auto& e : fs::recursive_directory_iterator(dir)) {
-            n += e.is_regular_file() && e.path().filename() != ModuleGate::kLockFile ? 1 : 0;
+            const bool lock = e.path().filename() == ModuleGate::kLockFile || e.path().extension() == ".lock";
+            n += e.is_regular_file() && !lock ? 1 : 0;
         }
         return n;
     }
