@@ -18,9 +18,9 @@ bool WorkerExec::redirectDescriptors(const Plan& plan) noexcept {
     if (devnull < 0) return false;
     const bool ok = dup2(devnull, 0) >= 0 && dup2(plan.errorFd, 1) >= 0 && dup2(plan.errorFd, 2) >= 0 &&
                     dup2(plan.socketFd, kProtocolFd) >= 0;
-    // The original descriptor is not needed once stdin points at /dev/null; it would otherwise
-    // reach the worker as one more open file. When stdin was closed, open() handed out 0 itself.
-    if (devnull != 0) close(devnull);
+    // The original devnull descriptor is not closed here: open() hands out the lowest free number,
+    // so it may be one of 0..3 that a dup2 above has just set up; any higher number goes with
+    // the close_range in run().
     return ok;
 }
 
