@@ -15,8 +15,13 @@ void WorkerExec::fail(int fd, const char (&what)[N]) noexcept {
 
 bool WorkerExec::redirectDescriptors(const Plan& plan) noexcept {
     const int devnull = open("/dev/null", O_RDONLY);
-    return devnull >= 0 && dup2(devnull, 0) >= 0 && dup2(plan.errorFd, 1) >= 0 && dup2(plan.errorFd, 2) >= 0 &&
-           dup2(plan.socketFd, kProtocolFd) >= 0;
+    if (devnull < 0) return false;
+    const bool ok = dup2(devnull, 0) >= 0 && dup2(plan.errorFd, 1) >= 0 && dup2(plan.errorFd, 2) >= 0 &&
+                    dup2(plan.socketFd, kProtocolFd) >= 0;
+    // The original descriptor is not needed once stdin points at /dev/null; it would otherwise
+    // reach the worker as one more open file. When stdin was closed, open() handed out 0 itself.
+    if (devnull != 0) close(devnull);
+    return ok;
 }
 
 bool WorkerExec::applyLimits(rlim_t memBytes) noexcept {
