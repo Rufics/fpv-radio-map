@@ -2,8 +2,15 @@
 // make several distinct modules from one source.
 #include <rfmod/module.hpp>
 
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <cerrno>
 #include <chrono>
 #include <cstdlib>
+#include <fstream>
 #include <thread>
 #include <vector>
 
@@ -35,7 +42,27 @@ public:
             return {{"bytes", big.size()}};
         }
         if (method == "bad") throw rfmod::BadRequest("nope");
+        if (method == "probe") return probe();
         throw rfmod::UnknownMethod(method);
+    }
+
+    /// What a hostile module could try: each attempt and whether the sandbox let it through.
+    static rfmod::json probe() {
+        const bool readsEtc = std::ifstream("/etc/passwd").good();
+        const bool readsOwnDir = std::ifstream("manifest.json").good();
+        // Landlock before ABI 3 lets a read-only open truncate; the syscall filter must not.
+        const int truncating = open("manifest.json", O_RDONLY | O_TRUNC);
+        if (truncating >= 0) close(truncating);
+        const int sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock >= 0) close(sock);
+        const pid_t child = fork();
+        if (child == 0) _exit(0);
+        if (child > 0) waitpid(child, nullptr, 0);
+        // The host is the same user, so only the sandbox can refuse the signal.
+        const bool signalsOthers = kill(getppid(), 0) == 0;
+        return {{"readsEtc", readsEtc}, {"readsOwnDir", readsOwnDir}, {"opensSocket", sock >= 0},
+                {"forks", child > 0}, {"signalsOthers", signalsOthers}, {"truncatesOwnFile", truncating >= 0},
+                {"writesHere", std::ofstream("probe.tmp").good()}};
     }
 
     rfmod::json selftest() override {

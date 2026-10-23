@@ -5,14 +5,13 @@
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
 
-#include <nlohmann/json.hpp>
-
 #include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
 #include <format>
-#include <fstream>
+#include <limits>
+#include <mutex>
 #include <stdexcept>
 
 namespace rfmap {
@@ -25,11 +24,16 @@ std::uint64_t nextRasterId() {
     return next++;
 }
 
-std::uint64_t blockKey(std::uint64_t raster, int bx, int by) {
-    return (raster << 44) ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(bx)) << 22) ^
-           static_cast<std::uint64_t>(static_cast<std::uint32_t>(by));
-}
+/// Block indices get 22 bits each in the cache key; the raster id takes the remaining 20.
+constexpr int kBlockIndexBits = 22;
+constexpr std::uint64_t kBlockIndexMask = (std::uint64_t{1} << kBlockIndexBits) - 1;
 }  // namespace
+
+void GdalRaster::DatasetCloser::operator()(GDALDataset* dataset) const { GDALClose(dataset); }
+
+void GdalRaster::TransformationDestroyer::operator()(OGRCoordinateTransformation* transformation) const {
+    OGRCoordinateTransformation::DestroyCT(transformation);
+}
 
 GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), cache_(cache), id_(nextRasterId()) {
     static std::once_flag once;
@@ -38,39 +42,63 @@ GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), c
         // Our own LRU holds the decoded blocks; GDAL's cache would only hold them twice.
         GDALSetCacheMax64(16 << 20);
     });
-    dataset_ = static_cast<GDALDataset*>(GDALOpen(file.c_str(), GA_ReadOnly));
-    if (!dataset_) throw RasterError("cannot open raster " + file.string());
-    if (dataset_->GetRasterCount() < 1) throw RasterError(file.string() + " has no bands");
-    band_ = dataset_->GetRasterBand(1);
-    width_ = dataset_->GetRasterXSize();
-    height_ = dataset_->GetRasterYSize();
-    band_->GetBlockSize(&blockW_, &blockH_);
-    int hasNoData = 0;
-    const double nd = band_->GetNoDataValue(&hasNoData);
-    if (hasNoData) noData_ = nd;
-
+    open();
     std::array<double, 6> gt{};
     if (dataset_->GetGeoTransform(gt.data()) != CE_None) throw RasterError(file.string() + " has no geotransform");
     if (!GDALInvGeoTransform(gt.data(), inverse_.data())) {
         throw RasterError(file.string() + ": geotransform not invertible");
     }
+    readProjection(gt);
 
+    std::error_code ec;
+    const auto size = fs::file_size(file, ec);
+    const auto mtime = fs::last_write_time(file, ec).time_since_epoch().count();
+    identity_ = std::format("{}:{}:{}", fs::absolute(file).string(), size, mtime);
+}
+
+GdalRaster::~GdalRaster() = default;
+
+void GdalRaster::open() {
+    dataset_.reset(static_cast<GDALDataset*>(GDALOpen(file_.c_str(), GA_ReadOnly)));
+    if (!dataset_) throw RasterError("cannot open raster " + file_.string());
+    if (dataset_->GetRasterCount() < 1) throw RasterError(file_.string() + " has no bands");
+    band_ = dataset_->GetRasterBand(1);
+    width_ = dataset_->GetRasterXSize();
+    height_ = dataset_->GetRasterYSize();
+    band_->GetBlockSize(&blockW_, &blockH_);
+    if (blockW_ < 1 || blockH_ < 1) throw RasterError(file_.string() + " has an empty block size");
+    // Each block index must fit its part of the cache key.
+    const std::uint64_t blocksAcross = static_cast<std::uint64_t>(width_ / blockW_) + 1;
+    if (const std::uint64_t blocksDown = static_cast<std::uint64_t>(height_ / blockH_) + 1;
+        blocksAcross > kBlockIndexMask || blocksDown > kBlockIndexMask) {
+        throw RasterError(file_.string() + " has more blocks than the block cache can address");
+    }
+    int hasNoData = 0;
+    const double nd = band_->GetNoDataValue(&hasNoData);
+    if (hasNoData) noData_ = nd;
+}
+
+void GdalRaster::readProjection(const std::array<double, 6>& geoTransform) {
     const OGRSpatialReference* srs = dataset_->GetSpatialRef();
-    if (!srs) throw RasterError(file.string() + " has no coordinate reference system");
+    if (!srs) throw RasterError(file_.string() + " has no coordinate reference system");
     OGRSpatialReference wgs84;
     wgs84.SetWellKnownGeogCS("WGS84");
     wgs84.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
     OGRSpatialReference target(*srs);
     target.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+    Transformation toWgs;
     if (!target.IsSame(&wgs84)) {
-        toRaster_ = OGRCreateCoordinateTransformation(&wgs84, &target);
-        if (!toRaster_) throw RasterError(file.string() + ": cannot transform from WGS84");
+        toRaster_.reset(OGRCreateCoordinateTransformation(&wgs84, &target));
+        if (!toRaster_) throw RasterError(file_.string() + ": cannot transform from WGS84");
+        toWgs.reset(OGRCreateCoordinateTransformation(&target, &wgs84));
+        if (!toWgs) throw RasterError(file_.string() + ": cannot transform to WGS84");
     }
+    measurePitch(geoTransform, toWgs.get());
+}
 
+void GdalRaster::measurePitch(const std::array<double, 6>& gt, OGRCoordinateTransformation* toWgs) {
     // Pixel centre positions back in WGS84, to measure the pixel pitch on the ellipsoid.
-    std::unique_ptr<OGRCoordinateTransformation> toWgs(
-        toRaster_ ? OGRCreateCoordinateTransformation(&target, &wgs84) : nullptr);
-    auto centreOf = [&gt, &toWgs](double col, double row) {
+    auto centreOf = [&gt, toWgs](double col, double row) {
         double x = gt[0] + (col + 0.5) * gt[1] + (row + 0.5) * gt[2];
         double y = gt[3] + (col + 0.5) * gt[4] + (row + 0.5) * gt[5];
         if (toWgs) toWgs->Transform(1, &x, &y);
@@ -89,22 +117,17 @@ GdalRaster::GdalRaster(const fs::path& file, BlockCache& cache) : file_(file), c
     }
     resolution_ = rfcore::Metres(best);
     centre_ = centreOf(width_ / 2.0 - 0.5, height_ / 2.0 - 0.5);
-
-    std::error_code ec;
-    const auto size = fs::file_size(file, ec);
-    const auto mtime = fs::last_write_time(file, ec).time_since_epoch().count();
-    identity_ = std::format("{}:{}:{}", fs::absolute(file).string(), size, mtime);
 }
 
-GdalRaster::~GdalRaster() {
-    if (toRaster_) OGRCoordinateTransformation::DestroyCT(toRaster_);
-    if (dataset_) GDALClose(dataset_);
+std::uint64_t GdalRaster::blockKey(int bx, int by) const {
+    return (id_ << (2 * kBlockIndexBits)) | ((static_cast<std::uint64_t>(bx) & kBlockIndexMask) << kBlockIndexBits) |
+           (static_cast<std::uint64_t>(by) & kBlockIndexMask);
 }
 
 std::string GdalRaster::dataType() const { return GDALGetDataTypeName(band_->GetRasterDataType()); }
 
 std::shared_ptr<const RasterBlock> GdalRaster::block(int bx, int by) const {
-    const std::uint64_t key = blockKey(id_, bx, by);
+    const std::uint64_t key = blockKey(bx, by);
     if (auto hit = cache_.get(key)) return hit;
     auto b = std::make_shared<RasterBlock>();
     b->width = std::min(blockW_, width_ - bx * blockW_);
@@ -130,6 +153,7 @@ std::optional<double> GdalRaster::valueAt(const rfcore::GeoPoint& p) const {
     }
     const double colF = inverse_[0] + x * inverse_[1] + y * inverse_[2];
     const double rowF = inverse_[3] + x * inverse_[4] + y * inverse_[5];
+    // NaN fails this test too, so the casts below are always within the raster.
     if (!(colF >= 0.0 && rowF >= 0.0 && colF < width_ && rowF < height_)) return std::nullopt;
     const auto col = static_cast<int>(colF);
     const auto row = static_cast<int>(rowF);
@@ -161,75 +185,6 @@ std::optional<int> LandCoverSource::code(const rfcore::GeoPoint& p) const {
     const auto v = raster_->valueAt(p);
     if (!v.has_value() || *v == 0.0) return std::nullopt;  // 0 is WorldCover "no data"
     return static_cast<int>(*v);
-}
-
-namespace {
-
-/// The "source" of `name` in a manifest's "files": tiles-builder writes
-/// {"files": {"<name>": {"source": ..., ...}}} or a list with "name".
-std::string sourceInFiles(const nlohmann::json& files, const std::string& name) {
-    if (files.is_object() && files.contains(name)) return files.at(name).value("source", "");
-    if (!files.is_array()) return {};
-    for (const auto& f : files) {
-        if (f.value("name", "") == name || f.value("file", "") == name) return f.value("source", "");
-    }
-    return {};
-}
-
-/// Adds the distinct attributions of a manifest's files to `out`, else its joined display text.
-void addAttributions(const nlohmann::json& doc, std::vector<std::string>& out) {
-    if (doc.contains("files") && doc.at("files").is_array()) {
-        for (const auto& f : doc.at("files")) {
-            if (const std::string a = f.value("attribution", ""); !a.empty() && std::ranges::find(out, a) == out.end()) out.push_back(a);
-        }
-    }
-    if (out.empty()) {
-        if (const std::string joined = doc.value("attribution_display_text", ""); !joined.empty()) out.push_back(joined);
-    }
-}
-
-}  // namespace
-
-std::string manifestSourceName(const fs::path& file) {
-    const fs::path manifest = file.parent_path() / "manifest.json";
-    std::ifstream in(manifest);
-    if (!in) return {};
-    try {
-        const auto doc = nlohmann::json::parse(in);
-        if (doc.contains("files")) return sourceInFiles(doc.at("files"), file.filename().string());
-    } catch (const nlohmann::json::exception&) {
-        return {};  // not JSON, or an entry of the wrong type: the source is unknown
-    }
-    return {};
-}
-
-std::vector<std::string> manifestAttributions(const fs::path& file) {
-    std::vector<std::string> out;
-    std::ifstream in(file.parent_path() / "manifest.json");
-    if (!in) return out;
-    try {
-        addAttributions(nlohmann::json::parse(in), out);
-    } catch (const nlohmann::json::exception&) {
-        return out;  // not JSON, or an entry of the wrong type: keep what was read before it
-    }
-    return out;
-}
-
-std::optional<std::set<std::string, std::less<>>> manifestFiles(const fs::path& file) {
-    std::ifstream in(file.parent_path() / "manifest.json");
-    if (!in) return std::nullopt;
-    try {
-        const auto doc = nlohmann::json::parse(in);
-        if (!doc.contains("files") || !doc.at("files").is_array()) return std::nullopt;
-        std::set<std::string, std::less<>> out;
-        for (const auto& f : doc.at("files")) {
-            const std::string name = f.value("file", "");
-            if (!name.empty()) out.insert(name);
-        }
-        return out;
-    } catch (const nlohmann::json::exception&) {  // not JSON, or an entry that is not an object
-        return std::nullopt;
-    }
 }
 
 }  // namespace rfmap

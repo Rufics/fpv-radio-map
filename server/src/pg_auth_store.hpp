@@ -14,8 +14,8 @@ public:
     void insertLink(const LinkRecord& link) override;
     std::vector<LinkRecord> links(const std::string& missionId) override;
     std::optional<LinkRecord> linkByToken(const Digest& tokenHash) override;
-    FailureOutcome recordFailure(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
-                                 TimePoint now) override;
+    AttemptOutcome beginAttempt(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
+                                TimePoint now) override;
     void recordSuccess(const std::string& linkId, TimePoint now) override;
     bool revokeLink(const std::string& missionId, const std::string& linkId) override;
     void insertSession(const SessionRecord& s) override;

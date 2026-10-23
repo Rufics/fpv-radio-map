@@ -24,7 +24,7 @@ import {
   RouteResult,
   ShareLink,
   TrustedKey,
-  ValidationReport,
+  ModuleReload,
   WeatherPoint,
 } from '../models/api.models';
 import { FlightLogImport, FlightLogPreview, FlightLogRow, FlightView } from '../models/flightlog.models';
@@ -225,20 +225,17 @@ export class RfmapApiClient {
     return this.run(this.http.get<ModuleInfo[]>(this.url('/modules')));
   }
 
-  /** `install=false` only checks the package. */
-  uploadModule(pkg: Blob, install: boolean): Promise<ValidationReport> {
-    const params = new HttpParams().set('install', String(install));
-    const headers = this.adminHeaders().set('Content-Type', 'application/octet-stream');
-    return this.run(this.http.post<ValidationReport>(this.url('/admin/modules'), pkg, { headers, params }));
-  }
-
   /** Enable or disable a module (built-ins included) and set its server-wide options. */
   setModule(moduleId: string, body: { enabled?: boolean; options?: Record<string, unknown> }): Promise<ModuleInfo[]> {
     return this.run(this.http.put<ModuleInfo[]>(this.url(`/admin/modules/${encodeURIComponent(moduleId)}`), body, { headers: this.adminHeaders() }));
   }
 
-  removeModule(moduleId: string): Promise<void> {
-    return this.run(this.http.delete(this.url(`/admin/modules/${encodeURIComponent(moduleId)}`), { headers: this.adminHeaders() }).pipe(map(() => undefined)));
+  /**
+   * Makes the server re-read what the operator installed, removed or trusted on its machine with
+   * the rfmod CLI. The API itself never takes a package.
+   */
+  reloadModules(): Promise<ModuleReload> {
+    return this.run(this.http.post<ModuleReload>(this.url('/admin/modules/reload'), null, { headers: this.adminHeaders() }));
   }
 
   moduleNotices(): Promise<Record<string, unknown>[]> {
@@ -247,16 +244,6 @@ export class RfmapApiClient {
 
   adminKeys(): Promise<TrustedKey[]> {
     return this.run(this.http.get<TrustedKey[]>(this.url('/admin/keys'), { headers: this.adminHeaders() }));
-  }
-
-  /** Add a trusted signing key; returns the key list. */
-  addKey(key: string, label?: string): Promise<TrustedKey[]> {
-    return this.run(this.http.post<TrustedKey[]>(this.url('/admin/keys'), label ? { key, label } : { key }, { headers: this.adminHeaders() }));
-  }
-
-  /** 409 for the built-in owner key or an unknown key. */
-  deleteKey(keyId: string): Promise<void> {
-    return this.run(this.http.delete(this.url(`/admin/keys/${encodeURIComponent(keyId)}`), { headers: this.adminHeaders() }).pipe(map(() => undefined)));
   }
 
   adminCache(): Promise<CacheTier[]> {

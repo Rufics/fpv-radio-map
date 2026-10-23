@@ -9,7 +9,7 @@ namespace {
 
 bool parses(const nlohmann::json& m, std::string* failed = nullptr, const Version& host = Version(0, 1, 0)) {
     ValidationReport r;
-    const bool ok = ManifestParser::parse(m, host, r).has_value();
+    const bool ok = ManifestParser(host).parse(m, r).has_value();
     if (failed) {
         for (const auto& c : r.checks()) {
             if (!c.ok) {

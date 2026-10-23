@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Packs and signs every FPV module of a finished build, then runs the upload checks and the
+"""Packs and signs every FPV module of a finished build, then runs the install checks and the
 self-test of each package against the given owner public key.
 
     python3 -I tools/ci/pack_modules.py BUILD_DIR OWNER.secret OWNER.pub OUT_DIR
@@ -24,7 +24,7 @@ RFMOD_TIMEOUT_SECONDS = 600
 
 
 class PackError(Exception):
-    """A module could not be packed or failed its upload checks."""
+    """A module could not be packed or failed its install checks."""
 
 
 class StagedModule:
@@ -111,7 +111,7 @@ class RfmodTool:
             raise PackError(f"rfmod pack failed for {stage} (exit {result.returncode})")
 
     def test(self, package, trust, dependencies):
-        """Runs the upload checks; returns the exit code and the combined output."""
+        """Runs the install checks; returns the exit code and the combined output."""
         with_args = [arg for dependency in dependencies for arg in ("--with", dependency)]
         result = self._run(["test", package, "--trust", trust, *with_args])
         return result.returncode, result.stdout + result.stderr
@@ -140,7 +140,7 @@ class ModulePublisher:
             status, output = self._rfmod.test(package, trust, dependencies)
             sys.stdout.write(output)
             if status != 0 or PASSED_MARKER not in output:
-                raise PackError(f"upload checks failed for {package} (exit {status})")
+                raise PackError(f"install checks failed for {package} (exit {status})")
 
     def write_checksums(self):
         lines = [f"{self._sha256(package)}  {package.name}\n"

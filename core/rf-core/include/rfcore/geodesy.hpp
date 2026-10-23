@@ -33,8 +33,13 @@ public:
     [[nodiscard]] GeodesicDirect directWithAzimuth(const GeoPoint& from, double azimuthDeg, Metres distance) const;
 
     /// Points along the geodesic from `from` to `to`, both ends included, spaced no more
-    /// than `maxStep` apart (equal spacing).
+    /// than `maxStep` apart (equal spacing). Throws std::invalid_argument for a step that is
+    /// not positive or would need more than kMaxIntervals.
     [[nodiscard]] std::vector<GeoPoint> sample(const GeoPoint& from, const GeoPoint& to, Metres maxStep) const;
+
+    /// Once around the Earth at 1 m: no profile the host builds needs more, and the bound keeps
+    /// a tiny step from asking for an unbounded allocation.
+    static constexpr std::size_t kMaxIntervals = 40'075'000;
 };
 
 }  // namespace rfcore

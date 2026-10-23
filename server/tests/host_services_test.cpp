@@ -4,7 +4,6 @@
 
 #include <rfcore/link_budget.hpp>
 
-#include <GeographicLib/Geodesic.hpp>
 #include <gtest/gtest.h>
 
 #include <functional>
@@ -85,7 +84,7 @@ TEST(TermPrefixRule, OnlyTermsInTheModulesNamespaceAreKept) {
 }
 
 TEST(TermPrefixRule, ForeignTermsNeverReachTheBudget) {
-    FakeModule m("acme.rain", [](const std::string& method, const json& req) -> json {
+    auto m = std::make_shared<FakeModule>("acme.rain", [](const std::string& method, const json& req) -> json {
         EXPECT_EQ(method, "loss.contribute");
         EXPECT_DOUBLE_EQ(req.at("frequencyHz").get<double>(), 2.44e9);
         EXPECT_EQ(req.at("profile").at("samples").size(), 11u);
@@ -99,6 +98,7 @@ TEST(TermPrefixRule, ForeignTermsNeverReachTheBudget) {
     const auto base = evaluateWith(nullptr);
     const auto withModule = evaluateWith(
         std::make_shared<ModuleLossContributor>(m, json{{"rate", 5}}, ends(), Clock::now(), nullptr, failures));
+    EXPECT_EQ(m->calls, 1);
     EXPECT_TRUE(failures.empty());
     EXPECT_NEAR(total(withModule) - total(base), 1.25, 1e-12);
     EXPECT_NEAR(base.margin.value() - withModule.margin.value(), 1.25, 1e-12);
@@ -111,7 +111,7 @@ TEST(TermPrefixRule, ForeignTermsNeverReachTheBudget) {
 }
 
 TEST(TermPrefixRule, AFailingModuleContributesNothingAndIsReported) {
-    FakeModule m("acme.broken", [](const std::string&, const json&) -> json {
+    auto m = std::make_shared<FakeModule>("acme.broken", [](const std::string&, const json&) -> json {
         throw rfmod::ModuleError("internal", "division by zero");
     });
     std::vector<ModuleFailure> failures;
@@ -124,80 +124,29 @@ TEST(TermPrefixRule, AFailingModuleContributesNothingAndIsReported) {
     EXPECT_DOUBLE_EQ(r.margin.value(), base.margin.value());
 }
 
-TEST(RecursionGuard, LinkEvaluateIsRefusedInsideLossContribute) {
+TEST(HostCalls, OutsideARequestEveryCallIsRefused) {
     Logger log;
     log.setQuiet(true);
-    ServerHostServices host(nullptr, nullptr, nullptr, nullptr, log);
-    std::string refusal;
-    FakeModule m("acme.loop", [&host, &refusal](const std::string&, const json&) -> json {
-        try {
-            (void)host.call("acme.loop", "link.evaluate", {{"frequencyHz", 2.4e9}});
-        } catch (const std::exception& e) {
-            refusal = e.what();
-        }
-        return {{"terms", json::array()}};
-    });
-    std::vector<ModuleFailure> failures;
-    (void)evaluateWith(std::make_shared<ModuleLossContributor>(m, json::object(), ends(), Clock::now(), nullptr, failures));
-    EXPECT_NE(refusal.find("refused inside loss.contribute"), std::string::npos) << refusal;
-    EXPECT_NE(refusal.find("acme.loop"), std::string::npos);
-    EXPECT_TRUE(LossContributionScope::active().empty()) << "the scope ends with the call";
-
-    // Outside loss.contribute the same call is not refused for recursion (it fails here only
-    // because this test host has no link service).
-    try {
-        (void)host.call("acme.loop", "link.evaluate", {{"frequencyHz", 2.4e9}});
-        FAIL();
-    } catch (const std::exception& e) {
-        EXPECT_EQ(std::string(e.what()).find("refused"), std::string::npos) << e.what();
-    }
+    ServerHostServices host(log);
+    EXPECT_THROW((void)host.call("m.x", "geodesy.inverse", json::object()), HostCallError);
+    EXPECT_THROW((void)host.call("m.x", "fs.read", json::object()), HostCallError);
+    EXPECT_FALSE(host.methods().find("fs.read"));
+    EXPECT_TRUE(host.methods().find("link.evaluate"));
 }
 
-TEST(RecursionGuard, ScopesNestAndRestore) {
-    EXPECT_TRUE(LossContributionScope::active().empty());
-    {
-        const LossContributionScope a("a.one");
-        EXPECT_EQ(LossContributionScope::active(), "a.one");
-        {
-            const LossContributionScope b("b.two");
-            EXPECT_EQ(LossContributionScope::active(), "b.two");
-        }
-        EXPECT_EQ(LossContributionScope::active(), "a.one");
-    }
-    EXPECT_TRUE(LossContributionScope::active().empty());
-}
-
-TEST(HostCalls, GeodesyIsAnsweredOnWgs84) {
-    Logger log;
-    ServerHostServices host(nullptr, nullptr, nullptr, nullptr, log);
-    const json inv = host.call("m.x", "geodesy.inverse", {{"from", {{"lat", 50.0}, {"lon", 30.0}}},
-                                                          {"to", {{"lat", 50.0}, {"lon", 31.0}}}});
-    // Same answer as GeographicLib's Karney solution on WGS84, to the last bit.
-    double s12 = 0, a1 = 0, a2 = 0;
-    GeographicLib::Geodesic::WGS84().Inverse(50.0, 30.0, 50.0, 31.0, s12, a1, a2);
-    EXPECT_DOUBLE_EQ(inv.at("distanceM").get<double>(), s12);
-    EXPECT_DOUBLE_EQ(inv.at("azimuth1Deg").get<double>(), a1);
-    const json dir = host.call("m.x", "geodesy.direct",
-                               {{"from", {{"lat", 50.0}, {"lon", 30.0}}}, {"azimuthDeg", inv.at("azimuth1Deg")},
-                                {"distanceM", inv.at("distanceM")}});
-    EXPECT_NEAR(dir.at("lon").get<double>(), 31.0, 1e-9);
-    EXPECT_NEAR(dir.at("azimuthDeg").get<double>(), inv.at("azimuth2Deg").get<double>(), 1e-9);
-    EXPECT_THROW(host.call("m.x", "fs.read", json::object()), std::runtime_error);
-}
-
-TEST(HostCalls, ServicesTheServerLacksAreRefusedByName) {
-    Logger log;
-    log.setQuiet(true);
-    ServerHostServices host(nullptr, nullptr, nullptr, nullptr, log);
-    const json here = {{"lat", 48.5}, {"lon", 35.2}};
-    const std::vector<std::pair<std::string, json>> calls = {
-        {"link.evaluate", {{"tx", here}, {"rx", here}}},
-        {"elevation.point", here},
-        {"profile.get", {{"from", here}, {"to", here}}},
-        {"weather.point", here},
-        {"library.get", {{"kind", "drones"}, {"id", "x"}}},
-    };
-    for (const auto& [method, request] : calls) {
-        EXPECT_THROW((void)host.call("m.x", method, request), HostCallError) << method;
-    }
+TEST(HostRequest, ReadingsNameTheFieldAndItsRange) {
+    const json r = {{"lat", 48.5}, {"lon", 35.2}, {"n", "nan"}, {"s", "text"}, {"p", {{"lat", 91.0}, {"lon", 0.0}}}};
+    const HostRequest req(r);
+    EXPECT_DOUBLE_EQ(req.number("lat", -90, 90), 48.5);
+    EXPECT_THROW((void)req.number("lat", 0, 10), HostCallError);
+    EXPECT_THROW((void)req.number("s", 0, 10), HostCallError);
+    EXPECT_THROW((void)req.number("missing", 0, 10), HostCallError);
+    EXPECT_FALSE(req.optionalNumber("missing", 0, 10).has_value());
+    EXPECT_EQ(req.string("s"), "text");
+    EXPECT_THROW((void)req.string("s", 2), HostCallError);
+    EXPECT_THROW((void)req.point("p"), HostCallError);
+    EXPECT_THROW((void)req.object("s"), HostCallError);
+    const TimePoint fallback = Clock::now();
+    EXPECT_EQ(req.time("missing", fallback), fallback);
+    EXPECT_THROW((void)req.time("s", fallback), HostCallError);
 }

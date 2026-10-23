@@ -29,11 +29,21 @@ private:
     json body_;
 };
 
-/// ISO 8601 UTC with seconds, "2026-10-18T14:00:00Z".
-std::string isoUtc(TimePoint t);
-/// Parses "YYYY-MM-DDTHH:MM[:SS[.fff]](Z|±HH:MM)" for the years 1900 to 2200. Nothing on malformed
-/// input or a year outside that range.
-std::optional<TimePoint> parseIsoUtc(const std::string& text);
+/// ISO 8601 times as the API exchanges them: UTC with seconds, "2026-10-18T14:00:00Z".
+class UtcTime {
+public:
+    [[nodiscard]] static std::string format(TimePoint t);
+    /// Parses "YYYY-MM-DDTHH:MM[:SS[.fff]](Z|±HH:MM)" for the years 1900 to 2200. Nothing on
+    /// malformed input or a year outside that range.
+    [[nodiscard]] static std::optional<TimePoint> parse(const std::string& text);
+
+private:
+    struct Fields;
+    class Cursor;
+    static bool parseDate(Cursor& c, Fields& f);
+    static bool parseClock(Cursor& c, Fields& f);
+    static bool parseZone(Cursor& c, Fields& f);
+};
 
 /// The time source, so lockouts and expiry can be tested without sleeping.
 class IClock {

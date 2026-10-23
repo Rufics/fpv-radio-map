@@ -39,6 +39,29 @@ TEST(Search, GridRespectsTheLimit) {
     EXPECT_THROW((void)a.grid(w, 10.0, 100), rfmod::BadRequest);
 }
 
+TEST(Search, GridCountsTheCellsItVisits) {
+    // The bounding-box estimate looks at the box's edges; on a world whose rows widen towards
+    // the middle the loop itself has to notice. A degree is a kilometre here, except that the
+    // middle rows are a thousand times wider.
+    class WidensInTheMiddle final : public IWorld {
+    public:
+        [[nodiscard]] InverseResult inverse(const LatLon& a, const LatLon& b) const override {
+            const double bulge = std::abs(a.lat - 0.5) < 0.25 ? 1000.0 : 1.0;
+            return {std::abs(b.lat - a.lat) * 1000.0 + std::abs(b.lon - a.lon) * 1000.0 * bulge, 0.0, 0.0};
+        }
+        [[nodiscard]] DirectResult direct(const LatLon& a, double azimuthDeg, double distanceM) const override {
+            const double deg = distanceM / 1000.0;
+            return {azimuthDeg == 0.0 ? LatLon{a.lat + deg, a.lon} : LatLon{a.lat, a.lon + deg}, azimuthDeg};
+        }
+        [[nodiscard]] double groundMsl(const LatLon&) const override { return 0.0; }
+        [[nodiscard]] std::vector<GroundSample> groundProfile(const LatLon&, const LatLon&) const override { return {}; }
+    } w;
+    const DrawnArea a = DrawnArea::fromJson({{{"lat", 0.0}, {"lon", 0.0}}, {{"lat", 1.0}, {"lon", 0.0}},
+                                             {{"lat", 1.0}, {"lon", 1.0}}, {{"lat", 0.0}, {"lon", 1.0}}});
+    // 1000 x 1000 cells by the edges, under the limit; the middle rows hold a million each.
+    EXPECT_THROW((void)a.grid(w, 1.0, 10'000'000), rfmod::BadRequest);
+}
+
 TEST(BestLaunch, PicksTheBestCandidateAndScoresTheWorstLink) {
     const LocalWorld w([](const LatLon&) { return std::optional<double>(100.0); }, 30.0);
     const LatLon a{48.5, 35.2};

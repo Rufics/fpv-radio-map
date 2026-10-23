@@ -9,11 +9,8 @@ using namespace rfcore::literals;
 namespace {
 class FixedLoss : public ILossContributor {
 public:
-    std::vector<BudgetTerm> contribute(const PathContext&) const override {
-        return {{"test/forest", "Forest", 7_dB, "test"}};
-    }
-    std::vector<UncertaintyNote> notes(const PathContext&) const override {
-        return {{"Forest height", "assumed for the test"}};
+    LossContribution contribute(const PathContext&) const override {
+        return {{{"test/forest", "Forest", 7_dB, "test"}}, {{"Forest height", "assumed for the test"}}};
     }
 };
 }  // namespace

@@ -78,7 +78,7 @@ class ScenarioSuiteTest(StandTestCase):
         self.assertEqual(plan["baseUrl"], "http://rfmap-server:8080/api/v1")
         environment = suite.environment()
         self.assertIn("afterLoad", environment["database"])
-        self.assertEqual(environment["server"]["health"]["ok"], True)
+        self.assertTrue(environment["server"]["health"]["ok"])
         self.assertEqual((self.run_dir / "raw" / "rfmap-server.log").read_text(encoding="utf-8"), "server log\n")
         self.assertEqual(self.runner.runs[-1][-3:], ["down", "-v", "--remove-orphans"])
 

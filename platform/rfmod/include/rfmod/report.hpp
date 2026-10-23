@@ -8,7 +8,7 @@
 
 namespace rfmod {
 
-/// The upload validation report (OpenAPI ValidationReport): every check is listed, passed or not,
+/// The install validation report (rfmod check, rfmod install): every check is listed, passed or not,
 /// so the admin sees exactly why a package was refused.
 class ValidationReport {
 public:

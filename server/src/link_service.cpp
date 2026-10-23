@@ -28,6 +28,15 @@ using rfcore::DecibelMilliwatt;
 using rfcore::Hertz;
 using rfcore::Metres;
 
+void ModuleFailure::appendTo(json& list) const {
+    const bool seen = std::ranges::any_of(list, [this](const json& j) { return j.value("module", "") == moduleId; });
+    if (!seen) list.push_back(toJson());
+}
+
+void ModuleFailure::appendAll(json& list, const std::vector<ModuleFailure>& failures) {
+    for (const auto& f : failures) f.appendTo(list);
+}
+
 std::string toString(LinkKind k) { return k == LinkKind::Control ? "control" : "video"; }
 
 LinkKind linkKindFromString(std::string_view s) {
@@ -315,6 +324,10 @@ PreparedPath LinkService::prepare(const Terminal& ground, const Terminal& air, c
     // steps the middle sample still takes the DEM's own value, nothing is interpolated.
     std::optional<Metres> step;
     if (p.distanceM < 2.0 * dem.nativeResolution().value()) step = Metres(p.distanceM / 2.0);
+    if (p.distanceM / dem.nativeResolution().value() > kMaxProfileSamples) {
+        throw HttpError(422, std::format("the path is too long for this DEM: more than {} samples at {} m",
+                                         kMaxProfileSamples, dem.nativeResolution().value()));
+    }
     rfcore::ProfileResult built = rfcore::ProfileBuilder(dem).build(ground.position, air.position, step);
     p.missing = std::move(built.missing);
     if (!built.profile.has_value()) return p;

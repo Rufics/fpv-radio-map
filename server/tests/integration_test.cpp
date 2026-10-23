@@ -5,6 +5,7 @@
 #include "test_support.hpp"
 
 #include <rfcore/constants.hpp>
+#include <rfmod/installer.hpp>
 #include <rfmod/package.hpp>
 #include <sample_log.hpp>
 
@@ -149,7 +150,8 @@ protected:
                     {"modules",
                      {{"root", (env->dir / "modules").string()},
                       {"worker", RFMOD_WORKER},
-                      {"trustStore", (env->dir / "keys.json").string()}}},
+                      {"trustStore", (env->dir / "keys.json").string()},
+                      {"allowDevOwnerKey", true}}},
                     {"weather", {{"baseUrl", "http://127.0.0.1:" + std::to_string(env->weather->port)}}},
                     {"auth", {{"argon2Cost", "interactive"}, {"pinLockoutMinutes", 15}}},
                     {"coverage", {{"threads", 4}, {"maxCells", 20000}}},
@@ -265,6 +267,46 @@ protected:
     /// Whether `list` holds an object with `key` equal to `value`.
     static bool has(const json& list, const std::string& key, const json& value) {
         return std::ranges::any_of(list, [&](const json& j) { return j.is_object() && j.value(key, json()) == value; });
+    }
+
+    /// The operator at the machine: installs and removes modules and trusts keys with the rfmod
+    /// CLI's classes, then asks the server to pick the result up. The API itself offers no way in.
+    class Operator {
+    public:
+        Operator() : trust_(readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), env->dir / "keys.json") {
+            log_.setQuiet(true);
+            rfmod::InstallerConfig c;
+            c.root = env->dir / "modules";
+            c.workerExecutable = RFMOD_WORKER;
+            c.hostVersion = rfmod::Version::parse(RFMAP_HOST_VERSION);
+            installer_ = std::make_unique<rfmod::ModuleInstaller>(c, trust_, host_);
+        }
+        rfmod::ValidationReport install(const std::string& package) {
+            const auto report = installer_->install(package);
+            reload();
+            return report;
+        }
+        void remove(const std::string& id) {
+            installer_->remove(id);
+            reload();
+        }
+        void trustKey(const std::string& keyText, const std::string& label) {
+            trust_.add(rfmod::PublicKey::fromText(keyText), label);
+            reload();
+        }
+        static void reload() {
+            const auto r = call("POST", "/admin/modules/reload", nullptr, admin());
+            if (r.status != 200) throw std::runtime_error("reload refused: " + r.body.dump());
+        }
+
+    private:
+        Logger log_;
+        ServerHostServices host_{log_};  ///< the self-tests of the test modules make no host calls
+        rfmod::TrustStore trust_;
+        std::unique_ptr<rfmod::ModuleInstaller> installer_;
+    };
+    static std::string packed(const fs::path& stage, const char* secretKeyFile) {
+        return rfmod::PackageWriter::pack(stage, rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS + std::string(secretKeyFile))));
     }
 };
 
@@ -523,7 +565,7 @@ TEST_F(Integration, BothLinksAndWeather) {
     EXPECT_NE(env->weather->lastQuery.find("geopotential_height_850hPa"), std::string::npos);
 
     // Beyond the forecast: said so, standard k, no rain.
-    req["timeUtc"] = isoUtc(Clock::now() + std::chrono::hours(24 * 30));
+    req["timeUtc"] = UtcTime::format(Clock::now() + std::chrono::hours(24 * 30));
     const auto far = call("POST", "/calc/path", req, bearer(env->editSession));
     ASSERT_EQ(far.status, 200);
     EXPECT_EQ(far.body["video"]["weather"]["tier"], "none");
@@ -563,7 +605,7 @@ TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
 
     // Same inputs, same hash: served from the result cache.
     json planned = m;
-    planned["time"] = {{"mode", "planned"}, {"utc", isoUtc(Clock::now())}};
+    planned["time"] = {{"mode", "planned"}, {"utc", UtcTime::format(Clock::now())}};
     const auto first = call("POST", "/calc/route", planned, bearer(env->editSession));
     ASSERT_EQ(first.status, 200) << first.body;
     const auto again = call("POST", "/calc/route", planned, bearer(env->editSession));
@@ -574,24 +616,24 @@ TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
 }
 
 TEST_F(Integration, ThirdPartyModuleAddsItsTermAndForeignBundlesStayPrivate) {
-    // Admin trusts the third-party test key and uploads the example module packed with it.
+    // The API neither installs modules nor trusts keys: those are the operator's, at the machine.
     const std::string pub = readFile(RFMOD_TEST_KEYS "/dev-thirdparty.pub");
-    EXPECT_EQ(call("POST", "/admin/keys", {{"key", pub}, {"label", "test vendor"}}).status, 401);
-    ASSERT_EQ(call("POST", "/admin/keys", {{"key", pub}, {"label", "test vendor"}}, admin()).status, 201);
-    const auto keys = call("GET", "/admin/keys", nullptr, admin());
-    ASSERT_EQ(keys.body.size(), 2u);
-    EXPECT_EQ(call("DELETE", "/admin/keys/" + keys.body[0]["id"].get<std::string>(), nullptr, admin()).status, 409);
+    EXPECT_EQ(call("POST", "/admin/keys", {{"key", pub}, {"label", "test vendor"}}, admin()).status, 404);
+    EXPECT_EQ(call("POST", "/admin/modules", nullptr, admin()).status, 404);
+    EXPECT_EQ(call("POST", "/admin/modules/reload").status, 401);
 
-    const std::string pkg = rfmod::PackageWriter::pack(
-        fs::path(BODY_SHADOW_STAGE), rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-thirdparty.secret")));
-    httplib::Client c("127.0.0.1", env->port);
-    c.set_read_timeout(60, 0);
-    auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
-    ASSERT_TRUE(up);
-    ASSERT_EQ(up->status, 200) << up->body;
-    const json report = json::parse(up->body);
-    ASSERT_TRUE(report["ok"].get<bool>()) << report.dump(2);
-    dump("upload-report", report);
+    // A package signed by a key the server does not trust stays out, whoever installs it.
+    const std::string pkg = packed(fs::path(BODY_SHADOW_STAGE), "/dev-thirdparty.secret");
+    Operator op;
+    EXPECT_FALSE(op.install(pkg).ok());
+    EXPECT_FALSE(has(call("GET", "/modules").body, "id", "example.body-shadow"));
+
+    op.trustKey(pub, "test vendor");
+    const auto keys = call("GET", "/admin/keys", nullptr, admin());
+    ASSERT_EQ(keys.body.size(), 2u) << keys.body;
+    const rfmod::ValidationReport report = op.install(pkg);
+    ASSERT_TRUE(report.ok()) << report.toJson().dump(2);
+    dump("install-report", report.toJson());
 
     const auto opts = call("PUT", "/admin/modules/example.body-shadow",
                            {{"options", {{"lossDb", 3.5}, {"source", "test measurement"}, {"uncertaintyDb", 1.0}}}}, admin());
@@ -628,6 +670,15 @@ TEST_F(Integration, ThirdPartyModuleAddsItsTermAndForeignBundlesStayPrivate) {
     const auto noBand = call("POST", "/calc/path", req, bearer(env->viewSession));
     EXPECT_FALSE(noBand.body.contains("band"));
     ASSERT_EQ(call("PUT", "/admin/modules/rf.uncertainty", {{"enabled", true}}, admin()).status, 200);
+
+    // The bundle is served as a resource, never as a page, and the module can be taken out again.
+    httplib::Client c("127.0.0.1", env->port);
+    const auto schema = c.Get("/api/v1/modules/example.body-shadow/schema/options.json");
+    ASSERT_TRUE(schema);
+    EXPECT_EQ(schema->get_header_value("X-Content-Type-Options"), "nosniff");
+    EXPECT_EQ(schema->get_header_value("Content-Security-Policy"), "default-src 'none'; sandbox");
+    op.remove("example.body-shadow");
+    EXPECT_FALSE(has(call("GET", "/modules").body, "id", "example.body-shadow"));
 }
 
 TEST_F(Integration, CoverageJob) {
@@ -710,14 +761,9 @@ TEST_F(Integration, MetricsForPrometheus) {
 }
 
 TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {
-    const std::string pkg = rfmod::PackageWriter::pack(
-        fs::path(PROBE_STAGE), rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-owner.secret")));
-    httplib::Client c("127.0.0.1", env->port);
-    c.set_read_timeout(60, 0);
-    const auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
-    ASSERT_TRUE(up);
-    ASSERT_EQ(up->status, 200) << up->body;
-    ASSERT_TRUE(json::parse(up->body)["ok"].get<bool>()) << up->body;
+    Operator op;
+    const auto installed = op.install(packed(fs::path(PROBE_STAGE), "/dev-owner.secret"));
+    ASSERT_TRUE(installed.ok()) << installed.toJson().dump(2);
 
     // Good reasons land on their leg or the route, an unknown severity becomes info, and the
     // module's data and battery estimate are kept.
@@ -782,12 +828,18 @@ TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {
                                   nullptr, bearer(failingSession));
     EXPECT_TRUE(has(failingGrid.body["moduleFailures"], "module", "test.probe")) << failingGrid.body;
 
-    // Removal: built-ins can only be disabled; an uploaded module goes away.
+    // Options that do not fit the module's schema are refused before anything runs.
+    const json badOptions = shortMission(point(48.51, 35.22, 100), {{"test.probe", {{"mode", 42}}}});
+    const auto refused = call("POST", "/calc/route", badOptions, bearer(sessionFor(badOptions)));
+    EXPECT_EQ(refused.status, 422) << refused.body;
+    EXPECT_NE(refused.body.dump().find("test.probe"), std::string::npos) << refused.body;
+
+    // Removal is the operator's: the API has no such route, built in or not.
     EXPECT_EQ(call("GET", "/admin/modules/notices", nullptr, admin()).status, 200);
     EXPECT_EQ(call("GET", "/admin/modules/notices").status, 401);
-    EXPECT_EQ(call("DELETE", "/admin/modules/rf.weather", nullptr, admin()).status, 422);
-    const auto removed = call("DELETE", "/admin/modules/test.probe", nullptr, admin());
-    EXPECT_LT(removed.status, 300) << removed.body;
+    EXPECT_EQ(call("DELETE", "/admin/modules/rf.weather", nullptr, admin()).status, 404);
+    EXPECT_EQ(call("DELETE", "/admin/modules/test.probe", nullptr, admin()).status, 404);
+    op.remove("test.probe");
     EXPECT_FALSE(has(call("GET", "/modules").body, "id", "test.probe"));
 }
 
@@ -876,7 +928,7 @@ TEST_F(Integration, DataEndpointsAndRequestErrors) {
     // Share links with an expiry.
     const httplib::Headers ownerKey = {{"X-Owner-Key", created.body["ownerKey"]}};
     const auto expiring = call("POST", "/missions/" + id + "/links",
-                               {{"role", "view"}, {"pin", "246810"}, {"expiresAt", isoUtc(Clock::now() + std::chrono::hours(2))}},
+                               {{"role", "view"}, {"pin", "246810"}, {"expiresAt", UtcTime::format(Clock::now() + std::chrono::hours(2))}},
                                ownerKey);
     ASSERT_EQ(expiring.status, 201) << expiring.body;
     EXPECT_TRUE(expiring.body.contains("expiresAt"));
@@ -957,15 +1009,13 @@ TEST_F(Integration, AlphaBundlesNeedTheAdminOrTheirGrant) {
     std::ofstream(stage / "manifest.json") << manifest.dump(2);
     fs::create_directories(stage / "ui");
     std::ofstream(stage / "ui" / "panel.js") << "export default {};\n";
-    const std::string pkg =
-        rfmod::PackageWriter::pack(stage, rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-owner.secret")));
+    const std::string pkg = packed(stage, "/dev-owner.secret");
     fs::remove_all(stage);
+    Operator op;
+    const auto installed = op.install(pkg);
+    ASSERT_TRUE(installed.ok()) << installed.toJson().dump(2);
     httplib::Client c("127.0.0.1", env->port);
     c.set_read_timeout(60, 0);
-    const auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
-    ASSERT_TRUE(up);
-    ASSERT_EQ(up->status, 200) << up->body;
-    ASSERT_TRUE(json::parse(up->body)["ok"].get<bool>()) << up->body;
 
     const auto probeIn = [](const json& list) {
         const auto it = std::ranges::find_if(list, [](const json& m) { return m["id"] == "test.probe"; });
@@ -988,7 +1038,7 @@ TEST_F(Integration, AlphaBundlesNeedTheAdminOrTheirGrant) {
     EXPECT_EQ(c.Get(file + "?grant=1.forged")->status, 404);
     EXPECT_EQ(c.Get(file, admin())->status, 200);
 
-    EXPECT_LT(call("DELETE", "/admin/modules/test.probe", nullptr, admin()).status, 300);
+    op.remove("test.probe");
 }
 
 TEST_F(Integration, AntennasOutOfBandOrCrossPolarisedAreNoted) {
@@ -1024,12 +1074,9 @@ TEST_F(Integration, FlightLogsDecodeImportReplayAndCompareWithThePlan) {
     EXPECT_EQ(none->status, 422) << none->body;
     EXPECT_EQ(c.Post("/api/v1/flightlogs/decode", bytes, "application/octet-stream")->status, 401);
 
-    const std::string pkg = rfmod::PackageWriter::pack(
-        fs::path(BLACKBOX_STAGE), rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-owner.secret")));
-    auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
-    ASSERT_TRUE(up);
-    ASSERT_EQ(up->status, 200) << up->body;
-    ASSERT_TRUE(json::parse(up->body)["ok"].get<bool>()) << up->body;
+    Operator op;
+    const auto installed = op.install(packed(fs::path(BLACKBOX_STAGE), "/dev-owner.secret"));
+    ASSERT_TRUE(installed.ok()) << installed.toJson().dump(2);
     const auto mods = call("GET", "/modules");
     for (const json& mod : mods.body) {
         if (mod["id"] == "fpv.blackbox") {
@@ -1104,5 +1151,6 @@ TEST_F(Integration, FlightLogsDecodeImportReplayAndCompareWithThePlan) {
     ASSERT_EQ(call("PUT", "/admin/modules/rf.flightlog", {{"enabled", false}}, admin()).status, 200);
     EXPECT_EQ(post("/flightlogs/decode", bytes)->status, 403);
     ASSERT_EQ(call("PUT", "/admin/modules/rf.flightlog", {{"enabled", true}, {"options", {{"timelineHz", 5}}}}, admin()).status, 200);
-    EXPECT_EQ(call("DELETE", "/admin/modules/fpv.blackbox", nullptr, admin()).status / 100, 2);
+    op.remove("fpv.blackbox");
+    EXPECT_FALSE(has(call("GET", "/modules").body, "id", "fpv.blackbox"));
 }

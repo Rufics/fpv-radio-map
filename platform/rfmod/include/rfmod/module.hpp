@@ -69,7 +69,7 @@ public:
     [[nodiscard]] virtual const char* manifest() const = 0;
     virtual void init(const HostClient& host, const json& options) { (void)host; (void)options; }
     [[nodiscard]] virtual json invoke(const std::string& method, const json& request) = 0;
-    /// Run by the server on upload, in a worker, before anything is installed. Return
+    /// Run by the rfmod CLI on install, in a sandboxed worker, before anything is installed. Return
     /// {"ok": bool, "checks": [{"name", "ok", "detail"}]}. Check your maths against known cases here.
     [[nodiscard]] virtual json selftest() { return {{"ok", true}, {"checks", json::array()}}; }
     virtual void shutdown() {

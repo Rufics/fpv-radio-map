@@ -109,16 +109,20 @@ std::string BundleGrants::issue(std::string_view moduleId, TimePoint until) cons
 }
 
 bool BundleGrants::valid(std::string_view moduleId, std::string_view grant, TimePoint now) const {
+    // The MAC is checked first: only a grant this server issued gets its expiry read at all.
     const auto dot = grant.find('.');
-    if (dot == std::string_view::npos) return false;
+    if (dot == std::string_view::npos || dot == 0 || dot > 20) return false;
     const std::string_view exp = grant.substr(0, dot);
+    if (!Secrets::constantTimeEqual(grant.substr(dot + 1), Secrets::mac(secret_, std::format("{}|{}", moduleId, exp)))) {
+        return false;
+    }
     std::time_t expiry = 0;
     if (const auto [end, ec] = std::from_chars(exp.data(), exp.data() + exp.size(), expiry);
         ec != std::errc{} || end != exp.data() + exp.size()) {
         return false;
     }
-    if (Clock::from_time_t(expiry) < now) return false;
-    return Secrets::constantTimeEqual(grant.substr(dot + 1), Secrets::mac(secret_, std::format("{}|{}", moduleId, exp)));
+    // Compared as unix seconds, the unit the grant was issued in.
+    return Clock::to_time_t(now) <= expiry;
 }
 
 }  // namespace rfmap

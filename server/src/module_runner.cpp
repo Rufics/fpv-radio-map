@@ -1,5 +1,9 @@
 #include "module_runner.hpp"
 
+#include <optional>
+
+#include "invocation_scope.hpp"
+
 #include <rfext/clutter.hpp>
 
 #include <cmath>
@@ -7,28 +11,11 @@
 
 namespace rfmap {
 
-namespace {
-/// The module whose loss.contribute runs on this thread, empty outside one.
-std::string& activeContributor() {
-    thread_local std::string id;
-    return id;
-}
-}  // namespace
-
-LossContributionScope::LossContributionScope(std::string moduleId) : previous_(activeContributor()) {
-    activeContributor() = std::move(moduleId);
-}
-
-// swap, not assignment: it cannot throw, and this runs in a destructor.
-LossContributionScope::~LossContributionScope() { activeContributor().swap(previous_); }
-
-const std::string& LossContributionScope::active() { return activeContributor(); }
-
-ModuleLossContributor::ModuleLossContributor(rfmod::IModuleInstance& instance, json options, const PathEnds& ends,
-                                             TimePoint time, const LandCoverSource* landcover,
+ModuleLossContributor::ModuleLossContributor(std::shared_ptr<rfmod::IModuleInstance> instance, json options,
+                                             const PathEnds& ends, TimePoint time, const LandCoverSource* landcover,
                                              std::vector<ModuleFailure>& failures)
-    : module_(instance),
-      id_(instance.manifest().id),
+    : module_(std::move(instance)),
+      id_(module_->manifest().id),
       options_(std::move(options)),
       ends_(ends),
       time_(time),
@@ -87,7 +74,7 @@ json ModuleLossContributor::request(const rfcore::PathContext& ctx) const {
     return {{"frequencyHz", ctx.frequency.value()},
             {"distanceM", ctx.profile.length().value()},
             {"rayLengthM", ctx.geometry.rayLength().value()},
-            {"time", isoUtc(time_)},
+            {"time", UtcTime::format(time_)},
             {"tx", end(ends_.tx, s.front())},
             {"rx", end(ends_.rx, s.back())},
             {"diffraction",
@@ -97,47 +84,41 @@ json ModuleLossContributor::request(const rfcore::PathContext& ctx) const {
             {"options", options_}};
 }
 
-std::vector<rfcore::BudgetTerm> ModuleLossContributor::contribute(const rfcore::PathContext& ctx) const {
-    std::vector<rfcore::UncertaintyNote> notes;
-    std::vector<rfcore::BudgetTerm> terms;
+rfcore::LossContribution ModuleLossContributor::accept(const json& response) const {
+    rfcore::LossContribution out;
+    std::vector<std::string> dropped;
+    out.terms = acceptTerms(id_, response.value("terms", json()), dropped);
+    for (const auto& d : dropped) out.notes.emplace_back(id_, "dropped: " + d);
+    if (response.contains("notes") && response.at("notes").is_array()) {
+        for (const json& n : response.at("notes")) {
+            if (n.is_object()) out.notes.emplace_back(n.value("what", id_), n.value("detail", ""));
+        }
+    }
+    return out;
+}
+
+rfcore::LossContribution ModuleLossContributor::contribute(const rfcore::PathContext& ctx) const {
     try {
-        json response;
-        {
-            const LossContributionScope scope(id_);
-            response = module_.invoke("loss.contribute", request(ctx));
-        }
-        std::vector<std::string> dropped;
-        terms = acceptTerms(id_, response.value("terms", json()), dropped);
-        for (const auto& d : dropped) notes.emplace_back(id_, "dropped: " + d);
-        if (response.contains("notes") && response.at("notes").is_array()) {
-            for (const json& n : response.at("notes")) {
-                if (n.is_object()) notes.emplace_back(n.value("what", id_), n.value("detail", ""));
-            }
-        }
+        // The module may call the host back while it answers; the scope names it, so the host can
+        // refuse link.evaluate (which would run this very contributor again). It nests in the
+        // request's scope; without one (a direct unit test) host calls are refused anyway.
+        std::optional<InvocationScope> scope;
+        if (InvocationScope::current()) scope.emplace(id_);
+        return accept(module_->invoke("loss.contribute", request(ctx)));
     } catch (const rfmod::ModuleError& e) {
         failures_.emplace_back(id_, e.code() + ": " + e.what());
     } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): a module failure is reported, never fails the calculation
-        // A module failure never fails the calculation: it is reported with the result instead.
         failures_.emplace_back(id_, e.what());
     }
-    const std::scoped_lock lock(lastMutex_);
-    lastProfile_ = &ctx.profile;
-    lastNotes_ = std::move(notes);
-    return terms;
-}
-
-std::vector<rfcore::UncertaintyNote> ModuleLossContributor::notes(const rfcore::PathContext& ctx) const {
-    const std::scoped_lock lock(lastMutex_);
-    return &ctx.profile == lastProfile_ ? lastNotes_ : std::vector<rfcore::UncertaintyNote>{};
+    return {};
 }
 
 std::vector<ModuleRunner::Active> ModuleRunner::optedIn(const std::string& capability, const CalcContext& ctx) const {
     std::vector<Active> out;
-    if (!registry_) return out;
-    for (rfmod::IModuleInstance* m : registry_->withCapability(capability)) {
-        const std::string& id = m->manifest().id;
+    for (std::shared_ptr<rfmod::IModuleInstance>& m : registry_.withCapability(capability)) {
+        const std::string id = m->manifest().id;
         if (!ctx.optedIn(id)) continue;
-        out.emplace_back(m, id, ctx.optionsFor(id));
+        out.emplace_back(std::move(m), id, ctx.optionsFor(id));
     }
     return out;
 }
@@ -146,19 +127,34 @@ std::vector<std::shared_ptr<const rfcore::ILossContributor>> ModuleRunner::lossC
     const CalcContext& ctx, const PathEnds& ends, const LandCoverSource* landcover,
     std::vector<ModuleFailure>& failures) const {
     std::vector<std::shared_ptr<const rfcore::ILossContributor>> out;
-    for (const Active& a : optedIn("loss.contributor", ctx)) {
-        out.push_back(std::make_shared<ModuleLossContributor>(*a.instance, a.options, ends, ctx.time, landcover, failures));
+    for (Active& a : optedIn("loss.contributor", ctx)) {
+        out.push_back(std::make_shared<ModuleLossContributor>(std::move(a.instance), std::move(a.options), ends, ctx.time,
+                                                              landcover, failures));
     }
     return out;
 }
 
 json ModuleRunner::versions(const CalcContext& ctx) const {
     json out = json::object();
-    if (!registry_) return out;
     for (const char* cap : {"loss.contributor", "route.analysis", "coverage.analysis"}) {
         for (const Active& a : optedIn(cap, ctx)) out[a.id] = a.instance->manifest().version.str();
     }
     return out;
+}
+
+std::vector<std::string> ModuleRunner::checkOptions(const json& missionModules) const {
+    std::vector<std::string> problems;
+    if (!missionModules.is_object()) return problems;
+    for (const auto& [id, options] : missionModules.items()) {
+        if (!registry_.instance(id)) {
+            // rf.* without a package is the server's own (rf.core, rf.weather, ...): those read
+            // their options with defaults and need no schema here.
+            if (!id.starts_with("rf.")) problems.push_back("modules." + id + ": no such module is active on this server");
+            continue;
+        }
+        if (const auto why = registry_.checkOptions(id, options)) problems.push_back("modules." + *why);
+    }
+    return problems;
 }
 
 }  // namespace rfmap
