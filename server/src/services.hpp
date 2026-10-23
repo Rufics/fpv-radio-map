@@ -71,10 +71,11 @@ public:
     /// Re-reads the trust store and the module root: what the rfmod CLI installed or removed.
     void reloadModules() const;
     /// Held around every change the server makes to the module files, see ModuleGate.
-    [[nodiscard]] ModuleGate& moduleGate() const { return moduleGate_; }
+    [[nodiscard]] ModuleGate& moduleGate() const { return *moduleGate_; }
 
 private:
-    mutable ModuleGate moduleGate_;  // also runs reloads from parallel admin requests in turn
+    // Also runs reloads from parallel admin requests in turn.
+    std::unique_ptr<ModuleGate> moduleGate_ = std::make_unique<ModuleGate>();
     void checkStartup(bool ownerKeyIsDev) const;
     void openDatabase(const std::filesystem::path& sqlDir);
     void buildStores();

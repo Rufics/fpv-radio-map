@@ -196,11 +196,11 @@ void Services::buildModules(const std::string& ownerKeyText) {
     // service of its own: the registry can load modules before the calculations exist.
     modules_.host = std::make_unique<ServerHostServices>(log_);
     modules_.trust = std::make_unique<rfmod::TrustStore>(ownerKeyText, config_.modules.trustStore);
-    moduleGate_.attach(config_.modules.root);
+    moduleGate_->attach(config_.modules.root);
     {
         // Loading restores the files of a module that differ from its signed package, so a backup
         // must not read them meanwhile.
-        const ModuleGate::Change gate(moduleGate_);
+        const ModuleGate::Change gate(*moduleGate_);
         modules_.registry =
             std::make_unique<rfmod::ModuleRegistry>(registryConfig(config_.modules), *modules_.trust, *modules_.host);
         modules_.registry->reload();
@@ -218,7 +218,7 @@ void Services::buildModules(const std::string& ownerKeyText) {
 }
 
 void Services::reloadModules() const {
-    const ModuleGate::Change gate(moduleGate_);
+    const ModuleGate::Change gate(*moduleGate_);
     modules_.trust->reload();
     modules_.registry->reload();
     for (const auto& n : modules_.registry->notices()) log_.warn("modules", n);
