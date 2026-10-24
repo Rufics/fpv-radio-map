@@ -14,6 +14,8 @@ export interface FpvAltitudeOptions {
   linkFloor?: boolean;
   fresnelFraction?: number;
   maxAglM?: number;
+  /** Heights for waypoints left to the server (route.prepare); default true */
+  autoHeight?: boolean;
 }
 
 /** data.corridor: parallel arrays, one entry per sample along the route; heights above mean sea level. */
@@ -79,6 +81,12 @@ export function fpvAltitudeData(result: RouteResult | null | undefined): FpvAlti
 
 export function fpvAltitudeOptions(m: Mission | null | undefined): FpvAltitudeOptions | null {
   return (m?.modules?.[FPV_ALTITUDE] as FpvAltitudeOptions | undefined) ?? null;
+}
+
+/** Whether the server sets the heights of waypoints left to it: fpv.altitude is on with autoHeight. */
+export function autoHeightsOn(m: Mission | null | undefined): boolean {
+  const o = fpvAltitudeOptions(m);
+  return !!o && o.autoHeight !== false;
 }
 
 /** Pure reading of a corridor: states, interpolation and the cursor point. */

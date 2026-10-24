@@ -309,6 +309,21 @@ export interface RouteResult {
   /** Per-module output keyed by module id: the module's route.analyze `data` as returned */
   modules?: Record<string, unknown>;
   moduleFailures?: ModuleFailure[];
+  /** Heights the route.preparation modules set before the calculation; absent when no waypoint asked for one */
+  autoHeights?: AutoHeight[];
+}
+
+/** RouteResult.autoHeights[]: one waypoint's automatic height. */
+export interface AutoHeight {
+  /** Index into mission.waypoints */
+  index: number;
+  field: 'aglM' | 'altM';
+  heightM: number;
+  module: string;
+  /** What set it: terrain, a link kind (control, video), or ceiling */
+  limitedBy?: string;
+  /** Even the ceiling does not keep the waypoint safe */
+  blocked?: boolean;
 }
 
 export type JobState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';

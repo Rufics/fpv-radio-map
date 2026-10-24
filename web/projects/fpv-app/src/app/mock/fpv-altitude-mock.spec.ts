@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MissionAltitude } from '@rfmap/ui-kit';
-import { fpvAltitudeMock } from './fpv-altitude-mock';
+import { fpvAltitudeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
 import { elevation } from './mock-terrain';
 import { exampleMission } from './reference-case';
 
@@ -63,5 +63,33 @@ describe('fpvAltitudeMock', () => {
     expect(zero.corridor!.stepM).toBe(10);
     const nan = fpvAltitudeMock({ ...m, modules: { 'fpv.altitude': { stepM: Number.NaN } } });
     expect(nan.corridor!.stepM).toBe(100);
+  });
+});
+
+describe('fpvAltitudePrepareMock', () => {
+  const m = { ...exampleMission(), modules: { 'fpv.altitude': {} } };
+
+  it('sets only the heights left to the server, at least the clearance above the ground', () => {
+    const waypoints = m.waypoints.map((w, i) =>
+      i === 0 ? MissionAltitude.withAutoHeight(w) : { ...w, heightSource: 'manual' as const },
+    );
+    const { mission, autoHeights } = fpvAltitudePrepareMock({ ...m, waypoints });
+    expect(autoHeights.map((h) => h.index)).toEqual([0]);
+    const h = autoHeights[0];
+    expect(h.field).toBe('aglM');
+    expect(h.heightM).toBeGreaterThanOrEqual(30);
+    expect(h.heightM).toBeLessThanOrEqual(120);
+    expect(mission.waypoints[0].aglM).toBe(h.heightM);
+    expect(mission.waypoints.slice(1)).toEqual(waypoints.slice(1));
+  });
+
+  it('does nothing with every height manual or autoHeight off', () => {
+    expect(fpvAltitudePrepareMock(m).autoHeights).toEqual([]);
+    const auto = { ...m, waypoints: m.waypoints.map((w) => MissionAltitude.withAutoHeight(w)) };
+    expect(
+      fpvAltitudePrepareMock({ ...auto, modules: { 'fpv.altitude': { autoHeight: false } } })
+        .autoHeights,
+    ).toEqual([]);
+    expect(fpvAltitudePrepareMock(auto).autoHeights).toHaveLength(m.waypoints.length);
   });
 });

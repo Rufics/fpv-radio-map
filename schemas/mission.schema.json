@@ -273,6 +273,11 @@
                 }
               },
               "then": {
+                "properties": {
+                  "altM": {
+                    "type": "number"
+                  }
+                },
                 "required": [
                   "altM"
                 ]
@@ -303,6 +308,11 @@
                 }
               },
               "then": {
+                "properties": {
+                  "aglM": {
+                    "type": "number"
+                  }
+                },
                 "required": [
                   "aglM"
                 ]

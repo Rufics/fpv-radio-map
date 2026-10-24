@@ -24,8 +24,15 @@ export interface MissionWaypoint {
   aglM?: number;
   /** Height above the ground at the pilot (altitudeRef launch); negative is below the launch point. */
   altM?: number;
+  /**
+   * Who sets the height: manual is the user's and is never changed; auto is the server's (route.prepare,
+   * fpv.altitude), and a stored height is only the last one it set. Without it a waypoint with a height is manual.
+   */
+  heightSource?: HeightSource;
   label?: string;
 }
+
+export type HeightSource = 'auto' | 'manual';
 
 /** #/$defs/linkSetup */
 export interface LinkSetup {
@@ -92,6 +99,21 @@ export class MissionAltitude {
   /** The waypoint's height in the mission's reference (0 when the field is missing). */
   static height(m: Pick<Mission, 'altitudeRef'>, w: MissionWaypoint): number {
     return w[MissionAltitude.field(m)] ?? 0;
+  }
+
+  /** Whether the server sets this waypoint's height: heightSource auto, or no height in the mission's reference. */
+  static isAuto(m: Pick<Mission, 'altitudeRef'>, w: MissionWaypoint): boolean {
+    return w.heightSource === 'auto' || w[MissionAltitude.field(m)] === undefined;
+  }
+
+  /** The waypoint with a height the user set: manual from now on. */
+  static withManualHeight<T extends MissionWaypoint>(m: Pick<Mission, 'altitudeRef'>, w: T, heightM: number): T {
+    return { ...MissionAltitude.withHeight(m, w, heightM), heightSource: 'manual' };
+  }
+
+  /** The waypoint with its height left to the server; the stored height stays as the last known one. */
+  static withAutoHeight<T extends MissionWaypoint>(w: T): T {
+    return { ...w, heightSource: 'auto' };
   }
 
   /** The waypoint with its height set in the mission's reference, and the other reference's field removed. */

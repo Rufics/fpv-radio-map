@@ -1,4 +1,5 @@
 import {
+  AutoHeight,
   LinkKind,
   Mission,
   MissionAltitude,
@@ -93,6 +94,7 @@ function optionsOf(m: Mission): Required<FpvAltitudeOptions> {
     linkFloor: true,
     fresnelFraction: 0.6,
     maxAglM: 500,
+    autoHeight: true,
     ...(m.modules?.['fpv.altitude'] as FpvAltitudeOptions | undefined),
   };
   o.stepM = Number.isFinite(o.stepM) ? Math.min(2000, Math.max(10, o.stepM)) : 100;
@@ -207,8 +209,8 @@ function summaryOf(c: FpvAltitudeCorridor): FpvAltitudeData['summary'] {
   };
 }
 
-/** Mock of modules/fpv/altitude: the corridor along the route (heights interpolated in the mission's reference). */
-export function fpvAltitudeMock(m: Mission): FpvAltitudeData {
+/** The corridor along the mission's route as planned, with what it was built from. */
+function corridorOf(m: Mission) {
   const o = optionsOf(m);
   const ref = MissionAltitude.ref(m);
   const launch = elevation(m.pilot.lat, m.pilot.lon);
@@ -229,9 +231,75 @@ export function fpvAltitudeMock(m: Mission): FpvAltitudeData {
     lambda: fresnel ? C / fresnel.frequencyHz : 0,
   };
   const msl = (h: number, ground: number) => (ref === 'launch' ? launch + h : ground + h);
-
   const c = emptyCorridor(o);
   for (const s of distances(path.cum, o.stepM)) addSample(c, path, s, o, link, msl);
+  return { o, ref, launch, path, fresnel, link, msl, c };
+}
+
+/**
+ * Mock of route.prepare in modules/fpv/altitude: every automatic waypoint gets the highest corridor
+ * floor on its two legs (level legs between free or pilot ends, the line from a manual end
+ * otherwise), capped by the ceiling at the waypoint.
+ */
+export function fpvAltitudePrepareMock(m: Mission): {
+  mission: Mission;
+  autoHeights: AutoHeight[];
+} {
+  const free = m.waypoints.map((w) => MissionAltitude.isAuto(m, w));
+  if (optionsOf(m).autoHeight === false || !free.some(Boolean))
+    return { mission: m, autoHeights: [] };
+  const { o, ref, launch, path, fresnel, c } = corridorOf(m);
+  const n = m.waypoints.length;
+  const toRef = (msl: number, ground: number) => msl - (ref === 'launch' ? launch : ground);
+  const isFree = (p: number) => p >= 1 && p <= n && free[p - 1];
+  const fixedAt = (p: number) => (p === 0 || p === n + 1 ? null : path.pts[p].h);
+  const need = new Array<number>(n).fill(-Infinity);
+  const by = new Array<string>(n).fill('terrain');
+  const raise = (p: number, other: number, toward: number, floor: number, limit: string) => {
+    const h = fixedAt(other);
+    const v =
+      isFree(other) || h === null ? floor : toward < 0.05 ? -Infinity : h + (floor - h) / toward;
+    if (v > need[p - 1]) {
+      need[p - 1] = v;
+      by[p - 1] = limit;
+    }
+  };
+  c.s.forEach((s, k) => {
+    const leg = c.leg[k];
+    const t = path.t(leg, s);
+    const ground = c.groundMslM[k];
+    const floor = toRef(c.floorMslM[k], ground);
+    const limit =
+      c.linkFloorMslM[k] !== null && c.linkFloorMslM[k]! > c.terrainFloorMslM[k]
+        ? (fresnel?.link ?? 'control')
+        : 'terrain';
+    if (isFree(leg + 1)) raise(leg + 1, leg, t, floor, limit);
+    if (isFree(leg)) raise(leg, leg + 1, 1 - t, floor, limit);
+  });
+  const field = MissionAltitude.field(m);
+  const autoHeights: AutoHeight[] = [];
+  const waypoints = m.waypoints.map((w, i) => {
+    if (!free[i] || !Number.isFinite(need[i])) return w;
+    const ground = elevation(w.lat, w.lon);
+    const ceiling = toRef(ground + o.ceilingAglM, ground);
+    const blocked = need[i] > ceiling;
+    const heightM = Math.ceil(blocked ? ceiling : need[i]);
+    autoHeights.push({
+      index: i,
+      field,
+      heightM,
+      module: 'fpv.altitude',
+      limitedBy: blocked ? 'ceiling' : by[i],
+      blocked,
+    });
+    return { ...MissionAltitude.withHeight(m, w, heightM), heightSource: 'auto' as const };
+  });
+  return { mission: { ...m, waypoints }, autoHeights };
+}
+
+/** Mock of modules/fpv/altitude: the corridor along the route (heights interpolated in the mission's reference). */
+export function fpvAltitudeMock(m: Mission): FpvAltitudeData {
+  const { o, ref, launch, path, fresnel, link, msl, c } = corridorOf(m);
   const waypoints: FpvAltitudeWaypoint[] = m.waypoints.map((w, i) => {
     const ground = elevation(w.lat, w.lon);
     const mslM = msl(MissionAltitude.height(m, w), ground);

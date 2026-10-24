@@ -39,8 +39,19 @@ export interface LegRowVm {
   failing: LinkKind[];
   isReturn: boolean;
   lengthM: number;
-  /** Height of the leg's end point in the mission's altitude reference. */
+  /** Height of the leg's end point in the mission's altitude reference: the server's when it set it. */
   heightM: number;
+  /** The end point's height is left to the server (heightSource auto). */
+  auto: boolean;
+}
+
+/** A waypoint's height as shown: the server's automatic one from a fresh result, else the stored one. */
+interface HeightVm {
+  heightM: number;
+  auto: boolean;
+  /** "auto 74 m", or "74 m" */
+  text: string;
+  title: string;
 }
 
 export interface VerdictVm {
@@ -198,20 +209,22 @@ export class FpvWorkspace {
       const { mark, markLabel, tone, failing } = this.legMark(leg);
       const from = pointName(m, i - 1);
       const to = pointName(m, i);
+      const h = this.heightView(m, i, r);
       return {
         index,
         name: `${index} · ${from} → ${to}`,
         from,
         to,
-        info: `${RfFormat.format(len, 'km1')} · ${RfFormat.format(MissionAltitude.height(m, w), 'm')}`,
-        infoTitle: `${RfFormat.full(len, 'km3')}, ${RfFormat.full(MissionAltitude.height(m, w), 'm')} ${MissionAltitude.basis(m)}`,
+        info: `${RfFormat.format(len, 'km1')} · ${h.text}`,
+        infoTitle: `${RfFormat.full(len, 'km3')}, ${h.title}`,
         mark,
         markLabel,
         tone,
         failing,
         isReturn: false,
         lengthM: len,
-        heightM: MissionAltitude.height(m, w),
+        heightM: h.heightM,
+        auto: h.auto,
       };
     });
     const last = m.waypoints.at(-1);
@@ -223,21 +236,40 @@ export class FpvWorkspace {
       const from = pointName(m, m.waypoints.length - 1);
       const to = pointName(m, -1);
       const v = this.legMark(leg);
+      const h = this.heightView(m, m.waypoints.length - 1, r);
       rows.push({
         index,
         name: `${index} · ${from} → ${to}, return`,
         from,
         to,
-        info: `${RfFormat.format(back, 'km1')} · ${RfFormat.format(MissionAltitude.height(m, last), 'm')} → ${RfFormat.format(m.pilot.aglM, 'm')}`,
+        info: `${RfFormat.format(back, 'km1')} · ${h.text} → ${RfFormat.format(m.pilot.aglM, 'm')}`,
         infoTitle: `${RfFormat.full(back, 'km3')} back to the pilot`,
         ...v,
         isReturn: true,
         lengthM: back,
-        heightM: MissionAltitude.height(m, last),
+        heightM: h.heightM,
+        auto: false,
       });
     }
     return rows;
   });
+
+  /** Waypoint `i`'s height for the route list: what the server set for it in `r` when it did. */
+  private heightView(m: Mission, i: number, r: RouteResult | null): HeightVm {
+    const w = m.waypoints[i];
+    const auto = MissionAltitude.isAuto(m, w);
+    const set = auto ? r?.autoHeights?.find((a) => a.index === i) : undefined;
+    const heightM = set?.heightM ?? MissionAltitude.height(m, w);
+    if (!auto) return { heightM, auto, text: RfFormat.format(heightM, 'm'), title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}` };
+    if (!set) return { heightM, auto, text: 'auto', title: 'Height set automatically when the route is calculated' };
+    const by = set.limitedBy === 'ceiling' ? 'the ceiling' : set.limitedBy === 'terrain' || !set.limitedBy ? 'terrain clearance' : `${set.limitedBy} link clearance`;
+    return {
+      heightM,
+      auto,
+      text: `auto ${RfFormat.format(heightM, 'm')}${set.blocked ? ' !' : ''}`,
+      title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}, set automatically by ${by}${set.blocked ? '; not safe even at that height' : ''}`,
+    };
+  }
 
   private legMark(leg: LegResult | undefined): Pick<LegRowVm, 'mark' | 'markLabel' | 'tone' | 'failing'> {
     const failing = (['control', 'video'] as LinkKind[]).filter((k) => leg?.worst?.[k]?.reachable === false);

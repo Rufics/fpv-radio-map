@@ -37,7 +37,7 @@ import { CompareService } from '../core/fpv-core';
 import { RouteWeatherService } from '../core/route-weather.service';
 import { RouteWeatherMapComponent } from './route-weather-map.component';
 import { FlightReplayMapComponent } from '../replay/flight-replay-map.component';
-import { AltitudeView } from '../core/fpv-altitude';
+import { AltitudeView, autoHeightsOn } from '../core/fpv-altitude';
 import { Route3dComponent } from './route-3d.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
@@ -268,7 +268,7 @@ export class MapStageComponent {
       untracked(() =>
         this.tool?.setAddPointHandler(
           placing
-            ? (p) => (placing === 'pilot' ? this.placePilot(p) : this.ws.store.addWaypoint(MissionAltitude.withHeight(this.ws.store.mission() ?? {}, { lat: p.lat, lon: p.lon }, MissionAltitude.defaultHeightM)))
+            ? (p) => (placing === 'pilot' ? this.placePilot(p) : this.addWaypoint(p))
             : null,
         ),
       );
@@ -320,6 +320,13 @@ export class MapStageComponent {
       },
     });
     this.ready.set(true);
+  }
+
+  /** A map click while placing waypoints: a new point at the default height, left to the server when fpv.altitude sets heights. */
+  private addWaypoint(p: LatLon): void {
+    const m = this.ws.store.mission() ?? {};
+    const w = MissionAltitude.withHeight(m, { lat: p.lat, lon: p.lon }, MissionAltitude.defaultHeightM);
+    this.ws.store.addWaypoint(autoHeightsOn(this.ws.store.mission()) ? MissionAltitude.withAutoHeight(w) : w);
   }
 
   /** A map click while placing the pilot: starts a new mission, or moves the pilot of the current one. */
@@ -386,7 +393,7 @@ export class MapStageComponent {
     if (changed) return `${km} · ${RfFormat.format(r.heightM, 'm')}`;
     const label = r.mark ? `${km} · ${r.mark}` : km;
     if (preview) return this.previewBaseLabel(i) ?? label;
-    if (r.tone === 'ok' && this.ws.store.result() && r.heightM !== MissionAltitude.defaultHeightM) return `${km} · ${RfFormat.format(r.heightM, 'm')} ✓`;
+    if (r.tone === 'ok' && this.ws.store.result() && (r.auto || r.heightM !== MissionAltitude.defaultHeightM)) return `${km} · ${r.auto ? 'auto ' : ''}${RfFormat.format(r.heightM, 'm')} ✓`;
     return label;
   }
 
