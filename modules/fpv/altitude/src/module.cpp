@@ -1,6 +1,7 @@
 // fpv.altitude module: host glue and self-test.
 
 #include "auto_height.hpp"
+#include "climb_assistant.hpp"
 
 #include <cmath>
 #include <optional>
@@ -25,7 +26,9 @@ public:
         std::optional<json> drone;
         json climbWeather = request.value("weather", json());
         // Without the drone the assistant still runs, without energy; without a forecast, in still air.
-        if (!m.droneId.empty()) {
+        // With the assistant off neither is needed.
+        const bool climbAssist = ClimbSettings::fromOptions(request.value("options", json::object())).enabled;
+        if (climbAssist && !m.droneId.empty()) {
             try {
                 drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
             } catch (const rfmod::HostError&) {

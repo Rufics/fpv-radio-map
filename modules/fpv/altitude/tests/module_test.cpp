@@ -63,3 +63,15 @@ TEST_F(AltitudeModule, TheDronesForecastGoesToTheClimbAssistantOnly) {
     EXPECT_NEAR(r.body.at("data").at("kFactor").get<double>(), 4.0 / 3.0, 1e-12);
     EXPECT_TRUE(r.body.at("data").at("climb").at("energyEstimated").get<bool>());
 }
+
+TEST_F(AltitudeModule, WithTheAssistantOffNeitherTheDroneNorTheForecastIsFetched) {
+    host_.on("weather.point", [](const json&) { return json{{"effectiveEarthFactor", 2.0}}; });
+    json m = eastMission(world_, 1.0, 60.0, "both");
+    m["links"] = {{"control", {{"radio", "elrs-900"}}}, {"video", "none"}};
+    m["drone"] = "quad";
+    const auto r = module_.analyze({{"mission", m}, {"options", {{"stepM", 250.0}, {"climbAssist", false}}}});
+    ASSERT_EQ(r.status, RFMOD_OK) << r.body.dump();
+    EXPECT_EQ(host_.calls("library.get"), 1);  // the radio profile only
+    EXPECT_EQ(host_.calls("weather.point"), 0);
+    EXPECT_FALSE(r.body.at("data").contains("climb"));
+}

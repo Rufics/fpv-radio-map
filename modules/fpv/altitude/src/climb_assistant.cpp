@@ -265,7 +265,8 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
         item["id"] = st.profile.id;
         item["title"] = st.title;
         item["summary"] = st.summary;
-        item["withinClimbRate"] = st.profile.withinClimbRate && after.steepestClimbMps <= perf.climbMps + kRateSlackMps;
+        // The fitted line, not just the profile, has to keep to both rates.
+        item["withinClimbRate"] = st.profile.withinClimbRate && planner.withinRates(fit.mslM, kRateSlackMps);
         item["addedWaypoints"] = fit.added;
         item["mslM"] = std::move(mslM);
         item["fix"] = fix;

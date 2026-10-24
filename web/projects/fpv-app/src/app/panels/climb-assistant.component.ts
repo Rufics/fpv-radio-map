@@ -24,6 +24,8 @@ interface CardVm {
 const SAME_WH = 0.05;
 const SAME_M = 0.5;
 const SAME_S = 0.5;
+/** The slack the module allows on the drone's rates. */
+const SAME_RATE_MPS = 0.05;
 
 function trendOf(delta: number, same: number): Trend {
   if (Math.abs(delta) < same) return 'same';
@@ -228,7 +230,7 @@ export class ClimbAssistantComponent {
       recommended: s.id === cl.recommended,
       shown: s.id === shown,
       deltas: this.deltas(s, cl.plan, cl.energyEstimated),
-      warnings: this.warnings(s, cl.climbRateMps),
+      warnings: this.warnings(s, cl.climbRateMps, cl.descentRateMps),
       waypoints: this.waypointsText(s),
     }));
   });
@@ -285,11 +287,15 @@ export class ClimbAssistantComponent {
     return `${s.waypoints} waypoints, ${added} added to follow the profile`;
   }
 
-  private warnings(s: FpvClimbStrategy, climbRateMps: number): string[] {
+  private warnings(s: FpvClimbStrategy, climbRateMps: number, descentRateMps: number): string[] {
     const out: string[] = [];
-    if (!s.withinClimbRate)
+    if (!s.withinClimbRate && s.steepestClimbMps > climbRateMps + SAME_RATE_MPS)
       out.push(
         `Climbs at up to ${RfFormat.format(s.steepestClimbMps, 'mps')}: faster than the drone's ${RfFormat.format(climbRateMps, 'mps')}.`,
+      );
+    else if (!s.withinClimbRate)
+      out.push(
+        `Descends faster than the drone's ${RfFormat.format(descentRateMps, 'mps')} somewhere.`,
       );
     if (s.overCeilingM > 0.05)
       out.push(`Up to ${RfFormat.format(s.overCeilingM, 'm')} over the ceiling.`);

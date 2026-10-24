@@ -118,6 +118,21 @@ TEST(ClimbPlanner, AClimbToARidgeStartsEarlyEnoughAndKeepsToTheRate) {
     EXPECT_NEAR(p.mslM.back(), 130.0, 1e-6);
 }
 
+TEST(ClimbPlanner, RatesCoverDescentsWithTheGivenSlack) {
+    const auto pts = corridor([](double) { return 30.0; }, 3000.0, 60.0, false);
+    const ClimbPlanner planner(pts, segmentsFor(pts), false, 5.0);
+    // 100 m stretches at 10 m/s: 4 m/s down is 40 m a stretch, and 0.05 m/s of slack is 0.5 m more.
+    const auto dropAt = [&](double dropM) {
+        std::vector<double> h(pts.size(), 200.0);
+        for (std::size_t i = 16; i < h.size(); ++i) h[i] = 200.0 - dropM;
+        return h;
+    };
+    EXPECT_TRUE(planner.withinRates(dropAt(40.0)));
+    EXPECT_FALSE(planner.withinRates(dropAt(40.3)));
+    EXPECT_TRUE(planner.withinRates(dropAt(40.3), 0.05));
+    EXPECT_FALSE(planner.withinRates(dropAt(41.0), 0.05));
+}
+
 TEST(ClimbPlanner, NoProfileWithinTheRateIsMarked) {
     // The ceiling is 220 m and a wall needs 330 m one stretch later: no rate-limited way over it.
     auto pts = corridor([](double s) { return s >= 2000.0 && s <= 2200.0 ? 230.0 : 30.0; }, 3000.0, 60.0, false);

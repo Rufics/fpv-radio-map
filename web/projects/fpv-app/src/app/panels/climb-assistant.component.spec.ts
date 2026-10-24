@@ -151,6 +151,16 @@ describe('ClimbAssistantComponent', () => {
           mslM: [],
           fix: { id: 'o', patch: {} },
         },
+        {
+          ...stats,
+          id: 'gradual',
+          title: 'Gradual up and down',
+          summary: 'Steady.',
+          withinClimbRate: false,
+          addedWaypoints: 0,
+          mslM: [],
+          fix: { id: 'g', patch: {} },
+        },
       ],
     };
 
@@ -180,6 +190,9 @@ describe('ClimbAssistantComponent', () => {
       );
       expect(cards[1].querySelector('.warn')?.textContent).toBe('Up to 12 m over the ceiling.');
       expect(cards[1].querySelector('.wps')?.textContent).toBe('3 waypoints, none added');
+      expect(cards[2].querySelector('.warn')?.textContent).toBe(
+        "Descends faster than the drone's 4.0 m/s somewhere.",
+      );
       expect(el().querySelector('.notes')?.textContent).toContain('No drone picked.');
     });
 

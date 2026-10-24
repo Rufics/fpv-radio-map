@@ -182,10 +182,12 @@ std::optional<std::vector<double>> ClimbPlanner::search(bool rates) const {
     return out;
 }
 
-bool ClimbPlanner::withinRates(const std::vector<double>& mslM) const {
+bool ClimbPlanner::withinRates(const std::vector<double>& mslM, double slackMps) const {
     for (std::size_t i = 0; i + 1 < mslM.size(); ++i) {
         const double d = mslM[i + 1] - mslM[i];
-        if (d > seg_[i].maxRiseM + kEpsilonM || -d > seg_[i].maxDropM + kEpsilonM) return false;
+        const double gs = seg_[i].groundSpeedMps;
+        const double slackM = gs > 0.0 ? slackMps * (pts_[i + 1].s - pts_[i].s) / gs : 0.0;
+        if (d > seg_[i].maxRiseM + slackM + kEpsilonM || -d > seg_[i].maxDropM + slackM + kEpsilonM) return false;
     }
     return true;
 }

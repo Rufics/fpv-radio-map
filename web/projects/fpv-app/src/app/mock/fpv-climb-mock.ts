@@ -154,12 +154,14 @@ export class ClimbPlannerMock {
     return out;
   }
 
-  withinRates(p: number[]): boolean {
-    return p.every(
-      (v, i) =>
-        i + 1 >= p.length ||
-        (p[i + 1] - v <= this.seg[i].maxRise + EPS && v - p[i + 1] <= this.seg[i].maxDrop + EPS),
-    );
+  /** Whether no stretch climbs or descends more than `slackMps` faster than the rates allow. */
+  withinRates(p: number[], slackMps = 0): boolean {
+    return p.every((v, i) => {
+      if (i + 1 >= p.length) return true;
+      const seg = this.seg[i];
+      const slack = seg.gs > 0 ? (slackMps * (this.c.s[i + 1] - this.c.s[i])) / seg.gs : 0;
+      return p[i + 1] - v <= seg.maxRise + slack + EPS && v - p[i + 1] <= seg.maxDrop + slack + EPS;
+    });
   }
 
   energyOptimal(): Profile {
@@ -561,7 +563,8 @@ export function fpvClimbMock(
       id: p.id,
       title,
       summary,
-      withinClimbRate: p.within && after.steepestClimbMps <= perf.climb + RATE_SLACK,
+      // The fitted line, not just the profile, has to keep to both rates.
+      withinClimbRate: p.within && planner.withinRates(fit.mslM, RATE_SLACK),
       addedWaypoints: fit.added,
       mslM: fit.mslM.map((v) => Math.round(v * 10) / 10),
       fix,

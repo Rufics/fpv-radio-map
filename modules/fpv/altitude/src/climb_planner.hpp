@@ -58,10 +58,12 @@ public:
     [[nodiscard]] ProfileStats stats(const std::vector<double>& mslM) const;
     /// The grid step used: the one asked for, coarsened to keep at most 400 heights per sample.
     [[nodiscard]] double heightStepM() const { return step_; }
+    /// Whether the drone can fly these heights: no stretch climbs or descends more than `slackMps`
+    /// faster than its rates allow.
+    [[nodiscard]] bool withinRates(const std::vector<double>& mslM, double slackMps = 0.0) const;
 
 private:
     [[nodiscard]] std::optional<std::vector<double>> search(bool rates) const;
-    [[nodiscard]] bool withinRates(const std::vector<double>& mslM) const;
     [[nodiscard]] double highestFloor() const;
 
     const std::vector<CorridorPoint>& pts_;
