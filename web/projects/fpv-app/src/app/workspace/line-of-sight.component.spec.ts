@@ -182,9 +182,12 @@ describe('LineOfSightComponent', () => {
     expect(sights.at(-1)).toMatchObject({ to: target, obstruction: null });
     const tag = () => findTag(fixture);
     expect(tag()?.textContent).toContain('checking…');
+    // a provisional reading is not announced
+    expect(tag()?.getAttribute('role')).toBeNull();
 
     await MockApiHarness.wait(3000);
     expect(tag()?.textContent).not.toContain('checking…');
+    expect(tag()?.getAttribute('role')).toBe('status');
 
     pointer.cursor.set(null);
     TestBed.tick();

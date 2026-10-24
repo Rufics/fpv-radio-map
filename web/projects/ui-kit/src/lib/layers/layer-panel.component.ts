@@ -13,7 +13,7 @@ import { HeatLegendComponent } from '../ui/ui-components';
     <details [open]="isOpen()" (toggle)="isOpen.set($any($event.target).open)">
       <summary>
         <span class="row">
-          <span class="title">{{ title() }}</span>
+          <span class="title">{{ heading() }}</span>
           @if (badge()) {
             <span class="badge">{{ badge() }}</span>
           }
@@ -39,7 +39,7 @@ import { HeatLegendComponent } from '../ui/ui-components';
   `,
 })
 export class LayerSectionComponent implements OnInit {
-  readonly title = input.required<string>();
+  readonly heading = input.required<string>();
   readonly hint = input('');
   readonly badge = input<string | null>(null);
   /** Whether the section starts open; after that it stays as the user leaves it. */
@@ -71,7 +71,7 @@ interface PanelSection {
       <button type="button" class="rf-icon-btn" aria-label="Close layers" (click)="closed.emit()">✕</button>
     </div>
     @if (bases().length || terrain().items.length) {
-      <rf-layer-section title="Map" hint="Base map and terrain shading">
+      <rf-layer-section heading="Map" hint="Base map and terrain shading">
         @if (bases().length) {
           <div class="sub">{{ groupTitle('base') }}</div>
           <div class="base" role="radiogroup" aria-label="Base map">
@@ -91,7 +91,7 @@ interface PanelSection {
       </rf-layer-section>
     }
     @if (coverage().items.length) {
-      <rf-layer-section title="Coverage" hint="Signal over the area, its limits and how to read it" [badge]="badge(coverage())">
+      <rf-layer-section heading="Coverage" hint="Signal over the area, its limits and how to read it" [badge]="badge(coverage())">
         @for (e of coverage().items; track e.def.id) {
           <label class="toggle"><input type="checkbox" [checked]="e.visible" (change)="toggle(e, $event)" /> {{ e.def.title }}</label>
           @if (e.def.id === 'results-coverage' && e.visible) {
@@ -102,7 +102,7 @@ interface PanelSection {
       </rf-layer-section>
     }
     @if (weather().items.length) {
-      <rf-layer-section title="Weather" hint="Forecast layers and the time they show" [badge]="badge(weather())" [open]="weather().on > 0">
+      <rf-layer-section heading="Weather" hint="Forecast layers and the time they show" [badge]="badge(weather())" [open]="weather().on > 0">
         @for (e of weather().items; track e.def.id) {
           <label class="toggle"><input type="checkbox" [checked]="e.visible" (change)="toggle(e, $event)" /> {{ e.def.title }}</label>
         }
@@ -113,7 +113,7 @@ interface PanelSection {
       </rf-layer-section>
     }
     @if (mission().items.length) {
-      <rf-layer-section title="Mission" hint="Extra drawings of the route" [badge]="badge(mission())">
+      <rf-layer-section heading="Mission" hint="Extra drawings of the route" [badge]="badge(mission())">
         @for (e of mission().items; track e.def.id) {
           <label class="toggle"><input type="checkbox" [checked]="e.visible" (change)="toggle(e, $event)" /> {{ e.def.title }}</label>
         }

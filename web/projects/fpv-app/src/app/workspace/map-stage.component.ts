@@ -103,7 +103,7 @@ import { MapPointer } from './map-pointer';
                 }
               </div>
               @if (hasRoute()) {
-                <rf-layer-section title="View" hint="3D and the altitude profile">
+                <rf-layer-section heading="View" hint="3D and the altitude profile">
                   <label class="view-toggle">
                     <input type="checkbox" [checked]="alt.mode() === '3d'" (change)="alt.setMode($any($event.target).checked ? '3d' : '2d')" />
                     3D terrain and route

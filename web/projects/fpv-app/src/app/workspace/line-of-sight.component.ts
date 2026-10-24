@@ -167,7 +167,7 @@ export class LineOfSightComponent {
       this.tag?.remove();
       const el = document.createElement('div');
       el.style.pointerEvents = 'none';
-      el.appendChild(document.createElement('div')).setAttribute('role', 'status');
+      el.appendChild(document.createElement('div'));
       this.tag = new Marker({
         element: el,
         anchor: left ? 'bottom-right' : 'bottom-left',
@@ -179,6 +179,9 @@ export class LineOfSightComponent {
     const tag = this.tag.getElement().firstElementChild as HTMLElement;
     tag.className = `rf-map-tag ${SIGHT_TAG_CLASS[tone]}`;
     tag.textContent = SightReadout.text(r);
+    // only a settled reading is announced, not every step of the mouse
+    if (r.exact || r.failed) tag.setAttribute('role', 'status');
+    else tag.removeAttribute('role');
     this.tag.setLngLat([to.lon, to.lat]).addTo(map);
   }
 

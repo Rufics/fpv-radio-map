@@ -96,6 +96,8 @@ export interface RouteToolOptions {
 export class RouteTool {
   private readonly lines = new RouteLinesLayer();
   private markers: Marker[] = [];
+  /** A point is being dragged; markers removed mid-drag never send their dragend. */
+  private dragging = false;
   private editable = false;
   private last: RouteDrawing | null = null;
   private readonly offRegistry: () => void;
@@ -191,9 +193,9 @@ export class RouteTool {
     }
     const marker = new Marker({ element: el, draggable, anchor: 'center' }).setLngLat([p.lon, p.lat]).addTo(map);
     if (draggable) {
-      marker.on('dragstart', () => this.options.onDrag?.(true));
+      marker.on('dragstart', () => this.setDragging(true));
       marker.on('dragend', () => {
-        this.options.onDrag?.(false);
+        this.setDragging(false);
         const ll = marker.getLngLat();
         this.options.onMove?.(index, { lat: ll.lat, lon: ll.lng });
       });
@@ -218,5 +220,12 @@ export class RouteTool {
   private clearMarkers(): void {
     for (const m of this.markers) m.remove();
     this.markers = [];
+    this.setDragging(false);
+  }
+
+  private setDragging(active: boolean): void {
+    if (this.dragging === active) return;
+    this.dragging = active;
+    this.options.onDrag?.(active);
   }
 }
