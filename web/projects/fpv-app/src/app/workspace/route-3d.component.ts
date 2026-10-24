@@ -35,6 +35,7 @@ export function terrainSource(ref: TileSourceRef) {
   template: `
     @if (view.mode() === '3d') {
       <div class="panel" role="group" aria-label="3D view">
+        <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" aria-label="Back to 2D" (click)="view.setMode('2d')">← 2D</button>
         <label class="ex">
           <span>Heights ×{{ view.exaggeration() }}</span>
           <input

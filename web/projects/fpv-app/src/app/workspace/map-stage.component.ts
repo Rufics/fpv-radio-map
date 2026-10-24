@@ -38,7 +38,7 @@ import { RouteWeatherService } from '../core/route-weather.service';
 import { RouteWeatherMapComponent } from './route-weather-map.component';
 import { FlightReplayMapComponent } from '../replay/flight-replay-map.component';
 import { AltitudeView } from '../core/fpv-altitude';
-import { Route3dComponent } from './route-3d.component';
+import { Route3dComponent, terrainSource } from './route-3d.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
@@ -58,14 +58,6 @@ import { Route3dComponent } from './route-3d.component';
               <button type="button" class="rf-btn rf-btn--sm map-btn" [class.is-on]="ws.weatherMode()" [attr.aria-pressed]="ws.weatherMode()" (click)="ws.weatherMode.set(!ws.weatherMode())">
                 <span aria-hidden="true">☁</span> Weather
               </button>
-              @if (!compact()) {
-                <button type="button" class="rf-btn rf-btn--sm map-btn" [class.is-on]="alt.profileOpen()" [attr.aria-pressed]="alt.profileOpen()" (click)="alt.profileOpen.set(!alt.profileOpen())">
-                  <span aria-hidden="true">⛰</span> Altitude
-                </button>
-              }
-              <button type="button" class="rf-btn rf-btn--sm map-btn" [class.is-on]="alt.mode() === '3d'" [attr.aria-pressed]="alt.mode() === '3d'" (click)="alt.setMode(alt.mode() === '3d' ? '2d' : '3d')">
-                3D
-              </button>
             }
           </div>
           @if (ws.layersOpen()) {
@@ -75,7 +67,21 @@ import { Route3dComponent } from './route-3d.component';
               [forecastTime]="forecastTime()"
               (forecastOffsetChange)="ws.forecastOffsetH.set($event)"
               (closed)="ws.layersOpen.set(false)"
-            />
+            >
+              @if (hasRoute()) {
+                <div class="rf-eyebrow">View</div>
+                <label class="view-toggle">
+                  <input type="checkbox" [checked]="alt.mode() === '3d'" (change)="alt.setMode($any($event.target).checked ? '3d' : '2d')" />
+                  3D terrain and route
+                </label>
+                @if (!compact()) {
+                  <label class="view-toggle">
+                    <input type="checkbox" [checked]="alt.profileOpen()" (change)="alt.profileOpen.set($any($event.target).checked)" />
+                    Altitude profile
+                  </label>
+                }
+              }
+            </rf-layer-panel>
           }
           @if (cmp.delta() || routeDeltaShown()) {
             <div class="legend" role="note" aria-label="Scenario difference legend">
@@ -132,6 +138,8 @@ import { Route3dComponent } from './route-3d.component';
     .top-right { top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-height: calc(100% - 32px); }
     .map-actions { display: flex; gap: 8px; align-items: center; }
     .map-btn { background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); }
+    .view-toggle { display: flex; gap: 10px; align-items: center; min-height: 32px; }
+    .view-toggle input { width: 18px; height: 18px; accent-color: var(--rf-ok); margin: 0; }
     .map-btn.is-on { border-color: var(--rf-ok); color: var(--rf-ok-text); background: var(--rf-ok-bg); }
     .delta-scale { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #FF6B5B, #8A96A5 50%, #35D0BA); }
     .delta-keys { display: flex; justify-content: space-between; font-size: 11px; }
@@ -216,6 +224,12 @@ export class MapStageComponent {
       // while the B − A difference map is shown, it replaces the plain heatmap
       const grid = this.cmp.delta() ? null : (this.ws.store.coverage()[this.ws.heatLink()] ?? null);
       untracked(() => this.coverage.setGrid(grid));
+    });
+    effect(() => {
+      if (!this.ready()) return;
+      // in 3D the heatmap is draped over the raised terrain with a relief shade over it
+      const dem = this.alt.mode() === '3d' ? this.ws.data.mapConfig()?.dem : undefined;
+      untracked(() => this.coverage.setRelief(dem ? terrainSource(dem) : null));
     });
     effect(() => {
       if (!this.ready()) return;

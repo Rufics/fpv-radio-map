@@ -90,11 +90,12 @@ describe('Route3dComponent', () => {
     expect(el().textContent).toContain('Tilt 30°');
 
     view.profileOpen.set(false);
-    el().querySelector<HTMLButtonElement>('button')!.click();
+    [...el().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Route heights'))!.click();
     expect(view.profileOpen()).toBe(true);
 
     map.rotate(45);
-    view.setMode('2d');
+    el().querySelector<HTMLButtonElement>('button[aria-label="Back to 2D"]')!.click();
+    expect(view.mode()).toBe('2d');
     fixture.detectChanges();
     expect(map.removeLayer).toHaveBeenCalledWith('fpv-route-3d');
     expect(map.setTerrain).toHaveBeenLastCalledWith(null);

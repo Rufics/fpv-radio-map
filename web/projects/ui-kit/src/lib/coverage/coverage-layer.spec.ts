@@ -23,8 +23,22 @@ class FakeMap {
   readonly sources = new Map<string, FakeSource>();
   readonly layers: string[] = [];
   readonly visibility = new Map<string, string>();
+  readonly paint = new Map<string, unknown>();
+  readonly specs = new Map<string, LayerSpecification>();
   setLayoutProperty(id: string, _name: string, value: string) {
     this.visibility.set(id, value);
+  }
+  setPaintProperty(id: string, name: string, value: unknown) {
+    this.paint.set(`${id}.${name}`, value);
+  }
+  getLayersOrder() {
+    return [...this.layers];
+  }
+  removeLayer(id: string) {
+    this.layers.splice(this.layers.indexOf(id), 1);
+  }
+  removeSource(id: string) {
+    this.sources.delete(id);
   }
   getSource(id: string) {
     return this.sources.get(id);
@@ -35,8 +49,11 @@ class FakeMap {
   getLayer(id: string) {
     return this.layers.includes(id) ? { id } : undefined;
   }
-  addLayer(layer: LayerSpecification) {
-    this.layers.push(layer.id);
+  addLayer(layer: LayerSpecification, before?: string) {
+    this.specs.set(layer.id, layer);
+    const at = before ? this.layers.indexOf(before) : -1;
+    if (at < 0) this.layers.push(layer.id);
+    else this.layers.splice(at, 0, layer.id);
   }
   asMap(): MlMap {
     return this as unknown as MlMap;
@@ -61,6 +78,47 @@ describe('CoverageLayer', () => {
       expect(map.sources.get('rf-coverage')!.image!.url).toMatch(/^data:image\/png;base64,/);
       expect(map.visibility.get('coverage-heat')).toBe('none');
     }
+  });
+});
+
+describe('CoverageLayer relief', () => {
+  const dem = { type: 'raster-dem', url: 'pmtiles:///tiles/terrain.pmtiles', encoding: 'terrarium' } as SourceSpecification;
+  const grid = { marginDb: [5, 25, null, 40], cols: 2, rows: 2, bbox: [35, 48, 35.1, 48.1] as [number, number, number, number] };
+
+  it('drapes a lighter heatmap under a relief shade in 3D, and takes the shade away on the flat map', () => {
+    const map = new FakeMap();
+    map.layers.push('route-line');
+    const layer = new CoverageLayer();
+    layer.attach(map.asMap(), 'route-line');
+    layer.setGrid(grid);
+    layer.setRelief(dem);
+    expect(map.layers).toEqual(['coverage-heat', 'coverage-relief', 'route-line']);
+    expect(map.specs.get('coverage-relief')?.type).toBe('hillshade');
+    expect(map.paint.get('coverage-heat.raster-opacity')).toBe(0.38);
+    expect(map.paint.get('coverage-heat.raster-saturation')).toBe(-0.35);
+    expect(map.visibility.get('coverage-relief')).toBe('visible');
+
+    layer.setVisible(map.asMap(), false);
+    expect(map.visibility.get('coverage-relief')).toBe('none');
+
+    layer.setRelief(null);
+    expect(map.layers).toEqual(['coverage-heat', 'route-line']);
+    expect(map.sources.has('rf-coverage-relief')).toBe(false);
+    expect(map.paint.get('coverage-heat.raster-opacity')).toBe(0.55);
+    expect(map.paint.get('coverage-heat.raster-saturation')).toBe(0);
+  });
+
+  it('keeps the relief across a re-attach and removes it on detach', () => {
+    const map = new FakeMap();
+    const layer = new CoverageLayer();
+    layer.setRelief(dem);
+    layer.attach(map.asMap(), undefined);
+    expect(map.layers).toEqual(['coverage-heat', 'coverage-relief']);
+    // no grid yet: the shade is hidden with the heatmap
+    expect(map.visibility.get('coverage-relief')).toBe('none');
+    layer.detach(map.asMap());
+    expect(map.layers).toEqual([]);
+    expect(map.sources.size).toBe(0);
   });
 });
 
