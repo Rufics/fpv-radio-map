@@ -83,6 +83,8 @@ class RouteLinesLayer extends StyleLayerSet {
 export interface RouteToolOptions {
   /** Pilot is index -1, waypoints 0..n-1 */
   onMove?: (index: number, p: LatLon) => void;
+  /** A point drag starts (true) or ends (false). */
+  onDrag?: (active: boolean) => void;
   onSelectPoint?: (index: number) => void;
   onSelectLeg?: (legIndex: number) => void;
 }
@@ -189,7 +191,9 @@ export class RouteTool {
     }
     const marker = new Marker({ element: el, draggable, anchor: 'center' }).setLngLat([p.lon, p.lat]).addTo(map);
     if (draggable) {
+      marker.on('dragstart', () => this.options.onDrag?.(true));
       marker.on('dragend', () => {
+        this.options.onDrag?.(false);
         const ll = marker.getLngLat();
         this.options.onMove?.(index, { lat: ll.lat, lon: ll.lng });
       });

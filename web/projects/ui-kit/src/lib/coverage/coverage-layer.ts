@@ -18,13 +18,23 @@ export function gridBounds(grid: CoverageGrid): [number, number, number, number]
   return [o.lon, south.lat, east.lon, o.lat];
 }
 
-/** Margin grid → heatmap with the 4-colour scale; below threshold is transparent. */
+/**
+ * Margin grid → heatmap with the 4-colour scale; below threshold is transparent.
+ * Listed with the results but drawn on the ground: over the base map and under the terrain
+ * shading and contours, so the relief and the route stay readable through the colour.
+ */
 export class CoverageLayer extends StyleLayerSet {
   readonly id = 'results-coverage';
   readonly title = 'Coverage heatmap';
   readonly group = 'results' as const;
+  override readonly drawGroup = 'base' as const;
+  /** Above every base map (their orders are single digits). */
+  override readonly order = 900;
   override readonly legend = 'Signal margin, strong to threshold';
+  /** Opacity while the coverage is what the pilot looks at. */
+  static readonly FULL_OPACITY = 0.45;
   private readonly scale = new HeatScale(0, 255);
+  private opacity = CoverageLayer.FULL_OPACITY;
   private url = EMPTY_PNG;
   private coords: [[number, number], [number, number], [number, number], [number, number]] = [
     [0, 0.0001],
@@ -45,9 +55,20 @@ export class CoverageLayer extends StyleLayerSet {
         id: 'coverage-heat',
         type: 'raster',
         source: 'rf-coverage',
-        paint: { 'raster-opacity': 0.55, 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
+        paint: {
+          'raster-opacity': this.opacity,
+          'raster-opacity-transition': { duration: 180, delay: 0 },
+          'raster-resampling': 'linear',
+          'raster-fade-duration': 0,
+        },
       },
     ];
+  }
+
+  /** Heatmap opacity, 0..1; it fades to the new value. */
+  setOpacity(opacity: number): void {
+    this.opacity = Math.min(1, Math.max(0, opacity));
+    if (this.map?.getLayer('coverage-heat')) this.map.setPaintProperty('coverage-heat', 'raster-opacity', this.opacity);
   }
 
   /** Render a grid; null clears the layer. */
@@ -65,7 +86,7 @@ export class CoverageLayer extends StyleLayerSet {
         [e, s],
         [w, s],
       ];
-      this.url = this.render(grid);
+      this.url = CoverageLayer.render(grid, this.scale);
       this.hasGrid = true;
     }
     const src = this.map?.getSource('rf-coverage') as ImageSource | undefined;
@@ -73,23 +94,35 @@ export class CoverageLayer extends StyleLayerSet {
     if (this.map) super.setVisible(this.map, this.visible && this.hasGrid);
   }
 
+  override attach(map: MlMap, beforeId: string | undefined): void {
+    super.attach(map, beforeId);
+    this.setOpacity(this.opacity);
+  }
+
   override setVisible(map: MlMap, visible: boolean): void {
     this.visible = visible;
     super.setVisible(map, visible && this.hasGrid);
   }
 
-  private render(grid: CoverageGrid): string {
+  /** The grid as a PNG data URL, one pixel per cell. */
+  static render(grid: CoverageGrid, scale: HeatScale): string {
+    const canvas = CoverageLayer.paintCanvas(grid, scale);
+    return canvas ? canvas.toDataURL('image/png') : EMPTY_PNG;
+  }
+
+  /** The grid painted on a canvas, one pixel per cell; null where 2D canvases are not available. */
+  static paintCanvas(grid: CoverageGrid, scale: HeatScale): HTMLCanvasElement | null {
     const cols = grid.cols ?? 0;
     const rows = grid.rows ?? 0;
     const canvas = document.createElement('canvas');
     canvas.width = cols;
     canvas.height = rows;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return EMPTY_PNG;
+    if (!ctx) return null;
     const img = ctx.createImageData(cols, rows);
-    this.scale.paint(grid.marginDb ?? [], img.data);
+    scale.paint(grid.marginDb ?? [], img.data);
     ctx.putImageData(img, 0, 0);
-    return canvas.toDataURL('image/png');
+    return canvas;
   }
 }
 

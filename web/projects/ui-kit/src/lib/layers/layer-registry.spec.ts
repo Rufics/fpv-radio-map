@@ -171,3 +171,33 @@ describe('TopoBaseLayer', () => {
     expect(map.getLayer('topo-shade')).toBeDefined();
   });
 });
+
+/** A results layer drawn on the ground, like the coverage heatmap. */
+class GroundResultsLayer extends StyleLayerSet {
+  readonly id = 'results-ground';
+  readonly title = 'Ground results';
+  readonly group = 'results' as const;
+  override readonly drawGroup = 'base' as const;
+  override readonly order = 900;
+  protected sources(): Record<string, SourceSpecification> {
+    return { 'rf-ground': { type: 'geojson', data: { type: 'FeatureCollection', features: [] } } };
+  }
+  protected layers(): LayerSpecification[] {
+    return [{ id: 'ground', type: 'fill', source: 'rf-ground' }];
+  }
+}
+
+describe('LayerRegistry draw groups', () => {
+  it('draws a layer in its draw group but lists it under its own group', () => {
+    const { map, registry } = setup();
+    registry.register(new GroundResultsLayer());
+    registry.setVisible('terrain-contours', true);
+    registry.setVisible('base-satellite', true);
+    const ids = map.layers.map((l) => l.id);
+    expect(ids.indexOf('ground')).toBeGreaterThan(ids.indexOf('satellite'));
+    expect(ids.indexOf('ground')).toBeLessThan(ids.indexOf('contours-minor'));
+    expect(ids.indexOf('ground')).toBeLessThan(ids.indexOf('results'));
+    const results = registry.groups().find((g) => g.group === 'results')!.items.map((e) => e.def.id);
+    expect(results).toEqual(['results-ground', 'results-test']);
+  });
+});

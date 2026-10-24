@@ -26,6 +26,10 @@ class FakeMap {
   setLayoutProperty(id: string, _name: string, value: string) {
     this.visibility.set(id, value);
   }
+  readonly paint = new Map<string, unknown>();
+  setPaintProperty(id: string, name: string, value: unknown) {
+    this.paint.set(`${id}.${name}`, value);
+  }
   getSource(id: string) {
     return this.sources.get(id);
   }
@@ -61,6 +65,27 @@ describe('CoverageLayer', () => {
       expect(map.sources.get('rf-coverage')!.image!.url).toMatch(/^data:image\/png;base64,/);
       expect(map.visibility.get('coverage-heat')).toBe('none');
     }
+  });
+});
+
+describe('CoverageLayer opacity and place', () => {
+  it('is drawn over the base maps and under the terrain group', () => {
+    const layer = new CoverageLayer();
+    expect(layer.group).toBe('results');
+    expect(layer.drawGroup).toBe('base');
+    expect(layer.order).toBeGreaterThan(9);
+  });
+
+  it('keeps an opacity set before the map and applies it on attach, clamped to 0..1', () => {
+    const layer = new CoverageLayer();
+    layer.setOpacity(0.12);
+    const map = new FakeMap();
+    layer.attach(map.asMap(), undefined);
+    expect(map.paint.get('coverage-heat.raster-opacity')).toBe(0.12);
+    layer.setOpacity(4);
+    expect(map.paint.get('coverage-heat.raster-opacity')).toBe(1);
+    layer.setOpacity(-1);
+    expect(map.paint.get('coverage-heat.raster-opacity')).toBe(0);
   });
 });
 
