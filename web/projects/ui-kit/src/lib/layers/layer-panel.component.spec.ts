@@ -82,4 +82,16 @@ describe('LayerPanelComponent', () => {
     expect(sections()[2].badge).toBe('1 on');
     expect(registry.isVisible('weather-wind')).toBe(true);
   });
+
+  it('keeps a section as the user left it when its layers change', () => {
+    const { fixture, el, sections } = render();
+    const weather = el.querySelectorAll('rf-layer-section')[2].querySelector('details')!;
+    weather.open = true;
+    weather.dispatchEvent(new Event('toggle'));
+    registry.setVisible('weather-wind', true);
+    fixture.detectChanges();
+    registry.setVisible('weather-wind', false);
+    fixture.detectChanges();
+    expect(sections()[2].open).toBe(true);
+  });
 });

@@ -1,4 +1,4 @@
-import { Component, computed, inject, input, output } from '@angular/core';
+import { Component, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { LAYER_GROUP_TITLE, LayerGroup } from './layer-definition';
 import { LayerEntry, LayerRegistry } from './layer-registry';
 import { HeatLegendComponent } from '../ui/ui-components';
@@ -10,7 +10,7 @@ import { HeatLegendComponent } from '../ui/ui-components';
 @Component({
   selector: 'rf-layer-section',
   template: `
-    <details [open]="open()">
+    <details [open]="isOpen()" (toggle)="isOpen.set($any($event.target).open)">
       <summary>
         <span class="row">
           <span class="title">{{ title() }}</span>
@@ -38,11 +38,17 @@ import { HeatLegendComponent } from '../ui/ui-components';
     summary:focus-visible { outline: 2px solid var(--rf-ok); outline-offset: 2px; border-radius: 4px; }
   `,
 })
-export class LayerSectionComponent {
+export class LayerSectionComponent implements OnInit {
   readonly title = input.required<string>();
   readonly hint = input('');
   readonly badge = input<string | null>(null);
+  /** Whether the section starts open; after that it stays as the user leaves it. */
   readonly open = input(true);
+  protected readonly isOpen = signal(true);
+
+  ngOnInit(): void {
+    this.isOpen.set(this.open());
+  }
 }
 
 /** What the panel shows in one of its sections. */
