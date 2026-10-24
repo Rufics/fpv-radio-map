@@ -35,9 +35,9 @@ std::vector<AutoHeightPlanner::Sample> AutoHeightPlanner::samples() const {
     for (const CorridorPoint& c : builder.build()) {
         const Leg& leg = route.legs()[c.p.leg];
         const double t = leg.lengthM > 0.0 ? std::clamp((c.s - leg.startM) / leg.lengthM, 0.0, 1.0) : 1.0;
-        out.push_back({c.p.leg, t, c.s, route.altitude().heightFor(c.floorMslM(), c.groundMslM),
-                       route.altitude().heightFor(c.ceilingMslM, c.groundMslM), c.floorBy(),
-                       c.linkChecked && !c.linkFloorMslM.has_value()});
+        out.emplace_back(c.p.leg, t, c.s, route.altitude().heightFor(c.floorMslM(), c.groundMslM),
+                         route.altitude().heightFor(c.ceilingMslM, c.groundMslM), c.floorBy(),
+                         c.linkChecked && !c.linkFloorMslM.has_value());
     }
     return out;
 }
@@ -54,9 +54,9 @@ std::optional<double> AutoHeightPlanner::need(const Point& other, double toward,
 std::vector<AutoHeightPlanner::Point> AutoHeightPlanner::lifted(const std::vector<Sample>& xs) const {
     // Route points: the pilot, the waypoints, and the pilot again after a return leg.
     std::vector<Point> pts;
-    pts.push_back({mission_.pilot.heightM, false, true});
-    for (const Waypoint& w : mission_.waypoints) pts.push_back({w.autoHeight ? -kInf : w.heightM, w.autoHeight, false});
-    if (mission_.returnToPilot) pts.push_back({mission_.pilot.heightM, false, true});
+    pts.emplace_back(mission_.pilot.heightM, false, true);
+    for (const Waypoint& w : mission_.waypoints) pts.emplace_back(w.autoHeight ? -kInf : w.heightM, w.autoHeight, false);
+    if (mission_.returnToPilot) pts.emplace_back(mission_.pilot.heightM, false, true);
     // Each free point takes the highest of what the samples on its two legs need of it.
     std::vector<Point> out = pts;
     const auto raise = [&out](std::size_t i, std::optional<double> h, const Sample& x) {
@@ -99,7 +99,7 @@ std::vector<AutoHeight> AutoHeightPlanner::plan() const {
     std::vector<AutoHeight> out;
     for (std::size_t i = 0; i < mission_.waypoints.size(); ++i) {
         const Point& p = pts[i + 1];
-        if (p.free && std::isfinite(p.height)) out.push_back(capped(i, p, xs));
+        if (p.free && std::isfinite(p.height)) out.emplace_back(capped(i, p, xs));
     }
     return out;
 }
@@ -109,8 +109,8 @@ json prepare(const json& request, const IWorld& world, const LinkInputs& links) 
     const json options = request.value("options", json::object());
     json waypoints = json::array();
     json reasons = json::array();
-    const bool wanted = std::ranges::any_of(mission.waypoints, &Waypoint::autoHeight);
-    if (!options.value("autoHeight", true) || !wanted) return {{"waypoints", waypoints}, {"reasons", reasons}};
+    if (const bool wanted = std::ranges::any_of(mission.waypoints, &Waypoint::autoHeight); !options.value("autoHeight", true) || !wanted)
+        return {{"waypoints", waypoints}, {"reasons", reasons}};
     const Settings set = Settings::fromOptions(options);
     const double k = refraction(request.value("weather", json())).first;
     const std::string field(AltitudeModel::waypointField(mission.altitudeRef));

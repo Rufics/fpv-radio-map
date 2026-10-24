@@ -259,8 +259,9 @@ export function fpvAltitudePrepareMock(m: Mission): {
   const noLink = new Array<boolean>(n).fill(false);
   const raise = (p: number, other: number, toward: number, floor: number, limit: string) => {
     const h = fixedAt(other);
-    const v =
-      isFree(other) || h === null ? floor : toward < 0.05 ? -Infinity : h + (floor - h) / toward;
+    let v = floor;
+    // A manual end right by this sample cannot be lifted over the floor from here.
+    if (!isFree(other) && h !== null) v = toward < 0.05 ? -Infinity : h + (floor - h) / toward;
     if (v > need[p - 1]) {
       need[p - 1] = v;
       by[p - 1] = limit;

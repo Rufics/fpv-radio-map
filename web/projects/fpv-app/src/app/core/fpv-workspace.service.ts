@@ -266,7 +266,9 @@ export class FpvWorkspace {
     const heightM = set?.heightM ?? w[MissionAltitude.field(m)] ?? MissionAltitude.defaultHeightM;
     if (!auto) return { heightM, auto, text: RfFormat.format(heightM, 'm'), title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}` };
     if (!set) return { heightM, auto, text: 'auto', title: 'Height set automatically when the route is calculated' };
-    const by = set.limitedBy === 'ceiling' ? 'the ceiling' : set.limitedBy === 'terrain' || !set.limitedBy ? 'terrain clearance' : `${set.limitedBy} link clearance`;
+    let by = `${set.limitedBy} link clearance`;
+    if (set.limitedBy === 'ceiling') by = 'the ceiling';
+    else if (set.limitedBy === 'terrain' || !set.limitedBy) by = 'terrain clearance';
     return {
       heightM,
       auto,
