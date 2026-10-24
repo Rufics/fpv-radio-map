@@ -45,9 +45,13 @@ export interface Route3dOptions {
   exaggeration: number;
   /** The safe corridor as dashed floor and ceiling lines */
   corridor: boolean;
+}
+
+export interface Route3dCursorOptions {
+  exaggeration: number;
   fresnel: boolean;
   /** Distance along the route of the cursor, m */
-  cursorS: number | null;
+  cursorS: number;
 }
 
 /** A point in the layer's frame: Web Mercator relative to the origin, and metres above sea level × exaggeration. */
@@ -73,28 +77,75 @@ export const POINT_STRIDE = 8;
 
 const round = (m: number) => Math.round(m).toString();
 
-/**
- * The 3D route as vertex arrays: a curtain from the line down to the ground and the line's
- * shadow on the ground, the flight line coloured by where it is in the corridor, posts with a
- * pin and a label at the pilot and the waypoints, the cursor with its read-out, and on request
- * the corridor's floor and ceiling as dashed lines and the first Fresnel zone to the cursor.
- */
-export class Route3dScene {
+/** Vertex arrays in the frame of the pilot, and the helpers that place points along the corridor. */
+abstract class Route3dGeometry {
   readonly triangles: number[] = [];
   readonly lines: number[] = [];
   readonly points: number[] = [];
   readonly labels: Route3dLabel[] = [];
   readonly origin: MercatorCoordinate;
-  private readonly corridor: Corridor;
+  protected readonly corridor: Corridor;
 
   constructor(
-    private readonly data: FpvAltitudeData,
-    private readonly opts: Route3dOptions,
+    protected readonly data: FpvAltitudeData,
+    private readonly exaggeration: number,
   ) {
     const c = data.corridor;
     if (!c || !data.pilot) throw new Error('fpv.altitude data without a corridor');
     this.corridor = new Corridor(c, data.pilot);
     this.origin = MercatorCoordinate.fromLngLat([data.pilot.lon, data.pilot.lat], 0);
+  }
+
+  /** Mercator x/y relative to the origin and exaggerated height at a sample. */
+  protected at(lat: number, lon: number, mslM: number): P3 {
+    const m = MercatorCoordinate.fromLngLat([lon, lat], 0);
+    return { x: m.x - this.origin.x, y: m.y - this.origin.y, z: mslM * this.exaggeration };
+  }
+
+  protected sample(i: number, h: number[]): P3 {
+    return this.at(this.corridor.c.lat[i], this.corridor.c.lon[i], h[i]);
+  }
+
+  protected atS(s: number, key: 'groundMslM' | 'plannedMslM'): P3 {
+    return this.at(this.corridor.valueAt('lat', s), this.corridor.valueAt('lon', s), this.corridor.valueAt(key, s));
+  }
+
+  protected tri(...corners: [P3, Rgba][]): void {
+    for (const [p, colour] of corners) this.triangles.push(p.x, p.y, p.z, ...colour);
+  }
+
+  protected point(p: P3, colour: Rgba, sizePx: number): void {
+    this.points.push(p.x, p.y, p.z, ...colour, sizePx);
+  }
+
+  /** Two triangles the vertex shader widens to `width` pixels across the segment's screen direction. */
+  protected segment(a: P3, b: P3, width: number, colour: Rgba): void {
+    for (const [t, side] of [
+      [0, -1],
+      [1, -1],
+      [1, 1],
+      [0, -1],
+      [1, 1],
+      [0, 1],
+    ]) {
+      this.lines.push(a.x, a.y, a.z, b.x, b.y, b.z, t, side, width, ...colour);
+    }
+  }
+}
+
+/**
+ * The 3D route as vertex arrays: a curtain from the line down to the ground and the line's
+ * shadow on the ground, the flight line coloured by where it is in the corridor, posts with a
+ * pin and a label at the pilot and the waypoints, and on request the corridor's floor and
+ * ceiling as dashed lines. The cursor is a separate, small Route3dCursor, so moving it does not
+ * rebuild or re-upload the route.
+ */
+export class Route3dScene extends Route3dGeometry {
+  constructor(
+    data: FpvAltitudeData,
+    private readonly opts: Route3dOptions,
+  ) {
+    super(data, opts.exaggeration);
     this.build();
   }
 
@@ -120,25 +171,6 @@ export class Route3dScene {
         k === waypoints.length - 1 ? TARGET : WHITE,
       );
     });
-    const s = this.opts.cursorS;
-    if (s !== null) {
-      this.cursor(s);
-      if (this.opts.fresnel) this.fresnelZone(s);
-    }
-  }
-
-  /** Mercator x/y relative to the origin and exaggerated height at a sample. */
-  private at(lat: number, lon: number, mslM: number): P3 {
-    const m = MercatorCoordinate.fromLngLat([lon, lat], 0);
-    return { x: m.x - this.origin.x, y: m.y - this.origin.y, z: mslM * this.opts.exaggeration };
-  }
-
-  private sample(i: number, h: number[]): P3 {
-    return this.at(this.corridor.c.lat[i], this.corridor.c.lon[i], h[i]);
-  }
-
-  private atS(s: number, key: 'groundMslM' | 'plannedMslM'): P3 {
-    return this.at(this.corridor.valueAt('lat', s), this.corridor.valueAt('lon', s), this.corridor.valueAt(key, s));
   }
 
   /** The curtain from sample i to i + 1: the line's colour at the line, fading out at the ground. */
@@ -168,6 +200,18 @@ export class Route3dScene {
     this.point(foot, POST, 7);
     this.point(top, ball, 11);
     this.labels.push({ at: top, text, tone: 'point' });
+  }
+}
+
+/** The cursor: a dashed drop to the ground, a dot and a read-out, and on request the first Fresnel zone to it. */
+export class Route3dCursor extends Route3dGeometry {
+  constructor(
+    data: FpvAltitudeData,
+    private readonly opts: Route3dCursorOptions,
+  ) {
+    super(data, opts.exaggeration);
+    this.cursor(opts.cursorS);
+    if (opts.fresnel) this.fresnelZone(opts.cursorS);
   }
 
   /** The cursor: a dashed drop to the ground, a dot on the line and what the plan is like there. */
@@ -237,28 +281,6 @@ export class Route3dScene {
         this.tri(point(i, j), point(i + 1, j), point(i + 1, j + 1));
         this.tri(point(i, j), point(i + 1, j + 1), point(i, j + 1));
       }
-    }
-  }
-
-  private tri(...corners: [P3, Rgba][]): void {
-    for (const [p, colour] of corners) this.triangles.push(p.x, p.y, p.z, ...colour);
-  }
-
-  private point(p: P3, colour: Rgba, sizePx: number): void {
-    this.points.push(p.x, p.y, p.z, ...colour, sizePx);
-  }
-
-  /** Two triangles the vertex shader widens to `width` pixels across the segment's screen direction. */
-  private segment(a: P3, b: P3, width: number, colour: Rgba): void {
-    for (const [t, side] of [
-      [0, -1],
-      [1, -1],
-      [1, 1],
-      [0, -1],
-      [1, 1],
-      [0, 1],
-    ]) {
-      this.lines.push(a.x, a.y, a.z, b.x, b.y, b.z, t, side, width, ...colour);
     }
   }
 }
@@ -351,8 +373,35 @@ interface Program {
   ratio: WebGLUniformLocation | null;
 }
 
+/** One drawn part of the layer (the route, or the cursor) with its own buffers, uploaded when it changes. */
+class Part {
+  geometry: Route3dGeometry | null = null;
+  uploaded = true;
+  tri?: WebGLBuffer;
+  line?: WebGLBuffer;
+  point?: WebGLBuffer;
+
+  set(geometry: Route3dGeometry | null): void {
+    this.geometry = geometry;
+    this.uploaded = false;
+  }
+
+  create(gl: WebGL2RenderingContext): void {
+    this.tri = gl.createBuffer() ?? undefined;
+    this.line = gl.createBuffer() ?? undefined;
+    this.point = gl.createBuffer() ?? undefined;
+    this.uploaded = false;
+  }
+
+  delete(gl: WebGL2RenderingContext): void {
+    for (const b of [this.tri, this.line, this.point]) if (b) gl.deleteBuffer(b);
+    this.tri = this.line = this.point = undefined;
+  }
+}
+
 /**
- * MapLibre custom layer that draws a Route3dScene in 3D, over the terrain. Its labels are DOM
+ * MapLibre custom layer that draws a Route3dScene and a Route3dCursor in 3D, over the terrain.
+ * Each has its own buffers, so moving the cursor uploads only the cursor. Labels are DOM
  * elements in a host the component gives it, moved to their projected points on every frame.
  */
 export class Route3dLayer implements CustomLayerInterface {
@@ -364,17 +413,27 @@ export class Route3dLayer implements CustomLayerInterface {
   private tri?: Program;
   private line?: Program;
   private dot?: Program;
-  private triBuffer?: WebGLBuffer;
-  private lineBuffer?: WebGLBuffer;
-  private pointBuffer?: WebGLBuffer;
-  private scene: Route3dScene | null = null;
-  private uploaded = true;
+  private readonly route = new Part();
+  private readonly cursor = new Part();
   private labelHost: HTMLElement | null = null;
   private labelEls: HTMLElement[] = [];
 
+  /** The route, which is drawn first; the cursor is drawn over it. */
+  get scene(): Route3dScene | null {
+    return this.route.geometry as Route3dScene | null;
+  }
+
   setScene(scene: Route3dScene | null): void {
-    this.scene = scene;
-    this.uploaded = false;
+    this.route.set(scene);
+    this.changed();
+  }
+
+  setCursor(cursor: Route3dCursor | null): void {
+    this.cursor.set(cursor);
+    this.changed();
+  }
+
+  private changed(): void {
     this.syncLabels();
     this.map?.triggerRepaint();
   }
@@ -387,9 +446,15 @@ export class Route3dLayer implements CustomLayerInterface {
     this.syncLabels();
   }
 
-  /** One element per scene label, reused across scenes so the cursor read-out does not flicker. */
+  /** The route's labels, then the cursor's; a cursor needs a route to be drawn. */
+  private labels(): Route3dLabel[] {
+    const route = this.route.geometry;
+    return route ? [...route.labels, ...(this.cursor.geometry?.labels ?? [])] : [];
+  }
+
+  /** One element per label, reused across updates so the cursor read-out does not flicker. */
   private syncLabels(): void {
-    const labels = this.scene?.labels ?? [];
+    const labels = this.labels();
     const host = this.labelHost;
     if (!host) return;
     while (this.labelEls.length > labels.length) this.labelEls.pop()?.remove();
@@ -408,8 +473,7 @@ export class Route3dLayer implements CustomLayerInterface {
 
   /** Moves each label to its point on screen; hidden behind the camera or far off screen. */
   private placeLabels(matrix: Float32Array, width: number, height: number): void {
-    const labels = this.scene?.labels ?? [];
-    labels.forEach((l, i) => {
+    this.labels().forEach((l, i) => {
       const el = this.labelEls[i];
       if (!el) return;
       const { x, y, z } = l.at;
@@ -428,74 +492,86 @@ export class Route3dLayer implements CustomLayerInterface {
     this.tri = link(gl, TRI_VS, FS, ['a_pos', 'a_color']);
     this.line = link(gl, LINE_VS, FS, ['a_start', 'a_end', 'a_tsw', 'a_color']);
     this.dot = link(gl, POINT_VS, POINT_FS, ['a_pos', 'a_color', 'a_size']);
-    this.triBuffer = gl.createBuffer() ?? undefined;
-    this.lineBuffer = gl.createBuffer() ?? undefined;
-    this.pointBuffer = gl.createBuffer() ?? undefined;
-    this.uploaded = false;
+    this.route.create(gl);
+    this.cursor.create(gl);
   }
 
   onRemove(_map: MlMap, gl: WebGL2RenderingContext): void {
     for (const p of [this.tri, this.line, this.dot]) if (p) gl.deleteProgram(p.program);
-    for (const b of [this.triBuffer, this.lineBuffer, this.pointBuffer]) if (b) gl.deleteBuffer(b);
+    this.route.delete(gl);
+    this.cursor.delete(gl);
     for (const el of this.labelEls) el.hidden = true;
     this.map = undefined;
   }
 
   render(gl: WebGL2RenderingContext, args: CustomRenderMethodInput): void {
-    const scene = this.scene;
-    const { tri, line, dot, triBuffer, lineBuffer, pointBuffer } = this;
-    if (!scene || !this.map || !tri || !line || !dot || !triBuffer || !lineBuffer || !pointBuffer)
-      return;
-    if (!this.uploaded) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, triBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(scene.triangles), gl.STATIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, lineBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(scene.lines), gl.STATIC_DRAW);
-      gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(scene.points), gl.STATIC_DRAW);
-      this.uploaded = true;
-    }
+    const scene = this.route.geometry;
+    const { tri, line, dot } = this;
+    if (!scene || !this.map || !tri || !line || !dot) return;
     const matrix = layerMatrix(
       args.modelViewProjectionMatrix,
       scene.origin,
       512 * 2 ** this.map.getZoom(),
     );
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    gl.depthMask(false);
-
-    gl.useProgram(tri.program);
-    gl.uniformMatrix4fv(tri.matrix, false, matrix);
-    gl.bindBuffer(gl.ARRAY_BUFFER, triBuffer);
-    attrib(gl, tri.attribs['a_pos'], 3, TRI_STRIDE, 0);
-    attrib(gl, tri.attribs['a_color'], 4, TRI_STRIDE, 3);
-    gl.drawArrays(gl.TRIANGLES, 0, scene.triangles.length / TRI_STRIDE);
-
-    gl.useProgram(line.program);
-    gl.uniformMatrix4fv(line.matrix, false, matrix);
     // Line widths are in CSS pixels; MapLibre sizes its buffer by its own pixel ratio.
     const ratio = this.map.getPixelRatio();
     const width = gl.drawingBufferWidth / ratio;
     const height = gl.drawingBufferHeight / ratio;
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    for (const part of [this.route, this.cursor]) this.draw(gl, part, matrix, ratio, width, height);
+    for (const p of [tri, line, dot])
+      for (const a of Object.values(p.attribs)) if (a >= 0) gl.disableVertexAttribArray(a);
+    this.placeLabels(matrix, width, height);
+  }
+
+  private draw(
+    gl: WebGL2RenderingContext,
+    part: Part,
+    matrix: Float32Array,
+    ratio: number,
+    width: number,
+    height: number,
+  ): void {
+    const g = part.geometry;
+    const { tri, line, dot } = this;
+    if (!g || !tri || !line || !dot || !part.tri || !part.line || !part.point) return;
+    if (!part.uploaded) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, part.tri);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(g.triangles), gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, part.line);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(g.lines), gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, part.point);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(g.points), gl.STATIC_DRAW);
+      part.uploaded = true;
+    }
+
+    gl.useProgram(tri.program);
+    gl.uniformMatrix4fv(tri.matrix, false, matrix);
+    gl.bindBuffer(gl.ARRAY_BUFFER, part.tri);
+    attrib(gl, tri.attribs['a_pos'], 3, TRI_STRIDE, 0);
+    attrib(gl, tri.attribs['a_color'], 4, TRI_STRIDE, 3);
+    gl.drawArrays(gl.TRIANGLES, 0, g.triangles.length / TRI_STRIDE);
+
+    gl.useProgram(line.program);
+    gl.uniformMatrix4fv(line.matrix, false, matrix);
     gl.uniform2f(line.viewport, width, height);
-    gl.bindBuffer(gl.ARRAY_BUFFER, lineBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, part.line);
     attrib(gl, line.attribs['a_start'], 3, LINE_STRIDE, 0);
     attrib(gl, line.attribs['a_end'], 3, LINE_STRIDE, 3);
     attrib(gl, line.attribs['a_tsw'], 3, LINE_STRIDE, 6);
     attrib(gl, line.attribs['a_color'], 4, LINE_STRIDE, 9);
-    gl.drawArrays(gl.TRIANGLES, 0, scene.lines.length / LINE_STRIDE);
+    gl.drawArrays(gl.TRIANGLES, 0, g.lines.length / LINE_STRIDE);
 
     gl.useProgram(dot.program);
     gl.uniformMatrix4fv(dot.matrix, false, matrix);
     gl.uniform1f(dot.ratio, ratio);
-    gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
+    gl.bindBuffer(gl.ARRAY_BUFFER, part.point);
     attrib(gl, dot.attribs['a_pos'], 3, POINT_STRIDE, 0);
     attrib(gl, dot.attribs['a_color'], 4, POINT_STRIDE, 3);
     attrib(gl, dot.attribs['a_size'], 1, POINT_STRIDE, 7);
-    gl.drawArrays(gl.POINTS, 0, scene.points.length / POINT_STRIDE);
-    for (const p of [tri, line, dot])
-      for (const a of Object.values(p.attribs)) if (a >= 0) gl.disableVertexAttribArray(a);
-    this.placeLabels(matrix, width, height);
+    gl.drawArrays(gl.POINTS, 0, g.points.length / POINT_STRIDE);
   }
 }
 

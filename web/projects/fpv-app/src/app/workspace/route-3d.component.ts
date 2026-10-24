@@ -15,11 +15,11 @@ import {
   LayerRegistry,
   MapContext,
   TileSourceRef,
-  bearingDeg,
+  initialBearingDeg,
 } from '@rfmap/ui-kit';
 import { AltitudeView } from '../core/fpv-altitude';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
-import { Route3dLayer, Route3dScene } from './route-3d-layer';
+import { Route3dCursor, Route3dLayer, Route3dScene } from './route-3d-layer';
 
 const TERRAIN_SOURCE = 'fpv-terrain';
 /** A second copy of the elevation source for the relief layers; MapLibre warns when terrain and hillshade share one. */
@@ -311,16 +311,25 @@ export class Route3dComponent {
     if (!g?.length) return { low: 100, high: 600 };
     return { low: Math.min(...g) - 20, high: Math.max(...g) + 60 };
   });
-  private readonly scene = computed(() => {
+  /** The data to draw in 3D, or null outside 3D or without a corridor. */
+  private readonly data3d = computed(() => {
     const data = this.view.result();
     if (this.view.mode() !== '3d' || !data?.corridor || !data.pilot || data.corridor.s.length < 2)
       return null;
-    return new Route3dScene(data, {
-      exaggeration: this.view.exaggeration(),
-      corridor: this.view.corridor3d(),
-      fresnel: this.view.fresnelShown(),
-      cursorS: this.view.cursorS(),
-    });
+    return data;
+  });
+  private readonly scene = computed(() => {
+    const data = this.data3d();
+    return data
+      ? new Route3dScene(data, { exaggeration: this.view.exaggeration(), corridor: this.view.corridor3d() })
+      : null;
+  });
+  /** The cursor on its own, so moving it leaves the route's buffers alone. */
+  private readonly cursor = computed(() => {
+    const data = this.data3d();
+    const cursorS = this.view.cursorS();
+    if (!data || cursorS === null) return null;
+    return new Route3dCursor(data, { exaggeration: this.view.exaggeration(), fresnel: this.view.fresnelShown(), cursorS });
   });
 
   constructor() {
@@ -356,6 +365,10 @@ export class Route3dComponent {
     effect(() => {
       const scene = this.scene();
       untracked(() => this.layer.setScene(scene));
+    });
+    effect(() => {
+      const cursor = this.cursor();
+      untracked(() => this.layer.setCursor(cursor));
     });
     effect(() => this.layer.setLabelHost(this.labelHost().nativeElement));
     inject(DestroyRef).onDestroy(() => {
@@ -422,7 +435,7 @@ export class Route3dComponent {
       return;
     }
     const last = points[points.length - 1];
-    const bearing = (((bearingDeg(m!.pilot, last) - 90) % 360) + 540) % 360 - 180;
+    const bearing = (((initialBearingDeg(m!.pilot, last) - 90) % 360) + 540) % 360 - 180;
     const bounds = new LngLatBounds();
     for (const p of points) bounds.extend([p.lon, p.lat]);
     const cam = map.cameraForBounds(bounds, { bearing, pitch: this.tilt(), padding: { top: 140, bottom: 120, left: 80, right: 80 } });

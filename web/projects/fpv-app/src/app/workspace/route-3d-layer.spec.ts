@@ -7,6 +7,7 @@ import {
   LINE_STRIDE,
   POINT_STRIDE,
   ROUTE_3D_COLOURS,
+  Route3dCursor,
   Route3dLayer,
   Route3dScene,
   TRI_STRIDE,
@@ -24,7 +25,7 @@ const data: FpvAltitudeData = {
 };
 
 describe('Route3dScene', () => {
-  const opts = { exaggeration: 1, corridor: false, fresnel: false, cursorS: null };
+  const opts = { exaggeration: 1, corridor: false };
 
   it('draws the curtain, the shadow, the glowing line and the posts', () => {
     const scene = new Route3dScene(data, { ...opts, exaggeration: 2, corridor: true });
@@ -55,18 +56,19 @@ describe('Route3dScene', () => {
   });
 
   it('drops a dashed line from the cursor to the ground with a read-out', () => {
-    const plain = new Route3dScene(data, opts);
-    const cursor = new Route3dScene(data, { ...opts, cursorS: 1500 });
-    expect((cursor.lines.length - plain.lines.length) / LINE_STRIDE).toBe(12 * 6);
-    expect((cursor.points.length - plain.points.length) / POINT_STRIDE).toBe(1);
-    const tip = cursor.labels.at(-1)!;
+    const cursor = new Route3dCursor(data, { exaggeration: 1, fresnel: false, cursorS: 1500 });
+    expect(cursor.lines.length / LINE_STRIDE).toBe(12 * 6);
+    expect(cursor.points.length / POINT_STRIDE).toBe(1);
+    expect(cursor.triangles).toEqual([]);
+    expect(cursor.labels.length).toBe(1);
+    const tip = cursor.labels[0];
     expect(tip.text).toMatch(/^1\.5 km · \d+ m AGL · /);
     expect(['ok', 'warn']).toContain(tip.tone);
   });
 
   it('draws the Fresnel zone to the cursor only when asked', () => {
-    const plain = new Route3dScene(data, { ...opts, cursorS: 1500 });
-    const fresnel = new Route3dScene(data, { ...opts, cursorS: 1500, fresnel: true });
+    const plain = new Route3dCursor(data, { exaggeration: 1, fresnel: false, cursorS: 1500 });
+    const fresnel = new Route3dCursor(data, { exaggeration: 1, fresnel: true, cursorS: 1500 });
     expect((fresnel.triangles.length - plain.triangles.length) / TRI_STRIDE).toBe(24 * 16 * 6);
     // Its widest ring is the first-zone radius half way, around the line from the antenna to the drone.
     const k = MercatorCoordinate.fromLngLat([35.2, 48.5], 0).meterInMercatorCoordinateUnits();
@@ -80,14 +82,14 @@ describe('Route3dScene', () => {
   it('refuses data without a corridor', () => {
     expect(
       () =>
-        new Route3dScene({}, { exaggeration: 1, corridor: true, fresnel: false, cursorS: null }),
+        new Route3dScene({}, { exaggeration: 1, corridor: true }),
     ).toThrow();
   });
 });
 
 describe('Route3dLayer', () => {
   const scene = () =>
-    new Route3dScene(data, { exaggeration: 2, corridor: true, fresnel: false, cursorS: null });
+    new Route3dScene(data, { exaggeration: 2, corridor: true });
   const map = () =>
     ({
       getZoom: () => 12,
@@ -118,7 +120,31 @@ describe('Route3dLayer', () => {
 
     layer.onRemove(m, gl);
     expect(gl.deleteProgram).toHaveBeenCalledTimes(3);
-    expect(gl.deleteBuffer).toHaveBeenCalledTimes(3);
+    // three buffers for the route and three for the cursor
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(6);
+    vi.mocked(gl.drawArrays).mockClear();
+    layer.render(gl, args);
+    expect(gl.drawArrays).not.toHaveBeenCalled();
+  });
+
+  it('uploads only the cursor when the cursor moves', () => {
+    const gl = fakeGl();
+    const layer = new Route3dLayer();
+    layer.onAdd(map(), gl);
+    layer.setScene(scene());
+    layer.render(gl, args);
+    vi.mocked(gl.bufferData).mockClear();
+    const cursor = new Route3dCursor(data, { exaggeration: 2, fresnel: false, cursorS: 1500 });
+    layer.setCursor(cursor);
+    layer.render(gl, args);
+    expect(gl.bufferData).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(gl.bufferData).mock.calls.map((c) => (c[1] as Float32Array).length)).toEqual([
+      0,
+      cursor.lines.length,
+      cursor.points.length,
+    ]);
+    // a cursor without a route draws nothing
+    layer.setScene(null);
     vi.mocked(gl.drawArrays).mockClear();
     layer.render(gl, args);
     expect(gl.drawArrays).not.toHaveBeenCalled();
@@ -136,6 +162,11 @@ describe('Route3dLayer', () => {
       'B · 100 m above launch · 150 m AGL',
     ]);
     expect(host.children[0].className).toBe('fpv-3d-label is-point');
+    // the cursor's read-out comes after the route's labels
+    layer.setCursor(new Route3dCursor(data, { exaggeration: 2, fresnel: false, cursorS: 1500 }));
+    expect(host.children.length).toBe(3);
+    expect(host.children[2].className).toMatch(/is-(ok|warn)/);
+    layer.setCursor(null);
     // A view that maps every point to the centre puts the labels in the middle of the 400×300 viewport.
     const centre = new Float64Array(16);
     centre[15] = 1;
