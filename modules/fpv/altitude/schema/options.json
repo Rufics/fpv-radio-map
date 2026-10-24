@@ -11,6 +11,12 @@
     "ceilingAglM": { "type": "number", "minimum": 10, "maximum": 5000, "default": 120, "description": "Highest height above ground: the corridor's ceiling, e.g. the legal limit" },
     "linkFloor": { "type": "boolean", "default": true, "description": "Raise the floor to where the link's Fresnel clearance holds; off = terrain clearance only" },
     "fresnelFraction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.6, "description": "Share of the first Fresnel zone radius that must be clear for the link floor" },
-    "maxAglM": { "type": "number", "minimum": 10, "maximum": 5000, "default": 500, "description": "Highest height searched for the link floor" }
+    "maxAglM": { "type": "number", "minimum": 10, "maximum": 5000, "default": 500, "description": "Highest height searched for the link floor" },
+    "climbAssist": { "type": "boolean", "default": true, "description": "Compare the plan's climb with the energy-optimal profile and simpler strategies, each offered as a fix (data.climb)" },
+    "climbRateMps": { "type": "number", "minimum": 0, "maximum": 50, "default": 0, "description": "Highest climb rate past the take-off zone; 0 = the drone's measured climb rate, else 3 m/s" },
+    "descentRateMps": { "type": "number", "minimum": 0.1, "maximum": 50, "default": 4, "description": "Highest descent rate past the take-off zone" },
+    "speedMps": { "type": "number", "minimum": 0, "maximum": 100, "default": 0, "description": "Airspeed for climb gradients and flight time; 0 = the drone's cruise airspeed, else 15 m/s" },
+    "heightStepM": { "type": "number", "minimum": 1, "maximum": 100, "default": 5, "description": "Height grid of the energy-optimal search" },
+    "fitToleranceM": { "type": "number", "minimum": 0.5, "maximum": 100, "default": 5, "description": "How far the waypoints of a strategy's fix may stray from its profile" }
   }
 }

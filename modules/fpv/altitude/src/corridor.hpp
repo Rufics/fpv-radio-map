@@ -101,6 +101,8 @@ std::vector<double> sampleDistances(const Route& route, double stepM);
 
 /// route.analyze: the corridor along the route (data.corridor), the waypoints in both references,
 /// and a warning per leg where the plan leaves the corridor.
-json analyze(const json& request, const IWorld& world, const LinkInputs& links);
+/// With the climb assistant on, also data.climb and its reasons; `drone` is the mission's drone
+/// from the library, when it has one.
+json analyze(const json& request, const IWorld& world, const LinkInputs& links, const std::optional<json>& drone = std::nullopt);
 
 }  // namespace fpv::altitude

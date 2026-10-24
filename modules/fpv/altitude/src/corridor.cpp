@@ -1,5 +1,7 @@
 #include "corridor.hpp"
 
+#include "climb_assistant.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -217,7 +219,7 @@ std::vector<double> sampleDistances(const Route& route, double stepM) {
     return at;
 }
 
-json analyze(const json& request, const IWorld& world, const LinkInputs& links) {
+json analyze(const json& request, const IWorld& world, const LinkInputs& links, const std::optional<json>& drone) {
     const Mission mission = Mission::fromJson(request.at("mission"));
     const Settings set = Settings::fromOptions(request.value("options", json::object()));
     const auto [k, kNote] = refraction(request.value("weather", json()));
@@ -241,6 +243,11 @@ json analyze(const json& request, const IWorld& world, const LinkInputs& links) 
             data["fresnel"] = {{"link", w->first}, {"radio", w->second.radioName}, {"frequencyHz", w->second.frequency.value()}};
         }
         reasons = legReasons(route, pts, set);
+        if (const ClimbSettings climb = ClimbSettings::fromOptions(request.value("options", json::object())); climb.enabled) {
+            ClimbAdvice advice = climbAssist(request, route, world, pts, climb, drone);
+            data["climb"] = std::move(advice.data);
+            for (json& r : advice.reasons) reasons.push_back(std::move(r));
+        }
     } catch (const MissingTerrain& e) {
         reasons.push_back(reason(kId, "warn", std::string("Altitude corridor not drawn: ") + e.what() + "."));
     }

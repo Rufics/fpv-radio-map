@@ -51,6 +51,21 @@ double integrate(const F& f, double a, double b) {
 
 }  // namespace
 
+Air Air::fromJson(const json& weather, const json& options) {
+    Air a;
+    auto num = [](const json& j, const char* k) {
+        return j.is_object() && j.contains(k) && j.at(k).is_number() ? std::optional<double>(j.at(k).get<double>()) : std::nullopt;
+    };
+    a.densityKgM3 = num(weather, "airDensityKgM3");
+    a.windSpeedMps = num(weather, "windSpeedMps");
+    a.windFromDeg = num(weather, "windFromDeg");
+    a.temperatureC = num(weather, "temperatureC");
+    if (auto v = num(options, "temperatureC"); v.has_value()) a.temperatureC = v;
+    if (auto v = num(options, "windSpeedMps"); v.has_value()) a.windSpeedMps = v;
+    if (auto v = num(options, "windFromDeg"); v.has_value()) a.windFromDeg = v;
+    return a;
+}
+
 DroneSpec DroneSpec::fromJson(const json& j) {
     DroneSpec d;
     d.id = j.value("id", "");

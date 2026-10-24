@@ -52,6 +52,10 @@ struct Air {
     std::optional<double> windSpeedMps;
     std::optional<double> windFromDeg;  ///< meteorological: where the wind comes from
     std::optional<double> temperatureC;
+
+    /// From a weather.point answer, with windSpeedMps, windFromDeg and temperatureC in the
+    /// options taking precedence.
+    static Air fromJson(const json& weather, const json& options);
 };
 
 /// Thrown when the drone cannot hold its course in this wind.

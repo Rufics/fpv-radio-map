@@ -3,6 +3,7 @@
 #include "auto_height.hpp"
 
 #include <cmath>
+#include <optional>
 
 namespace fpv::altitude {
 namespace {
@@ -18,7 +19,22 @@ public:
         const Mission m = Mission::fromJson(request.at("mission"));
         const LinkInputs links = readLinks(host(), m);
         const HostWorld world(host());
-        return method == "route.prepare" ? prepare(request, world, links) : analyze(request, world, links);
+        if (method == "route.prepare") return prepare(request, world, links);
+        // The climb assistant estimates energy for the mission's drone, in the forecast wind.
+        std::optional<json> drone;
+        json req = request;
+        if (!m.droneId.empty()) {
+            try {
+                drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
+                if (!req.contains("weather") || req.at("weather").is_null()) {
+                    req["weather"] = host().call("weather.point", {{"lat", m.pilot.position.lat}, {"lon", m.pilot.position.lon},
+                                                                    {"time", request.value("time", "")}});
+                }
+            } catch (const rfmod::HostError&) {
+                if (!req.contains("weather")) req["weather"] = nullptr;
+            }
+        }
+        return analyze(req, world, links, drone);
     }
 
     json selftest() override {
@@ -32,7 +48,7 @@ public:
                               {"pilot", {{"lat", a.lat}, {"lon", a.lon}, {"aglM", 1.5}}},
                               {"waypoints", {{{"lat", b.lat}, {"lon", b.lon}, {"altM", 50.0}}}},
                               {"returnToPilot", false}};
-        const json r = analyze({{"mission", mission}, {"options", {{"takeoffM", 600.0}}}}, world, {});
+        const json r = analyze({{"mission", mission}, {"options", {{"takeoffM", 600.0}, {"climbAssist", false}}}}, world, {});
         const json& c = r.at("data").at("corridor");
         const bool floor = std::abs(c.at("floorMslM").back().get<double>() - 130.0) < 1e-6;
         const bool ceiling = std::abs(c.at("ceilingMslM").back().get<double>() - 220.0) < 1e-6;
