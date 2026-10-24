@@ -17,7 +17,7 @@ import { FpvWorkspace } from '../core/fpv-workspace.service';
         <ul>
           @for (c of ws.flightChecks(); track $index) {
             <li [class]="'tone-' + c.tone">
-              @if (c.legIndex !== null && !compact()) {
+              @if (c.legIndex !== null && !compact() && ws.evaluated().length) {
                 <button type="button" class="where" (click)="ws.openWhy(c.legIndex)">{{ c.where }}</button>
               } @else {
                 <span class="where">{{ c.where }}</span>
@@ -51,7 +51,7 @@ import { FpvWorkspace } from '../core/fpv-workspace.service';
 })
 export class FlightChecksComponent {
   protected readonly ws = inject(FpvWorkspace);
-  /** On the phone the legs open from their own rows. */
+  /** On the phone the legs open from their own rows; without a link there is no link detail to open. */
   readonly compact = input(false);
   protected readonly blocked = computed(() => this.ws.flightChecks().some((c) => c.tone === 'blocked'));
 }

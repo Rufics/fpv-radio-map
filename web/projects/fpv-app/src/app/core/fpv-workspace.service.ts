@@ -165,9 +165,12 @@ export class FpvWorkspace {
 
   readonly batteryReason = computed(() => this.moduleReasons().find((r) => (r.module ?? '').startsWith('fpv.battery')) ?? null);
 
+  /** The result of the route on screen: none while a fix is previewed or after an edit. */
+  private readonly shownResult = computed(() => (this.store.preview() || this.store.resultStale() ? null : this.store.result()));
+
   /** Warnings and blocks of the flight checks, blocks first; the legs they name come first. */
   readonly flightChecks = computed<FlightCheckVm[]>(() => {
-    const r = this.store.result();
+    const r = this.shownResult();
     if (!r) return [];
     const rows = this.legRows();
     const onLegs = (r.legs ?? []).flatMap((l, i) => (l.reasons ?? []).map((reason) => ({ reason, legIndex: i + 1 as number | null })));
@@ -186,7 +189,7 @@ export class FpvWorkspace {
 
   /** On an autonomous route: where a link is lost and the pilot cannot take over. */
   readonly linkGapText = computed(() => {
-    const r = this.store.result();
+    const r = this.shownResult();
     if (!r || !this.autonomous()) return null;
     const rows = this.legRows();
     const gaps = (r.legs ?? [])
