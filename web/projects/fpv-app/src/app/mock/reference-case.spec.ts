@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { RfFormat, distanceM, groundToAir, polylineLengthM } from '@rfmap/ui-kit';
-import { A_TO_B_M, PILOT, TARGET, exampleMission, fixAltitude, routeResult } from './reference-case';
+import { CoverageProbe, RfFormat, distanceM, groundToAir, polylineLengthM } from '@rfmap/ui-kit';
+import { A_TO_B_M, PILOT, TARGET, coverageGrid, exampleMission, fixAltitude, pathResult, routeResult } from './reference-case';
 
 /** The dev mock must reproduce the reference case exactly (leg 3 WP2 → B, Dnipro). */
 describe('mock reference case', () => {
@@ -96,5 +96,18 @@ describe('mock reference case', () => {
     expect(s0).toBeLessThan(n);
     expect(l.samples!.missingData).toBeGreaterThan(0);
     expect(l.samples!.evaluated! + l.samples!.missingData!).toBe(l.samples!.total);
+  });
+});
+
+describe('pathResult (mock /calc/path)', () => {
+  it('matches the coverage grid margin and names the ridge that blocks the line', () => {
+    const m = exampleMission();
+    const grid = coverageGrid(m, 'video');
+    const probe = CoverageProbe.of(grid)!;
+    const target = m.waypoints.at(-1)!;
+    const res = pathResult({ from: m.pilot, to: { lat: target.lat, lon: target.lon, aglM: 120 }, kind: 'video', link: m.links.video! });
+    expect(res.diffraction?.lineOfSight).toBe(false);
+    expect(res.diffraction?.dominant?.lat).toBeDefined();
+    expect(Math.abs(res.marginDb! - probe.marginAt(target)!)).toBeLessThan(6);
   });
 });

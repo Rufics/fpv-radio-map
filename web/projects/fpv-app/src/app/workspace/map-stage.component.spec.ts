@@ -8,6 +8,7 @@ import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { RouteWeatherService } from '../core/route-weather.service';
 import { MockApiHarness } from '../tests/mock-api-harness';
 import { MapStageComponent } from './map-stage.component';
+import { FlightReplay } from '../core/flight-replay.service';
 
 interface LimitShapes {
   radio: unknown;
@@ -273,6 +274,29 @@ describe('MapStageComponent drawing', () => {
     expect(label({ type: 'LineString', coordinates: ring }).radioLabel).toMatch(/km$/);
     expect(label({ type: 'MultiLineString', coordinates: [ring] }).radioLabel).toMatch(/km$/);
     expect(label({ type: 'Point', coordinates: ring[0] })).toMatchObject({ radioLabel: '', radioAnchor: null });
+  });
+
+  it('fades the heatmap while the route is edited, hides it in a replay and in mini-map mode, and says so', () => {
+    const ws = TestBed.inject(FpvWorkspace);
+    const replay = TestBed.inject(FlightReplay);
+    const c = fixture.componentInstance as unknown as { activity: () => string; intensityNote: () => string | null; sightAvailable: () => boolean };
+    const m = exampleMission();
+    show(m, routeResult(m, 'normal'));
+    expect(c.activity()).toBe('analyse');
+    expect(c.intensityNote()).toBeNull();
+    expect(c.sightAvailable()).toBe(true);
+    ws.editingRoute.set(true);
+    expect(c.activity()).toBe('edit');
+    expect(c.intensityNote()).toMatch(/edit/);
+    expect(c.sightAvailable()).toBe(false);
+    ws.editingRoute.set(false);
+    ws.coverageMiniMap.set(true);
+    expect(c.activity()).toBe('mini-map');
+    expect(c.sightAvailable()).toBe(true);
+    replay.mode.set('replay');
+    expect(c.activity()).toBe('flight');
+    expect(c.sightAvailable()).toBe(false);
+    replay.mode.set('plan');
   });
 
   it('keeps drawing after the map is ready and cleans up on destroy', () => {

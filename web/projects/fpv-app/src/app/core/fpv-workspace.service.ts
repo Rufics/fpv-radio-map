@@ -127,6 +127,10 @@ export class FpvWorkspace {
   readonly radioSetup = signal<LinkKind | null>(null);
   /** Link shown in the coverage heatmap */
   readonly coverageLink = signal<LinkKind>('control');
+  /** The coverage shown in a mini-map in the corner instead of over the map (Layers › Coverage) */
+  readonly coverageMiniMap = signal(false);
+  /** Line of sight from the pilot to the point under the mouse while the result is read (Layers › Coverage) */
+  readonly lineOfSight = signal(false);
   readonly forecastOffsetH = signal(0);
 
   readonly mission = this.store.mission;

@@ -11,6 +11,7 @@ import { fpvAltitudeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
 import {
   CacheLimit,
   CacheTier,
+  CalcPathRequest,
   CoverageGrid,
   CreateLinkRequest,
   FlightView,
@@ -33,6 +34,7 @@ import {
   elevationProfile,
   exampleMission,
   horizon,
+  pathResult,
   routeResult,
   weatherAt,
 } from './reference-case';
@@ -111,6 +113,7 @@ export class MockBackend {
     r('GET', /^\/links\/([^/]+)$/, (_req, m) => this.linkInfo(m[1]));
     r('POST', /^\/links\/([^/]+)\/open$/, (req, m) => this.openLink(m[1], (req.body as { pin?: string })?.pin ?? ''));
     r('POST', /^\/calc\/route$/, (req) => this.calcRoute(req));
+    r('POST', /^\/calc\/path$/, (req) => new HttpResponse({ status: 200, body: pathResult(req.body as CalcPathRequest) }));
     r('POST', /^\/calc\/path$/, () => { throw this.error(501, 'Not part of the mock'); });
     r('POST', /^\/calc\/coverage$/, (req) => this.startJob(req));
     r('GET', /^\/jobs\/([^/]+)$/, (_req, m) => this.getJob(m[1]));
