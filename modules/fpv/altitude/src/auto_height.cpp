@@ -51,51 +51,55 @@ std::optional<double> AutoHeightPlanner::need(const Point& other, double toward,
     return other.height + (floor - other.height) / toward;
 }
 
-std::vector<AutoHeight> AutoHeightPlanner::plan() const {
-    const std::vector<Sample> xs = samples();
+std::vector<AutoHeightPlanner::Point> AutoHeightPlanner::lifted(const std::vector<Sample>& xs) const {
     // Route points: the pilot, the waypoints, and the pilot again after a return leg.
-    const std::size_t nw = mission_.waypoints.size();
     std::vector<Point> pts;
     pts.push_back({mission_.pilot.heightM, false, true});
     for (const Waypoint& w : mission_.waypoints) pts.push_back({w.autoHeight ? -kInf : w.heightM, w.autoHeight, false});
     if (mission_.returnToPilot) pts.push_back({mission_.pilot.heightM, false, true});
     // Each free point takes the highest of what the samples on its two legs need of it.
-    std::vector<Point> lifted = pts;
-    const auto raise = [&lifted](std::size_t i, std::optional<double> h, const Sample& x) {
-        if (!h.has_value() || *h <= lifted[i].height) return;
-        lifted[i].height = *h;
-        lifted[i].by = x.by;
-        lifted[i].atM = x.s;
+    std::vector<Point> out = pts;
+    const auto raise = [&out](std::size_t i, std::optional<double> h, const Sample& x) {
+        if (!h.has_value() || *h <= out[i].height) return;
+        out[i].height = *h;
+        out[i].by = x.by;
+        out[i].atM = x.s;
     };
     for (const Sample& x : xs) {
         if (pts[x.leg + 1].free) raise(x.leg + 1, need(pts[x.leg], x.t, x.floor), x);
         if (pts[x.leg].free) raise(x.leg, need(pts[x.leg + 1], 1.0 - x.t, x.floor), x);
     }
+    return out;
+}
 
-    std::vector<AutoHeight> out;
-    for (std::size_t i = 0; i < nw; ++i) {
-        const Point& p = lifted[i + 1];
-        if (!p.free || !std::isfinite(p.height)) continue;
-        AutoHeight h{i, p.height, p.by, p.atM, false};
-        double cap = kInf;
-        for (const Sample& x : xs) {
-            const bool own = x.leg == i && x.t >= 1.0;
-            if (own) cap = x.ceiling;
-            if (own && h.heightM > x.ceiling + kEpsilonM) {
-                h = {i, x.ceiling, "ceiling", x.s, true};
-            }
-            const bool adjacent = x.leg == i || x.leg == i + 1;
-            if (adjacent && x.noLink && !h.blocked) {
-                h.blocked = true;
-                h.atM = x.s;
-            }
+AutoHeight AutoHeightPlanner::capped(std::size_t i, const Point& p, const std::vector<Sample>& xs) {
+    AutoHeight h{i, p.height, p.by, p.atM, false};
+    double cap = kInf;
+    for (const Sample& x : xs) {
+        const bool own = x.leg == i && x.t >= 1.0;
+        if (own) cap = x.ceiling;
+        if (own && h.heightM > x.ceiling + kEpsilonM) h = {i, x.ceiling, "ceiling", x.s, true};
+        const bool adjacent = x.leg == i || x.leg == i + 1;
+        if (adjacent && x.noLink && !h.blocked) {
+            h.blocked = true;
+            h.atM = x.s;
         }
-        // Whole metres: up for the floor, but never over the ceiling at the waypoint.
-        const double rounded = std::ceil(h.heightM - kEpsilonM);
-        const double capped = std::floor(cap + kEpsilonM);
-        if (rounded > capped && !h.blocked) h = {i, h.heightM, "ceiling", h.atM, true};
-        h.heightM = std::min(rounded, capped);
-        out.push_back(h);
+    }
+    // Whole metres: up for the floor, but never over the ceiling at the waypoint.
+    const double rounded = std::ceil(h.heightM - kEpsilonM);
+    const double ceiling = std::floor(cap + kEpsilonM);
+    if (rounded > ceiling && !h.blocked) h = {i, h.heightM, "ceiling", h.atM, true};
+    h.heightM = std::min(rounded, ceiling);
+    return h;
+}
+
+std::vector<AutoHeight> AutoHeightPlanner::plan() const {
+    const std::vector<Sample> xs = samples();
+    const std::vector<Point> pts = lifted(xs);
+    std::vector<AutoHeight> out;
+    for (std::size_t i = 0; i < mission_.waypoints.size(); ++i) {
+        const Point& p = pts[i + 1];
+        if (p.free && std::isfinite(p.height)) out.push_back(capped(i, p, xs));
     }
     return out;
 }

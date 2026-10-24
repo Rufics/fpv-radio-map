@@ -118,6 +118,30 @@ TEST(AutoHeight, AWholeMetreHeightStaysUnderAnUnevenCeiling) {
     EXPECT_DOUBLE_EQ(r.at("waypoints")[0].at("heightM").get<double>(), 120.0) << "rounded down, not up past the ceiling";
 }
 
+TEST(AutoHeight, ALinkOverARidgeSetsTheHeight) {
+    // A 60 m ridge half way: the control link needs more than the 30 m terrain clearance at the waypoint.
+    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1000.0) < 100.0 ? 160.0 : 100.0; });
+    const LinkInputs links{{"control", {rfcore::Hertz(915e6), "ELRS 900"}}};
+    const json r = run(w, eastRoute(w, {{2.0, -1.0}}), {{"stepM", 100.0}}, links);
+    ASSERT_EQ(r.at("waypoints").size(), 1U);
+    const json& h = r.at("waypoints")[0];
+    EXPECT_EQ(h.at("limitedBy"), "control") << h.dump();
+    EXPECT_GT(h.at("heightM").get<double>(), 30.0);
+    EXPECT_FALSE(h.at("blocked").get<bool>());
+}
+
+TEST(AutoHeight, NoClearLinkHeightBlocksTheWaypoint) {
+    // A 400 m wall before the waypoint: no height up to maxAglM clears the link.
+    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1500.0) < 100.0 ? 500.0 : 100.0; });
+    const LinkInputs links{{"control", {rfcore::Hertz(915e6), "ELRS 900"}}};
+    const json r = run(w, eastRoute(w, {{2.0, -1.0}}), {{"stepM", 100.0}, {"maxAglM", 100.0}}, links);
+    ASSERT_EQ(r.at("waypoints").size(), 1U);
+    EXPECT_TRUE(r.at("waypoints")[0].at("blocked").get<bool>()) << r.dump();
+    ASSERT_EQ(r.at("reasons").size(), 1U);
+    const std::string text = r.at("reasons")[0].at("text");
+    EXPECT_NE(text.find("Fresnel zone clear"), std::string::npos) << text;
+}
+
 TEST(AutoHeight, ALaunchMissionGetsLaunchHeights) {
     // Ground rising to 150 m at the waypoint, launch at 100 m: 50 + 30 above launch.
     const LocalWorld w = worldOf([](double x) { return 100.0 + x / 20.0; });

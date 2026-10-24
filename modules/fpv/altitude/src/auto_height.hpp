@@ -53,6 +53,10 @@ private:
     };
 
     [[nodiscard]] std::vector<Sample> samples() const;
+    /// The route points with every free one raised to what the samples on its legs need.
+    [[nodiscard]] std::vector<Point> lifted(const std::vector<Sample>& xs) const;
+    /// Waypoint `i`'s height in whole metres under its ceiling, and whether it is blocked.
+    [[nodiscard]] static AutoHeight capped(std::size_t i, const Point& p, const std::vector<Sample>& xs);
     /// The least height a free point needs for one sample `toward` of the way to it from `other`.
     static std::optional<double> need(const Point& other, double toward, double floor);
 

@@ -248,6 +248,17 @@ describe('MapStageComponent drawing', () => {
     expect(stage.ws.placing()).toBeNull();
   });
 
+  it('adds points at the default height, left to the server when fpv.altitude sets heights', () => {
+    const add = (p: { lat: number; lon: number }) => (fixture.componentInstance as unknown as { addWaypoint: (p: { lat: number; lon: number }) => void }).addWaypoint(p);
+    const m = exampleMission();
+    show(m, null);
+    add({ lat: 48.6, lon: 35.3 });
+    expect(store.mission()!.waypoints.at(-1)).toEqual({ lat: 48.6, lon: 35.3, aglM: 120 });
+    store.update((x) => ({ ...x, modules: { ...x.modules, 'fpv.altitude': {} } }));
+    add({ lat: 48.61, lon: 35.31 });
+    expect(store.mission()!.waypoints.at(-1)).toEqual({ lat: 48.61, lon: 35.31, aglM: 120, heightSource: 'auto' });
+  });
+
   it('accepts line and polygon limits and ignores other geometry', () => {
     const m = exampleMission();
     show(m, null);
