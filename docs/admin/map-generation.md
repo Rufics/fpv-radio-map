@@ -74,6 +74,7 @@ browser shows.
 | `basemap.pmtiles` | **Converted.** Planetiler turns OSM data into vector tiles in the OpenMapTiles schema. | Yes, by design: features are generalised for each zoom level. |
 | `satellite.pmtiles` from a raster file | **Converted.** Reprojected to Web Mercator with cubic resampling and cut into JPEG tiles. | Yes: resampled and JPEG-compressed. Display only. |
 | `hillshade.pmtiles` | **Derived** from `dem.cog.tif`. | Display only; not used in calculations. |
+| `terrain.pmtiles` | **Derived** from `dem.cog.tif`: reprojected to Web Mercator (bilinear) and encoded as Terrarium RGB. | Display only, for the 3D view; not used in calculations. |
 | `contours.pmtiles` | **Derived** from `dem.cog.tif`. | Display only; not used in calculations. |
 | `style-dark.json`, `fonts/` | **Written** from the template in `styles/` and the fonts in the image. | — |
 | `manifest.json` | **Written** from the record each step keeps. | — |
@@ -100,6 +101,7 @@ browser shows.
 | File | Format | Details |
 |---|---|---|
 | `basemap.pmtiles` | PMTiles v3, vector tiles (MVT) | OpenMapTiles schema, z0–16 (or `--basemap-maxzoom`), cut to the bbox unless `--basemap-full-extract`. |
+| `terrain.pmtiles` | PMTiles v3, raster-dem, 256 px PNG | z6–12 by default. Terrarium encoding: height = R × 256 + G + B / 256 − 32768 m; no-data is 0 m. Overviews pick the nearest cell, because averaging encoded bytes gives wrong heights. |
 | `hillshade.pmtiles` | PMTiles v3, raster, 256 px PNG | z6–12 by default. `alpha` style: RGBA, black shadows and faint white highlights on transparent; `gray`: classic grey. |
 | `contours.pmtiles` | PMTiles v3, vector tiles (MVT) | Layer `contours` (every line, from z12) and `contours_index` (every 5th line, from z10), attribute `ele` in metres. |
 | `satellite.pmtiles` | PMTiles v3, raster | The provider's own tiles for XYZ sources; JPEG (quality 85 by default) for raster files. z6–14 by default. |

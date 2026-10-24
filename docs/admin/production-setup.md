@@ -65,6 +65,7 @@ service, and **no API keys or accounts are needed** for any built-in source.
 | Basemap (roads, places, water, buildings) | `basemap` | `basemap.pmtiles` | OpenStreetMap extract from Geofabrik | browser | yes |
 | Terrain for calculations | `dem` | `dem.cog.tif` | Copernicus DEM GLO-30 (AWS Open Data) | rfmap-server | yes |
 | Hillshade | `dem` | `hillshade.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
+| Terrain for the 3D view | `dem` | `terrain.pmtiles` | derived from `dem.cog.tif` | browser | recommended: without it the 3D view has no relief |
 | Contour lines | `dem` | `contours.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
 | Land cover (clutter) | `landcover` | `landcover.cog.tif` | ESA WorldCover 10 m (AWS Open Data) | rfmap-server | recommended: without it the server starts, logs a warning and leaves clutter out |
 | Satellite imagery | `satellite` | `satellite.pmtiles` | none: you choose a mosaic and check its licence | browser | optional |
@@ -175,7 +176,7 @@ still runs, and the manifest records the duplication. The alternative is to spli
 50° N, but the server reads one `dem.cog.tif`, so you would run two servers. A builder image from
 before 20 October 2026 could fail the pixel check after this warning; build the image again.
 
-Output: `dem.cog.tif`, `hillshade.pmtiles`, `contours.pmtiles`.
+Output: `dem.cog.tif`, `hillshade.pmtiles`, `terrain.pmtiles`, `contours.pmtiles`. `--no-terrain` skips `terrain.pmtiles`.
 
 ### 2.5 Land cover (ESA WorldCover)
 
@@ -260,7 +261,7 @@ ls ~/rfmap-data/out
 
 `verify` checks the `.tif` and `.pmtiles` files that exist, and each must be reported `OK`. It
 does not notice a missing file, so also check the listing: you should see `dem.cog.tif`, `landcover.cog.tif`,
-`basemap.pmtiles`, `hillshade.pmtiles`, `contours.pmtiles`, `style-dark.json`, `manifest.json`
+`basemap.pmtiles`, `hillshade.pmtiles`, `terrain.pmtiles`, `contours.pmtiles`, `style-dark.json`, `manifest.json`
 and `fonts/`, plus `satellite.pmtiles` if you built it. `manifest.json` lists each file with its
 source, licence, attribution, bbox and resolution; check that the licence of your satellite
 mosaic is not `UNVERIFIED`.

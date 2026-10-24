@@ -83,7 +83,7 @@ file and does not check `style-dark.json`, `manifest.json` or `fonts/`, so compa
 `data/out` with this one (`satellite.pmtiles` only if you built it):
 
 ```
-basemap.pmtiles  hillshade.pmtiles  contours.pmtiles  satellite.pmtiles
+basemap.pmtiles  hillshade.pmtiles  terrain.pmtiles  contours.pmtiles  satellite.pmtiles
 dem.cog.tif      landcover.cog.tif  style-dark.json   manifest.json   fonts/
 ```
 

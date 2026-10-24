@@ -65,7 +65,10 @@ paths:
                   satellite: { type: object, properties: { pmtiles: { type: string } } }
                   hillshade: { type: object, properties: { pmtiles: { type: string } } }
                   contours: { type: object, properties: { pmtiles: { type: string }, sourceLayer: { type: string } } }
-                  dem: { type: object, description: 'Optional raster-dem source, only when configured' }
+                  dem:
+                    type: object
+                    description: 'Terrarium heights for the 3D view (tiles-builder terrain.pmtiles); left out when the manifest lists no terrain.pmtiles'
+                    properties: { pmtiles: { type: string }, encoding: { type: string, enum: [terrarium, mapbox] } }
                   weather: { type: object, description: 'Optional weather tile templates, only when configured' }
                   glyphs: { type: string }
                   attribution: { type: array, items: { type: string }, description: 'From the tiles-builder manifest.json next to the DEM' }
