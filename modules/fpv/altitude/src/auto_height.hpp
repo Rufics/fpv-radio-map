@@ -22,9 +22,10 @@ struct AutoHeight {
 /// highest corridor floor on its two legs (terrain and obstacles plus the clearance, and with
 /// linkFloor the Fresnel clearance of every link), so a leg between two automatic points flies
 /// level over its highest floor, capped by the ceiling. Next to a manual point the line from that
-/// point has to clear the floor instead. Manual heights stay as they are. On the legs from and
-/// back to the pilot only the waypoint end has to clear the floor: the climb itself is left to
-/// the climb-out (the analysis still shows where it runs under the corridor).
+/// point has to clear the floor instead. Manual heights stay as they are. The legs from and back to
+/// the pilot are taken as flown level at the waypoint's height, so their highest floor applies;
+/// only the climb from the pilot itself is left to the climb-out (the analysis still shows where
+/// it runs under the corridor).
 class AutoHeightPlanner {
 public:
     AutoHeightPlanner(const Mission& mission, const IWorld& world, const Settings& set, const LinkInputs& links, double k);

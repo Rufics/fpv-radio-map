@@ -182,8 +182,10 @@ waypoint, another field, a height that is not a number) sets nothing and is list
 `fpv.altitude` gives each automatic waypoint the highest corridor floor on its legs: terrain and
 obstacles plus 30 m, and with `linkFloor` the height that keeps 60 % of every link's first Fresnel
 zone clear, capped by the 120 m AGL ceiling. A leg between two automatic waypoints flies level
-over its highest floor; next to a manual waypoint the line from it has to clear the floor; on the
-legs from and back to the pilot only the waypoint end counts (the climb is the climb-out's). A
+over its highest floor; next to a manual waypoint the line from it has to clear the floor. The legs
+from and back to the pilot are taken as flown level at the waypoint's height, so the highest floor
+along them applies; only the climb from the pilot itself is left out (the take-off ramp and the
+climb-out cover it). A
 waypoint the ceiling cannot make safe, or with no clear Fresnel height up to `maxAglM`, is
 `blocked`, with a reason that points to `fpv.relay` and `fpv.best-launch`. Its `autoHeight`
 option (default true) turns this off.

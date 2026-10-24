@@ -22,7 +22,8 @@ bool RoutePreparation::apply(json& mission, const json& answer, const std::strin
     json& waypoints = mission["waypoints"];
     for (const json& h : answer.value("waypoints", json::array())) {
         if (!h.is_object() || !h.contains("index") || !h["index"].is_number_unsigned() || !h.contains("heightM") ||
-            !h["heightM"].is_number() || h.value("field", field) != field) {
+            !h["heightM"].is_number() || (h.contains("field") && h["field"] != field) ||
+            (h.contains("blocked") && !h["blocked"].is_boolean())) {
             return false;
         }
         const auto i = h["index"].get<std::size_t>();

@@ -48,6 +48,7 @@ private:
             heights.push_back({{"index", i}, {"field", field}, {"heightM", 77.0}, {"limitedBy", "probe"}, {"blocked", i == 0}});
         }
         if (mode == "bad-height") heights.push_back({{"index", 99}, {"heightM", 1.0}});
+        if (mode == "bad-type") heights[0]["blocked"] = "yes";
         return {{"waypoints", heights}, {"reasons", {{{"severity", "warn"}, {"text", "probe set heights"}, {"leg", 0}}}}};
     }
 

@@ -921,12 +921,14 @@ TEST_F(Integration, RoutePreparationSetsOnlyTheMissingHeights) {
     EXPECT_FALSE(kept.body.contains("autoHeights")) << kept.body["autoHeights"];
 
     // A malformed answer sets nothing and is listed; an automatic waypoint keeps its last height.
-    json stale = shortMission(point(48.51, 35.22, 90), {{"test.probe", {{"mode", "bad-height"}}}});
-    stale["waypoints"][0]["heightSource"] = "auto";
-    const auto bad = call("POST", "/calc/route", stale, bearer(sessionFor(stale)));
-    ASSERT_EQ(bad.status, 200) << bad.body;
-    EXPECT_FALSE(bad.body.contains("autoHeights"));
-    EXPECT_NE(bad.body["moduleFailures"].dump().find("malformed"), std::string::npos) << bad.body["moduleFailures"];
+    for (const char* mode : {"bad-height", "bad-type"}) {
+        json stale = shortMission(point(48.51, 35.22, 90), {{"test.probe", {{"mode", mode}}}});
+        stale["waypoints"][0]["heightSource"] = "auto";
+        const auto bad = call("POST", "/calc/route", stale, bearer(sessionFor(stale)));
+        ASSERT_EQ(bad.status, 200) << mode << ": " << bad.body;
+        EXPECT_FALSE(bad.body.contains("autoHeights")) << mode;
+        EXPECT_NE(bad.body["moduleFailures"].dump().find("malformed"), std::string::npos) << mode << ": " << bad.body["moduleFailures"];
+    }
     op.remove("test.probe");
 }
 
