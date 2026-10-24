@@ -9,6 +9,7 @@ import { HttpErrorResponse, HttpHeaders, HttpParams, HttpRequest, HttpResponse }
 import { fpvCoreMock } from './fpv-core-mock';
 import { fpvAltitudeAnalyzeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
 import {
+  AutoHeight,
   CacheLimit,
   CacheTier,
   CalcPathRequest,
@@ -22,6 +23,7 @@ import {
   Mission,
   MissionAltitude,
   ModuleInfo,
+  Reason,
   RouteResult,
   SchemaValidator,
   ShareLink,
@@ -368,27 +370,12 @@ export class MockBackend {
     if (bare >= 0) throw this.error(422, `waypoints[${bare}] has no ${field}: set its height, or turn on fpv.altitude for automatic heights`);
     const result = routeResult(mission, this.scenario());
     if (prepared.autoHeights.length) result.autoHeights = prepared.autoHeights;
-    for (const h of prepared.autoHeights.filter((a) => a.blocked)) {
-      const name = mission.waypoints[h.index].label ?? `WP${h.index + 1}`;
-      // As the module says it: the ceiling, or a link no height up to maxAglM clears.
-      const why = h.limitedBy === 'ceiling' ? 'flying its legs safely takes more than the ceiling allows' : 'no height up to the highest allowed keeps the Fresnel zone clear';
-      result.legs?.[h.index]?.reasons?.push({
-        module: 'fpv.altitude',
-        severity: 'warn',
-        leg: h.index,
-        text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but ${why}. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
-      });
-    }
+    this.warnBlockedHeights(mission, prepared.autoHeights, result);
     if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
     if (mission.modules?.['fpv.altitude']) {
       const altitude = fpvAltitudeAnalyzeMock(mission);
       result.modules = { ...result.modules, 'fpv.altitude': altitude.data };
-      // As the server: a reason with a leg goes to that leg, the rest to the route.
-      for (const r of altitude.reasons) {
-        const leg = r.leg === undefined ? undefined : result.legs?.[r.leg];
-        if (leg) (leg.reasons ??= []).push(r);
-        else (result.reasons ??= []).push(r);
-      }
+      this.attachReasons(altitude.reasons, result);
     }
     const sess = this.sessionOf(req);
     const stored = sess ? this.missions.get(sess.missionId) : undefined;
@@ -397,6 +384,29 @@ export class MockBackend {
       stored.lastResult = result;
     }
     return this.ok(result);
+  }
+
+  /** As the module says it: a blocked automatic height hit the ceiling, or a link no height up to maxAglM clears. */
+  private warnBlockedHeights(mission: Mission, autoHeights: AutoHeight[], result: RouteResult): void {
+    for (const h of autoHeights.filter((a) => a.blocked)) {
+      const name = mission.waypoints[h.index].label ?? `WP${h.index + 1}`;
+      const why = h.limitedBy === 'ceiling' ? 'flying its legs safely takes more than the ceiling allows' : 'no height up to the highest allowed keeps the Fresnel zone clear';
+      result.legs?.[h.index]?.reasons?.push({
+        module: 'fpv.altitude',
+        severity: 'warn',
+        leg: h.index,
+        text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but ${why}. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
+      });
+    }
+  }
+
+  /** As the server: a reason with a leg goes to that leg, the rest to the route. */
+  private attachReasons(reasons: Reason[], result: RouteResult): void {
+    for (const r of reasons) {
+      const leg = r.leg === undefined ? undefined : result.legs?.[r.leg];
+      if (leg) (leg.reasons ??= []).push(r);
+      else (result.reasons ??= []).push(r);
+    }
   }
 
   private startJob(req: HttpRequest<unknown>): HttpResponse<unknown> {

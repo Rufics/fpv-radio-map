@@ -5,6 +5,7 @@
 #include <deque>
 #include <functional>
 #include <limits>
+#include <utility>
 
 namespace fpv::altitude {
 namespace {
@@ -22,6 +23,22 @@ double gridStep(const std::vector<CorridorPoint>& pts, double wanted) {
     double span = 0.0;
     for (const CorridorPoint& p : pts) span = std::max(span, p.ceilingMslM - p.floorMslM());
     return std::max(wanted, span / kMaxHeights);
+}
+
+/// The first and last samples in [first, last] whose floor is at `top`, or `first` twice if none is.
+std::pair<std::size_t, std::size_t> peakSpan(const std::vector<CorridorPoint>& pts, std::size_t first, std::size_t last,
+                                             double top) {
+    std::size_t peak = first;
+    std::size_t peakEnd = first;
+    bool found = false;
+    for (std::size_t i = first; i <= last; ++i) {
+        if (pts[i].floorMslM() < top - kEpsilonM) continue;
+        if (!found) peak = i;
+        found = true;
+        peakEnd = i;
+    }
+    if (!found) return {first, first};
+    return {peak, peakEnd};
 }
 
 /// The heights each sample may take, and the least climb to each with the height it came from.
@@ -198,14 +215,7 @@ ClimbProfile ClimbPlanner::gradual() const {
     if (first >= n || first > last) return overLaunch();
 
     const double top = highestFloor();
-    std::size_t peak = first;
-    std::size_t peakEnd = first;
-    for (std::size_t i = first; i <= last; ++i) {
-        if (pts_[i].floorMslM() < top - kEpsilonM) continue;
-        if (peakEnd == first && pts_[peak].floorMslM() < top - kEpsilonM) peak = i;
-        peakEnd = i;
-    }
-    if (pts_[peak].floorMslM() < top - kEpsilonM) peak = peakEnd;
+    const auto [peak, peakEnd] = peakSpan(pts_, first, last, top);
 
     // The gentlest straight climb from the zone's edge that clears every floor up to the peak,
     // and on a return the gentlest straight descent from the peak to the zone's edge at the end.
