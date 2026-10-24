@@ -287,12 +287,13 @@ export class MapStageComponent {
       untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], this.routePadding()));
     });
     // keep the route visible above the why drawer
-    let drawerOpen = false;
+    // the drawer's height while it is open, 0 when it is closed: a change refits the route
+    let drawerCover = 0;
     effect(() => {
       if (!this.ready()) return;
-      const open = this.drawerOpen();
-      if (open === drawerOpen) return;
-      drawerOpen = open;
+      const cover = this.drawerOpen() ? this.drawerHeight() : 0;
+      if (cover === drawerCover) return;
+      drawerCover = cover;
       const m = untracked(() => this.ws.mission());
       if (!m || m.waypoints.length === 0) return;
       untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], this.routePadding()));

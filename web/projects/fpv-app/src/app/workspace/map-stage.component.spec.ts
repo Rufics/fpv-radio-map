@@ -66,9 +66,18 @@ describe('MapStageComponent drawing', () => {
     TestBed.tick();
     expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 360, left: 80, right: 80 });
 
+    fit.mockClear();
     store.newMission({ ...exampleMission(), name: 'Another' });
     TestBed.tick();
+    expect(fit).toHaveBeenCalledOnce();
     expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 360, left: 80, right: 80 });
+
+    // the open drawer grows: the route is fitted above its new edge
+    fit.mockClear();
+    fixture.componentRef.setInput('drawerHeight', 400);
+    TestBed.tick();
+    expect(fit).toHaveBeenCalledOnce();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 460, left: 80, right: 80 });
 
     TestBed.inject(AltitudeView).profileOpen.set(false);
     TestBed.tick();
