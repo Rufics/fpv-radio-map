@@ -27,8 +27,7 @@ public:
         json climbWeather = request.value("weather", json());
         // Without the drone the assistant still runs, without energy; without a forecast, in still air.
         // With the assistant off neither is needed.
-        const bool climbAssist = ClimbSettings::fromOptions(request.value("options", json::object())).enabled;
-        if (climbAssist && !m.droneId.empty()) {
+        if (ClimbSettings::fromOptions(request.value("options", json::object())).enabled && !m.droneId.empty()) {
             try {
                 drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
             } catch (const rfmod::HostError&) {

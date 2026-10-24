@@ -199,7 +199,7 @@ ClimbProfile ClimbPlanner::energyOptimal() const {
 }
 
 ClimbProfile ClimbPlanner::overLaunch() const {
-    std::vector<double> out(pts_.size(), highestFloor());
+    std::vector out(pts_.size(), highestFloor());
     out.front() = start_;
     if (returns_) out.back() = end_;
     const bool ok = withinRates(out);

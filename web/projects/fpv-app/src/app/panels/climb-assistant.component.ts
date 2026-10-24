@@ -34,8 +34,8 @@ function trendOf(delta: number, same: number): Trend {
 
 function signedWh(v: number): string {
   if (Math.abs(v) < SAME_WH) return '0.0 Wh';
-  const sign = v > 0 ? '+' : '';
-  return `${RfFormat.minus(`${sign}${v.toFixed(1)}`)} Wh`;
+  const signed = (v > 0 ? '+' : '') + v.toFixed(1);
+  return `${RfFormat.minus(signed)} Wh`;
 }
 
 function signedTime(seconds: number): string {

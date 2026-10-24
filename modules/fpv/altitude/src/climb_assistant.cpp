@@ -4,12 +4,15 @@
 #include "energy_model.hpp"
 #include "profile_fit.hpp"
 
+#include <rfmod/module.hpp>
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <format>
 #include <limits>
 #include <map>
+#include <stdexcept>
 
 namespace fpv::altitude {
 namespace {
@@ -83,9 +86,11 @@ Performance performance(const json& weather, const Route& route, const IWorld& w
             p.energy.emplace(spec, battery::Air::fromJson(weather, json::object()), world);
             for (const Leg& leg : route.legs()) p.cruiseWh += p.energy->levelWh(leg.from.position, leg.to.position);
             p.notes.push_back("Energy: cruise at " + fixed(p.airspeedMps, 1) + " m/s airspeed in the forecast wind, plus climbing; descents give nothing back.");
-        } catch (const std::runtime_error& e) {
+        } catch (const rfmod::BadRequest& e) {
             p.dropEnergy(e);
-        } catch (const std::logic_error& e) {
+        } catch (const battery::Unflyable& e) {
+            p.dropEnergy(e);
+        } catch (const std::domain_error& e) {
             p.dropEnergy(e);
         } catch (const json::exception& e) {
             p.dropEnergy(e);
