@@ -21,6 +21,7 @@ import { exampleMissionFor } from '../core/example-mission';
 import { MissionTimeComponent } from './mission-time.component';
 import { PreviewPanelComponent } from './preview-panel.component';
 import { StateCardsComponent } from './state-cards.component';
+import { FlightChecksComponent } from './flight-checks.component';
 import { WeatherCardComponent } from './weather-card.component';
 import { ComparePanelComponent } from './compare-panel.component';
 import { CompareService } from '../core/fpv-core';
@@ -28,7 +29,7 @@ import { CompareService } from '../core/fpv-core';
 /** Side panel of layout A: new mission, links, radios, time, route, calculate, results. */
 @Component({
   selector: 'fpv-plan-panel',
-  imports: [SegmentedComponent, JobProgressComponent, SlotHostComponent, StepperComponent, MissionTimeComponent, PreviewPanelComponent, StateCardsComponent, RfNumComponent, ComparePanelComponent, WeatherCardComponent],
+  imports: [SegmentedComponent, JobProgressComponent, SlotHostComponent, StepperComponent, MissionTimeComponent, PreviewPanelComponent, StateCardsComponent, FlightChecksComponent, RfNumComponent, ComparePanelComponent, WeatherCardComponent],
   template: `
     @if (!ws.mission()) {
       @if (ws.placing() === 'pilot') {
@@ -60,6 +61,17 @@ import { CompareService } from '../core/fpv-core';
         <rf-segmented label="Flight" [options]="flights" [value]="m.flightMode ?? 'manual'" (valueChange)="setFlight($event)" />
       }
       <div class="rf-caption">{{ flightHint(m) }}</div>
+      <label class="drone-row">
+        <span class="rf-eyebrow">Drone</span>
+        <select class="rf-input" [disabled]="!canEdit" (change)="setDrone($any($event.target).value)" aria-label="Drone">
+          @for (d of ws.data.drones(); track d.id) {
+            <option [value]="d.id" [selected]="d.id === m.drone">{{ d.name }} · {{ d.airframe === 'fixed-wing' ? 'fixed-wing' : 'multirotor' }}</option>
+          }
+        </select>
+      </label>
+      @if (droneHint(m); as h) {
+        <div class="rf-caption">{{ h }}</div>
+      }
       <div class="rf-eyebrow">Links to check</div>
       @if (canEdit) {
         <rf-segmented label="Links to check" [options]="modes" [value]="m.evaluate" (valueChange)="setMode($event)" />
@@ -174,10 +186,11 @@ import { CompareService } from '../core/fpv-core';
       }
       @if (ws.allClearText(); as t) {
         <section class="rf-card rf-card--ok clear">
-          <b>All flown legs reachable by radio</b>
+          <b>{{ ws.allClearTitle() }}</b>
           <div class="rf-body">{{ t }}</div>
         </section>
       }
+      <fpv-flight-checks />
       @if (ws.batteryCard(); as b) {
         <section class="rf-card rf-card--warn battery">
           <b>Battery will not last with return</b>
@@ -226,6 +239,7 @@ import { CompareService } from '../core/fpv-core';
     .pilot .info { margin-left: auto; }
     .add { border: 1px dashed var(--rf-border-strong); color: var(--rf-text-2); }
     .section-head { display: flex; justify-content: space-between; align-items: center; min-height: 32px; }
+    .drone-row { display: flex; flex-direction: column; gap: 6px; }
     .battery-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .battery-row .rf-mono { font-size: 13px; }
     .verdict, .clear, .battery { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
@@ -285,6 +299,24 @@ export class PlanPanelComponent {
   protected setFlight(mode: FlightMode): void {
     this.ws.store.setFlightMode(mode);
     this.ws.why.set(null);
+  }
+
+  /** Picks the drone; a fixed-wing also gets its flight envelope checked (fpv.airframe). */
+  protected setDrone(id: string): void {
+    const fixedWing = this.ws.data.drones().find((d) => d.id === id)?.airframe === 'fixed-wing';
+    this.ws.store.update((m) => {
+      const modules = { ...m.modules };
+      if (fixedWing) modules['fpv.airframe'] = modules['fpv.airframe'] ?? {};
+      else delete modules['fpv.airframe'];
+      return { ...m, drone: id, modules };
+    });
+  }
+
+  protected droneHint(m: Mission): string | null {
+    const d = this.ws.data.drones().find((x) => x.id === m.drone);
+    const w = d?.fixedWing;
+    if (!d || d.airframe !== 'fixed-wing' || !w) return null;
+    return `Climbs at most ${w.maxClimbAngleDeg}°, descends at most ${w.maxDiveAngleDeg}°, banks ${w.maxBankDeg}°, stalls at ${RfFormat.format(w.stallSpeedMps, 'mps')}. The route is checked against these limits.`;
   }
 
   protected flightHint(m: Mission): string {

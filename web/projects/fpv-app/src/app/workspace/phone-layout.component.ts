@@ -12,6 +12,7 @@ import { WeatherCardComponent } from '../panels/weather-card.component';
 import { AltitudeView } from '../core/fpv-altitude';
 import { AltitudeDrawerComponent } from '../panels/altitude-drawer.component';
 import { ClimbAssistantComponent } from '../panels/climb-assistant.component';
+import { FlightChecksComponent } from '../panels/flight-checks.component';
 import { MapStageComponent } from './map-stage.component';
 import { PhoneAltitudeComponent } from './phone-altitude.component';
 
@@ -25,7 +26,7 @@ const DRAG_PX = 24;
  */
 @Component({
   selector: 'fpv-phone-layout',
-  imports: [PillComponent, MapStageComponent, PhoneAltitudeComponent, AltitudeDrawerComponent, ClimbAssistantComponent, WhyDrawerComponent, PreviewPanelComponent, WeatherCardComponent, WeatherBriefingComponent, ReplaySheetComponent, FlightImportComponent],
+  imports: [PillComponent, MapStageComponent, PhoneAltitudeComponent, AltitudeDrawerComponent, ClimbAssistantComponent, WhyDrawerComponent, PreviewPanelComponent, WeatherCardComponent, WeatherBriefingComponent, ReplaySheetComponent, FlightImportComponent, FlightChecksComponent],
   host: { class: 'phone' },
   template: `
     @if (ws.briefingOpen() && ws.mission()) {
@@ -123,6 +124,7 @@ const DRAG_PX = 24;
               }
             }
           </div>
+          <fpv-flight-checks [compact]="true" />
           @if (ws.weatherMode() && ws.mission()!.waypoints.length) {
             <fpv-weather-card [routeColours]="true" />
           }

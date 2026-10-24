@@ -581,6 +581,8 @@ export const MODULES: ModuleInfo[] = [
   { id: 'rf.flightlog', version: '1.3.0', title: 'Flight log replay', builtIn: true, lifecycle: 'stable', provides: ['flightlog.processor'], signedBy: 'built in', isolated: false, state: 'active' },
   { id: 'fpv.blackbox', version: '1.0.0', title: 'Betaflight Blackbox decoder', lifecycle: 'beta', provides: ['flightlog.decoder'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.altitude', version: '1.2.0', title: 'Altitude corridor and 3D view', lifecycle: 'alpha', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.airframe', version: '1.0.0', title: 'Fixed-wing flight envelope', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.failsafe', version: '1.0.0', title: 'Failsafe check', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.min-altitude', version: '0.4.0', title: 'Minimum altitude', lifecycle: 'alpha', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   {
     id: 'fpv.relay', version: '1.1.0', title: 'Relay planning', lifecycle: 'deprecated', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active',
