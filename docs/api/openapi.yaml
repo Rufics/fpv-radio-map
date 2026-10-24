@@ -329,7 +329,9 @@ paths:
       tags: [calc]
       summary: >-
         Every leg of the mission route, both links as requested, plus the modules the mission opts into.
-        Legs are pilot → wp1 → … → last, plus last → pilot when returnToPilot. Each leg is sampled at
+        Legs are pilot → wp1 → … → last, plus last → pilot when returnToPilot. Waypoints without a
+        height (or with heightSource auto) first get one from the route.preparation modules
+        (RouteResult.autoHeights); one still without a height is a 422. Each leg is sampled at
         the DEM native step. The drone height is interpolated linearly between the waypoints in the
         mission's altitudeRef: with launch (altM, above the ground at the pilot) the drone flies a
         straight line in altitude, and a leg that would put it below the ground is blocked; with agl
@@ -1072,6 +1074,22 @@ components:
         library: { type: array, items: { $ref: '#/components/schemas/LibraryRef' } }
         modules: { type: object, description: "Per-module output keyed by module id: the module's route.analyze `data` as returned. A module's reasons go to the leg they name (Reason.leg) or, without a leg, to RouteResult.reasons, not into modules[id]." }
         moduleFailures: { type: array, items: { $ref: '#/components/schemas/ModuleFailure' } }
+        autoHeights:
+          type: array
+          description: >-
+            Heights the route.preparation modules (fpv.altitude) set before the calculation, one per
+            waypoint that left its height to the server (none in the mission's reference, or
+            heightSource auto). The legs and the route.analysis modules use them; the stored mission
+            is not changed. Absent when no waypoint asked for one.
+          items:
+            type: object
+            properties:
+              index: { type: integer, description: 'Index into mission.waypoints' }
+              field: { enum: [aglM, altM], description: "The mission's height field" }
+              heightM: { type: number }
+              module: { type: string }
+              limitedBy: { type: string, description: 'What set it: terrain, a link kind (control, video), or ceiling' }
+              blocked: { type: boolean, description: 'Even the ceiling does not keep the waypoint safe; the reasons say what may help' }
 
     Job:
       type: object
