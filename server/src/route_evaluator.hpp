@@ -10,8 +10,9 @@
 
 namespace rfmap {
 
-/// The route calculation: every leg sampled at the DEM's step, the worst sample of each link
-/// kept, then the route.analysis modules. Runs inside the caller's InvocationScope.
+/// The route calculation: the route.preparation modules' heights (route_preparation.hpp), every
+/// leg sampled at the DEM's step, the worst sample of each link kept, then the route.analysis
+/// modules. Runs inside the caller's InvocationScope.
 class RouteEvaluator {
 public:
     using Links = std::vector<std::pair<LinkKind, ResolvedLink>>;
@@ -19,7 +20,7 @@ public:
     RouteEvaluator(LinkService& links, const ModuleRunner& modules);
 
     /// The legs and modules of `result`, which already carries its header fields.
-    void evaluate(const json& mission, const Links& links, const CalcContext& ctx, json& result) const;
+    void evaluate(const json& request, const Links& links, const CalcContext& ctx, json& result) const;
 
 private:
     /// The worst sample of one link along a leg.

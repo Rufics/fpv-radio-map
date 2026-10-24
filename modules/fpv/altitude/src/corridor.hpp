@@ -5,6 +5,7 @@
 
 #include <functional>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -57,6 +58,42 @@ struct CorridorPoint {
     [[nodiscard]] double floorMslM() const { return linkFloorMslM.has_value() ? std::max(terrainFloorMslM, *linkFloorMslM) : terrainFloorMslM; }
     /// "terrain", or the link kind when the link floor is the higher one.
     [[nodiscard]] std::string floorBy() const { return linkFloorMslM.has_value() && *linkFloorMslM > terrainFloorMslM ? linkFloorBy : "terrain"; }
+};
+
+/// Builds the corridor: the ground along every leg from the host's terrain profile, and at each
+/// sample the terrain floor, the ceiling and (with linkFloor) the lowest height where every
+/// link's Fresnel clearance holds.
+class CorridorBuilder {
+public:
+    CorridorBuilder(const Mission& mission, const Route& route, const IWorld& world, const Settings& set,
+                    const LinkInputs& links, double k);
+
+    /// The corridor at every sample distance (sampleDistances).
+    [[nodiscard]] std::vector<CorridorPoint> build() const;
+    /// The corridor at one distance along the route.
+    [[nodiscard]] CorridorPoint at(double s) const;
+
+private:
+    struct LinkSolver {
+        std::string kind;
+        ClearanceSolver solver;
+    };
+    /// The link floor at one point: the highest of the links' lowest clear heights, as MSL, and
+    /// the link that sets it. Nothing when some link has no clear height up to the search limit.
+    struct LinkFloor {
+        std::optional<double> mslM;
+        std::string by;
+    };
+
+    [[nodiscard]] LinkFloor linkFloor(const RoutePoint& p, const InverseResult& inv) const;
+
+    const Mission& mission_;
+    const Route& route_;
+    const IWorld& world_;
+    Settings set_;
+    std::vector<LinkSolver> solvers_;
+    std::vector<LegGround> ground_;
+    double lambda_ = 0.0;
 };
 
 /// Distances along the route to sample: every `stepM`, and every leg's start and end.

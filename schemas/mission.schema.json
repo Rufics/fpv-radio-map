@@ -198,6 +198,13 @@
           "maximum": 10000,
           "description": "Height above the ground at the pilot (altitudeRef launch), as a barometric altimeter zeroed at take-off reads it. Negative is below the launch point."
         },
+        "heightSource": {
+          "enum": [
+            "auto",
+            "manual"
+          ],
+          "description": "Who sets the height. manual: the height field of the mission's altitudeRef (aglM or altM) is the user's and is never changed. auto: the server sets it before the calculation (route.prepare, fpv.altitude) and a stored value is only the last one it set. Without the field a waypoint with a height is manual and one without is auto."
+        },
         "label": {
           "type": "string"
         }
@@ -255,9 +262,26 @@
                   "type": "number"
                 }
               },
-              "required": [
-                "altM"
-              ]
+              "if": {
+                "required": [
+                  "heightSource"
+                ],
+                "properties": {
+                  "heightSource": {
+                    "const": "manual"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "altM": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "altM"
+                ]
+              }
             }
           }
         }
@@ -273,9 +297,26 @@
                   "type": "number"
                 }
               },
-              "required": [
-                "aglM"
-              ]
+              "if": {
+                "required": [
+                  "heightSource"
+                ],
+                "properties": {
+                  "heightSource": {
+                    "const": "manual"
+                  }
+                }
+              },
+              "then": {
+                "properties": {
+                  "aglM": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "aglM"
+                ]
+              }
             }
           }
         }

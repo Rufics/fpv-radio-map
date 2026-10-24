@@ -136,7 +136,7 @@ std::vector<std::shared_ptr<const rfcore::ILossContributor>> ModuleRunner::lossC
 
 json ModuleRunner::versions(const CalcContext& ctx) const {
     json out = json::object();
-    for (const char* cap : {"loss.contributor", "route.analysis", "coverage.analysis"}) {
+    for (const char* cap : {"loss.contributor", "route.preparation", "route.analysis", "coverage.analysis"}) {
         for (const Active& a : optedIn(cap, ctx)) out[a.id] = a.instance->manifest().version.str();
     }
     return out;

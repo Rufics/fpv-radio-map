@@ -40,4 +40,16 @@ describe('MissionAltitude', () => {
     const launch: Mission = { ...base, altitudeRef: 'launch', waypoints: [{ lat: 48.55, lon: 35.17, altM: -50 }] };
     expect(MissionAltitude.withRef(launch, 'agl').waypoints[0]).toEqual({ lat: 48.55, lon: 35.17, aglM: 0 });
   });
+
+  it('leaves a waypoint without a height, or with heightSource auto, to the server', () => {
+    const launch = { altitudeRef: 'launch' as const };
+    expect(MissionAltitude.isAuto(base, base.waypoints[0])).toBe(false);
+    expect(MissionAltitude.isAuto(launch, base.waypoints[0])).toBe(true);
+    const auto = MissionAltitude.withAutoHeight(base.waypoints[0]);
+    expect(auto).toEqual({ ...base.waypoints[0], heightSource: 'auto' });
+    expect(MissionAltitude.isAuto(base, auto)).toBe(true);
+    const manual = MissionAltitude.withManualHeight(base, auto, 90);
+    expect(manual).toEqual({ lat: 48.55, lon: 35.17, aglM: 90, label: 'B', heightSource: 'manual' });
+    expect(MissionAltitude.isAuto(base, manual)).toBe(false);
+  });
 });

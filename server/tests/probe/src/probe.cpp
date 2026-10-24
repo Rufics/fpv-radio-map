@@ -23,6 +23,7 @@ public:
         const std::string mode = request.value("options", rfmod::json::object()).value("mode", "answer");
         if (mode == "fail") throw rfmod::BadRequest("probe asked to fail");
         if (method == "loss.contribute") return contribute();
+        if (method == "route.prepare") return mode == "not-an-object" ? rfmod::json::array() : prepareRoute(request.at("mission"), mode);
         if (method == "route.analyze") return mode == "not-an-object" ? rfmod::json::array() : analyzeRoute();
         if (method == "coverage.analyze") return analyzeCoverage(request.at("grid"));
         throw rfmod::UnknownMethod(method);
@@ -37,6 +38,19 @@ private:
     static rfmod::json contribute() {
         return {{"terms", {{{"id", "test.probe/term"}, {"label", "Probe term"}, {"valueDb", 1.0}, {"source", "test"}}}},
                 {"notes", rfmod::json::array()}};
+    }
+
+    /// 77 m for every waypoint, the manual ones too (the server keeps those), or one that does not exist.
+    static rfmod::json prepareRoute(const rfmod::json& mission, const std::string& mode) {
+        const std::string field = mission.value("altitudeRef", "agl") == "launch" ? "altM" : "aglM";
+        rfmod::json heights = rfmod::json::array();
+        for (std::size_t i = 0; i < mission.at("waypoints").size(); ++i) {
+            heights.push_back({{"index", i}, {"field", field}, {"heightM", 77.0}, {"limitedBy", "probe"}, {"blocked", i == 0}});
+        }
+        if (mode == "bad-height") heights.push_back({{"index", 99}, {"heightM", 1.0}});
+        if (mode == "bad-type") heights[0]["blocked"] = "yes";
+        if (mode == "bad-list") return {{"waypoints", {{"first", heights[0]}}}};
+        return {{"waypoints", heights}, {"reasons", {{{"severity", "warn"}, {"text", "probe set heights"}, {"leg", 0}}}}};
     }
 
     static rfmod::json analyzeRoute() {

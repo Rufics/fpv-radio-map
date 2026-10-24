@@ -2,8 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { ApiError, CredentialStore, Job, RFMAP_API_BASE, RfmapApiClient, WeatherPoint } from '@rfmap/ui-kit';
+import { ApiError, CredentialStore, Job, Mission, MissionAltitude, RFMAP_API_BASE, RfmapApiClient, RouteResult, WeatherPoint } from '@rfmap/ui-kit';
 import { MockApiHarness } from '../tests/mock-api-harness';
+import { LOCAL, RIDGE, toLatLon } from './mock-terrain';
 import { LIBRARY, exampleMission, weatherAt } from './reference-case';
 
 /** The dev mock backend, walked through with the app's own API client, keeps to the contract. */
@@ -99,6 +100,35 @@ describe('MockBackend through the API client', () => {
     expect((await settle(api.getJob(null, cancelled.jobId!))).state).toBe('cancelled');
     expect((await rejection(api.getJob(null, 'job-none'))).status).toBe(404);
     expect((await rejection(api.getCoverage(null, 'job-none', 'video'))).status).toBe(404);
+  });
+
+  it('names what blocked an automatic height: the ceiling, or a link no height clears', async () => {
+    const route = (m: Mission) => settle(new Promise<RouteResult>((resolve, reject) => api.calcRoute(null, m).subscribe({ next: resolve, error: reject })));
+    const texts = (r: RouteResult) => (r.legs ?? []).flatMap((l) => l.reasons ?? []).map((x) => x.text ?? '');
+    const auto = (m: Mission, options: Record<string, unknown>): Mission => ({ ...m, modules: { ...m.modules, 'fpv.altitude': options }, waypoints: m.waypoints.map((w) => MissionAltitude.withAutoHeight(w)) });
+
+    const noLink = await route(auto(exampleMission(), { maxAglM: 10 }));
+    expect(noLink.autoHeights?.some((h) => h.blocked && h.limitedBy === 'control')).toBe(true);
+    expect(texts(noLink).some((t) => t.includes('Fresnel zone clear'))).toBe(true);
+
+    const ridge = exampleMission();
+    ridge.altitudeRef = 'launch';
+    ridge.returnToPilot = false;
+    ridge.waypoints = [toLatLon(RIDGE.x, RIDGE.y), toLatLon(LOCAL.B.x, LOCAL.B.y)].map((p, i) => ({ ...p, label: `W${i + 1}` }));
+    const ceiling = await route(auto(ridge, { ceilingAglM: 60, linkFloor: false }));
+    expect(texts(ceiling).some((t) => t.includes('more than the ceiling allows'))).toBe(true);
+    expect(texts(ceiling).some((t) => t.includes('Fresnel'))).toBe(false);
+
+    // Without fpv.altitude nothing sets the missing height: 422, as on the server.
+    const bare = { ...exampleMission(), modules: {}, waypoints: exampleMission().waypoints.map(({ lat, lon, label }) => ({ lat, lon, label, heightSource: 'auto' as const })) };
+    const refused = await rejection(settle(new Promise((resolve, reject) => api.calcRoute(null, bare).subscribe({ next: resolve, error: reject }))));
+    expect(refused.status).toBe(422);
+    expect(refused.message).toContain('waypoints[0]');
+    // A null height is missing too, not zero.
+    const field = MissionAltitude.field(bare);
+    const nulled = { ...bare, waypoints: bare.waypoints.map((w, i) => (i === 1 ? { ...w, heightSource: 'manual' as const, [field]: 50 } : { ...w, [field]: null })) } as unknown as Mission;
+    const refusedNull = await rejection(settle(new Promise((resolve, reject) => api.calcRoute(null, nulled).subscribe({ next: resolve, error: reject }))));
+    expect(refusedNull.status).toBe(422);
   });
 
   it('answers profiles and weather, and refuses a malformed point', async () => {

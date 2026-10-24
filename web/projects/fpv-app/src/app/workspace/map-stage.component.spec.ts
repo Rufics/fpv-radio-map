@@ -125,6 +125,19 @@ describe('MapStageComponent drawing', () => {
     expect(drawing().legs[0].label).toBe('3.7 km · 80 m ✓');
   });
 
+  it('labels a height auto only when the server set it, and names it on the map', () => {
+    const m = exampleMission();
+    const auto = { ...m, waypoints: m.waypoints.map((w, i) => (i === 0 ? { ...w, heightSource: 'auto' as const } : w)) };
+    const w0 = auto.waypoints[0];
+    show(auto, routeResult(auto, 'normal'));
+    expect(drawing().legs[0].label).toBe('3.7 km · ✓');
+    expect(drawing().waypoints[0].ariaLabel).toBe('Waypoint 1, height set automatically');
+
+    show(auto, { ...routeResult(auto, 'normal'), autoHeights: [{ index: 0, lat: w0.lat, lon: w0.lon, field: 'aglM', heightM: 74, module: 'fpv.altitude' }] });
+    expect(drawing().legs[0].label).toBe('3.7 km · auto 74 m ✓');
+    expect(drawing().waypoints[0].ariaLabel).toBe('Waypoint 1, 74 m above ground');
+  });
+
   it('draws a missing-data leg as missing', () => {
     const m = exampleMission();
     show(m, routeResult(m, 'missing-elevation'));
@@ -247,6 +260,17 @@ describe('MapStageComponent drawing', () => {
     stage.ws.placing.set('pilot');
     stage.cancelPlacing();
     expect(stage.ws.placing()).toBeNull();
+  });
+
+  it('adds points at the default height, left to the server when fpv.altitude sets heights', () => {
+    const add = (p: { lat: number; lon: number }) => (fixture.componentInstance as unknown as { addWaypoint: (p: { lat: number; lon: number }) => void }).addWaypoint(p);
+    const m = exampleMission();
+    show(m, null);
+    add({ lat: 48.6, lon: 35.3 });
+    expect(store.mission()!.waypoints.at(-1)).toEqual({ lat: 48.6, lon: 35.3, aglM: 120 });
+    store.update((x) => ({ ...x, modules: { ...x.modules, 'fpv.altitude': {} } }));
+    add({ lat: 48.61, lon: 35.31 });
+    expect(store.mission()!.waypoints.at(-1)).toEqual({ lat: 48.61, lon: 35.31, aglM: 120, heightSource: 'auto' });
   });
 
   it('accepts line and polygon limits and ignores other geometry', () => {

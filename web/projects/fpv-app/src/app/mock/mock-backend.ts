@@ -7,7 +7,7 @@
  */
 import { HttpErrorResponse, HttpHeaders, HttpParams, HttpRequest, HttpResponse } from '@angular/common/http';
 import { fpvCoreMock } from './fpv-core-mock';
-import { fpvAltitudeMock } from './fpv-altitude-mock';
+import { fpvAltitudeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
 import {
   CacheLimit,
   CacheTier,
@@ -20,6 +20,7 @@ import {
   LibraryKind,
   LinkKind,
   Mission,
+  MissionAltitude,
   ModuleInfo,
   RouteResult,
   SchemaValidator,
@@ -357,8 +358,27 @@ export class MockBackend {
   }
 
   private calcRoute(req: HttpRequest<unknown>): HttpResponse<unknown> {
-    const mission = req.body as Mission;
+    // route.prepare first: the legs and the modules see the automatic heights.
+    const body = req.body as Mission;
+    const prepared = body.modules?.['fpv.altitude'] ? fpvAltitudePrepareMock(body) : { mission: body, autoHeights: [] };
+    const mission = prepared.mission;
+    // As the server: a waypoint route.prepare left without a height cannot be evaluated.
+    const field = MissionAltitude.field(mission);
+    const bare = mission.waypoints.findIndex((w) => w[field] === undefined || w[field] === null);
+    if (bare >= 0) throw this.error(422, `waypoints[${bare}] has no ${field}: set its height, or turn on fpv.altitude for automatic heights`);
     const result = routeResult(mission, this.scenario());
+    if (prepared.autoHeights.length) result.autoHeights = prepared.autoHeights;
+    for (const h of prepared.autoHeights.filter((a) => a.blocked)) {
+      const name = mission.waypoints[h.index].label ?? `WP${h.index + 1}`;
+      // As the module says it: the ceiling, or a link no height up to maxAglM clears.
+      const why = h.limitedBy === 'ceiling' ? 'flying its legs safely takes more than the ceiling allows' : 'no height up to the highest allowed keeps the Fresnel zone clear';
+      result.legs?.[h.index]?.reasons?.push({
+        module: 'fpv.altitude',
+        severity: 'warn',
+        leg: h.index,
+        text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but ${why}. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
+      });
+    }
     if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
     if (mission.modules?.['fpv.altitude']) result.modules = { ...result.modules, 'fpv.altitude': fpvAltitudeMock(mission) };
     const sess = this.sessionOf(req);

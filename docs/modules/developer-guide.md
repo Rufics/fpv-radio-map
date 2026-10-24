@@ -54,7 +54,7 @@ The fields that matter most:
 | `abi` | Always `2` for now (the `RFMOD_ABI_VERSION` in `abi.h`). |
 | `host` | Range of host versions you support, for example `>=0.1.0 <1.0.0`. |
 | `requires` / `optional` | Other modules, with version ranges (`^1.2.0`, `>=1.0.0 <2.0.0`, `~1.4.0`, `a || b`). Required ones must be installed first. Optional ones may be missing; check with the host at run time. |
-| `provides` | What you add: `loss.contributor`, `route.analysis`, `coverage.analysis`, `flightlog.decoder`, `library.kind`, `ui.panel`. |
+| `provides` | What you add: `loss.contributor`, `route.preparation`, `route.analysis`, `coverage.analysis`, `flightlog.decoder`, `library.kind`, `ui.panel`. |
 | `methods` | Methods you answer, for documentation and the admin page. |
 | `entry` | Library per platform: `{"linux-x86_64": "lib/libacme_rain.so"}`. |
 | `optionsSchema` | JSON Schema (draft-07) of the options the admin can set. The server validates against it. |
@@ -150,6 +150,45 @@ order you return them. Your `notes` go to `LinkResult.uncertainty`, along with a
 dropped term. A failure (an error, a timeout, a malformed response) never fails the
 calculation: the path is evaluated without your terms, and the failure is listed in
 `moduleFailures`.
+
+### route.preparation → `route.prepare`
+
+Called before the core evaluates a route, and only when some waypoint leaves its height to the
+server: it has no height in the mission's reference (`aglM`, or `altM` for `"launch"`), or its
+`heightSource` is `"auto"` (its stored height is only the last automatic one). Request:
+
+```json
+{ "mission": { }, "options": { }, "weather": { }, "time": "2026-10-18T14:00:00Z" }
+```
+
+Response: a height for each waypoint you can set, in the mission's reference, and reasons.
+
+```json
+{
+  "waypoints": [ { "index": 0, "field": "aglM", "heightM": 74, "limitedBy": "control", "blocked": false } ],
+  "reasons": [ { "severity": "warn", "leg": 0, "text": "WP1: automatic height 120 m AGL, but ..." } ]
+}
+```
+
+The server sets only the heights still wanted: a manual height is never changed, and with more
+than one such module the first in dependency order wins. Each one set is listed in
+`RouteResult.autoHeights` and marked `heightSource: "auto"` in the mission the legs and the
+route.analysis modules then see; the stored mission is not changed. Reasons are attached once the
+legs exist, the same way as route.analyze's. A failure or a malformed answer (an unknown
+waypoint, another field, a height that is not a number) sets nothing and is listed in
+`moduleFailures`. A waypoint still without a height after every module makes the calculation a
+422.
+
+`fpv.altitude` gives each automatic waypoint the highest corridor floor on its legs: terrain and
+obstacles plus 30 m, and with `linkFloor` the height that keeps 60 % of every link's first Fresnel
+zone clear, capped by the 120 m AGL ceiling. A leg between two automatic waypoints flies level
+over its highest floor; next to a manual waypoint the line from it has to clear the floor. The legs
+from and back to the pilot are taken as flown level at the waypoint's height, so the highest floor
+along them applies; only the climb from the pilot itself is left out (the take-off ramp and the
+climb-out cover it). A
+waypoint the ceiling cannot make safe (at the waypoint, or anywhere along one of its legs as the
+heights are set), or with no clear Fresnel height up to `maxAglM`, is `blocked`, with a reason that points to `fpv.relay` and `fpv.best-launch`. Its `autoHeight`
+option (default true) turns this off.
 
 ### route.analysis → `route.analyze`
 

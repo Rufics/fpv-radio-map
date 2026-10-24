@@ -880,10 +880,58 @@ TEST_F(Integration, LaunchReferencedRouteFliesLevelAndMayHitTheRidge) {
     ASSERT_EQ(a.status, 200) << a.body;
     EXPECT_EQ(a.body["legs"][0]["samples"]["belowGround"], 0);
 
-    // A launch-referenced waypoint needs altM.
+    // A manual launch-referenced waypoint needs altM; without heightSource it is left to the
+    // server, which cannot set it without a route.preparation module.
     json wrong = shortMission(point(48.50, 35.30, 60.0));
     wrong["altitudeRef"] = "launch";
+    wrong["waypoints"][0]["heightSource"] = "manual";
     EXPECT_EQ(call("POST", "/missions", wrong).status, 422);
+    wrong["waypoints"][0].erase("heightSource");
+    const auto unset = call("POST", "/calc/route", wrong, bearer(sessionFor(wrong)));
+    EXPECT_EQ(unset.status, 422) << unset.body;
+    EXPECT_NE(unset.body.dump().find("fpv.altitude"), std::string::npos) << unset.body;
+}
+
+TEST_F(Integration, RoutePreparationSetsOnlyTheMissingHeights) {
+    Operator op;
+    const auto installed = op.install(packed(fs::path(PROBE_STAGE), "/dev-owner.secret"));
+    ASSERT_TRUE(installed.ok()) << installed.toJson().dump(2);
+
+    // The probe offers 77 m for every waypoint: the first has none and takes it, the second is
+    // manual and keeps its 60 m.
+    json m = shortMission({{"lat", 48.51}, {"lon", 35.22}}, {{"test.probe", {{"mode", "answer"}}}});
+    m["waypoints"].push_back(point(48.50, 35.30, 60.0));
+    const auto r = call("POST", "/calc/route", m, bearer(sessionFor(m)));
+    ASSERT_EQ(r.status, 200) << r.body;
+    ASSERT_EQ(r.body["autoHeights"].size(), 1u) << r.body["autoHeights"];
+    const json& h = r.body["autoHeights"][0];
+    EXPECT_EQ(h["index"], 0);
+    EXPECT_EQ(h["lat"], 48.51);
+    EXPECT_EQ(h["lon"], 35.22);
+    EXPECT_EQ(h["field"], "aglM");
+    EXPECT_EQ(h["heightM"], 77.0);
+    EXPECT_EQ(h["module"], "test.probe");
+    EXPECT_EQ(h["limitedBy"], "probe");
+    EXPECT_TRUE(h["blocked"].get<bool>());
+    EXPECT_TRUE(has(r.body["legs"][0]["reasons"], "text", "probe set heights")) << r.body["legs"][0]["reasons"];
+    EXPECT_TRUE(r.body["moduleFailures"].empty()) << r.body["moduleFailures"];
+
+    // With every height manual the module is not asked.
+    const json manual = shortMission(point(48.51, 35.22, 100), {{"test.probe", {{"mode", "answer"}}}});
+    const auto kept = call("POST", "/calc/route", manual, bearer(sessionFor(manual)));
+    ASSERT_EQ(kept.status, 200) << kept.body;
+    EXPECT_FALSE(kept.body.contains("autoHeights")) << kept.body["autoHeights"];
+
+    // A malformed answer sets nothing and is listed; an automatic waypoint keeps its last height.
+    for (const char* mode : {"bad-height", "bad-type", "bad-list"}) {
+        json stale = shortMission(point(48.51, 35.22, 90), {{"test.probe", {{"mode", mode}}}});
+        stale["waypoints"][0]["heightSource"] = "auto";
+        const auto bad = call("POST", "/calc/route", stale, bearer(sessionFor(stale)));
+        ASSERT_EQ(bad.status, 200) << mode << ": " << bad.body;
+        EXPECT_FALSE(bad.body.contains("autoHeights")) << mode;
+        EXPECT_NE(bad.body["moduleFailures"].dump().find("malformed"), std::string::npos) << mode << ": " << bad.body["moduleFailures"];
+    }
+    op.remove("test.probe");
 }
 
 TEST_F(Integration, CoverageCountsCellsWithoutTerrainAndHonoursLimits) {

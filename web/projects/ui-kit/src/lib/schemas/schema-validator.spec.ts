@@ -19,6 +19,16 @@ describe('SchemaValidator (contract schemas, ajv draft-07 strict)', () => {
     expect(bad.issues.map((i) => i.path)).toEqual(expect.arrayContaining(['/time/mode', '/pilot/lat', '/pilot/aglM', '/waypoints']));
   });
 
+  it('accepts a waypoint left to the server but not a manual one without its height', () => {
+    const m = { schema: 'mission/v1', name: 'Auto', time: { mode: 'now' }, pilot: { lat: 48.53, lon: 35.2, aglM: 2 }, links: {}, evaluate: 'both' };
+    const r = v.validateMission({ ...m, waypoints: [{ lat: 48.557, lon: 35.258 }] });
+    expect(r.issues).toEqual([]);
+    expect(v.validateMission({ ...m, waypoints: [{ lat: 48.557, lon: 35.258, aglM: 90, heightSource: 'auto' }] }).issues).toEqual([]);
+    expect(v.validateMission({ ...m, waypoints: [{ lat: 48.557, lon: 35.258, heightSource: 'manual' }] }).ok).toBe(false);
+    const launch = { ...m, altitudeRef: 'launch', waypoints: [{ lat: 48.557, lon: 35.258, aglM: 90, heightSource: 'manual' }] };
+    expect(v.validateMission(launch).ok).toBe(false);
+  });
+
   it('validates a battery entry with the shared common definitions', () => {
     const entry = {
       id: 'liion-6s-6000',

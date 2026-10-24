@@ -15,6 +15,7 @@ import {
   StepperComponent,
 } from '@rfmap/ui-kit';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
+import { autoHeightsOn } from '../core/fpv-altitude';
 import { exampleMissionFor } from '../core/example-mission';
 import { MissionTimeComponent } from './mission-time.component';
 import { PreviewPanelComponent } from './preview-panel.component';
@@ -107,6 +108,9 @@ import { CompareService } from '../core/fpv-core';
           @if (ws.editingRoute() && !r.isReturn) {
             <div class="edit">
               <rf-stepper [label]="'Height ' + alt.basis(m) + ', point ' + r.to" [value]="r.heightM" [unit]="alt.unit(m)" [step]="5" [min]="alt.ref(m) === 'launch' ? -1500 : 0" [max]="1500" [dense]="true" (valueChange)="setHeight(r.index - 1, $event)" />
+              @if (autoOn(m) || r.auto) {
+                <button type="button" class="rf-btn rf-btn--dense auto" [class.on]="r.auto" [attr.aria-pressed]="r.auto" [disabled]="!autoOn(m)" (click)="setAuto(r.index - 1, !r.auto)" [title]="r.auto ? 'Set by the server from the terrain and the links. Change the height to set it yourself.' : 'Let the server set this height from the terrain and the links'" [attr.aria-label]="'Automatic height, point ' + r.to">Auto</button>
+              }
               <button type="button" class="rf-btn rf-btn--dense rf-btn--danger" (click)="ws.store.removeWaypoint(r.index - 1)" [disabled]="m.waypoints.length <= 1" [attr.aria-label]="'Delete point ' + r.to">Delete</button>
             </div>
           }
@@ -211,6 +215,8 @@ import { CompareService } from '../core/fpv-core';
     .leg.tone-warn .mark { color: var(--rf-warn-text); }
     .edit { display: flex; gap: 8px; align-items: flex-end; padding: 0 0 6px 10px; }
     .edit rf-stepper { flex: 1; }
+    .edit .auto { color: var(--rf-text-2); }
+    .edit .auto.on { background: var(--rf-ok-bg); color: var(--rf-ok-text); border-color: var(--rf-ok-border); }
     .pilot .info { margin-left: auto; }
     .add { border: 1px dashed var(--rf-border-strong); color: var(--rf-text-2); }
     .section-head { display: flex; justify-content: space-between; align-items: center; min-height: 32px; }
@@ -266,7 +272,23 @@ export class PlanPanelComponent {
   }
 
   protected setHeight(index: number, heightM: number): void {
-    this.ws.store.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? MissionAltitude.withHeight(m, w, heightM) : w)) }));
+    this.ws.store.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? MissionAltitude.withManualHeight(m, w, heightM) : w)) }));
+  }
+
+  protected autoOn(m: Mission): boolean {
+    return autoHeightsOn(m);
+  }
+
+  /** Leaves a point's height to the server, or keeps the height it shows as the user's own. */
+  protected setAuto(index: number, auto: boolean): void {
+    const shown = this.ws.legRows().find((r) => r.index === index + 1)?.heightM;
+    this.ws.store.update((m) => ({
+      ...m,
+      waypoints: m.waypoints.map((w, i) => {
+        if (i !== index) return w;
+        return auto ? MissionAltitude.withAutoHeight(w) : MissionAltitude.withManualHeight(m, w, shown ?? MissionAltitude.height(m, w));
+      }),
+    }));
   }
 
   protected setRef(ref: AltitudeRef): void {
