@@ -17,6 +17,6 @@
     "descentRateMps": { "type": "number", "minimum": 0.1, "maximum": 50, "default": 4, "description": "Highest descent rate past the take-off zone" },
     "speedMps": { "type": "number", "minimum": 0, "maximum": 100, "default": 0, "description": "Airspeed for climb gradients and flight time; 0 = the drone's cruise airspeed, else 15 m/s" },
     "heightStepM": { "type": "number", "minimum": 1, "maximum": 100, "default": 5, "description": "Height grid of the energy-optimal search" },
-    "fitToleranceM": { "type": "number", "minimum": 0.5, "maximum": 100, "default": 5, "description": "How far the waypoints of a strategy's fix may stray from its profile" }
+    "fitToleranceM": { "type": "number", "minimum": 0.5, "maximum": 100, "default": 5, "description": "How far the waypoints of a strategy's fix may stray from its profile; a dip the line can skip inside the corridor without more climb is skipped" }
   }
 }

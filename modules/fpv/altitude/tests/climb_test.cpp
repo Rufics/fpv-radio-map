@@ -291,6 +291,10 @@ TEST(ClimbAssist, TheSpeedOptionFliesTheDroneAtThatAirspeed) {
     const json fast = {{"linkFloor", false}, {"speedMps", 20.0}};
     // The level legs take half as long; only the vertical climb in the take-off zone does not halve.
     EXPECT_LT(planTime(fast), 0.6 * planTime(cruise));
+    // Without a drone the note names the same airspeed the profiles use.
+    const json bare = analyze({{"mission", mission}, {"options", fast}}, w, {});
+    EXPECT_EQ(bare.at("data").at("climb").at("airspeedMps").get<double>(), 20.0);
+    EXPECT_NE(bare.at("data").at("climb").at("notes").at(0).get<std::string>().find("assume 20 m/s"), std::string::npos);
 }
 
 TEST(ClimbAssist, OffWithTheOption) {

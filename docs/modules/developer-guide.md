@@ -199,13 +199,16 @@ vertically. It is found on a `heightStepM` grid (5 m, coarsened to at most 400 h
 climbing over launch to the highest floor and flying level, and a steady climb to it and a steady
 descent back. Each is turned into the fewest waypoints that follow it within `fitToleranceM` (5 m)
 in the mission's reference without crossing the floor or the ceiling (added points are labelled
-C1, C2, …; one whose removal keeps the line in the corridor without more climb is dropped) and
+C1, C2, …; one whose removal keeps the line in the corridor without more climb is dropped, so the
+fix may skip a dip of the profile by more than the tolerance) and
 offered as a fix that replaces `waypoints`. A stretch takes as long as flying it or as climbing or
 descending its height at the drone's rates, whichever is longer; `overCeilingM` counts only where
 the floor is under the ceiling. `data.climb` holds the plan's and every
 strategy's stats (`riseM`, `timeS`, `minClearanceM`, `overCeilingM`, `steepestClimbMps`, and
-`energyWh` when the mission has a drone, fetched with `library.get` and flown in the forecast wind
-from `weather.point`; that forecast is the assistant's only, the corridor's refraction keeps to the request's `weather`), the strategies' heights at every corridor sample (`mslM`) and their fixes.
+`energyWh` when the mission has a drone, fetched with `library.get` and flown in the request's
+`weather` or, when that is null, the forecast from `weather.point` (still air if the call fails);
+only the assistant uses that forecast, the corridor's refraction keeps to the request's `weather`),
+the strategies' heights at every corridor sample (`mslM`) and their fixes.
 A leg the plan climbs faster than the drone can gets a warning, and a plan that climbs at least
 10 m and 10 % more than the energy-optimal profile, or leaves the corridor where that profile does
 not, gets an info reason; both carry the energy-optimal fix.

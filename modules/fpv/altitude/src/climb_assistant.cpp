@@ -66,6 +66,7 @@ Performance performance(const json& weather, const Route& route, const IWorld& w
                         const std::optional<json>& drone) {
     Performance p;
     double droneClimb = 0.0;
+    if (set.speedMps > 0.0) p.airspeedMps = set.speedMps;
     if (drone.has_value()) {
         try {
             battery::DroneSpec spec = battery::DroneSpec::fromJson(*drone);
@@ -83,7 +84,6 @@ Performance performance(const json& weather, const Route& route, const IWorld& w
     } else {
         p.notes.push_back("No drone picked: energy is not estimated, and the profiles assume " + fixed(p.airspeedMps, 0) + " m/s.");
     }
-    if (set.speedMps > 0.0) p.airspeedMps = set.speedMps;
     if (set.climbRateMps > 0.0) {
         p.climbMps = set.climbRateMps;
     } else if (droneClimb > 0.0) {

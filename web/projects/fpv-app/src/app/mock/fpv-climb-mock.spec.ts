@@ -98,6 +98,12 @@ describe('fpvClimbMock', () => {
     expect(at(20).plan.timeS).toBeLessThan(at(0).plan.timeS);
     expect(at(20).airspeedMps).toBe(20);
     expect(at(20).notes[0]).toContain('cruise at 20.0 m/s');
+    const bare = fpvAltitudeAnalyzeMock({
+      ...m,
+      drone: undefined,
+      modules: { 'fpv.altitude': { speedMps: 20 } },
+    }).data.climb!;
+    expect(bare.notes[0]).toContain('the profiles assume 20 m/s');
   });
 
   it('names the target, not the pilot, at the end of a one-way route', () => {

@@ -381,7 +381,7 @@ function performance(m: Mission, o: FpvAltitudeOptions, route: ClimbRoute) {
   const drone = LIBRARY.drones.find((d) => d.id === m.drone);
   const notes: string[] = [];
   let climb = 0;
-  let airspeed = 15;
+  let airspeed = (o.speedMps ?? 0) > 0 ? o.speedMps! : 15;
   let wh: ((rise: number) => number) | null = null;
   if (drone) {
     // The speed option flies the drone at that airspeed: ground speed, time and energy alike.
@@ -401,7 +401,6 @@ function performance(m: Mission, o: FpvAltitudeOptions, route: ClimbRoute) {
       `No drone picked: energy is not estimated, and the profiles assume ${fixed(airspeed, 0)} m/s.`,
     );
   }
-  if ((o.speedMps ?? 0) > 0) airspeed = o.speedMps!;
   if ((o.climbRateMps ?? 0) > 0) climb = o.climbRateMps!;
   else if (climb <= 0) {
     climb = 3;
