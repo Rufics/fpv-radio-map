@@ -27,12 +27,14 @@ function vectorSource(ref: TileSourceRef): SourceSpecification {
   return { type: 'geojson', data: ref.geojson ?? { type: 'FeatureCollection', features: [] } };
 }
 
-function rasterSource(ref: TileSourceRef): SourceSpecification {
+/** A raster tile source (pre-rendered hillshade, satellite) from a PMTiles archive or XYZ templates. */
+export function rasterSource(ref: TileSourceRef): SourceSpecification {
   if (ref.pmtiles) return { type: 'raster', url: `pmtiles://${ref.pmtiles}`, tileSize: ref.tileSize ?? 256 };
   return { type: 'raster', tiles: ref.tiles ?? [], tileSize: ref.tileSize ?? 256, maxzoom: ref.maxzoom ?? 16 };
 }
 
-function demSource(ref: TileSourceRef): SourceSpecification {
+/** A raster-dem source (Terrarium or Mapbox encoding) from a PMTiles archive or XYZ templates. */
+export function demSource(ref: TileSourceRef): SourceSpecification {
   const encoding = ref.encoding ?? 'terrarium';
   if (ref.pmtiles) return { type: 'raster-dem', url: `pmtiles://${ref.pmtiles}`, encoding, tileSize: ref.tileSize ?? 256 };
   return { type: 'raster-dem', tiles: ref.tiles ?? [], encoding, tileSize: ref.tileSize ?? 256, maxzoom: ref.maxzoom ?? 12 };

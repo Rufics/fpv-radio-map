@@ -1,5 +1,10 @@
 import type { FeatureCollection } from 'geojson';
-import type { LayerSpecification, Map as MlMap, SourceSpecification } from 'maplibre-gl';
+import {
+  Marker,
+  type LayerSpecification,
+  type Map as MlMap,
+  type SourceSpecification,
+} from 'maplibre-gl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LayerRegistry } from '../layers/layer-registry';
 import { MapContext } from '../map/map-context';
@@ -85,8 +90,20 @@ describe('RouteTool lines', () => {
     registry.connect(map.asMap());
     const fc = map.sources.get('rf-route')!.data!;
     expect(fc.features.map((f) => f.properties?.['status'])).toEqual(['ok', 'blocked', 'return']);
-    expect(fc.features[1].geometry).toEqual({ type: 'LineString', coordinates: [[35.01, 48.51], [35.02, 48.52]] });
-    expect(fc.features[2].geometry).toEqual({ type: 'LineString', coordinates: [[35.02, 48.52], [35.0, 48.5]] });
+    expect(fc.features[1].geometry).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [35.01, 48.51],
+        [35.02, 48.52],
+      ],
+    });
+    expect(fc.features[2].geometry).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [35.02, 48.52],
+        [35.0, 48.5],
+      ],
+    });
   });
 
   it('replaces the lines on the live map when the route is cleared', () => {
@@ -104,10 +121,15 @@ describe('RouteTool lines', () => {
     const { registry, tool } = setup();
     tool.draw(twoLegs);
     const map = new FakeMap();
-    map.addSource('rf-route', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addSource('rf-route', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
     map.sources.get('rf-route')!.failing = true;
     registry.connect(map.asMap());
-    await vi.waitFor(() => expect(error).toHaveBeenCalledWith('Route lines could not be updated', expect.any(Error)));
+    await vi.waitFor(() =>
+      expect(error).toHaveBeenCalledWith('Route lines could not be updated', expect.any(Error)),
+    );
   });
 
   it('forwards map clicks to the add-point handler only while one is set', () => {
@@ -118,5 +140,32 @@ describe('RouteTool lines', () => {
     tool.setAddPointHandler(null);
     ctx.emitClick({ lat: 3, lon: 4 });
     expect(added).toEqual([{ lat: 1, lon: 2 }]);
+  });
+});
+
+describe('RouteTool drag state', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reports a drag once, and ends it when the markers go mid-drag', () => {
+    vi.spyOn(Marker.prototype, 'addTo').mockReturnThis();
+    const ctx = new MapContext();
+    ctx.map.set(new FakeMap().asMap());
+    const onDrag = vi.fn();
+    const onMove = vi.fn();
+    const tool = new RouteTool(new LayerRegistry(), ctx, { onDrag, onMove });
+    tool.setEditable(true);
+    tool.draw(twoLegs);
+    const point = (tool as unknown as { markers: Marker[] }).markers.find((m) => m.isDraggable())!;
+
+    point.fire('dragstart');
+    point.fire('dragend');
+    expect(onDrag.mock.calls).toEqual([[true], [false]]);
+    expect(onMove).toHaveBeenCalledTimes(1);
+
+    point.fire('dragstart');
+    // a redraw removes the dragged marker, which never sends its dragend
+    tool.draw(twoLegs);
+    tool.destroy();
+    expect(onDrag.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 });

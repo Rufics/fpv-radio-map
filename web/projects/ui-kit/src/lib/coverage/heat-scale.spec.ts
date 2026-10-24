@@ -12,26 +12,26 @@ describe('HeatScale', () => {
   });
 
   it('clamps strong margins to the top stop', () => {
-    expect(scale.color(30)).toEqual([0xf9, 0xe4, 0x6b, 200]);
-    expect(scale.color(80)).toEqual([0xf9, 0xe4, 0x6b, 200]);
+    expect(scale.color(30)).toEqual([0xfd, 0xe7, 0x25, 200]);
+    expect(scale.color(80)).toEqual([0xfd, 0xe7, 0x25, 200]);
   });
 
   it('interpolates between two stops', () => {
     expect(scale.color(0)).toEqual([...HEAT_STOPS[0].rgb, 200]);
     const mid = scale.color(5)!;
-    expect(mid[0]).toBe(Math.round((0x6a + 0xc9) / 2));
+    expect(mid[0]).toBe(Math.round((0x44 + 0x31) / 2));
     expect(mid[3]).toBe(200);
   });
 
   it('paints coloured cells and clears the alpha of the others', () => {
     const target = new Uint8ClampedArray(8).fill(9);
     scale.paint([30, null], target);
-    expect([...target]).toEqual([0xf9, 0xe4, 0x6b, 200, 9, 9, 9, 0]);
+    expect([...target]).toEqual([0xfd, 0xe7, 0x25, 200, 9, 9, 9, 0]);
   });
 
   it('draws the legend gradient from strong to threshold', () => {
     expect(HeatScale.cssGradient()).toBe(
-      'linear-gradient(90deg, rgb(249,228,107), rgb(242,141,60), rgb(201,65,122), rgb(106,44,143))',
+      'linear-gradient(90deg, rgb(253,231,37), rgb(53,183,121), rgb(49,104,142), rgb(68,1,84))',
     );
   });
 });

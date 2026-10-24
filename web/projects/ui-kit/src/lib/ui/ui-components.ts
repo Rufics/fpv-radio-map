@@ -158,7 +158,7 @@ export class JobProgressComponent {
   template: `
     <div class="bar" aria-hidden="true"></div>
     <div class="ticks rf-mono"><span>+30 dB</span><span>+20</span><span>+10</span><span>0 dB margin</span></div>
-    <span class="sr-only">Signal margin scale from +30 dB, light yellow, to 0 dB, dark purple. Below 0 dB is not coloured.</span>
+    <span class="sr-only">Signal margin scale from +30 dB, yellow, through green and blue, to 0 dB, dark purple. Below 0 dB is not coloured.</span>
   `,
   styles: `
     :host { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--rf-text-2); }
