@@ -175,8 +175,8 @@ std::vector<ProfilePoint> VerticalProfile::of(const Route& route, const IWorld& 
             const GroundSample& g = ground[i];
             const double t = leg.lengthM > 0.0 ? std::clamp(g.distanceM / leg.lengthM, 0.0, 1.0) : 1.0;
             const double height = leg.from.heightM + t * (leg.to.heightM - leg.from.heightM);
-            out.push_back({leg.startM + g.distanceM, g.position, leg.index, altitude.mslM(height, g.groundMslM), g.groundMslM,
-                           g.obstacleM, leg.isReturn});
+            out.emplace_back(leg.startM + g.distanceM, g.position, leg.index, altitude.mslM(height, g.groundMslM), g.groundMslM,
+                             g.obstacleM, leg.isReturn);
         }
     }
     return out;
@@ -216,9 +216,9 @@ void ClimbSimulator::checkTerrain(const ProfilePoint& p, double achievedMsl, Cli
 
 void ClimbSimulator::recordArrival(const ProfilePoint& p, double belowPlan, ClimbResult& out) const {
     if (belowPlan > tolerance_) {
-        out.arrivals.push_back({p.leg, belowPlan, belowPlan / airframe_.climbGradient()});
+        out.arrivals.emplace_back(p.leg, belowPlan, belowPlan / airframe_.climbGradient());
     } else if (-belowPlan > tolerance_ && !p.returnLeg) {
-        out.highArrivals.push_back({p.leg, -belowPlan, -belowPlan / airframe_.diveGradient()});
+        out.highArrivals.emplace_back(p.leg, -belowPlan, -belowPlan / airframe_.diveGradient());
     }
 }
 
