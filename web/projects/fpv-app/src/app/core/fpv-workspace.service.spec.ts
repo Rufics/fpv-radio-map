@@ -96,6 +96,20 @@ describe('FpvWorkspace', () => {
     expect(ws.legRows()[1]).toMatchObject({ mark: '!', tone: 'warn' });
   });
 
+  it('lets a blocking flight check outrank a lost link and the all-clear', () => {
+    const m: Mission = { ...exampleMission(), flightMode: 'autonomous', drone: 'fw-1800-mapper', modules: { 'fpv.airframe': {} } };
+    const r = routeResult(m, 'normal');
+    const strike = { module: 'fpv.airframe', severity: 'blocked' as const, leg: 2, text: 'Fixed-wing: climbing at most 8°, the plane flies into terrain or clutter.' };
+    show(m, { ...r, legs: r.legs!.map((l, i) => (i === 2 ? { ...l, reasons: [...(l.reasons ?? []), strike] } : l)) });
+    expect(ws.legRows()[2]).toMatchObject({ mark: '✕', tone: 'blocked' });
+    expect(ws.legRows()[3]).toMatchObject({ mark: 'V !', tone: 'warn' });
+
+    const none: Mission = { ...m, flightMode: 'manual', evaluate: 'none' };
+    const clear = routeResult(none, 'normal');
+    show(none, { ...clear, legs: clear.legs!.map((l, i) => ({ ...l, status: 'ok' as const, worst: {}, reasons: i === 2 ? [strike] : [] })) });
+    expect(ws.allClearText()).toBeNull();
+  });
+
   it('names the all-clear after the ground when no link is checked', () => {
     const m: Mission = { ...exampleMission(), evaluate: 'none', drone: 'fw-1800-mapper', modules: { 'fpv.airframe': {} } };
     const r = routeResult(m, 'normal');
