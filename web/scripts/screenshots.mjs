@@ -82,6 +82,10 @@ try {
   await laptop.setViewportSize({ width: 1440, height: 900 });
   await laptop.getByRole('button', { name: 'Now', exact: true }).click();
   await laptop.getByRole('button', { name: 'Weather', exact: true }).click();
+  // the mission time change made the result stale; calculate again so the shots below show verdicts
+  await laptop.getByRole('button', { name: /^(Re)?[Cc]alculate$/ }).click();
+  await laptop.getByRole('button', { name: 'Show why' }).waitFor({ timeout: 20000 });
+  await settle(laptop, 4500);
   await laptop.getByRole('button', { name: 'Show why' }).click();
   await settle(laptop, 5000);
   await laptop.screenshot({ path: `${OUT}/laptop-why.png` });
@@ -158,15 +162,21 @@ try {
     await plane.locator('fpv-plan-panel .row.leg').first().waitFor({ timeout: 20000 });
     await settle(plane, 4500);
   };
+  // scroll the plan panel itself; scrollIntoView would also shift the page and leave blank bands
+  const scrollPanelTo = (el) => {
+    let box = el.parentElement;
+    while (box && box.scrollHeight <= box.clientHeight) box = box.parentElement;
+    if (box) box.scrollTop += el.parentElement.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
+  };
   await plane.getByLabel('Drone').selectOption('fw-1800-mapper');
   await calculate();
   // the plan panel scrolls; bring the flight checks up next to the route
-  await plane.locator('#checks-title').evaluate((el) => el.parentElement.scrollIntoView({ block: 'end' }));
+  await plane.locator('#checks-title').evaluate(scrollPanelTo);
   await settle(plane, 500);
   await plane.screenshot({ path: `${OUT}/laptop-fixed-wing.png` });
   await plane.getByRole('button', { name: 'Autonomous', exact: true }).click();
   await calculate();
-  await plane.locator('#gap-title').evaluate((el) => el.parentElement.scrollIntoView({ block: 'end' }));
+  await plane.locator('#gap-title').evaluate(scrollPanelTo);
   await settle(plane, 500);
   await plane.screenshot({ path: `${OUT}/laptop-autonomous.png` });
 
