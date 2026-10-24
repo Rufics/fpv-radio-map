@@ -440,7 +440,7 @@ export class FpvWorkspace {
   );
 
   readonly allClearText = computed(() => {
-    const r = this.store.result();
+    const r = this.shownResult();
     const m = this.mission();
     if (!r || !m || this.verdict() || this.missingLeg() || this.linkGapText()) return null;
     if (this.flightChecks().some((c) => c.tone === 'blocked')) return null;

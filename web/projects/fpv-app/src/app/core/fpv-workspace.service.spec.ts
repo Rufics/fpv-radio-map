@@ -121,6 +121,9 @@ describe('FpvWorkspace', () => {
     show(m, { ...r, legs: r.legs!.map((l) => ({ ...l, status: 'ok' as const, reasons: [], worst: {} })) });
     expect(ws.allClearTitle()).toBe('Route clear of the ground');
     expect(ws.allClearText()).toBe('No radio link is checked in this mode; the route stays clear of the ground.');
+    // the edited route has not been calculated yet
+    store.setFlightMode('autonomous');
+    expect(ws.allClearText()).toBeNull();
     show(exampleMission(), null);
     expect(ws.allClearTitle()).toBe('All flown legs reachable by radio');
   });
