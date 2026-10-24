@@ -217,7 +217,7 @@ export class LibraryPage implements OnInit {
     if (typeof f === 'number') return `${(f / 1e6).toFixed(0)} MHz`;
     if (typeof e['gainDbi'] === 'number') return `${e['gainDbi']} dBi`;
     if (typeof e['capacityAh'] === 'number') return `${Math.round((e['capacityAh'] as number) * 1000)} mAh · ${e['cellsSeries']}S ${e['chemistry']}`;
-    if (typeof e['massKg'] === 'number') return `${e['massKg']} kg · cruise ${e['cruiseAirspeedMps']} m/s`;
+    if (typeof e['massKg'] === 'number') return `${e['airframe'] === 'fixed-wing' ? 'fixed-wing · ' : ''}${e['massKg']} kg · cruise ${e['cruiseAirspeedMps']} m/s`;
     const label = e['kind'] ?? e.id;
     return typeof label === 'string' || typeof label === 'number' || typeof label === 'boolean' ? String(label) : '';
   }

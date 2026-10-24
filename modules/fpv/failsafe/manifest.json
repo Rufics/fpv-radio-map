@@ -3,7 +3,7 @@
   "id": "fpv.failsafe",
   "version": "1.0.0",
   "title": "Failsafe check",
-  "description": "Finds where the control link would drop on the way out and checks what the failsafe then does: for return-to-home, the altitude it flies, terrain on the way, where control comes back and whether the battery lasts.",
+  "description": "Finds where the control link would drop on the way out and checks what the failsafe then does: for return-to-home, the altitude it flies, terrain on the way, where control comes back and whether the battery lasts. A fixed-wing loiters instead of hovering, and on an autonomous route it reports whether the mission flies on and where the pilot can take over again.",
   "author": "rfmap",
   "license": "MIT",
   "lifecycle": "beta",

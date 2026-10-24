@@ -9,7 +9,6 @@
     "time",
     "pilot",
     "waypoints",
-    "links",
     "evaluate"
   ],
   "properties": {
@@ -61,6 +60,14 @@
       "type": "boolean",
       "default": true
     },
+    "flightMode": {
+      "enum": [
+        "manual",
+        "autonomous"
+      ],
+      "default": "manual",
+      "description": "manual: the pilot flies the route over the control link, so losing it stops the mission (the failsafe takes over). autonomous: the route is uploaded to the flight controller before take-off and the autopilot flies it on its own; the radio links are optional and a link below its margin is a warning (the pilot cannot take over there), not a blocker. Without the field a mission is manual."
+    },
     "links": {
       "type": "object",
       "properties": {
@@ -70,14 +77,17 @@
         "video": {
           "$ref": "#/$defs/linkSetup"
         }
-      }
+      },
+      "description": "Radio setups for the links in evaluate. Optional: a mission that evaluates no link (evaluate none) needs none."
     },
     "evaluate": {
       "enum": [
         "both",
         "control",
-        "video"
-      ]
+        "video",
+        "none"
+      ],
+      "description": "Links the calculation evaluates. none: no radio link at all, for an autonomous route flown without one; the route is still checked for terrain, energy and the airframe."
     },
     "drone": {
       "type": "string",

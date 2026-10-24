@@ -34,7 +34,8 @@ export function exampleMissionFor(data: FpvDataService): Mission {
     evaluate: 'both',
     drone: drone?.id,
     battery: data.batteries()[0]?.id,
-    modules: { 'fpv.battery': {}, 'rf.weather': {}, 'fpv.example': {} },
+    // A fixed-wing drone also gets its flight envelope checked.
+    modules: { 'fpv.battery': {}, 'rf.weather': {}, 'fpv.example': {}, ...(drone?.airframe === 'fixed-wing' ? { 'fpv.airframe': {} } : {}) },
     coverage: { radiusM: 8000, cellM: 100, droneAglM: 120 },
   };
 }

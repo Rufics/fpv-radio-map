@@ -62,6 +62,72 @@ describe('FpvWorkspace', () => {
     expect(ws.batteryCard()?.suggestion).toContain('turn back at T');
   });
 
+  it('on an autonomous route a lost link is a warning, not the verdict', () => {
+    const m: Mission = { ...exampleMission(), flightMode: 'autonomous' };
+    show(m, routeResult(m, 'normal'));
+    expect(ws.pills().find((p) => p.key === 'video')).toMatchObject({ tone: 'warn', text: 'V ! −3.74 dB' });
+    expect(ws.legRows()[2]).toMatchObject({ mark: 'V !', tone: 'warn', failing: [] });
+    expect(ws.legRows()[2].markLabel).toContain('autopilot flies on');
+    expect(ws.verdict()).toBeNull();
+  });
+
+  it('says where an autonomous route loses a link instead of the all-clear', () => {
+    const m: Mission = { ...exampleMission(), flightMode: 'autonomous' };
+    show(m, routeResult(m, 'normal'));
+    expect(ws.linkGapText()).toBe('The autopilot flies the whole route, but the pilot cannot take over where a link is lost: video on leg 3 · WP2 → B; video on leg 4 · B → A, return.');
+    expect(ws.allClearText()).toBeNull();
+    show(exampleMission(), routeResult(exampleMission(), 'normal'));
+    expect(ws.linkGapText()).toBeNull();
+  });
+
+  it('lists the flight checks of a fixed-wing drone and marks the legs they name', () => {
+    const m: Mission = { ...exampleMission(), drone: 'fw-1800-mapper', modules: { 'fpv.airframe': {} } };
+    const r = routeResult(m, 'normal');
+    expect(ws.flightChecks()).toEqual([]);
+    show(m, r);
+    expect(ws.flightChecks()).toEqual([expect.objectContaining({ tone: 'warn', module: 'Fixed-wing flight envelope', where: 'Whole route', legIndex: null })]);
+    expect(ws.flightChecks()[0].text).toContain('a gust in a turn can stall it');
+
+    const strike = { module: 'fpv.airframe', severity: 'blocked' as const, leg: 0, text: 'Fixed-wing: climbing at most 8°, the plane flies into terrain or clutter.' };
+    const climb = { module: 'fpv.airframe', severity: 'warn' as const, leg: 1, text: 'Fixed-wing: the plane reaches WP2 40 m below the planned height.' };
+    show(m, { ...r, legs: r.legs!.map((l, i) => (i < 2 ? { ...l, reasons: [...(l.reasons ?? []), i === 0 ? strike : climb] } : l)) });
+    expect(ws.flightChecks().map((c) => [c.tone, c.where])).toEqual([['blocked', 'Leg 1 · A → WP1'], ['warn', 'Leg 2 · WP1 → WP2'], ['warn', 'Whole route']]);
+    expect(ws.legRows()[0]).toMatchObject({ mark: '✕', tone: 'blocked', failing: [] });
+    expect(ws.legRows()[1]).toMatchObject({ mark: '!', tone: 'warn' });
+
+    // an edit leaves the result of the old route: its checks are not shown against the new one
+    store.setFlightMode('autonomous');
+    expect(ws.flightChecks()).toEqual([]);
+    expect(ws.linkGapText()).toBeNull();
+  });
+
+  it('lets a blocking flight check outrank a lost link and the all-clear', () => {
+    const m: Mission = { ...exampleMission(), flightMode: 'autonomous', drone: 'fw-1800-mapper', modules: { 'fpv.airframe': {} } };
+    const r = routeResult(m, 'normal');
+    const strike = { module: 'fpv.airframe', severity: 'blocked' as const, leg: 2, text: 'Fixed-wing: climbing at most 8°, the plane flies into terrain or clutter.' };
+    show(m, { ...r, legs: r.legs!.map((l, i) => (i === 2 ? { ...l, reasons: [...(l.reasons ?? []), strike] } : l)) });
+    expect(ws.legRows()[2]).toMatchObject({ mark: '✕', tone: 'blocked' });
+    expect(ws.legRows()[3]).toMatchObject({ mark: 'V !', tone: 'warn' });
+
+    const none: Mission = { ...m, flightMode: 'manual', evaluate: 'none' };
+    const clear = routeResult(none, 'normal');
+    show(none, { ...clear, legs: clear.legs!.map((l, i) => ({ ...l, status: 'ok' as const, worst: {}, reasons: i === 2 ? [strike] : [] })) });
+    expect(ws.allClearText()).toBeNull();
+  });
+
+  it('names the all-clear after the ground when no link is checked', () => {
+    const m: Mission = { ...exampleMission(), evaluate: 'none', drone: 'fw-1800-mapper', modules: { 'fpv.airframe': {} } };
+    const r = routeResult(m, 'normal');
+    show(m, { ...r, legs: r.legs!.map((l) => ({ ...l, status: 'ok' as const, reasons: [], worst: {} })) });
+    expect(ws.allClearTitle()).toBe('Route clear of the ground');
+    expect(ws.allClearText()).toBe('No radio link is checked in this mode; the route stays clear of the ground.');
+    // the edited route has not been calculated yet
+    store.setFlightMode('autonomous');
+    expect(ws.allClearText()).toBeNull();
+    show(exampleMission(), null);
+    expect(ws.allClearTitle()).toBe('All flown legs reachable by radio');
+  });
+
   it('marks pills of a route with missing elevation as part missing', () => {
     const m = exampleMission();
     show(m, routeResult(m, 'missing-elevation'));

@@ -68,6 +68,14 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 <td><b>Compare two setups.</b> For example a different antenna or frequency: worst margins side by side, and the route coloured by B − A.</td>
 <td><b>Share and export.</b> Read-only links protected by a PIN that the owner can revoke, plus KML and GPX.</td>
 </tr>
+<tr>
+<td><img src="docs/images/laptop-fixed-wing.png" alt="Fixed-wing drone: flight checks card with the stall margin in a 45 degree turn"></td>
+<td><img src="docs/images/laptop-autonomous.png" alt="Autonomous route: lost video link on legs 3 and 4 shown as warnings, with the links lost on the way card"></td>
+</tr>
+<tr>
+<td><b>Plan a fixed-wing.</b> The route is checked against the plane's envelope: climb and dive angles over the terrain, turn radius at each waypoint and the stall margin in a banked turn.</td>
+<td><b>Fly an uploaded route.</b> In autonomous mode the links are optional. A lost link is a warning that shows where the pilot cannot take over, not a block.</td>
+</tr>
 </table>
 
 <p align="center">
@@ -93,6 +101,8 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 | ↕️ | Minimum altitude along the route that keeps the Fresnel zone clear | `fpv.min-altitude` |
 | 🏔️ | 3D view of the route over the terrain, with a linked altitude profile, the safe corridor (terrain clearance, link floor, ceiling) and an optional Fresnel tube | `fpv.altitude`, web |
 | 🏠 | Failsafe check: where the link is lost, and whether return-to-home clears the terrain | `fpv.failsafe` |
+| ✈️ | Fixed-wing planning: the climb angle over the terrain from take-off on, the turn radius at every waypoint, the stall margin in a banked turn, and loiter instead of hover in the failsafe | `fpv.airframe`, `fpv.failsafe` |
+| 🛰️ | Autonomous routes uploaded before take-off: the radio links become optional, and a lost link shows where the pilot cannot take over instead of blocking the route | server, `fpv.failsafe` |
 | 📍 | Best launch point inside an area you draw | `fpv.best-launch` |
 | 🔁 | Relay placement: budget per hop and the best relay spot | `fpv.relay` |
 | ⚖️ | Scenario compare, KML and GPX export | `fpv.core` |

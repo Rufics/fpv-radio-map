@@ -9,12 +9,13 @@ import { WhyDrawerComponent } from '../panels/why-drawer.component';
 import { PreviewPanelComponent } from '../panels/preview-panel.component';
 import { WeatherBriefingComponent } from '../panels/weather-briefing.component';
 import { WeatherCardComponent } from '../panels/weather-card.component';
+import { FlightChecksComponent } from '../panels/flight-checks.component';
 import { MapStageComponent } from './map-stage.component';
 
 /** Layout C (phone, view-oriented): full map + bottom sheet; "why" opens full screen. */
 @Component({
   selector: 'fpv-phone-layout',
-  imports: [PillComponent, MapStageComponent, WhyDrawerComponent, PreviewPanelComponent, WeatherCardComponent, WeatherBriefingComponent, ReplaySheetComponent, FlightImportComponent],
+  imports: [PillComponent, MapStageComponent, WhyDrawerComponent, PreviewPanelComponent, WeatherCardComponent, WeatherBriefingComponent, ReplaySheetComponent, FlightImportComponent, FlightChecksComponent],
   host: { class: 'phone' },
   template: `
     @if (ws.briefingOpen() && ws.mission()) {
@@ -73,6 +74,7 @@ import { MapStageComponent } from './map-stage.component';
               }
             }
           </div>
+          <fpv-flight-checks [compact]="true" />
           @if (ws.weatherMode() && ws.mission()!.waypoints.length) {
             <fpv-weather-card [routeColours]="true" />
           }

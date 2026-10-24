@@ -337,7 +337,11 @@ paths:
         per link per leg is reported. When the body equals the stored mission and the
         session can edit, the result is saved as the mission's lastResult. Modules, rf.weather and
         rf.clutter included, run only when listed in mission.modules: leave out rf.weather for a run
-        without weather (standard atmosphere, forecastTier off).
+        without weather (standard atmosphere, forecastTier off). With evaluate none no radio link is
+        evaluated and the mission needs no links: each leg reports only its terrain (samples counts,
+        belowGround, missing-data) and the modules run as usual. With flightMode autonomous the
+        autopilot flies the route on its own, so a link below its margin is a warn reason (the pilot
+        cannot take over there) rather than blocked.
       security: [{ session: [] }]
       requestBody:
         required: true
@@ -357,6 +361,7 @@ paths:
       tags: [calc]
       summary: >-
         Start a coverage job around the pilot (one part per evaluated link, run on the server thread pool).
+        A mission with evaluate none has no link to cover and is refused with 422.
         Poll the job; finished parts are usable at once. Needs coverage.radiusM, coverage.cellM and
         coverage.droneAglM; the grid may not exceed the server's coverage.maxCells.
       security: [{ session: [] }]

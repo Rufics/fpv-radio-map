@@ -87,6 +87,33 @@ describe('side panels', () => {
     ]);
   });
 
+  it('plan panel: an autonomous route may check no radio link at all', () => {
+    const plan = vmOf<{
+      radios: () => unknown[];
+      setMode: (m: string) => void;
+      setFlight: (m: string) => void;
+      flightHint: (m: unknown) => string;
+    }>(PlanPanelComponent);
+    expect(plan.flightHint(store.mission())).toContain('control link');
+    plan.setFlight('autonomous');
+    plan.setMode('none');
+    expect(store.mission()?.flightMode).toBe('autonomous');
+    expect(plan.radios()).toEqual([]);
+    expect(plan.flightHint(store.mission())).toContain('autopilot');
+  });
+
+  it('plan panel: a fixed-wing drone opts the mission into the envelope check', () => {
+    const plan = vmOf<{ setDrone: (id: string) => void; droneHint: (m: unknown) => string | null }>(PlanPanelComponent);
+    expect(plan.droneHint(store.mission())).toBeNull();
+    plan.setDrone('fw-1800-mapper');
+    expect(store.mission()?.drone).toBe('fw-1800-mapper');
+    expect(store.mission()?.modules?.['fpv.airframe']).toEqual({});
+    expect(plan.droneHint(store.mission())).toContain('checked against these limits');
+    expect(plan.droneHint({ ...store.mission()!, modules: {} })).toContain('check is off');
+    plan.setDrone('fpv-10in-recon');
+    expect(store.mission()?.modules?.['fpv.airframe']).toBeUndefined();
+  });
+
   it('plan panel: "Move on map" puts the map into pilot placing mode', () => {
     const plan = vmOf<{ movePilot: () => void; ws: { placing: () => string | null; why: () => unknown } }>(PlanPanelComponent);
     plan.movePilot();
