@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "fpv.altitude",
+  "version": "1.0.0",
+  "title": "Altitude corridor and 3D view",
+  "description": "Ground, planned altitude and the safe corridor along the route: a floor from terrain clearance and, optionally, the link's Fresnel clearance, and a ceiling above ground. Feeds the 3D view and the altitude profile.",
+  "author": "rfmap",
+  "license": "MIT",
+  "lifecycle": "alpha",
+  "abi": 2,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["route.analysis"],
+  "methods": ["route.analyze"],
+  "entry": { "linux-x86_64": "lib/libfpv_altitude.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 256, "timeoutMs": 120000 }
+}

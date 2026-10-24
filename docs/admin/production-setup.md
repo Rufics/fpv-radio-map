@@ -437,7 +437,7 @@ API call makes the running server pick them up:
 ```sh
 cd ~/fpv-radio-map/deploy
 docker compose cp "$HOME/rfmap-modules/." rfmap-server:/var/lib/rfmap/incoming/
-for m in core battery min-altitude failsafe best-launch relay blackbox; do
+for m in core battery min-altitude altitude failsafe best-launch relay blackbox; do
   docker compose exec rfmap-server rfmod install "/var/lib/rfmap/incoming/$m.rfmod" \
       --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json
 done

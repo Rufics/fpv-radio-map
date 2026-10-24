@@ -70,7 +70,7 @@ fpv_module(battery fpv_battery
   TESTS battery/tests/energy_model_test.cpp battery/tests/module_test.cpp)
 
 fpv_module(min-altitude fpv_min_altitude
-  SOURCES min-altitude/src/clearance.cpp min-altitude/src/analysis.cpp
+  SOURCES min-altitude/src/analysis.cpp
   TESTS min-altitude/tests/clearance_test.cpp min-altitude/tests/module_test.cpp)
 
 fpv_module(failsafe fpv_failsafe
@@ -95,3 +95,7 @@ fpv_module(blackbox fpv_blackbox
   SOURCES blackbox/src/log_header.cpp blackbox/src/frame_decoder.cpp blackbox/src/frame_parser.cpp
           blackbox/src/firmware_model.cpp blackbox/src/log_builder.cpp blackbox/src/decoder.cpp
   TESTS blackbox/tests/decoder_test.cpp blackbox/tests/module_test.cpp)
+
+fpv_module(altitude fpv_altitude
+  SOURCES altitude/src/corridor.cpp
+  TESTS altitude/tests/corridor_test.cpp altitude/tests/module_test.cpp)

@@ -1,7 +1,6 @@
 #pragma once
 
-#include "clearance.hpp"
-
+#include <fpv/clearance.hpp>
 #include <fpv/route.hpp>
 
 #include <functional>
