@@ -86,6 +86,7 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 |---|---|---|
 | 📡 | Control and video links, each with its own radio, antennas and sensitivity; evaluated separately or together | server, `rf-core` |
 | ⛰️ | Terrain profile, first Fresnel zone, Bullington diffraction, coverage heatmap and maximum range | `rf-core` |
+| 🗺️ | Coverage that keeps the map readable: under the relief and labels, fading while you edit, an optional mini-map, and line of sight to the cursor | web |
 | 🌦️ | Refraction from the forecast (ITU-R P.453) and rain loss (ITU-R P.838-3), including future dates | `rf-ext`, Open-Meteo |
 | 🌲 | Forest and buildings from land-cover classes, with obstacle heights set by the admin | `rf-ext` |
 | ± | Uncertainty band from the DEM's stated error: *reliable*, *marginal*, *blocked*, *blocked, may work* | `rf-ext` |

@@ -36,6 +36,26 @@ try {
   await laptop.getByText('Recalculate').or(laptop.getByText('Calculated')).first().waitFor({ timeout: 20000 }).catch(() => {});
   await settle(laptop, 4500);
   await laptop.screenshot({ path: `${OUT}/laptop-result.png` });
+  // coverage options: the Layers panel in sections with the mini-map on, then the line of sight
+  // to a point past the ridge; both are switched off again for the shots after them
+  await laptop.getByRole('button', { name: 'Layers' }).click();
+  await laptop.getByLabel('Mini-map instead of the heatmap').check();
+  await laptop.locator('fpv-coverage-mini-map canvas').waitFor({ timeout: 10000 });
+  await settle(laptop, 1500);
+  await laptop.screenshot({ path: `${OUT}/laptop-coverage-layers.png` });
+  await laptop.getByLabel('Mini-map instead of the heatmap').uncheck();
+  await laptop.getByLabel('Line of sight on hover').check();
+  await laptop.getByRole('button', { name: 'Close layers' }).click();
+  const ridgeFrom = await laptop.locator('.rf-marker--waypoint', { hasText: '2' }).boundingBox();
+  const ridgeTo = await laptop.locator('.rf-marker--target').boundingBox();
+  await laptop.mouse.move(ridgeFrom.x + ridgeFrom.width / 2 + (ridgeTo.x - ridgeFrom.x) * 0.75, ridgeFrom.y + ridgeFrom.height / 2 + (ridgeTo.y - ridgeFrom.y) * 0.75);
+  await laptop.locator('fpv-line-of-sight [role=status]').filter({ hasText: /\S/ }).waitFor({ timeout: 15000 }).catch(() => {});
+  await settle(laptop, 800);
+  await laptop.screenshot({ path: `${OUT}/laptop-line-of-sight.png` });
+  await laptop.getByRole('button', { name: 'Layers' }).click();
+  await laptop.getByLabel('Line of sight on hover').uncheck();
+  await laptop.getByRole('button', { name: 'Close layers' }).click();
+  await laptop.mouse.move(5, 450);
   // weather mode: the route coloured by the weather, the read-out where the cursor meets leg 3,
   // then the pre-flight briefing; weather mode is switched off again for the shots after it
   await laptop.getByRole('button', { name: 'Weather', exact: true }).click();
