@@ -378,7 +378,8 @@ function performance(m: Mission, o: FpvAltitudeOptions, route: ClimbRoute) {
   let airspeed = 15;
   let wh: ((rise: number) => number) | null = null;
   if (drone) {
-    airspeed = drone.cruiseAirspeedMps;
+    // The speed option flies the drone at that airspeed: ground speed, time and energy alike.
+    airspeed = (o.speedMps ?? 0) > 0 ? o.speedMps! : drone.cruiseAirspeedMps;
     if (drone.climb.method === 'measured') climb = drone.climb.climbRateMps ?? 0;
     const cruiseWh = ((route.cum.at(-1) ?? 0) / airspeed) * (drone.cruisePowerW / 3600);
     const perM =

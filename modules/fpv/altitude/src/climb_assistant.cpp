@@ -68,8 +68,10 @@ Performance performance(const json& request, const Route& route, const IWorld& w
     double droneClimb = 0.0;
     if (drone.has_value()) {
         try {
-            const battery::DroneSpec spec = battery::DroneSpec::fromJson(*drone);
+            battery::DroneSpec spec = battery::DroneSpec::fromJson(*drone);
             if (spec.climbMethod == "measured") droneClimb = spec.climbRateMps;
+            // The speed option flies the drone at that airspeed: ground speed, time and energy alike.
+            if (set.speedMps > 0.0) spec.cruiseAirspeedMps = set.speedMps;
             p.airspeedMps = spec.cruiseAirspeedMps;
             p.energy.emplace(spec, battery::Air::fromJson(request.value("weather", json()), json::object()), world);
             for (const Leg& leg : route.legs()) p.cruiseWh += p.energy->levelWh(leg.from.position, leg.to.position);

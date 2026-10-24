@@ -277,6 +277,21 @@ TEST(ClimbAssist, EnergyForTheMissionsDrone) {
     EXPECT_LT(energy->at("energyWh").get<double>(), climb.at("plan").at("energyWh").get<double>());
 }
 
+TEST(ClimbAssist, TheSpeedOptionFliesTheDroneAtThatAirspeed) {
+    const LocalWorld w = flat();
+    const json mission = oneLeg(w, 3.0, 100.0, "agl", true);
+    const json drone = {{"id", "d"}, {"version", 2}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
+                        {"climb", {{"method", "measured"}, {"climbPowerW", 150.0}, {"climbRateMps", 2.5}}}};
+    const auto planTime = [&](const json& options) {
+        const json r = analyze({{"mission", mission}, {"options", options}}, w, {}, drone);
+        return r.at("data").at("climb").at("plan").at("timeS").get<double>();
+    };
+    const json cruise = {{"linkFloor", false}};
+    const json fast = {{"linkFloor", false}, {"speedMps", 20.0}};
+    // The level legs take half as long; only the vertical climb in the take-off zone does not halve.
+    EXPECT_LT(planTime(fast), 0.6 * planTime(cruise));
+}
+
 TEST(ClimbAssist, OffWithTheOption) {
     const LocalWorld w = flat();
     const json r = analyze({{"mission", oneLeg(w, 2.0, 100.0, "agl", true)}, {"options", {{"climbAssist", false}}}}, w, {});

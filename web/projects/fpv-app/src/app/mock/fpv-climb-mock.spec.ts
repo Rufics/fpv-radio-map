@@ -92,6 +92,14 @@ describe('fpvClimbMock', () => {
     );
   });
 
+  it('flies the drone at the speed option', () => {
+    const at = (speedMps: number) =>
+      fpvAltitudeAnalyzeMock({ ...m, modules: { 'fpv.altitude': { speedMps } } }).data.climb!;
+    expect(at(20).plan.timeS).toBeLessThan(at(0).plan.timeS);
+    expect(at(20).airspeedMps).toBe(20);
+    expect(at(20).notes[0]).toContain('cruise at 20.0 m/s');
+  });
+
   it('stays out when the assistant is off', () => {
     const off = fpvAltitudeAnalyzeMock({
       ...m,
