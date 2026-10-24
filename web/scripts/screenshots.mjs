@@ -49,7 +49,8 @@ try {
   const ridgeFrom = await laptop.locator('.rf-marker--waypoint', { hasText: '2' }).boundingBox();
   const ridgeTo = await laptop.locator('.rf-marker--target').boundingBox();
   await laptop.mouse.move(ridgeFrom.x + ridgeFrom.width / 2 + (ridgeTo.x - ridgeFrom.x) * 0.75, ridgeFrom.y + ridgeFrom.height / 2 + (ridgeTo.y - ridgeFrom.y) * 0.75);
-  await laptop.locator('fpv-line-of-sight [role=status]').filter({ hasText: /\S/ }).waitFor({ timeout: 15000 }).catch(() => {});
+  // the live region gets text only once the exact path answer is in
+  await laptop.locator('fpv-line-of-sight [role=status]').filter({ hasText: /\S/ }).waitFor({ state: 'attached', timeout: 15000 });
   await settle(laptop, 800);
   await laptop.screenshot({ path: `${OUT}/laptop-line-of-sight.png` });
   await laptop.getByRole('button', { name: 'Layers' }).click();
