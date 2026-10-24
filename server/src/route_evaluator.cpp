@@ -2,6 +2,7 @@
 
 #include "module_call.hpp"
 #include "route_altitude.hpp"
+#include "route_preparation.hpp"
 
 #include <rfcore/geodesy.hpp>
 
@@ -246,7 +247,9 @@ void RouteEvaluator::runModules(const json& mission, json& result, const CalcCon
     }
 }
 
-void RouteEvaluator::evaluate(const json& mission, const Links& links, const CalcContext& ctx, json& result) const {
+void RouteEvaluator::evaluate(const json& request, const Links& links, const CalcContext& ctx, json& result) const {
+    json early = json::array();
+    const json mission = RoutePreparation(modules_).prepare(request, ctx, result, early);
     // Legs: pilot -> wp1 -> ... -> last, and back to the pilot when returnToPilot (default true).
     std::vector<json> points{mission.at("pilot")};
     for (const json& w : mission.at("waypoints")) points.push_back(w);
@@ -256,6 +259,7 @@ void RouteEvaluator::evaluate(const json& mission, const Links& links, const Cal
         result["legs"].push_back(evaluateLeg(mission, i, points[i], points[i + 1], links, ctx, failures));
     }
     ModuleFailure::appendAll(result["moduleFailures"], failures);
+    for (const json& r : early) addReason(result, r, r.at("module").get<std::string>());
     runModules(mission, result, ctx);
 }
 

@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Type } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MissionStore, provideMapView } from '@rfmap/ui-kit';
+import { Mission, MissionStore, provideMapView } from '@rfmap/ui-kit';
 import { FPV_CORE } from '../core/fpv-core';
 import { FpvDataService } from '../core/fpv-data.service';
 import { exampleMission, routeResult } from '../mock/reference-case';
@@ -92,6 +92,20 @@ describe('side panels', () => {
     plan.movePilot();
     expect(plan.ws.placing()).toBe('pilot');
     expect(plan.ws.why()).toBeNull();
+  });
+
+  it('plan panel: Auto hands a height to the server and back, and an edit makes it manual', () => {
+    const plan = vmOf<{ autoOn: (m: Mission) => boolean; setAuto: (i: number, auto: boolean) => void; setHeight: (i: number, h: number) => void }>(PlanPanelComponent);
+    expect(plan.autoOn(store.mission()!)).toBe(false);
+    store.update((m) => ({ ...m, modules: { ...m.modules, 'fpv.altitude': {} } }));
+    expect(plan.autoOn(store.mission()!)).toBe(true);
+    plan.setAuto(0, true);
+    expect(store.mission()!.waypoints[0].heightSource).toBe('auto');
+    plan.setAuto(0, false);
+    expect(store.mission()!.waypoints[0]).toMatchObject({ heightSource: 'manual', aglM: 120 });
+    plan.setAuto(0, true);
+    plan.setHeight(0, 75);
+    expect(store.mission()!.waypoints[0]).toMatchObject({ heightSource: 'manual', aglM: 75 });
   });
 
   describe('state cards', () => {

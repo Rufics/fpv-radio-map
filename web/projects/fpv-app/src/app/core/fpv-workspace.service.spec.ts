@@ -129,6 +129,31 @@ describe('FpvWorkspace', () => {
     expect(ws.routeLengthText()).toBe('10.8 km');
   });
 
+  it('shows the height the server set for an automatic point, only while the point stays put', () => {
+    const m = exampleMission();
+    const w0 = { ...m.waypoints[0], heightSource: 'auto' as const };
+    const auto = { ...m, waypoints: [w0, ...m.waypoints.slice(1)] };
+    const r = routeResult(auto, 'normal');
+    show(auto, { ...r, autoHeights: [{ index: 0, lat: w0.lat, lon: w0.lon, field: 'aglM', heightM: 74, module: 'fpv.altitude', limitedBy: 'control', blocked: true }] });
+    expect(ws.legRows()[0]).toMatchObject({ auto: true, heightM: 74 });
+    expect(ws.legRows()[0].info).toContain('auto 74 m !');
+    expect(ws.legRows()[0].infoTitle).toContain('control link clearance');
+    expect(ws.legRows()[1].auto).toBe(false);
+
+    // Switched to above launch, the AGL entry no longer fits it.
+    store.update((x) => ({ ...x, altitudeRef: 'launch' }));
+    expect(ws.legRows()[0]).toMatchObject({ auto: true, heightM: 120 });
+    store.update((x) => ({ ...x, altitudeRef: 'agl' }));
+
+    store.update((x) => ({ ...x, waypoints: x.waypoints.map((w, i) => (i === 0 ? { ...w, lat: w.lat + 0.01 } : w)) }));
+    expect(ws.legRows()[0]).toMatchObject({ auto: true, heightM: 120 });
+
+    const { aglM: _, ...bare } = w0;
+    show({ ...m, waypoints: [bare, ...m.waypoints.slice(1)] }, null);
+    expect(ws.legRows()[0]).toMatchObject({ auto: true, heightM: 120 });
+    expect(ws.legRows()[0].info).toContain('auto');
+  });
+
   it('marks a warning leg with an exclamation mark', () => {
     const m = exampleMission();
     const r = routeResult(m, 'normal');

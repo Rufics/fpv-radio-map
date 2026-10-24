@@ -97,5 +97,5 @@ fpv_module(blackbox fpv_blackbox
   TESTS blackbox/tests/decoder_test.cpp blackbox/tests/module_test.cpp)
 
 fpv_module(altitude fpv_altitude
-  SOURCES altitude/src/corridor.cpp
-  TESTS altitude/tests/corridor_test.cpp altitude/tests/module_test.cpp)
+  SOURCES altitude/src/corridor.cpp altitude/src/auto_height.cpp
+  TESTS altitude/tests/corridor_test.cpp altitude/tests/auto_height_test.cpp altitude/tests/module_test.cpp)
