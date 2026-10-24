@@ -6,6 +6,7 @@
 #include <rfcore/geodesy.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <sstream>
 
@@ -176,7 +177,7 @@ json RouteEvaluator::evaluateLeg(const json& mission, std::size_t index, const j
     for (std::size_t i = 0; i < pts.size(); ++i) {
         const double f = static_cast<double>(i) / steps;
         // Without ground under the drone the path is incomplete and recorded as missing data.
-        const double agl = altitude.aglAt(pts[i], heightA + (heightB - heightA) * f).value_or(0.0);
+        const double agl = altitude.aglAt(pts[i], std::lerp(heightA, heightB, f)).value_or(0.0);
         if (agl < 0.0) recordBelowGround(scan, agl, length * f);
         scanSample(scan, pilot, Terminal{pts[i], std::max(0.0, agl)}, length * f, lc);
     }

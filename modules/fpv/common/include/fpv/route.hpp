@@ -85,8 +85,9 @@ public:
 
 private:
     static AltitudeModel modelFor(const Mission& mission, const IWorld& world) {
-        if (mission.altitudeRef == AltitudeReference::Agl) return {AltitudeReference::Agl, 0.0};
-        return {AltitudeReference::Launch, world.groundMsl(mission.pilot.position)};
+        using enum AltitudeReference;
+        if (mission.altitudeRef == Agl) return {Agl, 0.0};
+        return {Launch, world.groundMsl(mission.pilot.position)};
     }
 
     const IWorld& world_;
