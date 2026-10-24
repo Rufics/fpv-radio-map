@@ -393,17 +393,7 @@ export class Route3dComponent {
   }
 
   private enter(map: MlMap): void {
-    const cfg = this.ws.data.mapConfig();
-    const dem = cfg?.dem;
-    if (dem) {
-      if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(dem));
-      if (!map.getSource(RELIEF_SOURCE)) map.addSource(RELIEF_SOURCE, terrainSource(dem));
-      if (cfg.contours && !map.getSource(CONTOUR_SOURCE)) map.addSource(CONTOUR_SOURCE, contourSource(cfg.contours));
-      const before = this.firstLayerAboveTerrain(map);
-      const { low, high } = this.groundRange();
-      for (const l of reliefLayers(cfg.contours, low, high)) if (!map.getLayer(l.id)) map.addLayer(l, before);
-      map.setTerrain({ source: TERRAIN_SOURCE, exaggeration: this.view.exaggeration() });
-    }
+    this.raiseTerrain(map);
     this.layers.suppress(this.hiddenIn3d());
     map.getContainer().classList.add('fpv-3d');
     if (!map.getLayer(this.layer.id)) map.addLayer(this.layer);
@@ -411,6 +401,20 @@ export class Route3dComponent {
     map.dragRotate.enable();
     if (this.view.corridor()) this.frame(map);
     else map.easeTo({ pitch: this.tilt(), duration: 600 });
+  }
+
+  /** Raised terrain with its tints, shading and contours under the other layers, when the server has terrain tiles. */
+  private raiseTerrain(map: MlMap): void {
+    const cfg = this.ws.data.mapConfig();
+    const dem = cfg?.dem;
+    if (!dem) return;
+    if (!map.getSource(TERRAIN_SOURCE)) map.addSource(TERRAIN_SOURCE, terrainSource(dem));
+    if (!map.getSource(RELIEF_SOURCE)) map.addSource(RELIEF_SOURCE, terrainSource(dem));
+    if (cfg.contours && !map.getSource(CONTOUR_SOURCE)) map.addSource(CONTOUR_SOURCE, contourSource(cfg.contours));
+    const before = this.firstLayerAboveTerrain(map);
+    const { low, high } = this.groundRange();
+    for (const l of reliefLayers(cfg.contours, low, high)) if (!map.getLayer(l.id)) map.addLayer(l, before);
+    map.setTerrain({ source: TERRAIN_SOURCE, exaggeration: this.view.exaggeration() });
   }
 
   private leave(map: MlMap, animate = true): void {
