@@ -364,7 +364,7 @@ export class MockBackend {
     const mission = prepared.mission;
     // As the server: a waypoint route.prepare left without a height cannot be evaluated.
     const field = MissionAltitude.field(mission);
-    const bare = mission.waypoints.findIndex((w) => w[field] === undefined);
+    const bare = mission.waypoints.findIndex((w) => w[field] === undefined || w[field] === null);
     if (bare >= 0) throw this.error(422, `waypoints[${bare}] has no ${field}: set its height, or turn on fpv.altitude for automatic heights`);
     const result = routeResult(mission, this.scenario());
     if (prepared.autoHeights.length) result.autoHeights = prepared.autoHeights;

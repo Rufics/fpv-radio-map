@@ -124,6 +124,11 @@ describe('MockBackend through the API client', () => {
     const refused = await rejection(settle(new Promise((resolve, reject) => api.calcRoute(null, bare).subscribe({ next: resolve, error: reject }))));
     expect(refused.status).toBe(422);
     expect(refused.message).toContain('waypoints[0]');
+    // A null height is missing too, not zero.
+    const field = MissionAltitude.field(bare);
+    const nulled = { ...bare, waypoints: bare.waypoints.map((w, i) => (i === 1 ? { ...w, heightSource: 'manual' as const, [field]: 50 } : { ...w, [field]: null })) } as unknown as Mission;
+    const refusedNull = await rejection(settle(new Promise((resolve, reject) => api.calcRoute(null, nulled).subscribe({ next: resolve, error: reject }))));
+    expect(refusedNull.status).toBe(422);
   });
 
   it('answers profiles and weather, and refuses a malformed point', async () => {
