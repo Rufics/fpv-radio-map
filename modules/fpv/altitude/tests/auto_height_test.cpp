@@ -200,3 +200,17 @@ TEST_F(ModuleEntryTest, RoutePrepareGoesThroughTheEntry) {
     ASSERT_EQ(r.body.at("waypoints").size(), 1U) << r.body.dump();
     EXPECT_DOUBLE_EQ(r.body.at("waypoints")[0].at("heightM").get<double>(), 30.0);
 }
+
+TEST(AutoHeight, ALinkBlindSpotBehindARidgeNamesTheLink) {
+    // A 60 m ridge with a wide terrain margin sets the height; behind it no height up to maxAglM
+    // clears the link. The waypoint is blocked by the link, so that is what it names.
+    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1000.0) < 100.0 ? 160.0 : 100.0; });
+    const LinkInputs links{{"control", {rfcore::Hertz(915e6), "ELRS 900"}}};
+    const json r = run(w, eastRoute(w, {{2.0, -1.0}}),
+                       {{"stepM", 100.0}, {"clearanceM", 90.0}, {"maxAglM", 100.0}, {"ceilingAglM", 300.0}}, links);
+    ASSERT_EQ(r.at("waypoints").size(), 1U);
+    EXPECT_TRUE(r.at("waypoints")[0].at("blocked").get<bool>()) << r.dump();
+    EXPECT_EQ(r.at("waypoints")[0].at("limitedBy"), "control") << r.dump();
+    const std::string text = r.at("reasons")[0].at("text");
+    EXPECT_NE(text.find("control link's Fresnel zone clear"), std::string::npos) << text;
+}

@@ -272,10 +272,9 @@ export function fpvAltitudePrepareMock(m: Mission): {
     const t = path.t(leg, s);
     const ground = c.groundMslM[k];
     const floor = toRef(c.floorMslM[k], ground);
-    // Where no height clears the link, that link is what limits the waypoint, not the terrain.
     const blind = o.linkFloor && c.fresnelRadiusM[k] > 0 && c.linkFloorMslM[k] === null;
     const limit =
-      blind || (c.linkFloorMslM[k] !== null && c.linkFloorMslM[k]! > c.terrainFloorMslM[k])
+      c.linkFloorMslM[k] !== null && c.linkFloorMslM[k]! > c.terrainFloorMslM[k]
         ? (fresnel?.link ?? 'control')
         : 'terrain';
     if (isFree(leg + 1)) raise(leg + 1, leg, t, floor, limit);
@@ -311,6 +310,10 @@ export function fpvAltitudePrepareMock(m: Mission): {
     if (heightM === null) return w;
     const capped = heightM < need[i];
     const ceiling = capped || (overCeiling[i] && !noLink[i]);
+    // Blocked by the link no height clears: name that link, whatever floor set the height.
+    let limitedBy = by[i];
+    if (ceiling) limitedBy = 'ceiling';
+    else if (noLink[i]) limitedBy = fresnel?.link ?? 'control';
     autoHeights.push({
       index: i,
       lat: w.lat,
@@ -318,7 +321,7 @@ export function fpvAltitudePrepareMock(m: Mission): {
       field,
       heightM,
       module: 'fpv.altitude',
-      limitedBy: ceiling ? 'ceiling' : by[i],
+      limitedBy,
       blocked: capped || noLink[i] || overCeiling[i],
     });
     return { ...MissionAltitude.withHeight(m, w, heightM), heightSource: 'auto' as const };

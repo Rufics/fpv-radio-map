@@ -103,6 +103,18 @@ describe('fpvAltitudePrepareMock', () => {
     expect(autoHeights[1].blocked).toBe(true);
   });
 
+  it('names the link that blocks a waypoint, even where the terrain set its height', () => {
+    // A wide terrain margin sets the heights; further out no height up to 150 m clears the link.
+    const auto = {
+      ...m,
+      modules: { 'fpv.altitude': { clearanceM: 150, maxAglM: 150, ceilingAglM: 1000 } },
+      waypoints: m.waypoints.map((w) => MissionAltitude.withAutoHeight(w)),
+    };
+    const blocked = fpvAltitudePrepareMock(auto).autoHeights.filter((h) => h.blocked);
+    expect(blocked.length).toBeGreaterThan(0);
+    for (const h of blocked) expect(h.limitedBy).toBe('control');
+  });
+
   it('does nothing with every height manual or autoHeight off', () => {
     expect(fpvAltitudePrepareMock(m).autoHeights).toEqual([]);
     const auto = { ...m, waypoints: m.waypoints.map((w) => MissionAltitude.withAutoHeight(w)) };

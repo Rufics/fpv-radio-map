@@ -17,13 +17,6 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 
 std::string km(double m) { return "km " + fixed(m / 1000.0, 2); }
 
-/// "the control link's Fresnel clearance", "terrain clearance", "the ceiling".
-std::string limitText(const std::string& by) {
-    if (by == "terrain") return "terrain clearance";
-    if (by == "ceiling") return "the ceiling";
-    return "the " + by + " link's Fresnel clearance";
-}
-
 }  // namespace
 
 AutoHeightPlanner::AutoHeightPlanner(const Mission& mission, const IWorld& world, const Settings& set,
@@ -84,7 +77,9 @@ AutoHeight AutoHeightPlanner::capped(std::size_t i, const Point& p, const std::v
         if (own && h.heightM > x.ceiling + kEpsilonM) h = {i, x.ceiling, "ceiling", x.s, true};
         const bool adjacent = x.leg == i || x.leg == i + 1;
         if (adjacent && x.noLink && !h.blocked) {
+            // Blocked by the link no height clears: name that link, whatever floor set the height.
             h.blocked = true;
+            h.limitedBy = x.by;
             h.atM = x.s;
         }
     }
@@ -145,8 +140,8 @@ json prepare(const json& request, const IWorld& world, const LinkInputs& links) 
             const std::string why =
                 h.limitedBy == "ceiling"
                     ? "flying its legs safely takes more than the " + fixed(set.ceilingAglM, 0) + " m AGL ceiling allows"
-                    : "no height up to " + fixed(set.maxAglM, 0) + " m AGL keeps " + fixed(set.fraction * 100.0, 0) +
-                          " % of the Fresnel zone clear at " + km(h.atM) + "; the height keeps " + limitText(h.limitedBy) + " only";
+                    : "no height up to " + fixed(set.maxAglM, 0) + " m AGL keeps " + fixed(set.fraction * 100.0, 0) + " % of the " +
+                          h.limitedBy + " link's Fresnel zone clear at " + km(h.atM);
             json r = reason(kId, "warn", name + ": automatic height " + fixed(h.heightM, 0) + unit + ", but " + why +
                                              ". A relay (fpv.relay) or another launch point (fpv.best-launch) may help.");
             r["leg"] = h.waypoint;
