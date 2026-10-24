@@ -35,4 +35,9 @@ describe('MissionAltitude', () => {
     expect(MissionAltitude.withRef(launch, 'agl').waypoints[0]).toEqual(base.waypoints[0]);
     expect(MissionAltitude.withRef(base, 'agl')).toBe(base);
   });
+
+  it('clamps heights below the launch point to the ground when switching to AGL', () => {
+    const launch: Mission = { ...base, altitudeRef: 'launch', waypoints: [{ lat: 48.55, lon: 35.17, altM: -50 }] };
+    expect(MissionAltitude.withRef(launch, 'agl').waypoints[0]).toEqual({ lat: 48.55, lon: 35.17, aglM: 0 });
+  });
 });

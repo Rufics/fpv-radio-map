@@ -114,11 +114,13 @@ export class MissionAltitude {
 
   /**
    * The mission in another reference. The numbers are kept: the client has no terrain to convert them
-   * with, and over flat ground they mean the same. The user reviews them after switching.
+   * with, and over flat ground they mean the same. The user reviews them after switching. A height
+   * below the launch point becomes 0 above ground, the lowest AGL height there is.
    */
   static withRef(m: Mission, ref: AltitudeRef): Mission {
     if (MissionAltitude.ref(m) === ref) return m;
     const target = { altitudeRef: ref };
-    return { ...m, altitudeRef: ref, waypoints: m.waypoints.map((w) => MissionAltitude.withHeight(target, w, MissionAltitude.height(m, w))) };
+    const fit = (h: number) => (ref === 'agl' ? Math.max(0, h) : h);
+    return { ...m, altitudeRef: ref, waypoints: m.waypoints.map((w) => MissionAltitude.withHeight(target, w, fit(MissionAltitude.height(m, w)))) };
   }
 }
