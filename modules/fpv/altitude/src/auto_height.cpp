@@ -104,10 +104,11 @@ void AutoHeightPlanner::checkLegs(std::vector<Point> pts, std::vector<AutoHeight
     };
     for (const Sample& x : xs) {
         const double a = pts[x.leg].height;
-        const double b = pts[x.leg + 1].height;
-        if (!std::isfinite(a) || !std::isfinite(b) || a + (b - a) * x.t <= x.ceiling + kCeilingToleranceM) continue;
-        block(x.leg, x);
-        block(x.leg + 1, x);
+        if (const double b = pts[x.leg + 1].height;
+            std::isfinite(a) && std::isfinite(b) && a + (b - a) * x.t > x.ceiling + kCeilingToleranceM) {
+            block(x.leg, x);
+            block(x.leg + 1, x);
+        }
     }
 }
 
