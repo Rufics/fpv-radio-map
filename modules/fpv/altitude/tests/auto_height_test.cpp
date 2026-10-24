@@ -106,6 +106,18 @@ TEST(AutoHeight, OverTheCeilingTheWaypointIsBlocked) {
     EXPECT_NE(text.find("fpv.best-launch"), std::string::npos) << text;
 }
 
+TEST(AutoHeight, AWholeMetreHeightStaysUnderAnUnevenCeiling) {
+    // Launch at 100 m, the plain beyond at 100.4 m: the ceiling at the waypoint is 120.4 m above launch.
+    const LocalWorld w = worldOf([](double x) {
+        if (x < 50.0) return 100.0;
+        return std::abs(x - 1000.0) < 300.0 ? 100.4 + 150.0 * (1.0 - std::abs(x - 1000.0) / 300.0) : 100.4;
+    });
+    const json r = run(w, eastRoute(w, {{1.4, -1.0}}, "launch"), {{"stepM", 50.0}});
+    ASSERT_EQ(r.at("waypoints").size(), 1U);
+    EXPECT_TRUE(r.at("waypoints")[0].at("blocked").get<bool>());
+    EXPECT_DOUBLE_EQ(r.at("waypoints")[0].at("heightM").get<double>(), 120.0) << "rounded down, not up past the ceiling";
+}
+
 TEST(AutoHeight, ALaunchMissionGetsLaunchHeights) {
     // Ground rising to 150 m at the waypoint, launch at 100 m: 50 + 30 above launch.
     const LocalWorld w = worldOf([](double x) { return 100.0 + x / 20.0; });

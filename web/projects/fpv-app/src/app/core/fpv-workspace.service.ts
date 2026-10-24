@@ -201,6 +201,8 @@ export class FpvWorkspace {
     if (!m) return [];
     const previewing = !!this.store.preview();
     const r = previewing || this.store.resultStale() ? null : this.store.result();
+    // An automatic height stays the last one the server set until the next calculation.
+    const latest = previewing ? null : this.store.result();
     const pts: Pick<MissionPoint, 'lat' | 'lon'>[] = [m.pilot, ...m.waypoints];
     const rows: LegRowVm[] = m.waypoints.map((w, i) => {
       const index = i + 1;
@@ -209,7 +211,7 @@ export class FpvWorkspace {
       const { mark, markLabel, tone, failing } = this.legMark(leg);
       const from = pointName(m, i - 1);
       const to = pointName(m, i);
-      const h = this.heightView(m, i, r);
+      const h = this.heightView(m, i, latest);
       return {
         index,
         name: `${index} · ${from} → ${to}`,
@@ -236,7 +238,7 @@ export class FpvWorkspace {
       const from = pointName(m, m.waypoints.length - 1);
       const to = pointName(m, -1);
       const v = this.legMark(leg);
-      const h = this.heightView(m, m.waypoints.length - 1, r);
+      const h = this.heightView(m, m.waypoints.length - 1, latest);
       rows.push({
         index,
         name: `${index} · ${from} → ${to}, return`,
@@ -254,7 +256,7 @@ export class FpvWorkspace {
     return rows;
   });
 
-  /** Waypoint `i`'s height for the route list: what the server set for it in `r` when it did. */
+  /** Waypoint `i`'s height for the route list: what the server last set for it in `r` when it did. */
   private heightView(m: Mission, i: number, r: RouteResult | null): HeightVm {
     const w = m.waypoints[i];
     const auto = MissionAltitude.isAuto(m, w);

@@ -283,7 +283,7 @@ export function fpvAltitudePrepareMock(m: Mission): {
     const ground = elevation(w.lat, w.lon);
     const ceiling = toRef(ground + o.ceilingAglM, ground);
     const blocked = need[i] > ceiling;
-    const heightM = Math.ceil(blocked ? ceiling : need[i]);
+    const heightM = Math.min(Math.ceil(need[i]), Math.floor(ceiling));
     autoHeights.push({
       index: i,
       field,

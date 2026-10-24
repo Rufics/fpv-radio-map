@@ -77,8 +77,10 @@ std::vector<AutoHeight> AutoHeightPlanner::plan() const {
         const Point& p = lifted[i + 1];
         if (!p.free || !std::isfinite(p.height)) continue;
         AutoHeight h{i, p.height, p.by, p.atM, false};
+        double cap = kInf;
         for (const Sample& x : xs) {
             const bool own = x.leg == i && x.t >= 1.0;
+            if (own) cap = x.ceiling;
             if (own && h.heightM > x.ceiling + kEpsilonM) {
                 h = {i, x.ceiling, "ceiling", x.s, true};
             }
@@ -88,7 +90,8 @@ std::vector<AutoHeight> AutoHeightPlanner::plan() const {
                 h.atM = x.s;
             }
         }
-        h.heightM = std::ceil(h.heightM - kEpsilonM);
+        // Whole metres: up for the floor, but never over the ceiling at the waypoint.
+        h.heightM = std::min(std::ceil(h.heightM - kEpsilonM), std::floor(cap + kEpsilonM));
         out.push_back(h);
     }
     return out;
