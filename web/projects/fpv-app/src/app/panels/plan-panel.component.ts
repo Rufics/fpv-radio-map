@@ -316,7 +316,8 @@ export class PlanPanelComponent {
     const d = this.ws.data.drones().find((x) => x.id === m.drone);
     const w = d?.fixedWing;
     if (!d || d.airframe !== 'fixed-wing' || !w) return null;
-    return `Climbs at most ${w.maxClimbAngleDeg}°, descends at most ${w.maxDiveAngleDeg}°, banks ${w.maxBankDeg}°, stalls at ${RfFormat.format(w.stallSpeedMps, 'mps')}. The route is checked against these limits.`;
+    const checked = m.modules?.['fpv.airframe'] ? 'The route is checked against these limits.' : 'The fixed-wing envelope check is off for this mission; pick the drone again to turn it on.';
+    return `Climbs at most ${w.maxClimbAngleDeg}°, descends at most ${w.maxDiveAngleDeg}°, banks ${w.maxBankDeg}°, stalls at ${RfFormat.format(w.stallSpeedMps, 'mps')}. ${checked}`;
   }
 
   protected flightHint(m: Mission): string {

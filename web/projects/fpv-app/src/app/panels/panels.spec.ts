@@ -108,7 +108,8 @@ describe('side panels', () => {
     plan.setDrone('fw-1800-mapper');
     expect(store.mission()?.drone).toBe('fw-1800-mapper');
     expect(store.mission()?.modules?.['fpv.airframe']).toEqual({});
-    expect(plan.droneHint(store.mission())).toContain('Climbs at most 8°');
+    expect(plan.droneHint(store.mission())).toContain('checked against these limits');
+    expect(plan.droneHint({ ...store.mission()!, modules: {} })).toContain('check is off');
     plan.setDrone('fpv-10in-recon');
     expect(store.mission()?.modules?.['fpv.airframe']).toBeUndefined();
   });

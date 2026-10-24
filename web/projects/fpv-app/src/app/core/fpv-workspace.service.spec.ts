@@ -94,6 +94,11 @@ describe('FpvWorkspace', () => {
     expect(ws.flightChecks().map((c) => [c.tone, c.where])).toEqual([['blocked', 'Leg 1 · A → WP1'], ['warn', 'Leg 2 · WP1 → WP2'], ['warn', 'Whole route']]);
     expect(ws.legRows()[0]).toMatchObject({ mark: '✕', tone: 'blocked', failing: [] });
     expect(ws.legRows()[1]).toMatchObject({ mark: '!', tone: 'warn' });
+
+    // an edit leaves the result of the old route: its checks are not shown against the new one
+    store.setFlightMode('autonomous');
+    expect(ws.flightChecks()).toEqual([]);
+    expect(ws.linkGapText()).toBeNull();
   });
 
   it('lets a blocking flight check outrank a lost link and the all-clear', () => {
