@@ -201,6 +201,13 @@ export class MapStageComponent {
   });
   protected readonly routeDeltaShown = computed(() => !!this.cmp.result()?.links?.[this.cmp.link()]?.points?.length && !this.ws.store.preview());
   protected readonly droneAgl = computed(() => this.ws.mission()?.coverage?.droneAglM ?? 120);
+  /** A bottom drawer (why, altitude profile) covers the lower part of the map. */
+  private readonly drawerOpen = computed(() => (!!this.ws.why() || this.alt.profileOpen()) && this.drawerHeight() > 0);
+  /** Padding for fitting the route, clear of the drawer while it is open. */
+  private routePadding() {
+    const pad = this.fitPadding();
+    return this.drawerOpen() ? { ...pad, top: 40, bottom: this.drawerHeight() + 60 } : pad;
+  }
   protected readonly showHeatLegend = computed(() => !!this.ws.store.coverage()[this.ws.heatLink()] && this.layers.isVisible('results-coverage'));
   protected readonly forecastTime = computed(() => {
     const base = new Date();
@@ -277,19 +284,18 @@ export class MapStageComponent {
       const key = m ? `${this.ws.store.missionId() ?? 'new'}:${m.name}:${m.waypoints.length > 0}` : null;
       if (!m || key === this.fittedFor || m.waypoints.length === 0) return;
       this.fittedFor = key;
-      untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], this.fitPadding()));
+      untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], this.routePadding()));
     });
     // keep the route visible above the why drawer
     let drawerOpen = false;
     effect(() => {
       if (!this.ready()) return;
-      const open = (!!this.ws.why() || this.alt.profileOpen()) && this.drawerHeight() > 0;
+      const open = this.drawerOpen();
       if (open === drawerOpen) return;
       drawerOpen = open;
       const m = untracked(() => this.ws.mission());
       if (!m || m.waypoints.length === 0) return;
-      const pad = this.fitPadding();
-      untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], open ? { ...pad, top: 40, bottom: this.drawerHeight() + 60 } : pad));
+      untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], this.routePadding()));
     });
     this.destroyRef.onDestroy(() => {
       this.tool?.destroy();
