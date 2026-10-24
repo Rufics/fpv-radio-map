@@ -146,7 +146,12 @@ export class AltitudeView {
   readonly mode = signal<'2d' | '3d'>('2d');
   /** Vertical exaggeration of terrain and route in 3D; 1 = true scale */
   readonly exaggeration = signal(2);
+  /** The safe corridor in the profile */
   readonly corridorShown = signal(true);
+  /** The safe corridor in 3D, as dashed floor and ceiling lines; off by default */
+  readonly corridor3d = signal(false);
+  /** How coverage shows over the 3D terrain; only the 0 dB edge for now */
+  readonly coverage3d = signal<'edge'>('edge');
   readonly fresnelShown = signal(false);
   readonly profileOpen = signal(false);
   /** Distance along the route under the profile cursor, m; null = no cursor */

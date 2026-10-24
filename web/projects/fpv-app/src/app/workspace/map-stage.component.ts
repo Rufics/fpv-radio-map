@@ -38,7 +38,7 @@ import { RouteWeatherService } from '../core/route-weather.service';
 import { RouteWeatherMapComponent } from './route-weather-map.component';
 import { FlightReplayMapComponent } from '../replay/flight-replay-map.component';
 import { AltitudeView } from '../core/fpv-altitude';
-import { Route3dComponent, terrainSource } from './route-3d.component';
+import { Route3dComponent } from './route-3d.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
@@ -83,7 +83,9 @@ import { Route3dComponent, terrainSource } from './route-3d.component';
               }
             </rf-layer-panel>
           }
-          @if (cmp.delta() || routeDeltaShown()) {
+          @if (alt.mode() === '3d') {
+            <!-- 3D hides the heatmap and the difference maps, and their legends with them -->
+          } @else if (cmp.delta() || routeDeltaShown()) {
             <div class="legend" role="note" aria-label="Scenario difference legend">
               <div class="legend-head"><span>{{ (cmp.options()?.name || 'B') === 'B' ? 'B' : 'B “' + cmp.options()?.name + '”' }} − A · {{ cmp.link() }} link</span></div>
               <div class="delta-scale" aria-hidden="true"></div>
@@ -231,12 +233,6 @@ export class MapStageComponent {
       // while the B − A difference map is shown, it replaces the plain heatmap
       const grid = this.cmp.delta() ? null : (this.ws.store.coverage()[this.ws.heatLink()] ?? null);
       untracked(() => this.coverage.setGrid(grid));
-    });
-    effect(() => {
-      if (!this.ready()) return;
-      // in 3D the heatmap is draped over the raised terrain with a relief shade over it
-      const dem = this.alt.mode() === '3d' ? this.ws.data.mapConfig()?.dem : undefined;
-      untracked(() => this.coverage.setRelief(dem ? terrainSource(dem) : null));
     });
     effect(() => {
       if (!this.ready()) return;
@@ -444,7 +440,7 @@ export class MapStageComponent {
     const radio = (grid?.limitPolygon as Geometry | undefined) ?? null;
     const { radioKm, radioAnchor } = radio && m ? radioLimitExtent(radio, m.pilot) : { radioKm: null, radioAnchor: null };
     const b = r?.battery;
-    const battery = m && b?.rangeM && !turnPreview && !endsAtTurnBack(m) && !this.ws.store.pilotStale() ? { lat: m.pilot.lat, lon: m.pilot.lon, radiusM: b.rangeM / 2 } : null;
+    const battery = m && b?.rangeM && this.alt.mode() !== '3d' && !turnPreview && !endsAtTurnBack(m) && !this.ws.store.pilotStale() ? { lat: m.pilot.lat, lon: m.pilot.lon, radiusM: b.rangeM / 2 } : null;
     const linkName = this.ws.heatLink() === 'control' ? 'Control' : 'Video';
     return {
       radio,

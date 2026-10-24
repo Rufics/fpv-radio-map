@@ -5,6 +5,7 @@ import { fakeGl } from '../tests/fake-gl';
 import { FpvAltitudeData } from '../core/fpv-altitude';
 import {
   LINE_STRIDE,
+  POINT_STRIDE,
   ROUTE_3D_COLOURS,
   Route3dLayer,
   Route3dScene,
@@ -23,52 +24,49 @@ const data: FpvAltitudeData = {
 };
 
 describe('Route3dScene', () => {
-  it('draws the curtain, corridor, flight line and posts', () => {
-    const scene = new Route3dScene(data, {
-      exaggeration: 2,
-      corridor: true,
-      fresnel: false,
-      cursorS: null,
-    });
-    // Two walls (curtain and corridor) of two triangles per gap.
-    expect(scene.triangles.length / TRI_STRIDE).toBe(3 * 2 * 2 * 3);
-    // Floor, ceiling and plan of 3 segments each, plus posts at the pilot and B, 6 vertices each.
-    expect(scene.lines.length / LINE_STRIDE).toBe((3 * 3 + 2) * 6);
+  const opts = { exaggeration: 1, corridor: false, fresnel: false, cursorS: null };
+
+  it('draws the curtain, the shadow, the glowing line and the posts', () => {
+    const scene = new Route3dScene(data, { ...opts, exaggeration: 2, corridor: true });
+    // The curtain: two triangles per gap.
+    expect(scene.triangles.length / TRI_STRIDE).toBe(3 * 2 * 3);
+    // Shadow, glow and core of 3 segments each; the dashed floor and ceiling on every other gap;
+    // a post at the pilot and at B. 6 vertices a segment.
+    expect(scene.lines.length / LINE_STRIDE).toBe((3 * 3 + 2 * 2 + 2) * 6);
+    // A ground pin and a ball at each post, and a label on top.
+    expect(scene.points.length / POINT_STRIDE).toBe(4);
+    expect(scene.labels.map((l) => l.text)).toEqual(['Pilot', 'B · 100 m above launch · 150 m AGL']);
     // Heights are exaggerated; positions are relative to the pilot.
     expect(scene.triangles.slice(0, 3)).toEqual([0, 0, 1000]);
-    const firstPlan = 3 * 2 * 6 * LINE_STRIDE;
-    expect(scene.lines.slice(firstPlan + 9, firstPlan + 13)).toEqual([...ROUTE_3D_COLOURS.takeoff]);
+    // The curtain fades toward the ground.
+    expect(scene.triangles[6]).toBeLessThan(scene.triangles[TRI_STRIDE * 2 + 6]);
+    const firstCore = (3 + 2 + 2 + 3) * 6 * LINE_STRIDE;
+    expect(scene.lines.slice(firstCore + 9, firstCore + 13)).toEqual([...ROUTE_3D_COLOURS.takeoff]);
+    // The glow under it is the same colour, faint and wide.
+    const firstGlow = (3 + 2 + 2) * 6 * LINE_STRIDE;
+    expect(scene.lines[firstGlow + 8]).toBeGreaterThan(scene.lines[firstCore + 8]);
+    expect(scene.lines[firstGlow + 12]).toBeLessThan(0.5);
   });
 
-  it('leaves the corridor out when it is off', () => {
-    const scene = new Route3dScene(data, {
-      exaggeration: 1,
-      corridor: false,
-      fresnel: false,
-      cursorS: null,
-    });
+  it('leaves the corridor lines out when they are off', () => {
+    const scene = new Route3dScene(data, opts);
     expect(scene.triangles.length / TRI_STRIDE).toBe(3 * 2 * 3);
-    expect(scene.lines.length / LINE_STRIDE).toBe((3 + 2) * 6);
+    expect(scene.lines.length / LINE_STRIDE).toBe((3 * 3 + 2) * 6);
+  });
+
+  it('drops a dashed line from the cursor to the ground with a read-out', () => {
+    const plain = new Route3dScene(data, opts);
+    const cursor = new Route3dScene(data, { ...opts, cursorS: 1500 });
+    expect((cursor.lines.length - plain.lines.length) / LINE_STRIDE).toBe(12 * 6);
+    expect((cursor.points.length - plain.points.length) / POINT_STRIDE).toBe(1);
+    const tip = cursor.labels.at(-1)!;
+    expect(tip.text).toMatch(/^1\.5 km · \d+ m AGL · /);
+    expect(['ok', 'warn']).toContain(tip.tone);
   });
 
   it('draws the Fresnel zone to the cursor only when asked', () => {
-    const plain = new Route3dScene(data, {
-      exaggeration: 1,
-      corridor: false,
-      fresnel: false,
-      cursorS: 1500,
-    });
-    const fresnel = new Route3dScene(data, {
-      exaggeration: 1,
-      corridor: false,
-      fresnel: true,
-      cursorS: 1500,
-    });
-    expect(
-      plain.lines.length -
-        new Route3dScene(data, { exaggeration: 1, corridor: false, fresnel: false, cursorS: null })
-          .lines.length,
-    ).toBe(6 * LINE_STRIDE);
+    const plain = new Route3dScene(data, { ...opts, cursorS: 1500 });
+    const fresnel = new Route3dScene(data, { ...opts, cursorS: 1500, fresnel: true });
     expect((fresnel.triangles.length - plain.triangles.length) / TRI_STRIDE).toBe(24 * 16 * 6);
     // Its widest ring is the first-zone radius half way, around the line from the antenna to the drone.
     const k = MercatorCoordinate.fromLngLat([35.2, 48.5], 0).meterInMercatorCoordinateUnits();
@@ -98,7 +96,7 @@ describe('Route3dLayer', () => {
     }) as unknown as MlMap;
   const args = { modelViewProjectionMatrix: new Float64Array(16) } as unknown as CustomRenderMethodInput;
 
-  it('uploads the scene once and draws triangles and lines', () => {
+  it('uploads the scene once and draws triangles, lines and points', () => {
     const gl = fakeGl();
     const m = map();
     const layer = new Route3dLayer();
@@ -111,18 +109,45 @@ describe('Route3dLayer', () => {
     expect(m.triggerRepaint).toHaveBeenCalled();
     layer.render(gl, args);
     layer.render(gl, args);
-    expect(gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(gl.bufferData).toHaveBeenCalledTimes(3);
     expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, s.triangles.length / TRI_STRIDE);
     expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, s.lines.length / LINE_STRIDE);
+    expect(gl.drawArrays).toHaveBeenCalledWith(gl.POINTS, 0, s.points.length / POINT_STRIDE);
     // The line viewport is in CSS pixels.
     expect(gl.uniform2f).toHaveBeenCalledWith(expect.anything(), 400, 300);
 
     layer.onRemove(m, gl);
-    expect(gl.deleteProgram).toHaveBeenCalledTimes(2);
-    expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
+    expect(gl.deleteProgram).toHaveBeenCalledTimes(3);
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(3);
     vi.mocked(gl.drawArrays).mockClear();
     layer.render(gl, args);
     expect(gl.drawArrays).not.toHaveBeenCalled();
+  });
+
+  it('keeps one label element per scene label and moves it to its point', () => {
+    const gl = fakeGl();
+    const layer = new Route3dLayer();
+    const host = document.createElement('div');
+    layer.onAdd(map(), gl);
+    layer.setLabelHost(host);
+    layer.setScene(scene());
+    expect([...host.children].map((e) => e.textContent)).toEqual([
+      'Pilot',
+      'B · 100 m above launch · 150 m AGL',
+    ]);
+    expect(host.children[0].className).toBe('fpv-3d-label is-point');
+    // A view that maps every point to the centre puts the labels in the middle of the 400×300 viewport.
+    const centre = new Float64Array(16);
+    centre[15] = 1;
+    layer.render(gl, { modelViewProjectionMatrix: centre } as unknown as CustomRenderMethodInput);
+    const pilot = host.children[0] as HTMLElement;
+    expect(pilot.hidden).toBe(false);
+    expect(pilot.style.transform).toBe('translate(200.0px, 150.0px)');
+    // Behind the camera, labels hide.
+    layer.render(gl, args);
+    expect(pilot.hidden).toBe(true);
+    layer.setScene(null);
+    expect(host.children.length).toBe(0);
   });
 
   it('skips attributes the shader does not use', () => {

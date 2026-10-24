@@ -5,14 +5,6 @@ import { StyleLayerSet } from '../layers/layer-definition';
 import { HeatScale } from './heat-scale';
 import { destinationPoint } from '../tools/geo';
 
-/** The heatmap's opacity on the flat map, and draped over raised terrain under the relief shade. */
-const OPACITY_FLAT = 0.55;
-const OPACITY_DRAPED = 0.38;
-/** Draped, the colours are muted a little so the shading, not the hue, carries the shape. */
-const SATURATION_DRAPED = -0.35;
-const RELIEF_SOURCE = 'rf-coverage-relief';
-const RELIEF_LAYER = 'coverage-relief';
-
 const EMPTY_PNG =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
@@ -42,7 +34,6 @@ export class CoverageLayer extends StyleLayerSet {
   ];
   private hasGrid = false;
   private visible = true;
-  private relief: SourceSpecification | null = null;
 
   protected sources(): Record<string, SourceSpecification> {
     return { 'rf-coverage': { type: 'image', url: this.url, coordinates: this.coords } };
@@ -54,7 +45,7 @@ export class CoverageLayer extends StyleLayerSet {
         id: 'coverage-heat',
         type: 'raster',
         source: 'rf-coverage',
-        paint: { 'raster-opacity': OPACITY_FLAT, 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
+        paint: { 'raster-opacity': 0.55, 'raster-resampling': 'linear', 'raster-fade-duration': 0 },
       },
     ];
   }
@@ -79,66 +70,12 @@ export class CoverageLayer extends StyleLayerSet {
     }
     const src = this.map?.getSource('rf-coverage') as ImageSource | undefined;
     src?.updateImage({ url: this.url, coordinates: this.coords });
-    if (this.map) this.setVisible(this.map, this.visible);
-  }
-
-  /**
-   * 3D: the heatmap is draped over raised terrain. It is drawn lighter, and a relief shade from
-   * `dem` goes right over it, so slopes and valleys read through the colours. null is the flat map.
-   */
-  setRelief(dem: SourceSpecification | null): void {
-    this.relief = dem;
-    if (this.map) this.applyRelief(this.map);
-  }
-
-  override attach(map: MlMap, beforeId: string | undefined): void {
-    super.attach(map, beforeId);
-    this.applyRelief(map);
-  }
-
-  override detach(map: MlMap): void {
-    this.removeRelief(map);
-    super.detach(map);
+    if (this.map) super.setVisible(this.map, this.visible && this.hasGrid);
   }
 
   override setVisible(map: MlMap, visible: boolean): void {
     this.visible = visible;
     super.setVisible(map, visible && this.hasGrid);
-    if (map.getLayer(RELIEF_LAYER)) map.setLayoutProperty(RELIEF_LAYER, 'visibility', visible && this.hasGrid ? 'visible' : 'none');
-  }
-
-  private applyRelief(map: MlMap): void {
-    if (!map.getLayer('coverage-heat')) return;
-    map.setPaintProperty('coverage-heat', 'raster-opacity', this.relief ? OPACITY_DRAPED : OPACITY_FLAT);
-    map.setPaintProperty('coverage-heat', 'raster-saturation', this.relief ? SATURATION_DRAPED : 0);
-    if (!this.relief) return this.removeRelief(map);
-    if (!map.getSource(RELIEF_SOURCE)) map.addSource(RELIEF_SOURCE, this.relief);
-    if (!map.getLayer(RELIEF_LAYER)) {
-      const order = map.getLayersOrder();
-      const above = order[order.indexOf('coverage-heat') + 1];
-      map.addLayer(
-        {
-          id: RELIEF_LAYER,
-          type: 'hillshade',
-          source: RELIEF_SOURCE,
-          paint: {
-            // shadows darken the colours, sunlit slopes lift them a little; flat ground is left as is
-            'hillshade-shadow-color': 'rgba(4, 7, 11, 0.75)',
-            'hillshade-highlight-color': 'rgba(255, 255, 255, 0.25)',
-            'hillshade-accent-color': 'rgba(4, 7, 11, 0.3)',
-            'hillshade-exaggeration': 0.9,
-            'hillshade-illumination-anchor': 'map',
-          },
-        },
-        above,
-      );
-    }
-    this.setVisible(map, this.visible);
-  }
-
-  private removeRelief(map: MlMap): void {
-    if (map.getLayer(RELIEF_LAYER)) map.removeLayer(RELIEF_LAYER);
-    if (map.getSource(RELIEF_SOURCE)) map.removeSource(RELIEF_SOURCE);
   }
 
   private render(grid: CoverageGrid): string {

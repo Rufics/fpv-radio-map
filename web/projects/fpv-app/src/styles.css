@@ -11,3 +11,8 @@ app-root {
   display: block;
   height: 100%;
 }
+
+/* 3D view: the flat 2D route pins and labels step aside for the 3D route (workspace/route-3d.component.ts). */
+.fpv-3d .maplibregl-marker {
+  display: none;
+}

@@ -257,10 +257,10 @@ const STATE_TEXT: Record<CorridorState, string> = {
       height: 10px !important;
     }
     .k-floor {
-      background: #ffb547;
+      background: #f5a524;
     }
     .k-ceiling {
-      background: #6ea8fe;
+      background: repeating-linear-gradient(90deg, #8a96a5 0 4px, transparent 4px 6px);
     }
     .tools {
       margin-left: auto;
@@ -335,12 +335,12 @@ const STATE_TEXT: Record<CorridorState, string> = {
     }
     .floor {
       fill: none;
-      stroke: #ffb547;
+      stroke: #f5a524;
       stroke-width: 1.5;
     }
     .ceiling {
       fill: none;
-      stroke: #6ea8fe;
+      stroke: #8a96a5;
       stroke-width: 1.5;
       stroke-dasharray: 6 4;
     }
@@ -353,16 +353,16 @@ const STATE_TEXT: Record<CorridorState, string> = {
       stroke: #35d0ba;
     }
     .plan.is-low {
-      stroke: #ffb547;
-    }
-    .plan.is-ground {
       stroke: #ff6b5b;
     }
+    .plan.is-ground {
+      stroke: #d6453a;
+    }
     .plan.is-high {
-      stroke: #b98cff;
+      stroke: #5b9cff;
     }
     .plan.is-takeoff {
-      stroke: #8a96a5;
+      stroke: #f5a524;
     }
     .wp {
       stroke: var(--rf-text-3);
@@ -399,7 +399,7 @@ const STATE_TEXT: Record<CorridorState, string> = {
       color: var(--rf-warn-text);
     }
     dd.is-high {
-      color: #b98cff;
+      color: #5b9cff;
     }
     dd.is-inside {
       color: var(--rf-ok-text);

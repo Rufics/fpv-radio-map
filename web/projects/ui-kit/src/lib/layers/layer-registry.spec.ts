@@ -99,3 +99,26 @@ describe('LayerRegistry with lazy tile layers', () => {
     expect(map.getLayer('base-water')).toBeUndefined();
   });
 });
+
+describe('LayerRegistry suppression', () => {
+  it('hides suppressed layers without touching their toggles, and shows them again', () => {
+    const { map, registry } = setup();
+    registry.suppress(['results-test']);
+    expect(map.getLayer('results')?.visibility).toBe('none');
+    expect(registry.isVisible('results-test')).toBe(true);
+    // toggling while suppressed keeps it hidden
+    registry.setVisible('results-test', true);
+    expect(map.getLayer('results')?.visibility).toBe('none');
+    registry.suppress([]);
+    expect(map.getLayer('results')?.visibility).toBe('visible');
+  });
+
+  it('keeps a lazy layer hidden when it is first shown while suppressed', () => {
+    const { map, registry } = setup();
+    registry.suppress(['terrain-contours']);
+    registry.setVisible('terrain-contours', true);
+    expect(map.getLayer('contours-major')?.visibility).toBe('none');
+    registry.suppress([]);
+    expect(map.getLayer('contours-major')?.visibility).toBe('visible');
+  });
+});

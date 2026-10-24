@@ -19,6 +19,16 @@ export function distanceM(a: LatLon, b: LatLon): number {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+/** Initial great-circle bearing from a to b, degrees clockwise from north (0..360). */
+export function bearingDeg(a: LatLon, b: LatLon): number {
+  const p1 = rad(a.lat);
+  const p2 = rad(b.lat);
+  const dl = rad(b.lon - a.lon);
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+
 export function destinationPoint(lat: number, lon: number, bearingDeg: number, distM: number): LatLon {
   const d = distM / EARTH_RADIUS_M;
   const b = rad(bearingDeg);
