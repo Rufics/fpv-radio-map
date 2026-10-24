@@ -39,6 +39,8 @@ export interface FpvClimbStats {
   overCeilingM: number;
   steepestClimbMps: number;
   steepestClimbAtM: number;
+  /** The steepest descent past the take-off zone, as a positive rate. */
+  steepestDescentMps: number;
   waypoints: number;
   /** Only with a drone picked */
   energyWh?: number;

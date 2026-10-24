@@ -112,6 +112,7 @@ describe('ClimbAssistantComponent', () => {
       overCeilingM: 0,
       steepestClimbMps: 2,
       steepestClimbAtM: 0,
+      steepestDescentMps: 3,
       waypoints: 3,
     };
     const climb: FpvClimbData = {
@@ -157,6 +158,7 @@ describe('ClimbAssistantComponent', () => {
           title: 'Gradual up and down',
           summary: 'Steady.',
           withinClimbRate: false,
+          steepestDescentMps: 5.5,
           addedWaypoints: 0,
           mslM: [],
           fix: { id: 'g', patch: {} },
@@ -191,7 +193,7 @@ describe('ClimbAssistantComponent', () => {
       expect(cards[1].querySelector('.warn')?.textContent).toBe('Up to 12 m over the ceiling.');
       expect(cards[1].querySelector('.wps')?.textContent).toBe('3 waypoints, none added');
       expect(cards[2].querySelector('.warn')?.textContent).toBe(
-        "Descends faster than the drone's 4.0 m/s somewhere.",
+        "Descends at up to 5.5 m/s: faster than the drone's 4.0 m/s.",
       );
       expect(el().querySelector('.notes')?.textContent).toContain('No drone picked.');
     });

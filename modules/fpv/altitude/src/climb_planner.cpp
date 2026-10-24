@@ -265,10 +265,12 @@ ProfileStats ClimbPlanner::stats(const std::vector<double>& mslM) const {
         st.riseM += std::max(0.0, d);
         st.timeS += stretchTime(seg, ds, d);
         if (ds > 0.0 && std::isfinite(seg.maxRiseM)) {
-            if (const double rate = d / ds * seg.groundSpeedMps; rate > st.steepestClimbMps) {
+            const double rate = d / ds * seg.groundSpeedMps;
+            if (rate > st.steepestClimbMps) {
                 st.steepestClimbMps = rate;
                 st.steepestClimbAtM = p.s;
             }
+            st.steepestDescentMps = std::max(st.steepestDescentMps, -rate);
         }
     }
     if (!std::isfinite(st.minClearanceM)) st.minClearanceM = 0.0;

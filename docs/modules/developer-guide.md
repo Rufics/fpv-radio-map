@@ -204,7 +204,7 @@ fix may skip a dip of the profile by more than the tolerance) and
 offered as a fix that replaces `waypoints`. A stretch takes as long as flying it or as climbing or
 descending its height at the drone's rates, whichever is longer; `overCeilingM` counts only where
 the floor is under the ceiling. `data.climb` holds the plan's and every
-strategy's stats (`riseM`, `timeS`, `minClearanceM`, `overCeilingM`, `steepestClimbMps`, and
+strategy's stats (`riseM`, `timeS`, `minClearanceM`, `overCeilingM`, `steepestClimbMps`, `steepestDescentMps`, and
 `energyWh` when the mission has a drone, fetched with `library.get` and flown in the request's
 `weather` or, when that is null, the forecast from `weather.point` (still air if the call fails);
 only the assistant uses that forecast, the corridor's refraction keeps to the request's `weather`),

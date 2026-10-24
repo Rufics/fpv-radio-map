@@ -126,6 +126,7 @@ json statsJson(const ProfileStats& st, const Performance& perf, std::size_t wayp
               {"overCeilingM", st.overCeilingM},
               {"steepestClimbMps", st.steepestClimbMps},
               {"steepestClimbAtM", st.steepestClimbAtM},
+              {"steepestDescentMps", st.steepestDescentMps},
               {"waypoints", waypoints}};
     if (const auto wh = perf.wh(st.riseM); wh.has_value()) j["energyWh"] = *wh;
     return j;
@@ -265,8 +266,8 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
         item["id"] = st.profile.id;
         item["title"] = st.title;
         item["summary"] = st.summary;
-        // The fitted line, not just the profile, has to keep to both rates.
-        item["withinClimbRate"] = st.profile.withinClimbRate && planner.withinRates(fit.mslM, kRateSlackMps);
+        // The fitted line is what the drone flies: it has to keep to both rates.
+        item["withinClimbRate"] = planner.withinRates(fit.mslM, kRateSlackMps);
         item["addedWaypoints"] = fit.added;
         item["mslM"] = std::move(mslM);
         item["fix"] = fix;

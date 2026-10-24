@@ -289,13 +289,13 @@ export class ClimbAssistantComponent {
 
   private warnings(s: FpvClimbStrategy, climbRateMps: number, descentRateMps: number): string[] {
     const out: string[] = [];
-    if (!s.withinClimbRate && s.steepestClimbMps > climbRateMps + SAME_RATE_MPS)
+    if (s.steepestClimbMps > climbRateMps + SAME_RATE_MPS)
       out.push(
         `Climbs at up to ${RfFormat.format(s.steepestClimbMps, 'mps')}: faster than the drone's ${RfFormat.format(climbRateMps, 'mps')}.`,
       );
-    else if (!s.withinClimbRate)
+    if (s.steepestDescentMps > descentRateMps + SAME_RATE_MPS)
       out.push(
-        `Descends faster than the drone's ${RfFormat.format(descentRateMps, 'mps')} somewhere.`,
+        `Descends at up to ${RfFormat.format(s.steepestDescentMps, 'mps')}: faster than the drone's ${RfFormat.format(descentRateMps, 'mps')}.`,
       );
     if (s.overCeilingM > 0.05)
       out.push(`Up to ${RfFormat.format(s.overCeilingM, 'm')} over the ceiling.`);

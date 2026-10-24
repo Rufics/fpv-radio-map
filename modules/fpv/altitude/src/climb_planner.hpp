@@ -33,6 +33,7 @@ struct ProfileStats {
     double overCeilingM = 0.0;      ///< highest height over the ceiling where the floor is under it; 0 inside
     double steepestClimbMps = 0.0;  ///< outside the take-off zone, at the ground speed there
     double steepestClimbAtM = 0.0;
+    double steepestDescentMps = 0.0;  ///< likewise, as a positive rate
     double timeS = 0.0;             ///< a stretch takes as long as its distance or its climb or descent does
 };
 

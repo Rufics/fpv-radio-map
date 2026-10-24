@@ -131,6 +131,7 @@ TEST(ClimbPlanner, RatesCoverDescentsWithTheGivenSlack) {
     EXPECT_FALSE(planner.withinRates(dropAt(40.3)));
     EXPECT_TRUE(planner.withinRates(dropAt(40.3), 0.05));
     EXPECT_FALSE(planner.withinRates(dropAt(41.0), 0.05));
+    EXPECT_NEAR(planner.stats(dropAt(41.0)).steepestDescentMps, 4.1, 1e-9);
 }
 
 TEST(ClimbPlanner, NoProfileWithinTheRateIsMarked) {

@@ -229,6 +229,7 @@ export class ClimbPlannerMock {
       overCeilingM: 0,
       steepestClimbMps: 0,
       steepestClimbAtM: 0,
+      steepestDescentMps: 0,
     };
     p.forEach((v, i) => {
       const s = this.c.s[i];
@@ -246,9 +247,12 @@ export class ClimbPlannerMock {
       st.riseM += Math.max(0, d);
       st.timeS += stretchTime(seg, ds, d);
       const rate = (d / ds) * seg.gs;
-      if (ds > 0 && Number.isFinite(seg.maxRise) && rate > st.steepestClimbMps) {
-        st.steepestClimbMps = rate;
-        st.steepestClimbAtM = s;
+      if (ds > 0 && Number.isFinite(seg.maxRise)) {
+        if (rate > st.steepestClimbMps) {
+          st.steepestClimbMps = rate;
+          st.steepestClimbAtM = s;
+        }
+        st.steepestDescentMps = Math.max(st.steepestDescentMps, -rate);
       }
     });
     if (!Number.isFinite(st.minClearanceM)) st.minClearanceM = 0;
@@ -563,8 +567,8 @@ export function fpvClimbMock(
       id: p.id,
       title,
       summary,
-      // The fitted line, not just the profile, has to keep to both rates.
-      withinClimbRate: p.within && planner.withinRates(fit.mslM, RATE_SLACK),
+      // The fitted line is what the drone flies: it has to keep to both rates.
+      withinClimbRate: planner.withinRates(fit.mslM, RATE_SLACK),
       addedWaypoints: fit.added,
       mslM: fit.mslM.map((v) => Math.round(v * 10) / 10),
       fix,
