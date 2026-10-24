@@ -50,7 +50,7 @@ describe('AltitudeDrawerComponent', () => {
     fixture.detectChanges();
     expect(el().querySelector('svg path.ground')).not.toBeNull();
     expect(el().querySelectorAll('svg path.plan').length).toBeGreaterThan(0);
-    expect(el().querySelector('#alt-summary')?.textContent).toMatch(
+    expect(el().querySelector('.summary')?.textContent).toMatch(
       /^Highest ground \d+ m at km \d+\.\d\d\./,
     );
     expect([...el().querySelectorAll('.xaxis .wpl')].map((e) => e.textContent)).toEqual([
@@ -86,5 +86,49 @@ describe('AltitudeDrawerComponent', () => {
     });
     fixture.detectChanges();
     expect(el().textContent).toContain('Altitude corridor not drawn: no terrain data.');
+  });
+
+  it('moves the cursor with the keyboard and keeps it after a touch', () => {
+    store.newMission(mission);
+    store.result.set({
+      ...routeResult(mission, 'normal'),
+      modules: { [FPV_ALTITUDE]: fpvAltitudeMock(mission) },
+    });
+    fixture.detectChanges();
+    const svg = el().querySelector('svg')!;
+    const total = Number(svg.getAttribute('aria-valuemax'));
+    expect(svg.getAttribute('role')).toBe('slider');
+    expect(svg.getAttribute('tabindex')).toBe('0');
+    expect(svg.getAttribute('aria-valuetext')).toMatch(/^Highest ground/);
+    const press = (key: string) => {
+      const e = new KeyboardEvent('keydown', { key, cancelable: true });
+      svg.dispatchEvent(e);
+      fixture.detectChanges();
+      return e;
+    };
+
+    expect(press('End').defaultPrevented).toBe(true);
+    expect(view.cursorS()).toBe(total);
+    press('ArrowRight');
+    expect(view.cursorS()).toBe(total);
+    press('Home');
+    press('ArrowRight');
+    expect(view.cursorS()).toBeCloseTo(total / 100, 6);
+    press('PageUp');
+    expect(view.cursorS()).toBeCloseTo(total * 0.11, 6);
+    press('ArrowLeft');
+    press('PageDown');
+    expect(view.cursorS()).toBe(0);
+    expect(press('a').defaultPrevented).toBe(false);
+    expect(svg.getAttribute('aria-valuetext')).toMatch(/^km 0\.00: plan \d+ m MSL/);
+
+    view.cursorS.set(1000);
+    svg.dispatchEvent(Object.assign(new Event('pointerleave'), { pointerType: 'touch' }));
+    expect(view.cursorS()).toBe(1000);
+    svg.dispatchEvent(Object.assign(new Event('pointerleave'), { pointerType: 'mouse' }));
+    expect(view.cursorS()).toBeNull();
+    view.cursorS.set(1000);
+    svg.dispatchEvent(new Event('blur'));
+    expect(view.cursorS()).toBeNull();
   });
 });

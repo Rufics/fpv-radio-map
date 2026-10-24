@@ -34,7 +34,7 @@ describe('Corridor', () => {
   });
 
   it('interpolates between samples and finds the sample before a distance', () => {
-    expect(c.length).toBe(3000);
+    expect(c).toHaveLength(3000);
     expect(c.indexAt(-5)).toBe(0);
     expect(c.indexAt(1500)).toBe(1);
     expect(c.indexAt(3000)).toBe(3);

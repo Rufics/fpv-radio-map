@@ -7,12 +7,41 @@
 #include <rfcore/path_geometry.hpp>
 #include <rfcore/propagation.hpp>
 
+#include <cmath>
+#include <functional>
+#include <map>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace fpv {
+
+/// Shared by fpv.min-altitude and fpv.altitude: the radio of one evaluated link.
+struct LinkInput {
+    rfcore::Hertz frequency;
+    std::string radioName;
+};
+
+/// Radio of each evaluated link, by link kind.
+using LinkInputs = std::map<std::string, LinkInput, std::less<>>;
+
+/// The radio of each evaluated link of the mission, from the host's library. Throws on a radio
+/// whose frequency is not a finite number above 0, which no Fresnel zone can be drawn for.
+inline LinkInputs readLinks(const rfmod::HostClient& host, const Mission& m) {
+    LinkInputs links;
+    for (const std::string& kind : m.links()) {
+        const json setup = m.raw.value("links", json::object()).value(kind, json());
+        if (!setup.is_object()) continue;
+        const json radio = host.call("library.get", {{"kind", "radio-profiles"}, {"id", setup.at("radio")}});
+        const double hz = radio.at("frequencyHz").get<double>();
+        if (!std::isfinite(hz) || hz <= 0.0)
+            throw rfmod::BadRequest("radio profile " + setup.at("radio").dump() + ": frequencyHz must be above 0");
+        links.try_emplace(kind, rfcore::Hertz(hz), radio.value("name", ""));
+    }
+    return links;
+}
 
 /// Shared by fpv.min-altitude and fpv.altitude.
 /// Lowest drone height above ground at which a fraction of the first Fresnel zone is clear

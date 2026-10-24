@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { MercatorCoordinate } from 'maplibre-gl';
+import { describe, expect, it, vi } from 'vitest';
+import { CustomRenderMethodInput, Map as MlMap, MercatorCoordinate } from 'maplibre-gl';
 import { corridorOf } from '../tests/altitude-fixtures';
+import { fakeGl } from '../tests/fake-gl';
 import { FpvAltitudeData } from '../core/fpv-altitude';
 import {
   LINE_STRIDE,
   ROUTE_3D_COLOURS,
+  Route3dLayer,
   Route3dScene,
   TRI_STRIDE,
   layerMatrix,
@@ -82,6 +84,66 @@ describe('Route3dScene', () => {
       () =>
         new Route3dScene({}, { exaggeration: 1, corridor: true, fresnel: false, cursorS: null }),
     ).toThrow();
+  });
+});
+
+describe('Route3dLayer', () => {
+  const scene = () =>
+    new Route3dScene(data, { exaggeration: 2, corridor: true, fresnel: false, cursorS: null });
+  const map = () =>
+    ({
+      getZoom: () => 12,
+      getPixelRatio: () => 2,
+      triggerRepaint: vi.fn(),
+    }) as unknown as MlMap;
+  const args = { modelViewProjectionMatrix: new Float64Array(16) } as unknown as CustomRenderMethodInput;
+
+  it('uploads the scene once and draws triangles and lines', () => {
+    const gl = fakeGl();
+    const m = map();
+    const layer = new Route3dLayer();
+    layer.onAdd(m, gl);
+    layer.render(gl, args);
+    expect(gl.drawArrays).not.toHaveBeenCalled();
+
+    const s = scene();
+    layer.setScene(s);
+    expect(m.triggerRepaint).toHaveBeenCalled();
+    layer.render(gl, args);
+    layer.render(gl, args);
+    expect(gl.bufferData).toHaveBeenCalledTimes(2);
+    expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, s.triangles.length / TRI_STRIDE);
+    expect(gl.drawArrays).toHaveBeenCalledWith(gl.TRIANGLES, 0, s.lines.length / LINE_STRIDE);
+    // The line viewport is in CSS pixels.
+    expect(gl.uniform2f).toHaveBeenCalledWith(expect.anything(), 400, 300);
+
+    layer.onRemove(m, gl);
+    expect(gl.deleteProgram).toHaveBeenCalledTimes(2);
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(2);
+    vi.mocked(gl.drawArrays).mockClear();
+    layer.render(gl, args);
+    expect(gl.drawArrays).not.toHaveBeenCalled();
+  });
+
+  it('skips attributes the shader does not use', () => {
+    const gl = fakeGl({ getAttribLocation: () => -1 });
+    const layer = new Route3dLayer();
+    layer.onAdd(map(), gl);
+    layer.setScene(scene());
+    layer.render(gl, args);
+    expect(gl.enableVertexAttribArray).not.toHaveBeenCalled();
+  });
+
+  it('reports a shader that does not compile or link', () => {
+    expect(() =>
+      new Route3dLayer().onAdd(map(), fakeGl({ getShaderParameter: () => false })),
+    ).toThrow('compile error');
+    expect(() =>
+      new Route3dLayer().onAdd(map(), fakeGl({ getProgramParameter: () => false })),
+    ).toThrow('link error');
+    expect(() => new Route3dLayer().onAdd(map(), fakeGl({ createShader: () => null }))).toThrow(
+      'WebGL shader could not be created',
+    );
   });
 });
 

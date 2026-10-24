@@ -158,3 +158,15 @@ TEST(Corridor, MissingTerrainIsAWarningNotAFailure) {
     ASSERT_EQ(r.at("reasons").size(), 1U);
     EXPECT_NE(r.at("reasons").at(0).at("text").get<std::string>().find("Altitude corridor not drawn"), std::string::npos);
 }
+
+TEST(Settings, OptionsAreKeptInsideTheSchemaBounds) {
+    const Settings s = Settings::fromOptions({{"stepM", 0.0}, {"clearanceM", -5.0}, {"takeoffM", 1e9},
+                                              {"fresnelFraction", 0.0}, {"maxAglM", 7.0}, {"ceilingAglM", 300.0}});
+    EXPECT_DOUBLE_EQ(s.stepM, 10.0) << "a zero step would never end the sampling";
+    EXPECT_DOUBLE_EQ(s.clearanceM, 0.0);
+    EXPECT_DOUBLE_EQ(s.takeoffM, 5000.0);
+    EXPECT_DOUBLE_EQ(s.fraction, 0.01);
+    EXPECT_DOUBLE_EQ(s.maxAglM, 10.0);
+    EXPECT_DOUBLE_EQ(s.ceilingAglM, 300.0);
+    EXPECT_DOUBLE_EQ(Settings::fromOptions(json::object()).stepM, 100.0);
+}

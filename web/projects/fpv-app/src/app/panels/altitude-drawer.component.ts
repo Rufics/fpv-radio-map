@@ -71,12 +71,18 @@ const STATE_TEXT: Record<CorridorState, string> = {
           <svg
             [attr.viewBox]="'0 0 ' + w + ' ' + h"
             preserveAspectRatio="none"
-            role="img"
+            role="slider"
+            tabindex="0"
             aria-labelledby="alt-title"
-            [attr.aria-describedby]="'alt-summary'"
+            aria-valuemin="0"
+            [attr.aria-valuemax]="ch.sAt(1)"
+            [attr.aria-valuenow]="view.cursorS() ?? 0"
+            [attr.aria-valuetext]="valueText()"
             (pointermove)="hover($event)"
             (pointerdown)="hover($event)"
-            (pointerleave)="view.cursorS.set(null)"
+            (pointerleave)="leave($event)"
+            (keydown)="key($event)"
+            (blur)="view.cursorS.set(null)"
           >
             @for (z of ch.takeoffZones(); track $index) {
               <rect class="takeoff" [attr.x]="z.x" y="0" [attr.width]="z.w" [attr.height]="h">
@@ -157,9 +163,10 @@ const STATE_TEXT: Record<CorridorState, string> = {
               </dd>
             </dl>
           } @else {
-            <p id="alt-summary" class="summary">{{ summary() }}</p>
+            <p class="summary">{{ summary() }}</p>
             <p class="hint">
-              Hover the profile to read both heights; the 3D view follows the cursor.
+              Hover the profile, or focus it and use the arrow keys, to read both heights; the 3D
+              view follows the cursor.
             </p>
           }
           @if (view.stale()) {
@@ -470,6 +477,40 @@ export class AltitudeDrawerComponent {
     if (!r || this.view.result()?.corridor) return null;
     return (r.reasons ?? []).find((x) => x.module === 'fpv.altitude')?.text ?? null;
   });
+
+  /** What a screen reader hears for the profile: the cursor's point, or the summary. */
+  protected readonly valueText = computed(() => {
+    const c = this.cursor();
+    if (!c) return this.summary();
+    return `${this.km(c.s)}: plan ${this.fmt(c.planned)} MSL, ${this.fmt(c.planned - c.ground)} above ground, margin ${this.fmtSigned(c.margin)}, ${this.stateText(c.state)}`;
+  });
+
+  /** Arrow keys move the cursor by 1 % of the route, Page Up/Down by 10 %, Home and End to the ends. */
+  protected key(e: KeyboardEvent): void {
+    const ch = this.chart();
+    if (!ch) return;
+    const total = ch.sAt(1);
+    const step = total / 100;
+    const at = this.view.cursorS() ?? 0;
+    const next: Record<string, number> = {
+      ArrowRight: at + step,
+      ArrowUp: at + step,
+      ArrowLeft: at - step,
+      ArrowDown: at - step,
+      PageUp: at + step * 10,
+      PageDown: at - step * 10,
+      Home: 0,
+      End: total,
+    };
+    if (!(e.key in next)) return;
+    e.preventDefault();
+    this.view.cursorS.set(Math.min(total, Math.max(0, next[e.key])));
+  }
+
+  /** A mouse leaving clears the cursor; a lifted finger keeps it, so the read-out stays. */
+  protected leave(e: PointerEvent): void {
+    if (e.pointerType === 'mouse') this.view.cursorS.set(null);
+  }
 
   protected hover(e: PointerEvent): void {
     const ch = this.chart();

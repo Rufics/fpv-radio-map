@@ -10,9 +10,9 @@ import { Corridor, CorridorState, FpvAltitudeData } from '../core/fpv-altitude';
 type Rgba = readonly [number, number, number, number];
 
 const hex = (h: string, a = 1): Rgba => [
-  parseInt(h.slice(1, 3), 16) / 255,
-  parseInt(h.slice(3, 5), 16) / 255,
-  parseInt(h.slice(5, 7), 16) / 255,
+  Number.parseInt(h.slice(1, 3), 16) / 255,
+  Number.parseInt(h.slice(3, 5), 16) / 255,
+  Number.parseInt(h.slice(5, 7), 16) / 255,
   a,
 ];
 
@@ -141,7 +141,7 @@ export class Route3dScene {
     const pilot = this.data.pilot;
     if (!pilot) return;
     const r = this.corridor.valueAt('fresnelRadiusM', s);
-    if (!(r > 0)) return;
+    if (!Number.isFinite(r) || r <= 0) return;
     const k = this.origin.meterInMercatorCoordinateUnits();
     const e = this.opts.exaggeration;
     const b = this.at(

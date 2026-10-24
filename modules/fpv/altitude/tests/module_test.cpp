@@ -39,3 +39,12 @@ TEST_F(AltitudeModule, UnknownRadioIsAHostError) {
     m["links"] = {{"control", {{"radio", "nope"}}}};
     EXPECT_EQ(module_.analyze({{"mission", m}}).status, RFMOD_ERR_HOST_CALL);
 }
+
+TEST_F(AltitudeModule, ARadioWithoutAFrequencyIsABadRequest) {
+    host_.libraryItem("radio-profiles", "broken", {{"id", "broken"}, {"frequencyHz", 0.0}});
+    json m = eastMission(world_, 1.0, 60.0);
+    m["links"] = {{"control", {{"radio", "broken"}}}};
+    const auto r = module_.analyze({{"mission", m}});
+    EXPECT_EQ(r.status, RFMOD_ERR_BAD_REQUEST);
+    EXPECT_NE(r.body.dump().find("frequencyHz"), std::string::npos);
+}

@@ -126,7 +126,7 @@ flowchart LR
 Planetiler reads the whole extract, keeps the features inside the bbox, builds vector tiles for
 each zoom and writes the PMTiles archive directly. Its temporary files are in `work/planetiler`.
 
-### dem, hillshade and contours
+### dem, hillshade, terrain and contours
 
 ```mermaid
 flowchart TB
@@ -145,6 +145,10 @@ flowchart TB
     r --> hm["MBTiles PNG + overviews"]
     hm --> hp["hillshade.pmtiles"]
 
+    m --> tr["Terrarium RGB<br/>(heights in PNG colours)"]
+    tr --> tm["MBTiles PNG +<br/>nearest overviews"]
+    tm --> tp["terrain.pmtiles"]
+
     dem --> c["gdal_contour<br/>on the original grid"]
     c --> l["two layers:<br/>contours, contours_index"]
     l --> cm["MBTiles (MVT)"]
@@ -155,7 +159,7 @@ flowchart TB
   recorded as missing and stay NoData.
 - The hillshade's vertical scale is corrected by cos(latitude) at the bbox centre, because one
   Web Mercator unit is shorter than a metre away from the equator.
-- Hillshade and contours are rebuilt only when the DEM's sha256 or their own options change.
+- Hillshade, terrain and contours are rebuilt only when the DEM's sha256 or their own options change.
 
 ### landcover
 

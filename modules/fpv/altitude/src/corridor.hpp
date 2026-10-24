@@ -10,13 +10,8 @@
 
 namespace fpv::altitude {
 
-struct LinkInput {
-    rfcore::Hertz frequency;
-    std::string radioName;
-};
-
-/// Radio of each evaluated link, by link kind.
-using LinkInputs = std::map<std::string, LinkInput, std::less<>>;
+using fpv::LinkInput;
+using fpv::LinkInputs;
 
 /// Request options, with the schema's defaults.
 struct Settings {
@@ -59,9 +54,9 @@ struct CorridorPoint {
     double fresnelRadiusM;                 ///< first-zone radius half way from the pilot, at the lowest frequency
     std::string linkFloorBy;               ///< the link kind that sets the link floor (or has no clear height)
 
-    [[nodiscard]] double floorMslM() const { return linkFloorMslM ? std::max(terrainFloorMslM, *linkFloorMslM) : terrainFloorMslM; }
+    [[nodiscard]] double floorMslM() const { return linkFloorMslM.has_value() ? std::max(terrainFloorMslM, *linkFloorMslM) : terrainFloorMslM; }
     /// "terrain", or the link kind when the link floor is the higher one.
-    [[nodiscard]] std::string floorBy() const { return linkFloorMslM && *linkFloorMslM > terrainFloorMslM ? linkFloorBy : "terrain"; }
+    [[nodiscard]] std::string floorBy() const { return linkFloorMslM.has_value() && *linkFloorMslM > terrainFloorMslM ? linkFloorBy : "terrain"; }
 };
 
 /// Distances along the route to sample: every `stepM`, and every leg's start and end.

@@ -48,7 +48,7 @@ public:
         : mission_(mission), route_(route), world_(world), set_(set) {
         if (set_.linkFloor) {
             // One solve per sample and link: scan in 5 m steps (the bisection still refines to 1 mm).
-            for (const auto& [kind, link] : links) solvers_.push_back({kind, ClearanceSolver(k, link.frequency, set_.fraction, kScanStepM)});
+            for (const auto& [kind, link] : links) solvers_.emplace_back(kind, ClearanceSolver(k, link.frequency, set_.fraction, kScanStepM));
         }
         if (const auto* w = widestLink(links)) lambda_ = rfcore::wavelength(w->second.frequency).value();
         for (const Leg& leg : route_.legs()) ground_.emplace_back(world_.groundProfile(leg.from.position, leg.to.position));
@@ -92,7 +92,7 @@ private:
         std::string by;
         for (const LinkSolver& l : solvers_) {
             const auto need = l.solver.requiredAgl(profile, mission_.pilot.heightM, set_.maxAglM);
-            if (!need) return {std::nullopt, l.kind};
+            if (!need.has_value()) return {std::nullopt, l.kind};
             if (const double msl = path.back().groundMslM + *need; msl > top) {
                 top = msl;
                 by = l.kind;
@@ -126,7 +126,7 @@ json corridorJson(const std::vector<CorridorPoint>& pts, const Settings& set) {
         c["plannedMslM"].push_back(p.plannedMslM);
         c["floorMslM"].push_back(p.floorMslM());
         c["terrainFloorMslM"].push_back(p.terrainFloorMslM);
-        c["linkFloorMslM"].push_back(p.linkFloorMslM ? json(*p.linkFloorMslM) : json(nullptr));
+        c["linkFloorMslM"].push_back(p.linkFloorMslM.has_value() ? json(*p.linkFloorMslM) : json(nullptr));
         c["ceilingMslM"].push_back(p.ceilingMslM);
         c["fresnelRadiusM"].push_back(p.fresnelRadiusM);
     }
@@ -187,7 +187,7 @@ json legReasons(const Route& route, const std::vector<CorridorPoint>& pts, const
             add(reason(kId, "warn", name + ": " + fixed(high->plannedMslM - high->groundMslM, 0) + " m above the ground at " +
                                         km(high->s) + ", over the " + fixed(set.ceilingAglM, 0) + " m ceiling."));
         }
-        if (const auto blind = worstOnLeg(pts, leg.index, [](const CorridorPoint& p) { return p.linkChecked && !p.linkFloorMslM ? 1.0 : 0.0; }, 0.5)) {
+        if (const auto blind = worstOnLeg(pts, leg.index, [](const CorridorPoint& p) { return p.linkChecked && !p.linkFloorMslM.has_value() ? 1.0 : 0.0; }, 0.5)) {
             add(reason(kId, "warn", name + ": no height up to " + fixed(set.maxAglM, 0) + " m AGL keeps " + fixed(set.fraction * 100.0, 0) +
                                         " % of the Fresnel zone clear at " + km(blind->s) + "; the floor there is the terrain clearance only."));
         }
@@ -198,14 +198,20 @@ json legReasons(const Route& route, const std::vector<CorridorPoint>& pts, const
 }  // namespace
 
 Settings Settings::fromOptions(const json& options) {
+    // The host checks options against the schema; these keep its bounds for any other caller too,
+    // so a zero step can never loop forever.
+    const auto bounded = [&options](const char* key, double fallback, double lo, double hi) {
+        const double v = options.value(key, fallback);
+        return std::isfinite(v) ? std::clamp(v, lo, hi) : fallback;
+    };
     Settings s;
-    s.stepM = options.value("stepM", s.stepM);
-    s.clearanceM = options.value("clearanceM", s.clearanceM);
-    s.takeoffM = options.value("takeoffM", s.takeoffM);
-    s.ceilingAglM = options.value("ceilingAglM", s.ceilingAglM);
+    s.stepM = bounded("stepM", s.stepM, 10.0, 2000.0);
+    s.clearanceM = bounded("clearanceM", s.clearanceM, 0.0, 1000.0);
+    s.takeoffM = bounded("takeoffM", s.takeoffM, 0.0, 5000.0);
+    s.ceilingAglM = bounded("ceilingAglM", s.ceilingAglM, 10.0, 5000.0);
     s.linkFloor = options.value("linkFloor", s.linkFloor);
-    s.fraction = options.value("fresnelFraction", s.fraction);
-    s.maxAglM = options.value("maxAglM", s.maxAglM);
+    s.fraction = bounded("fresnelFraction", s.fraction, 0.01, 1.0);
+    s.maxAglM = bounded("maxAglM", s.maxAglM, 10.0, 5000.0);
     return s;
 }
 
@@ -226,7 +232,7 @@ double LegGround::highestIn(double fromM, double toM) const {
 }
 
 std::vector<double> sampleDistances(const Route& route, double stepM) {
-    std::vector<double> at{0.0};
+    std::vector at{0.0};
     for (std::size_t i = 1; static_cast<double>(i) * stepM < route.length(); ++i) at.push_back(static_cast<double>(i) * stepM);
     for (const Leg& leg : route.legs()) at.push_back(leg.startM + leg.lengthM);
     std::ranges::sort(at);
