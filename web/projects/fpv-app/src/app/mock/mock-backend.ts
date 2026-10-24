@@ -363,11 +363,13 @@ export class MockBackend {
     if (prepared.autoHeights.length) result.autoHeights = prepared.autoHeights;
     for (const h of prepared.autoHeights.filter((a) => a.blocked)) {
       const name = mission.waypoints[h.index].label ?? `WP${h.index + 1}`;
+      // As the module says it: the ceiling, or a link no height up to maxAglM clears.
+      const why = h.limitedBy === 'ceiling' ? 'flying its legs safely takes more than the ceiling allows' : 'no height up to the highest allowed keeps the Fresnel zone clear';
       result.legs?.[h.index]?.reasons?.push({
         module: 'fpv.altitude',
         severity: 'warn',
         leg: h.index,
-        text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but flying its legs safely takes more than the ceiling allows. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
+        text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but ${why}. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
       });
     }
     if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
