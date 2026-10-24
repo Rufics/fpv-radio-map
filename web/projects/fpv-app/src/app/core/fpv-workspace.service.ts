@@ -360,13 +360,14 @@ export class FpvWorkspace {
     const failing = this.blocking(leg);
     if (!leg) return { mark: '', markLabel: '', tone: 'none', failing };
     if (leg.status === 'missing-data') return { mark: '? no data', markLabel: 'No elevation data, not calculated', tone: 'warn', failing };
-    const lost = this.unreachable(leg);
-    if (!failing.length && lost.length) {
-      return { mark: `${lost.map((k) => LINK_LETTER[k]).join(' ')} !`, markLabel: `${lost.join(' and ')} link lost; the autopilot flies on`, tone: 'warn', failing };
-    }
     if (failing.length) return { mark: `${failing.map((k) => LINK_LETTER[k]).join(' ')} ✕`, markLabel: `${failing.join(' and ')} link blocked`, tone: 'blocked', failing };
+    // a blocking flight check outranks a link the autopilot flies on without
     const check = this.worstCheck(leg);
     if (check === 'blocked') return { mark: '✕', markLabel: 'A flight check blocks this leg', tone: 'blocked', failing };
+    const lost = this.unreachable(leg);
+    if (lost.length) {
+      return { mark: `${lost.map((k) => LINK_LETTER[k]).join(' ')} !`, markLabel: `${lost.join(' and ')} link lost; the autopilot flies on`, tone: 'warn', failing };
+    }
     if (leg.status === 'warn' || check === 'warn') return { mark: '!', markLabel: 'Warning', tone: 'warn', failing };
     return { mark: '✓', markLabel: 'Reachable', tone: 'ok', failing };
   }
@@ -439,6 +440,7 @@ export class FpvWorkspace {
     const r = this.store.result();
     const m = this.mission();
     if (!r || !m || this.verdict() || this.missingLeg() || this.linkGapText()) return null;
+    if (this.flightChecks().some((c) => c.tone === 'blocked')) return null;
     const ev = this.evaluated();
     if (ev.length === 0) return 'No radio link is checked in this mode; the route stays clear of the ground.';
     // a module's info line says more than the core's per-link margin lines
