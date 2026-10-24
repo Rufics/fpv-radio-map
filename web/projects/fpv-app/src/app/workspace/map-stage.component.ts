@@ -37,12 +37,14 @@ import { CompareService } from '../core/fpv-core';
 import { RouteWeatherService } from '../core/route-weather.service';
 import { RouteWeatherMapComponent } from './route-weather-map.component';
 import { FlightReplayMapComponent } from '../replay/flight-replay-map.component';
+import { AltitudeView } from '../core/fpv-altitude';
+import { Route3dComponent } from './route-3d.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
   selector: 'fpv-map-stage',
   host: { '(document:keydown.escape)': 'cancelPlacing()' },
-  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent, FlightReplayMapComponent],
+  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent, FlightReplayMapComponent, Route3dComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
       <rf-map-view class="map" [class.weather-mode]="weatherShown()" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
@@ -55,6 +57,14 @@ import { FlightReplayMapComponent } from '../replay/flight-replay-map.component'
             @if (hasRoute()) {
               <button type="button" class="rf-btn rf-btn--sm map-btn" [class.is-on]="ws.weatherMode()" [attr.aria-pressed]="ws.weatherMode()" (click)="ws.weatherMode.set(!ws.weatherMode())">
                 <span aria-hidden="true">☁</span> Weather
+              </button>
+              @if (!compact()) {
+                <button type="button" class="rf-btn rf-btn--sm map-btn" [class.is-on]="alt.profileOpen()" [attr.aria-pressed]="alt.profileOpen()" (click)="alt.profileOpen.set(!alt.profileOpen())">
+                  <span aria-hidden="true">⛰</span> Altitude
+                </button>
+              }
+              <button type="button" class="rf-btn rf-btn--sm map-btn" [class.is-on]="alt.mode() === '3d'" [attr.aria-pressed]="alt.mode() === '3d'" (click)="alt.setMode(alt.mode() === '3d' ? '2d' : '3d')">
+                3D
               </button>
             }
           </div>
@@ -105,6 +115,7 @@ import { FlightReplayMapComponent } from '../replay/flight-replay-map.component'
         }
         <fpv-route-weather-map [compact]="compact()" />
         <fpv-flight-replay-map [fitPadding]="fitPadding()" />
+        <fpv-route-3d />
         <rf-slot-host class="overlay slot" name="map.overlays" />
       </rf-map-view>
       @if (dim()) {
@@ -162,6 +173,7 @@ export class MapStageComponent {
   private readonly missingData = new MissingDataLayer();
   private readonly routeDelta = new RouteDeltaLayer();
   protected readonly cmp = inject(CompareService);
+  protected readonly alt = inject(AltitudeView);
   private readonly wx = inject(RouteWeatherService);
   private readonly weather: WeatherLayer[] = [];
   private tags: Marker[] = [];
@@ -257,7 +269,7 @@ export class MapStageComponent {
     let drawerOpen = false;
     effect(() => {
       if (!this.ready()) return;
-      const open = !!this.ws.why() && this.drawerHeight() > 0;
+      const open = (!!this.ws.why() || this.alt.profileOpen()) && this.drawerHeight() > 0;
       if (open === drawerOpen) return;
       drawerOpen = open;
       const m = untracked(() => this.ws.mission());
