@@ -4,6 +4,7 @@
 #include <cmath>
 #include <format>
 #include <optional>
+#include <string_view>
 #include <utility>
 
 namespace fpv::minalt {
@@ -26,7 +27,8 @@ struct Settings {
 /// Required AGL at every sample for one link, and its maximum per leg.
 struct LinkResult {
     json points = json::array();
-    std::vector<double> legNeed;
+    std::vector<double> legNeed;        ///< highest required AGL on the leg
+    std::vector<double> legNeedHeight;  ///< the same in the mission's altitude reference
     std::vector<bool> legUnreachable;
 };
 
@@ -60,18 +62,22 @@ LinkResult requiredAlongRoute(const Route& route, const Mission& mission, const 
                               const std::vector<Sample>& samples, const ClearanceSolver& solver, double maxAgl) {
     LinkResult r;
     r.legNeed.assign(route.legs().size(), 0.0);
+    r.legNeedHeight.assign(route.legs().size(), -1e300);
     r.legUnreachable.assign(route.legs().size(), false);
     for (const Sample& smp : samples) {
         const InverseResult inv = world.inverse(mission.pilot.position, smp.p.position);
         const DirectResult mid = world.direct(mission.pilot.position, inv.azimuth1Deg, inv.distanceM / 2.0);
         const auto profile = ClearanceSolver::toProfile(world.groundProfile(mission.pilot.position, smp.p.position),
                                                         mid.azimuthDeg, mid.point.lat);
-        const auto need = solver.requiredAgl(profile, mission.pilot.aglM, maxAgl);
+        const auto need = solver.requiredAgl(profile, mission.pilot.heightM, maxAgl);
         json pt = {{"distanceAlongRouteM", smp.s}, {"lat", smp.p.position.lat}, {"lon", smp.p.position.lon},
                    {"leg", smp.p.leg}, {"plannedAglM", smp.p.aglM}};
         if (need.has_value()) {
             pt["requiredAglM"] = *need;
             r.legNeed[smp.p.leg] = std::max(r.legNeed[smp.p.leg], *need);
+            // The ground under the sample is the same in both references, so the height in the
+            // mission's reference moves one for one with the AGL.
+            r.legNeedHeight[smp.p.leg] = std::max(r.legNeedHeight[smp.p.leg], smp.p.heightM + *need - smp.p.aglM);
         } else {
             pt["requiredAglM"] = nullptr;
             r.legUnreachable[smp.p.leg] = true;
@@ -97,21 +103,32 @@ bool anyBelowRequired(const json& points, std::size_t leg) {
     return low;
 }
 
-/// Raising both ends of a leg to the leg's maximum keeps every sample clear,
-/// because the AGL is interpolated between them.
-json raiseLegFix(const json& request, const Leg& leg, const std::string& legName, double planned, double need) {
+/// What a raise-leg fix changes: the leg's lowest planned AGL and the AGL it needs, and the end
+/// height in the mission's reference that gives it.
+struct Raise {
+    double plannedAgl;
+    double needAgl;
+    double height;
+};
+
+/// Raising both ends of a leg to the leg's highest required height keeps every sample clear,
+/// because the height is interpolated between them in the mission's reference.
+json raiseLegFix(const json& request, const Leg& leg, const std::string& legName, const Raise& r, std::string_view field) {
     json wps = request.at("mission").at("waypoints");
+    const std::string key(field);
+    auto raise = [&wps, &key, &r](std::size_t i) { wps[i][key] = std::max(wps[i].at(key).get<double>(), r.height); };
     // leg.index is also the waypoint index of leg.to.
-    if (const std::size_t toIdx = leg.index; toIdx < wps.size()) wps[toIdx]["aglM"] = std::max(wps[toIdx].at("aglM").get<double>(), need);
-    if (leg.index >= 1) wps[leg.index - 1]["aglM"] = std::max(wps[leg.index - 1].at("aglM").get<double>(), need);
+    if (leg.index < wps.size()) raise(leg.index);
+    if (leg.index >= 1) raise(leg.index - 1);
+    const std::string title = field == "aglM" ? fixed(r.height, 1) + " m" : fixed(r.height, 1) + " m above launch";
     return {{"id", std::format("{}/raise-leg-{}", kId, leg.index)},
-            {"title", "Raise " + legName + " to " + fixed(need, 1) + " m"},
+            {"title", "Raise " + legName + " to " + title},
             {"patch", {{"waypoints", wps}}},
-            {"preview", {{{"label", "Height on " + legName}, {"now", fixed(planned, 1) + " m AGL"}, {"after", fixed(need, 1) + " m AGL"}}}}};
+            {"preview", {{{"label", "Height on " + legName}, {"now", fixed(r.plannedAgl, 1) + " m AGL"}, {"after", fixed(r.needAgl, 1) + " m AGL"}}}}};
 }
 
 /// The reason for one leg, or nothing when the planned height already clears it.
-std::optional<json> legReason(const json& request, const Leg& leg, const std::vector<Sample>& samples,
+std::optional<json> legReason(const json& request, const Route& route, const Leg& leg, const std::vector<Sample>& samples,
                               const LinkResult& r, const Settings& set) {
     const std::string legName = leg.from.label + " → " + leg.to.label;
     if (r.legUnreachable[leg.index]) {
@@ -121,8 +138,10 @@ std::optional<json> legReason(const json& request, const Leg& leg, const std::ve
     }
     const double planned = lowestPlanned(samples, leg.index);
     if (!anyBelowRequired(r.points, leg.index)) return std::nullopt;
-    const double need = std::ceil(r.legNeed[leg.index] * 10.0) / 10.0;  // display and patch at 0.1 m, rounded up
-    const json fix = leg.isReturn ? json(nullptr) : raiseLegFix(request, leg, legName, planned, need);
+    // Display and patch at 0.1 m, rounded up.
+    const Raise raise{planned, std::ceil(r.legNeed[leg.index] * 10.0) / 10.0, std::ceil(r.legNeedHeight[leg.index] * 10.0) / 10.0};
+    const double need = raise.needAgl;
+    const json fix = leg.isReturn ? json(nullptr) : raiseLegFix(request, leg, legName, raise, route.altitude().waypointField());
     return std::make_optional(reason(kId, "warn",
                                      "Leg " + legName + ": " + fixed(set.fraction * 100.0, 0) + " % of the " + set.kind +
                                          " Fresnel zone is clear only from " + fixed(need, 1) + " m AGL; planned " +
@@ -152,7 +171,7 @@ json analyze(const json& request, const IWorld& world, const LinkInputs& links) 
             data["links"][kind] = {{"radio", link.radioName}, {"frequencyHz", link.frequency.value()}, {"points", r.points}};
             set.kind = kind;
             for (const Leg& leg : route.legs()) {
-                if (auto legWhy = legReason(request, leg, samples, r, set)) reasons.push_back(*legWhy);
+                if (auto legWhy = legReason(request, route, leg, samples, r, set)) reasons.push_back(*legWhy);
             }
         }
     } catch (const MissingTerrain& e) {

@@ -54,7 +54,7 @@ json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eva
         const Route route(mission, world);
         const std::vector<RoutePoint> samples = routeSamples(route, stepM);
         const std::vector<std::string> links = mission.links();
-        const End pilot{mission.pilot.position, mission.pilot.aglM};
+        const End pilot{mission.pilot.position, mission.pilot.heightM};
         const WorstMargin direct = worstAlongRoute(eval, links, pilot, samples);
         data["direct"] = {{"worstMarginDb", direct.marginDb}, {"link", direct.link}};
 

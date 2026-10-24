@@ -30,7 +30,7 @@ json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eva
     const double cellM = options.value("cellM", 100.0);
     const double stepM = options.value("stepM", 250.0);
     const auto maxPoints = options.value("maxCandidates", std::size_t{200});
-    const double agl = options.value("antennaAglM", mission.pilot.aglM);
+    const double agl = options.value("antennaAglM", mission.pilot.heightM);
     json reasons = json::array();
     json data = {{"cellM", cellM}, {"stepM", stepM}, {"antennaAglM", agl}};
     try {
@@ -40,7 +40,7 @@ json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eva
         const std::vector<RoutePoint> samples = routeSamples(route, stepM);
         const std::vector<std::string> links = mission.links();
 
-        const WorstMargin now = worstAlongRoute(eval, links, {mission.pilot.position, mission.pilot.aglM}, samples);
+        const WorstMargin now = worstAlongRoute(eval, links, {mission.pilot.position, mission.pilot.heightM}, samples);
         struct Scored {
             LatLon p;
             WorstMargin w;

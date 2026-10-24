@@ -6,6 +6,7 @@ import {
   LinkKind,
   LinkResult,
   Mission,
+  MissionAltitude,
   MissionPoint,
   MissionStore,
   Reason,
@@ -38,7 +39,8 @@ export interface LegRowVm {
   failing: LinkKind[];
   isReturn: boolean;
   lengthM: number;
-  aglM: number;
+  /** Height of the leg's end point in the mission's altitude reference. */
+  heightM: number;
 }
 
 export interface VerdictVm {
@@ -188,7 +190,7 @@ export class FpvWorkspace {
     if (!m) return [];
     const previewing = !!this.store.preview();
     const r = previewing || this.store.resultStale() ? null : this.store.result();
-    const pts: MissionPoint[] = [m.pilot, ...m.waypoints];
+    const pts: Pick<MissionPoint, 'lat' | 'lon'>[] = [m.pilot, ...m.waypoints];
     const rows: LegRowVm[] = m.waypoints.map((w, i) => {
       const index = i + 1;
       const leg = this.legResult(r, index);
@@ -201,15 +203,15 @@ export class FpvWorkspace {
         name: `${index} · ${from} → ${to}`,
         from,
         to,
-        info: `${RfFormat.format(len, 'km1')} · ${RfFormat.format(w.aglM, 'm')}`,
-        infoTitle: `${RfFormat.full(len, 'km3')}, ${RfFormat.full(w.aglM, 'm')} above ground`,
+        info: `${RfFormat.format(len, 'km1')} · ${RfFormat.format(MissionAltitude.height(m, w), 'm')}`,
+        infoTitle: `${RfFormat.full(len, 'km3')}, ${RfFormat.full(MissionAltitude.height(m, w), 'm')} ${MissionAltitude.basis(m)}`,
         mark,
         markLabel,
         tone,
         failing,
         isReturn: false,
         lengthM: len,
-        aglM: w.aglM,
+        heightM: MissionAltitude.height(m, w),
       };
     });
     const last = m.waypoints.at(-1);
@@ -226,12 +228,12 @@ export class FpvWorkspace {
         name: `${index} · ${from} → ${to}, return`,
         from,
         to,
-        info: `${RfFormat.format(back, 'km1')} · ${RfFormat.format(last.aglM, 'm')} → ${RfFormat.format(m.pilot.aglM, 'm')}`,
+        info: `${RfFormat.format(back, 'km1')} · ${RfFormat.format(MissionAltitude.height(m, last), 'm')} → ${RfFormat.format(m.pilot.aglM, 'm')}`,
         infoTitle: `${RfFormat.full(back, 'km3')} back to the pilot`,
         ...v,
         isReturn: true,
         lengthM: back,
-        aglM: last.aglM,
+        heightM: MissionAltitude.height(m, last),
       });
     }
     return rows;

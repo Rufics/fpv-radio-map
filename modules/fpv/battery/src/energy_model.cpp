@@ -141,27 +141,35 @@ double EnergyModel::cruiseWh(const LatLon& a, double azimuthDeg, double length) 
     return power_ * seconds / 3600.0;
 }
 
-double EnergyModel::climbWh(const LatLon& a, double aglA, const LatLon& b, double aglB) const {
+double EnergyModel::climbWh(const LatLon& a, double heightA, const LatLon& b, double heightB,
+                            const AltitudeModel& altitude) const {
+    // Above the launch point the altitude is a straight line, so only the ends count.
+    if (!altitude.followsTerrain()) return riseWh(std::max(0.0, heightB - heightA));
     const std::vector<GroundSample> g = world_.groundProfile(a, b);
     if (g.size() < 2) return 0.0;
     const double total = g.back().distanceM;
     double rise = 0.0;
-    double prev = g.front().groundMslM + aglA;
+    double prev = g.front().groundMslM + heightA;
     for (std::size_t i = 1; i < g.size(); ++i) {
         const double t = total > 0.0 ? g[i].distanceM / total : 1.0;
-        const double msl = g[i].groundMslM + aglA + t * (aglB - aglA);
+        const double msl = g[i].groundMslM + heightA + t * (heightB - heightA);
         rise += std::max(0.0, msl - prev);  // descending gives nothing back
         prev = msl;
     }
-    if (drone_.climbMethod == "measured") {
-        return (drone_.climbPowerW - power_) * (rise / drone_.climbRateMps) / 3600.0;
-    }
-    return drone_.massKg * kGravity * rise / drone_.climbEfficiency / 3600.0;
+    return riseWh(rise);
 }
 
-double EnergyModel::segmentWh(const LatLon& a, double aglA, const LatLon& b, double aglB) const {
+double EnergyModel::riseWh(double riseM) const {
+    if (drone_.climbMethod == "measured") {
+        return (drone_.climbPowerW - power_) * (riseM / drone_.climbRateMps) / 3600.0;
+    }
+    return drone_.massKg * kGravity * riseM / drone_.climbEfficiency / 3600.0;
+}
+
+double EnergyModel::segmentWh(const LatLon& a, double heightA, const LatLon& b, double heightB,
+                              const AltitudeModel& altitude) const {
     const InverseResult inv = world_.inverse(a, b);
-    return cruiseWh(a, inv.azimuth1Deg, inv.distanceM) + climbWh(a, aglA, b, aglB);
+    return cruiseWh(a, inv.azimuth1Deg, inv.distanceM) + climbWh(a, heightA, b, heightB, altitude);
 }
 
 double EnergyModel::levelWh(const LatLon& a, const LatLon& b) const {
@@ -181,11 +189,11 @@ double EnergyModel::routeWh(const Route& route, double s) const {
         if (s <= leg.startM) break;
         if (s >= leg.startM + leg.lengthM) {
             e += cruiseWh(leg.from.position, leg.azimuthDeg, leg.lengthM) +
-                 climbWh(leg.from.position, leg.from.aglM, leg.to.position, leg.to.aglM);
+                 climbWh(leg.from.position, leg.from.heightM, leg.to.position, leg.to.heightM, route.altitude());
         } else {
             const RoutePoint p = route.at(s);
             e += cruiseWh(leg.from.position, leg.azimuthDeg, s - leg.startM) +
-                 climbWh(leg.from.position, leg.from.aglM, p.position, p.aglM);
+                 climbWh(leg.from.position, leg.from.heightM, p.position, p.heightM, route.altitude());
         }
     }
     return e;
@@ -220,7 +228,8 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
     // Turn-back: the farthest point on the way out from which the direct flight home still fits.
     auto costAt = [this, &route, &mission](double s) {
         const RoutePoint pt = route.at(s);
-        return model_.routeWh(route, s) + model_.segmentWh(pt.position, pt.aglM, mission.pilot.position, mission.pilot.aglM);
+        return model_.routeWh(route, s) +
+               model_.segmentWh(pt.position, pt.heightM, mission.pilot.position, mission.pilot.heightM, route.altitude());
     };
     const double out = route.outboundLength();
     double lastOk = -1.0;
@@ -249,7 +258,8 @@ Plan BatteryPlanner::plan(const Mission& mission, const Route& route, const IWor
         lastOk = lo;
     }
     const RoutePoint pt = route.at(lastOk);
-    p.turnBack = TurnBack{lastOk, world.inverse(pt.position, mission.pilot.position).distanceM, pt.position, pt.aglM, pt.leg};
+    p.turnBack = TurnBack{lastOk, world.inverse(pt.position, mission.pilot.position).distanceM, pt.position, pt.aglM,
+                          pt.heightM, pt.leg};
     p.notes.push_back("Turn-back point searched every " + fixed(step_, 0) + " m along the route, then refined to 1 mm.");
     return p;
 }

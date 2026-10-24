@@ -77,8 +77,9 @@ json analyze(const json& request, const IWorld& world, const json& drone, const 
                 json wps = json::array();
                 const auto& orig = request.at("mission").at("waypoints");
                 for (std::size_t i = 0; i + 1 <= p.turnBack->leg && i < orig.size(); ++i) wps.push_back(orig[i]);
+                const std::string field(AltitudeModel::waypointField(mission.altitudeRef));
                 wps.push_back({{"lat", p.turnBack->position.lat}, {"lon", p.turnBack->position.lon},
-                               {"aglM", p.turnBack->aglM}, {"label", "T"}});
+                               {field, p.turnBack->heightM}, {"label", "T"}});
                 const double after = p.turnBack->distanceAlongRouteM + p.turnBack->returnM;
                 fix = {{"id", "fpv.battery/turn-back"},
                        {"title", "Turn back at T"},

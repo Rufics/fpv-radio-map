@@ -1,11 +1,11 @@
 import { LinkKind, Mission, MissionExporter, MissionPoint, applyMergePatch, distanceM, interpolate, linksEvaluated, sampleGrid, xmlEscape } from '@rfmap/ui-kit';
 import type { FpvComparePoint, FpvCompareData, FpvCoreData, FpvCoreOptions } from '../core/fpv-core';
 import { coverageGrid, routeResult } from './reference-case';
-import { elevation } from './mock-terrain';
+import { aglPoint, elevation } from './mock-terrain';
 
 /** Points every `stepM` along pilot → waypoints, with the AGL interpolated per leg. */
 function samples(m: Mission, stepM: number): MissionPoint[] {
-  const pts = [m.pilot, ...m.waypoints];
+  const pts = [m.pilot, ...m.waypoints.map((w) => aglPoint(m, w))];
   const out: MissionPoint[] = [];
   for (let i = 0; i + 1 < pts.length; i++) {
     const a = pts[i];
@@ -90,7 +90,7 @@ function exportData(mission: Mission, opts: FpvCoreOptions): NonNullable<FpvCore
 function kml(m: Mission, stepM: number, mode: 'relativeToGround' | 'absolute'): string {
   const alt = (p: MissionPoint) => (mode === 'absolute' ? elevation(p.lat, p.lon) + p.aglM : p.aglM);
   const coord = (p: MissionPoint) => `${p.lon.toFixed(7)},${p.lat.toFixed(7)},${alt(p).toFixed(1)}`;
-  const pts = [m.pilot, ...m.waypoints];
+  const pts = [m.pilot, ...m.waypoints.map((w) => aglPoint(m, w))];
   const marks = pts
     .map((p, i) => {
       const name = p.label ?? (i === 0 ? 'A' : `WP${i}`);

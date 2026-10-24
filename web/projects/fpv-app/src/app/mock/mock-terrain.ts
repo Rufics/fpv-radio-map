@@ -6,6 +6,7 @@
  */
 import { contours } from 'd3-contour';
 import type { Feature, FeatureCollection, LineString, MultiPolygon, Position } from 'geojson';
+import { Mission, MissionAltitude, MissionPoint, MissionWaypoint } from '@rfmap/ui-kit';
 
 export const ORIGIN = { lat: 48.53, lon: 35.2 };
 const KM_PER_DEG_LAT = 111.195;
@@ -57,6 +58,22 @@ export function elevationLocal(x: number, y: number): number {
 export function elevation(lat: number, lon: number): number {
   const p = toLocal(lat, lon);
   return elevationLocal(p.x, p.y);
+}
+
+/**
+ * A waypoint as the mock evaluates it: its height above the ground under it. A launch-referenced
+ * height is converted at the waypoint only, and the mock then interpolates above ground between
+ * waypoints, which is close enough for a mock (the server interpolates in the mission's reference).
+ */
+export function aglPoint(m: Mission, w: MissionWaypoint): MissionPoint {
+  const height = MissionAltitude.height(m, w);
+  const aglM = MissionAltitude.ref(m) === 'launch' ? elevation(m.pilot.lat, m.pilot.lon) + height - elevation(w.lat, w.lon) : height;
+  return { lat: w.lat, lon: w.lon, aglM, ...(w.label ? { label: w.label } : {}) };
+}
+
+/** The height in the mission's reference that puts the drone `aglM` above the ground at `w`. */
+export function heightForAgl(m: Mission, w: Pick<MissionWaypoint, 'lat' | 'lon'>, aglM: number): number {
+  return MissionAltitude.ref(m) === 'launch' ? aglM + elevation(w.lat, w.lon) - elevation(m.pilot.lat, m.pilot.lon) : aglM;
 }
 
 // ---------------- tiles ----------------

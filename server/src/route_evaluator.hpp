@@ -34,12 +34,27 @@ private:
         std::size_t evaluated = 0;
         std::size_t overPilot = 0;
         std::size_t missingCount = 0;
+        std::size_t belowGround = 0;
+        double lowestAglM = 0.0;    ///< the deepest position below the ground
+        double lowestAlongM = 0.0;
         json missing = json::array();
         json missingBbox = nullptr;
+    };
+    /// What every sample of a leg is evaluated with.
+    struct LegContext {
+        const Links& links;
+        const CalcContext& ctx;
+        std::vector<ModuleFailure>& failures;
     };
 
     [[nodiscard]] json evaluateLeg(const json& mission, std::size_t index, const json& from, const json& to,
                                    const Links& links, const CalcContext& ctx, std::vector<ModuleFailure>& failures) const;
+    /// Evaluates one drone position on a leg, or records why it was not.
+    void scanSample(LegScan& scan, const Terminal& pilot, const Terminal& drone, double along, const LegContext& lc) const;
+    /// Records a drone position the plan puts below the ground.
+    static void recordBelowGround(LegScan& scan, double aglM, double along);
+    /// Marks a leg whose plan goes below the ground as blocked, with the reason.
+    static void markBelowGround(json& leg, const LegScan& scan, std::size_t total);
     /// Records a drone position whose path from the pilot lacks terrain data; the first 20 are listed.
     void recordMissing(LegScan& scan, const PreparedPath& p, double along) const;
     /// Evaluates every link at one sample position and keeps each link's worst.

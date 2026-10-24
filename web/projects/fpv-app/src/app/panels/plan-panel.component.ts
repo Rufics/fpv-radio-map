@@ -1,9 +1,12 @@
 import { Component, computed, inject } from '@angular/core';
 import {
+  AltitudeRef,
   EvaluateMode,
   JobPart,
   JobProgressComponent,
   LinkKind,
+  Mission,
+  MissionAltitude,
   RadioProfile,
   RfFormat,
   RfNumComponent,
@@ -86,6 +89,10 @@ import { CompareService } from '../core/fpv-core';
           <div class="edit">
             <rf-stepper label="Height above ground, pilot" [value]="m.pilot.aglM" unit="m AGL" [step]="1" [max]="1500" [dense]="true" (valueChange)="ws.store.setPilotAgl($event)" />
           </div>
+          <div class="edit ref">
+            <rf-segmented label="Waypoint heights" [options]="refs" [value]="alt.ref(m)" (valueChange)="setRef($event)" />
+          </div>
+          <div class="rf-caption">{{ refHint(m) }}</div>
         }
         @for (r of ws.legRows(); track r.index) {
           @if (ws.store.result() && r.mark && !ws.editingRoute()) {
@@ -99,7 +106,7 @@ import { CompareService } from '../core/fpv-core';
           }
           @if (ws.editingRoute() && !r.isReturn) {
             <div class="edit">
-              <rf-stepper [label]="'Height above ground, point ' + r.to" [value]="r.aglM" unit="m AGL" [step]="5" [max]="1500" [dense]="true" (valueChange)="setAgl(r.index - 1, $event)" />
+              <rf-stepper [label]="'Height ' + alt.basis(m) + ', point ' + r.to" [value]="r.heightM" [unit]="alt.unit(m)" [step]="5" [min]="alt.ref(m) === 'launch' ? -1500 : 0" [max]="1500" [dense]="true" (valueChange)="setHeight(r.index - 1, $event)" />
               <button type="button" class="rf-btn rf-btn--dense rf-btn--danger" (click)="ws.store.removeWaypoint(r.index - 1)" [disabled]="m.waypoints.length <= 1" [attr.aria-label]="'Delete point ' + r.to">Delete</button>
             </div>
           }
@@ -224,6 +231,11 @@ import { CompareService } from '../core/fpv-core';
 export class PlanPanelComponent {
   protected readonly ws = inject(FpvWorkspace);
   protected readonly cmp = inject(CompareService);
+  protected readonly alt = MissionAltitude;
+  protected readonly refs: { value: AltitudeRef; label: string }[] = [
+    { value: 'launch', label: 'Above launch' },
+    { value: 'agl', label: 'Above ground' },
+  ];
   protected readonly modes: { value: EvaluateMode; label: string }[] = [
     { value: 'both', label: 'Both' },
     { value: 'control', label: 'Control' },
@@ -253,8 +265,18 @@ export class PlanPanelComponent {
     this.ws.why.set(null);
   }
 
-  protected setAgl(index: number, aglM: number): void {
-    this.ws.store.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? { ...w, aglM } : w)) }));
+  protected setHeight(index: number, heightM: number): void {
+    this.ws.store.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? MissionAltitude.withHeight(m, w, heightM) : w)) }));
+  }
+
+  protected setRef(ref: AltitudeRef): void {
+    this.ws.store.update((m) => MissionAltitude.withRef(m, ref));
+  }
+
+  protected refHint(m: Mission): string {
+    return MissionAltitude.ref(m) === 'launch'
+      ? 'Heights are above the launch point, as a barometric altimeter reads them. The drone climbs or descends evenly between points and does not follow the terrain.'
+      : 'Heights are above the ground under the drone. Between points the drone follows the terrain, which costs climbs over every rise.';
   }
 
   protected toggleEdit(): void {

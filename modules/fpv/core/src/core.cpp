@@ -16,8 +16,11 @@ double altitudeOf(const RoutePoint& p, const IWorld& world, AltitudeMode mode) {
     return mode == AltitudeMode::Absolute ? world.groundMsl(p.position) + p.aglM : p.aglM;
 }
 
-double altitudeOf(const Waypoint& w, const IWorld& world, AltitudeMode mode) {
-    return mode == AltitudeMode::Absolute ? world.groundMsl(w.position) + w.aglM : w.aglM;
+/// A waypoint's export altitude: above mean sea level, or above the ground under it.
+double altitudeOf(const Waypoint& w, const Route& route, const IWorld& world, AltitudeMode mode) {
+    const double ground = world.groundMsl(w.position);
+    const double msl = route.altitude().mslM(w.heightM, ground);
+    return mode == AltitudeMode::Absolute ? msl : msl - ground;
 }
 
 std::string kmlCoord(const LatLon& p, double alt) { return num(p.lon, 9) + "," + num(p.lat, 9) + "," + num(alt, 3); }
@@ -26,9 +29,9 @@ std::string latLonAttrs(const LatLon& p) { return "lat=\"" + num(p.lat, 9) + "\"
 
 bool sameGeometry(const Mission& a, const Mission& b) {
     auto same = [](const Waypoint& x, const Waypoint& y) {
-        return x.position.lat == y.position.lat && x.position.lon == y.position.lon && x.aglM == y.aglM;
+        return x.position.lat == y.position.lat && x.position.lon == y.position.lon && x.heightM == y.heightM;
     };
-    if (a.returnToPilot != b.returnToPilot || a.waypoints.size() != b.waypoints.size() || !same(a.pilot, b.pilot)) return false;
+    if (a.altitudeRef != b.altitudeRef || a.returnToPilot != b.returnToPilot || a.waypoints.size() != b.waypoints.size() || !same(a.pilot, b.pilot)) return false;
     for (std::size_t i = 0; i < a.waypoints.size(); ++i) {
         if (!same(a.waypoints[i], b.waypoints[i])) return false;
     }
@@ -109,8 +112,8 @@ json compare(const json& missionA, const json& compareOpt, const IWorld& world, 
     const std::vector<RoutePoint> samplesB = routeSamples(routeB, stepM);
     const auto evalA = evalFor(missionA);
     const auto evalB = evalFor(missionB);
-    const Scenario sa{samplesA, *evalA, {a.pilot.position, a.pilot.aglM}};
-    const Scenario sb{samplesB, *evalB, {b.pilot.position, b.pilot.aglM}};
+    const Scenario sa{samplesA, *evalA, {a.pilot.position, a.pilot.heightM}};
+    const Scenario sb{samplesB, *evalB, {b.pilot.position, b.pilot.heightM}};
     const bool aligned = sameGeometry(a, b);
 
     json out = {{"name", name}, {"mission", missionB}, {"aligned", aligned}, {"stepM", stepM}, {"links", json::object()}};
@@ -151,31 +154,33 @@ std::vector<RoutePoint> exportVertices(const Route& route, double stepM) {
     if (!(stepM > 0.0)) throw rfmod::BadRequest("export stepM must be positive");
     std::vector<RoutePoint> out;
     for (const Leg& leg : route.legs()) {
-        const RoutePoint start = route.at(leg.startM);
-        out.emplace_back(leg.from.position, leg.from.aglM, leg.index, start.courseDeg);
+        RoutePoint start = route.at(leg.startM);
+        start.position = leg.from.position;
+        out.push_back(start);
         for (std::size_t i = 1; static_cast<double>(i) * stepM < leg.lengthM; ++i) {
             out.push_back(route.at(leg.startM + static_cast<double>(i) * stepM));
         }
     }
     if (!route.legs().empty()) {
-        const Leg& last = route.legs().back();
-        out.emplace_back(last.to.position, last.to.aglM, last.index, route.at(route.length()).courseDeg);
+        RoutePoint end = route.at(route.length());
+        end.position = route.legs().back().to.position;
+        out.push_back(end);
     }
     return out;
 }
 
 std::string toKml(const Mission& mission, const Route& route, const IWorld& world, const ExportSettings& s) {
     const std::string mode = s.altitude == AltitudeMode::Absolute ? "absolute" : "relativeToGround";
-    auto placemark = [&mode, &world, &s](const Waypoint& w) {
+    auto placemark = [&mode, &route, &world, &s](const Waypoint& w) {
         return "<Placemark><name>" + xmlEscape(w.label) + "</name><Point><altitudeMode>" + mode +
-               "</altitudeMode><coordinates>" + kmlCoord(w.position, altitudeOf(w, world, s.altitude)) +
+               "</altitudeMode><coordinates>" + kmlCoord(w.position, altitudeOf(w, route, world, s.altitude)) +
                "</coordinates></Point></Placemark>\n";
     };
     std::string k = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<kml xmlns=\"http://www.opengis.net/kml/2.2\">\n<Document>\n";
     k += "<name>" + xmlEscape(mission.name.empty() ? "Mission" : mission.name) + "</name>\n";
     k += "<description>" +
          xmlEscape(s.altitude == AltitudeMode::Absolute
-                       ? "Altitudes are ground height from the FPV Radio Map DEM plus the planned height above ground."
+                       ? "Altitudes are above mean sea level, from the planned heights and the FPV Radio Map DEM."
                        : "Altitudes are the planned heights above ground; the viewer adds its own terrain.") +
          "</description>\n";
     k += placemark(mission.pilot);
@@ -188,16 +193,17 @@ std::string toKml(const Mission& mission, const Route& route, const IWorld& worl
 
 std::string toGpx(const Mission& mission, const Route& route, const IWorld& world, const ExportSettings& s) {
     // GPX has no height above ground: <ele> is always our DEM ground plus AGL.
-    auto point = [&world](const char* tag, const Waypoint& w) {
+    auto point = [&route, &world](const char* tag, const Waypoint& w) {
         return std::string("<") + tag + " " + latLonAttrs(w.position) + "><ele>" +
-               num(altitudeOf(w, world, AltitudeMode::Absolute), 3) + "</ele><name>" + xmlEscape(w.label) +
-               "</name><desc>" + num(w.aglM, 3) + " m above ground</desc></" + tag + ">\n";
+               num(altitudeOf(w, route, world, AltitudeMode::Absolute), 3) + "</ele><name>" + xmlEscape(w.label) +
+               "</name><desc>" + num(altitudeOf(w, route, world, AltitudeMode::RelativeToGround), 3) +
+               " m above ground</desc></" + tag + ">\n";
     };
     const std::string name = xmlEscape(mission.name.empty() ? "Mission" : mission.name);
     std::string g = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                     "<gpx version=\"1.1\" creator=\"FPV Radio Map\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n";
     g += "<metadata><name>" + name + "</name><desc>" +
-         xmlEscape("Elevations are ground height from the FPV Radio Map DEM plus the planned height above ground.") +
+         xmlEscape("Elevations are above mean sea level, from the planned heights and the FPV Radio Map DEM.") +
          "</desc></metadata>\n";
     g += point("wpt", mission.pilot);
     for (const Waypoint& w : mission.waypoints) g += point("wpt", w);

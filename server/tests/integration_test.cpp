@@ -857,6 +857,32 @@ TEST_F(Integration, RouteIntoTheHoleIsMissingDataNotAVerdict) {
     EXPECT_EQ(leg["reasons"][0]["severity"], "blocked");
 }
 
+TEST_F(Integration, LaunchReferencedRouteFliesLevelAndMayHitTheRidge) {
+    // Above the launch point the drone holds a straight line in altitude: 60 m above the pilot's
+    // 150 m ground does not clear the 270 m ridge between them.
+    json m = shortMission({{"lat", 48.50}, {"lon", 35.30}, {"altM", 60.0}});
+    m["altitudeRef"] = "launch";
+    const auto r = call("POST", "/calc/route", m, bearer(sessionFor(m)));
+    ASSERT_EQ(r.status, 200) << r.body;
+    const json& leg = r.body["legs"][0];
+    EXPECT_EQ(leg["status"], "blocked") << leg;
+    EXPECT_GT(leg["samples"]["belowGround"].get<int>(), 0);
+    bool below = false;
+    for (const json& reason : leg["reasons"]) below = below || reason["text"].get<std::string>().find("below the ground") != std::string::npos;
+    EXPECT_TRUE(below) << leg["reasons"];
+
+    // The same numbers above the ground follow the ridge and never touch it.
+    json agl = shortMission(point(48.50, 35.30, 60.0));
+    const auto a = call("POST", "/calc/route", agl, bearer(sessionFor(agl)));
+    ASSERT_EQ(a.status, 200) << a.body;
+    EXPECT_EQ(a.body["legs"][0]["samples"]["belowGround"], 0);
+
+    // A launch-referenced waypoint needs altM.
+    json wrong = shortMission(point(48.50, 35.30, 60.0));
+    wrong["altitudeRef"] = "launch";
+    EXPECT_EQ(call("POST", "/missions", wrong).status, 422);
+}
+
 TEST_F(Integration, CoverageCountsCellsWithoutTerrainAndHonoursLimits) {
     json m = shortMission(point(48.46, 35.32, 100));
     m["pilot"] = point(48.455, 35.325, 1.5);

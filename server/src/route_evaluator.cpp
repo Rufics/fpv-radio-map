@@ -1,10 +1,12 @@
 #include "route_evaluator.hpp"
 
 #include "module_call.hpp"
+#include "route_altitude.hpp"
 
 #include <rfcore/geodesy.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <sstream>
 
@@ -122,49 +124,81 @@ void RouteEvaluator::describeWorst(json& leg, const LegScan& scan, const Links& 
     leg["reasons"] = reasons;
 }
 
+void RouteEvaluator::scanSample(LegScan& scan, const Terminal& pilot, const Terminal& drone, double along,
+                                const LegContext& lc) const {
+    if (!(rfcore::Geodesy().inverse(pilot.position, drone.position).distance.value() > 0.0)) {
+        ++scan.overPilot;  // the drone is over the pilot: there is no path to evaluate
+        return;
+    }
+    PreparedPath p = links_.prepare(pilot, drone, lc.ctx);
+    if (!p.complete()) {
+        recordMissing(scan, p, along);
+        return;
+    }
+    ++scan.evaluated;
+    recordWorst(scan, p, along, lc.links, lc.ctx, lc.failures);
+}
+
+void RouteEvaluator::recordBelowGround(LegScan& scan, double aglM, double along) {
+    ++scan.belowGround;
+    if (aglM < scan.lowestAglM) {
+        scan.lowestAglM = aglM;
+        scan.lowestAlongM = along;
+    }
+}
+
 json RouteEvaluator::evaluateLeg(const json& mission, std::size_t index, const json& from, const json& to,
                                  const Links& links, const CalcContext& ctx, std::vector<ModuleFailure>& failures) const {
     const DemSource& dem = links_.requireDem();
     const rfcore::Geodesy geo;
+    const RouteAltitude altitude(mission, dem);
+    const std::size_t n = mission.at("waypoints").size();
     const Terminal pilot = Terminal::fromJson(mission.at("pilot"));
-    const Terminal a = Terminal::fromJson(from);
-    const Terminal b = Terminal::fromJson(to);
-    const double length = geo.inverse(a.position, b.position).distance.value();
+    const rfcore::GeoPoint a{from.at("lat").get<double>(), from.at("lon").get<double>()};
+    const rfcore::GeoPoint b{to.at("lat").get<double>(), to.at("lon").get<double>()};
+    const double heightA = altitude.heightOf(from, index == 0);
+    const double heightB = altitude.heightOf(to, index == n);
+    const double length = geo.inverse(a, b).distance.value();
 
     json leg = {{"index", index}, {"lengthM", length}};
-    const std::size_t n = mission.at("waypoints").size();
     leg["from"] = index == 0 ? label(from, "Pilot") : label(from, std::format("WP{}", index));
     leg["to"] = index < n ? label(to, std::format("WP{}", index + 1)) : label(to, "Pilot");
 
     // Sample positions: the leg's geodesic at the DEM's native step, both ends included. The
-    // drone's AGL changes linearly with distance along the leg between the two points' aglM.
+    // drone's height changes linearly with distance along the leg in the mission's altitude
+    // reference (route_altitude.hpp).
     std::vector<rfcore::GeoPoint> pts;
-    if (length > 0.0) pts = geo.sample(a.position, b.position, dem.nativeResolution());
-    else pts = {a.position};
+    if (length > 0.0) pts = geo.sample(a, b, dem.nativeResolution());
+    else pts = {a};
     const double steps = std::max<double>(1.0, static_cast<double>(pts.size() - 1));
 
     LegScan scan;
+    const LegContext lc{links, ctx, failures};
     for (std::size_t i = 0; i < pts.size(); ++i) {
         const double f = static_cast<double>(i) / steps;
-        const double along = length * f;
-        const Terminal drone{pts[i], a.aglM + (b.aglM - a.aglM) * f};
-        if (!(geo.inverse(pilot.position, drone.position).distance.value() > 0.0)) {
-            ++scan.overPilot;  // the drone is over the pilot: there is no path to evaluate
-            continue;
-        }
-        PreparedPath p = links_.prepare(pilot, drone, ctx);
-        if (!p.complete()) {
-            recordMissing(scan, p, along);
-            continue;
-        }
-        ++scan.evaluated;
-        recordWorst(scan, p, along, links, ctx, failures);
+        // Without ground under the drone the path is incomplete and recorded as missing data.
+        const double agl = altitude.aglAt(pts[i], std::lerp(heightA, heightB, f)).value_or(0.0);
+        if (agl < 0.0) recordBelowGround(scan, agl, length * f);
+        scanSample(scan, pilot, Terminal{pts[i], std::max(0.0, agl)}, length * f, lc);
     }
     leg["samples"] = {{"total", pts.size()}, {"evaluated", scan.evaluated}, {"overPilot", scan.overPilot},
-                      {"missingData", scan.missingCount}, {"stepM", dem.nativeResolution().value()}};
+                      {"missingData", scan.missingCount}, {"belowGround", scan.belowGround},
+                      {"stepM", dem.nativeResolution().value()}};
     if (scan.missingCount > 0) return missingDataLeg(std::move(leg), scan, dem, pts.size());
     describeWorst(leg, scan, links, ctx, failures);
+    if (scan.belowGround > 0) markBelowGround(leg, scan, pts.size());
     return leg;
+}
+
+void RouteEvaluator::markBelowGround(json& leg, const LegScan& scan, std::size_t total) {
+    leg["status"] = "blocked";
+    leg["reasons"].push_back({{"module", "rf-core"},
+                              {"severity", "blocked"},
+                              {"text", std::format("The planned altitude is below the ground at {} of {} positions on this "
+                                                   "leg, down to {:.1f} m below it at {} along the leg. Links there are "
+                                                   "evaluated with the drone on the ground.",
+                                                   scan.belowGround, total, -scan.lowestAglM,
+                                                   km(scan.lowestAlongM))}});
 }
 
 std::optional<json> RouteEvaluator::analyze(const ModuleRunner::Active& a, const json& req, json& result) {

@@ -89,3 +89,23 @@ TEST(MinAltitude, RouteAnalysisSuggestsRaisingTheLeg) {
     const json again = analyze({{"mission", fixed}}, w, {{"control", {rfcore::Hertz(2.44e9), "test radio"}}});
     EXPECT_TRUE(again.at("reasons").empty()) << again.dump(2);
 }
+
+TEST(MinAltitude, LaunchReferencedRouteIsRaisedInAltM) {
+    const auto w = wallWorld(140.0);
+    const LatLon a{48.5, 35.2};
+    const LatLon b = w.direct(a, 90.0, 1500.0).point;
+    const json mission = {{"altitudeRef", "launch"},
+                          {"pilot", {{"lat", a.lat}, {"lon", a.lon}, {"aglM", 1.5}}},
+                          {"waypoints", {{{"lat", b.lat}, {"lon", b.lon}, {"altM", 20.0}, {"label", "Target"}}}},
+                          {"returnToPilot", false},
+                          {"evaluate", "control"}};
+    const json r = analyze({{"mission", mission}}, w, {{"control", {rfcore::Hertz(2.44e9), "test radio"}}});
+    ASSERT_EQ(r.at("reasons").size(), 1u);
+    const json& wp = r.at("reasons").at(0).at("fix").at("patch").at("waypoints").at(0);
+    EXPECT_FALSE(wp.contains("aglM"));
+    EXPECT_GT(wp.at("altM").get<double>(), 20.0);
+    json fixed = mission;
+    fixed["waypoints"] = r.at("reasons").at(0).at("fix").at("patch").at("waypoints");
+    const json again = analyze({{"mission", fixed}}, w, {{"control", {rfcore::Hertz(2.44e9), "test radio"}}});
+    EXPECT_TRUE(again.at("reasons").empty()) << again.dump(2);
+}

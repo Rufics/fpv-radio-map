@@ -38,13 +38,21 @@
         }
       }
     },
+    "altitudeRef": {
+      "enum": [
+        "launch",
+        "agl"
+      ],
+      "default": "agl",
+      "description": "What waypoint heights are measured from. launch: altM above the ground at the pilot, a barometric altitude from take-off; the drone flies a straight line in altitude between waypoints and does not follow the terrain. agl: aglM above the ground under the drone, which follows the terrain between waypoints. Without the field a mission is agl."
+    },
     "pilot": {
-      "$ref": "#/$defs/point"
+      "$ref": "#/$defs/pilot"
     },
     "waypoints": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/point"
+        "$ref": "#/$defs/waypoint"
       },
       "minItems": 1,
       "description": "Route in flight order; the last point is the target."
@@ -134,6 +142,67 @@
         }
       }
     },
+    "pilot": {
+      "type": "object",
+      "required": [
+        "lat",
+        "lon",
+        "aglM"
+      ],
+      "properties": {
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lon": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "aglM": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Antenna height above the ground at the pilot, in both altitude references."
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "waypoint": {
+      "type": "object",
+      "required": [
+        "lat",
+        "lon"
+      ],
+      "properties": {
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lon": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "aglM": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Height above the ground under the drone (altitudeRef agl); MSL is computed from the DEM."
+        },
+        "altM": {
+          "type": "number",
+          "minimum": -2000,
+          "maximum": 10000,
+          "description": "Height above the ground at the pilot (altitudeRef launch), as a barometric altimeter zeroed at take-off reads it. Negative is below the launch point."
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
     "linkSetup": {
       "type": "object",
       "required": [
@@ -162,5 +231,55 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "altitudeRef"
+        ],
+        "properties": {
+          "altitudeRef": {
+            "const": "launch"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "waypoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "altM": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "altM"
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "waypoints": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "aglM": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "aglM"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
 }
