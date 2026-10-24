@@ -78,9 +78,10 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-buil
 ```
 
 Expect `OK` for each builder output that exists: `dem.cog.tif`, `landcover.cog.tif` and four
-`.pmtiles` files by default, plus `satellite.pmtiles` when you built it. `verify` does not notice a missing
-file and does not check `style-dark.json`, `manifest.json` or `fonts/`, so compare the listing of
-`data/out` with this one (`satellite.pmtiles` only if you built it):
+`.pmtiles` files by default (three with `--no-terrain`), plus `satellite.pmtiles` when you built it.
+`verify` does not notice a missing file and does not check `style-dark.json`, `manifest.json` or
+`fonts/`, so compare the listing of `data/out` with this one (`terrain.pmtiles` only without
+`--no-terrain`, `satellite.pmtiles` only if you built it):
 
 ```
 basemap.pmtiles  hillshade.pmtiles  terrain.pmtiles  contours.pmtiles  satellite.pmtiles
