@@ -33,8 +33,9 @@ bool RoutePreparation::apply(json& mission, const json& answer, const std::strin
         done[i] = true;
         waypoints[i][field] = height;
         waypoints[i]["heightSource"] = "auto";
-        json entry = {{"index", i}, {"field", field}, {"heightM", height}, {"module", moduleId},
-                      {"blocked", h.value("blocked", false)}};
+        // Where the waypoint was, so a client can tell the entry still belongs to it after an edit.
+        json entry = {{"index", i}, {"lat", waypoints[i].at("lat")}, {"lon", waypoints[i].at("lon")}, {"field", field},
+                      {"heightM", height}, {"module", moduleId}, {"blocked", h.value("blocked", false)}};
         if (h.contains("limitedBy") && h["limitedBy"].is_string()) entry["limitedBy"] = h["limitedBy"];
         heights.push_back(std::move(entry));
     }

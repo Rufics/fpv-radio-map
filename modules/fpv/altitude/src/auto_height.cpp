@@ -91,7 +91,10 @@ std::vector<AutoHeight> AutoHeightPlanner::plan() const {
             }
         }
         // Whole metres: up for the floor, but never over the ceiling at the waypoint.
-        h.heightM = std::min(std::ceil(h.heightM - kEpsilonM), std::floor(cap + kEpsilonM));
+        const double rounded = std::ceil(h.heightM - kEpsilonM);
+        const double capped = std::floor(cap + kEpsilonM);
+        if (rounded > capped && !h.blocked) h = {i, h.heightM, "ceiling", h.atM, true};
+        h.heightM = std::min(rounded, capped);
         out.push_back(h);
     }
     return out;

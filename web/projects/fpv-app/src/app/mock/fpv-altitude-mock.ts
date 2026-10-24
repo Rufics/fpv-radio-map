@@ -255,6 +255,8 @@ export function fpvAltitudePrepareMock(m: Mission): {
   const fixedAt = (p: number) => (p === 0 || p === n + 1 ? null : path.pts[p].h);
   const need = new Array<number>(n).fill(-Infinity);
   const by = new Array<string>(n).fill('terrain');
+  // Waypoints with a leg where no height up to maxAglM clears the link.
+  const noLink = new Array<boolean>(n).fill(false);
   const raise = (p: number, other: number, toward: number, floor: number, limit: string) => {
     const h = fixedAt(other);
     const v =
@@ -275,6 +277,10 @@ export function fpvAltitudePrepareMock(m: Mission): {
         : 'terrain';
     if (isFree(leg + 1)) raise(leg + 1, leg, t, floor, limit);
     if (isFree(leg)) raise(leg, leg + 1, 1 - t, floor, limit);
+    if (o.linkFloor && c.fresnelRadiusM[k] > 0 && c.linkFloorMslM[k] === null) {
+      if (leg < n) noLink[leg] = true;
+      if (leg >= 1 && leg - 1 < n) noLink[leg - 1] = true;
+    }
   });
   const field = MissionAltitude.field(m);
   const autoHeights: AutoHeight[] = [];
@@ -282,15 +288,18 @@ export function fpvAltitudePrepareMock(m: Mission): {
     if (!free[i] || !Number.isFinite(need[i])) return w;
     const ground = elevation(w.lat, w.lon);
     const ceiling = toRef(ground + o.ceilingAglM, ground);
-    const blocked = need[i] > ceiling;
+    // Whole metres: up for the floor, never over the ceiling; rounding down to it is the ceiling's too.
     const heightM = Math.min(Math.ceil(need[i]), Math.floor(ceiling));
+    const capped = heightM < need[i];
     autoHeights.push({
       index: i,
+      lat: w.lat,
+      lon: w.lon,
       field,
       heightM,
       module: 'fpv.altitude',
-      limitedBy: blocked ? 'ceiling' : by[i],
-      blocked,
+      limitedBy: capped ? 'ceiling' : by[i],
+      blocked: capped || noLink[i],
     });
     return { ...MissionAltitude.withHeight(m, w, heightM), heightSource: 'auto' as const };
   });

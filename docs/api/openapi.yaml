@@ -1085,6 +1085,8 @@ components:
             type: object
             properties:
               index: { type: integer, description: 'Index into mission.waypoints' }
+              lat: { type: number, description: "The waypoint's position, so the entry can be matched to it after the route is edited" }
+              lon: { type: number }
               field: { enum: [aglM, altM], description: "The mission's height field" }
               heightM: { type: number }
               module: { type: string }

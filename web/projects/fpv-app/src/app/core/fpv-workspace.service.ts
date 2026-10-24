@@ -260,7 +260,8 @@ export class FpvWorkspace {
   private heightView(m: Mission, i: number, r: RouteResult | null): HeightVm {
     const w = m.waypoints[i];
     const auto = MissionAltitude.isAuto(m, w);
-    const set = auto ? r?.autoHeights?.find((a) => a.index === i) : undefined;
+    // Only for the same point: after a deletion or a move the entry at this index is another one's.
+    const set = auto ? r?.autoHeights?.find((a) => a.index === i && (a.lat === undefined || (a.lat === w.lat && a.lon === w.lon))) : undefined;
     // A waypoint without a stored height shows the height new points get until the server sets one.
     const heightM = set?.heightM ?? w[MissionAltitude.field(m)] ?? MissionAltitude.defaultHeightM;
     if (!auto) return { heightM, auto, text: RfFormat.format(heightM, 'm'), title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}` };

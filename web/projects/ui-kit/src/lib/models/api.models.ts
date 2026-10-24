@@ -317,6 +317,9 @@ export interface RouteResult {
 export interface AutoHeight {
   /** Index into mission.waypoints */
   index: number;
+  /** The waypoint's position, so the entry can be matched to it after the route is edited */
+  lat?: number;
+  lon?: number;
   field: 'aglM' | 'altM';
   heightM: number;
   module: string;

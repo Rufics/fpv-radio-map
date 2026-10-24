@@ -906,6 +906,8 @@ TEST_F(Integration, RoutePreparationSetsOnlyTheMissingHeights) {
     ASSERT_EQ(r.body["autoHeights"].size(), 1u) << r.body["autoHeights"];
     const json& h = r.body["autoHeights"][0];
     EXPECT_EQ(h["index"], 0);
+    EXPECT_EQ(h["lat"], 48.51);
+    EXPECT_EQ(h["lon"], 35.22);
     EXPECT_EQ(h["field"], "aglM");
     EXPECT_EQ(h["heightM"], 77.0);
     EXPECT_EQ(h["module"], "test.probe");
