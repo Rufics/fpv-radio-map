@@ -24,6 +24,8 @@ public:
     [[nodiscard]] static bool wantsHeight(const json& waypoint, const std::string& field);
 
 private:
+    /// Why a route.prepare answer is not an object with list fields, or empty when it is.
+    [[nodiscard]] static std::string shapeFailure(const json& answer);
     /// Sets the heights of one module's answer that are still wanted, listing each in `heights`;
     /// false for a malformed answer.
     static bool apply(json& mission, const json& answer, const std::string& moduleId, json& heights,

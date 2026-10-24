@@ -25,7 +25,8 @@ struct AutoHeight {
 /// point has to clear the floor instead. Manual heights stay as they are. The legs from and back to
 /// the pilot are taken as flown level at the waypoint's height, so their highest floor applies;
 /// only the climb from the pilot itself is left to the climb-out (the analysis still shows where
-/// it runs under the corridor).
+/// it runs under the corridor). A leg whose line, with the heights set, goes over the ceiling
+/// anywhere blocks its automatic ends.
 class AutoHeightPlanner {
 public:
     AutoHeightPlanner(const Mission& mission, const IWorld& world, const Settings& set, const LinkInputs& links, double k);
@@ -57,6 +58,8 @@ private:
     [[nodiscard]] std::vector<Point> lifted(const std::vector<Sample>& xs) const;
     /// Waypoint `i`'s height in whole metres under its ceiling, and whether it is blocked.
     [[nodiscard]] static AutoHeight capped(std::size_t i, const Point& p, const std::vector<Sample>& xs);
+    /// Blocks the free ends of every leg whose line, with the heights set, goes over the ceiling.
+    static void checkLegs(std::vector<Point> pts, std::vector<AutoHeight>& hs, const std::vector<Sample>& xs);
     /// The least height a free point needs for one sample `toward` of the way to it from `other`.
     static std::optional<double> need(const Point& other, double toward, double floor);
 

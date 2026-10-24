@@ -118,9 +118,23 @@ TEST(AutoHeight, AWholeMetreHeightStaysUnderAnUnevenCeiling) {
     EXPECT_DOUBLE_EQ(r.at("waypoints")[0].at("heightM").get<double>(), 120.0) << "rounded down, not up past the ceiling";
 }
 
+TEST(AutoHeight, ALegOverTheCeilingBetweenTwoHillsBlocksBoth) {
+    // Two waypoints on 200 m hills with the plain at 100 m between them: the level leg 130 m above
+    // launch is 130 m AGL over the plain, over the ceiling though both waypoints are under theirs.
+    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1000.0) < 100.0 || std::abs(x - 2000.0) < 100.0 ? 200.0 : 100.0; });
+    const json r = run(w, eastRoute(w, {{1.0, -1.0}, {2.0, -1.0}}, "launch"), {{"stepM", 50.0}});
+    ASSERT_EQ(r.at("waypoints").size(), 2U);
+    for (const json& h : r.at("waypoints")) {
+        EXPECT_TRUE(h.at("blocked").get<bool>()) << h.dump();
+        EXPECT_EQ(h.at("limitedBy"), "ceiling") << h.dump();
+        EXPECT_DOUBLE_EQ(h.at("heightM").get<double>(), 130.0) << h.dump();
+    }
+    EXPECT_EQ(r.at("reasons").size(), 2U);
+}
+
 TEST(AutoHeight, ALinkOverARidgeSetsTheHeight) {
-    // A 60 m ridge half way: the control link needs more than the 30 m terrain clearance at the waypoint.
-    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1000.0) < 100.0 ? 160.0 : 100.0; });
+    // A 30 m ridge half way: the control link needs more than the 30 m terrain clearance at the waypoint.
+    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1000.0) < 100.0 ? 130.0 : 100.0; });
     const LinkInputs links{{"control", {rfcore::Hertz(915e6), "ELRS 900"}}};
     const json r = run(w, eastRoute(w, {{2.0, -1.0}}), {{"stepM", 100.0}}, links);
     ASSERT_EQ(r.at("waypoints").size(), 1U);
@@ -130,9 +144,21 @@ TEST(AutoHeight, ALinkOverARidgeSetsTheHeight) {
     EXPECT_FALSE(h.at("blocked").get<bool>());
 }
 
+TEST(AutoHeight, ALinkNeedOverTheCeilingAtTheLastWaypointIsCapped) {
+    // A 60 m ridge half way: the control link would need about 148 m AGL at the route's last point.
+    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1000.0) < 100.0 ? 160.0 : 100.0; });
+    const LinkInputs links{{"control", {rfcore::Hertz(915e6), "ELRS 900"}}};
+    const json r = run(w, eastRoute(w, {{2.0, -1.0}}), {{"stepM", 100.0}}, links);
+    ASSERT_EQ(r.at("waypoints").size(), 1U);
+    const json& h = r.at("waypoints")[0];
+    EXPECT_DOUBLE_EQ(h.at("heightM").get<double>(), 120.0) << h.dump();
+    EXPECT_EQ(h.at("limitedBy"), "ceiling");
+    EXPECT_TRUE(h.at("blocked").get<bool>());
+}
+
 TEST(AutoHeight, NoClearLinkHeightBlocksTheWaypoint) {
-    // A 400 m wall before the waypoint: no height up to maxAglM clears the link.
-    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1500.0) < 100.0 ? 500.0 : 100.0; });
+    // A 60 m ridge half way: no height up to maxAglM clears the link, though the terrain is easy.
+    const LocalWorld w = worldOf([](double x) { return std::abs(x - 1000.0) < 100.0 ? 160.0 : 100.0; });
     const LinkInputs links{{"control", {rfcore::Hertz(915e6), "ELRS 900"}}};
     const json r = run(w, eastRoute(w, {{2.0, -1.0}}), {{"stepM", 100.0}, {"maxAglM", 100.0}}, links);
     ASSERT_EQ(r.at("waypoints").size(), 1U);

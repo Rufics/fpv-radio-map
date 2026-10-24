@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MissionAltitude } from '@rfmap/ui-kit';
 import { fpvAltitudeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
-import { elevation } from './mock-terrain';
+import { LOCAL, RIDGE, elevation, toLatLon } from './mock-terrain';
 import { exampleMission } from './reference-case';
 
 describe('fpvAltitudeMock', () => {
@@ -81,6 +81,26 @@ describe('fpvAltitudePrepareMock', () => {
     expect(h.heightM).toBeLessThanOrEqual(120);
     expect(mission.waypoints[0].aglM).toBe(h.heightM);
     expect(mission.waypoints.slice(1)).toEqual(waypoints.slice(1));
+  });
+
+  it('blocks a waypoint under its own ceiling when a leg of its goes over one', () => {
+    // W1 on the ridge top, W2 down on the plain: the level leg from W1 is far above W2's ground.
+    const auto = {
+      ...m,
+      altitudeRef: 'launch' as const,
+      modules: { 'fpv.altitude': { ceilingAglM: 60, linkFloor: false } },
+      waypoints: [toLatLon(RIDGE.x, RIDGE.y), toLatLon(LOCAL.B.x, LOCAL.B.y)].map((p, i) =>
+        MissionAltitude.withAutoHeight({ ...p, label: `W${i + 1}` }),
+      ),
+      returnToPilot: false,
+    };
+    const { autoHeights } = fpvAltitudePrepareMock(auto);
+    const top = autoHeights[0];
+    const ridge = toLatLon(RIDGE.x, RIDGE.y);
+    const ceiling = elevation(ridge.lat, ridge.lon) + 60 - elevation(m.pilot.lat, m.pilot.lon);
+    expect(top.heightM).toBeLessThan(Math.floor(ceiling));
+    expect(top).toMatchObject({ blocked: true, limitedBy: 'ceiling' });
+    expect(autoHeights[1].blocked).toBe(true);
   });
 
   it('does nothing with every height manual or autoHeight off', () => {

@@ -16,6 +16,14 @@ bool RoutePreparation::wantsHeight(const json& waypoint, const std::string& fiel
     return !waypoint.contains(field) || waypoint.value("heightSource", "manual") == "auto";
 }
 
+std::string RoutePreparation::shapeFailure(const json& answer) {
+    if (!answer.is_object()) return "route.prepare did not return an object";
+    for (const char* key : {"waypoints", "reasons"}) {
+        if (answer.contains(key) && !answer[key].is_array()) return std::format("route.prepare returned malformed {} (not a list)", key);
+    }
+    return {};
+}
+
 bool RoutePreparation::apply(json& mission, const json& answer, const std::string& moduleId, json& heights,
                              std::vector<bool>& done) {
     const std::string field = heightField(mission);
@@ -55,7 +63,7 @@ json RoutePreparation::prepare(const json& mission, const CalcContext& ctx, json
                           {"time", UtcTime::format(ctx.time)}};
         json resp;
         std::string failure = ModuleCall::failure([&a, &req, &resp] { resp = a.instance->invoke("route.prepare", req); });
-        if (failure.empty() && !resp.is_object()) failure = "route.prepare did not return an object";
+        if (failure.empty()) failure = shapeFailure(resp);
         // A malformed answer sets nothing: what it did set is dropped with the copies.
         json attempt = prepared;
         json heights = json::array();

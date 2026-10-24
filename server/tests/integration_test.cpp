@@ -923,7 +923,7 @@ TEST_F(Integration, RoutePreparationSetsOnlyTheMissingHeights) {
     EXPECT_FALSE(kept.body.contains("autoHeights")) << kept.body["autoHeights"];
 
     // A malformed answer sets nothing and is listed; an automatic waypoint keeps its last height.
-    for (const char* mode : {"bad-height", "bad-type"}) {
+    for (const char* mode : {"bad-height", "bad-type", "bad-list"}) {
         json stale = shortMission(point(48.51, 35.22, 90), {{"test.probe", {{"mode", mode}}}});
         stale["waypoints"][0]["heightSource"] = "auto";
         const auto bad = call("POST", "/calc/route", stale, bearer(sessionFor(stale)));

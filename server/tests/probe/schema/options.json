@@ -5,9 +5,9 @@
   "additionalProperties": false,
   "properties": {
     "mode": {
-      "enum": ["answer", "fail", "not-an-object", "bad-height", "bad-type"],
+      "enum": ["answer", "fail", "not-an-object", "bad-height", "bad-type", "bad-list"],
       "default": "answer",
-      "description": "answer: well-formed answers with some odd entries; fail: every call fails; not-an-object: route.prepare and route.analyze answer an array; bad-height: route.prepare names a waypoint that does not exist; bad-type: route.prepare answers a blocked that is not a boolean"
+      "description": "answer: well-formed answers with some odd entries; fail: every call fails; not-an-object: route.prepare and route.analyze answer an array; bad-height: route.prepare names a waypoint that does not exist; bad-type: route.prepare answers a blocked that is not a boolean; bad-list: route.prepare answers waypoints that are not a list"
     }
   }
 }

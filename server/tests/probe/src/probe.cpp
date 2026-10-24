@@ -49,6 +49,7 @@ private:
         }
         if (mode == "bad-height") heights.push_back({{"index", 99}, {"heightM", 1.0}});
         if (mode == "bad-type") heights[0]["blocked"] = "yes";
+        if (mode == "bad-list") return {{"waypoints", {{"first", heights[0]}}}};
         return {{"waypoints", heights}, {"reasons", {{{"severity", "warn"}, {"text", "probe set heights"}, {"leg", 0}}}}};
     }
 

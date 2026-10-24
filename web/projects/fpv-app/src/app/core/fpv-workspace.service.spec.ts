@@ -140,6 +140,11 @@ describe('FpvWorkspace', () => {
     expect(ws.legRows()[0].infoTitle).toContain('control link clearance');
     expect(ws.legRows()[1].auto).toBe(false);
 
+    // Switched to above launch, the AGL entry no longer fits it.
+    store.update((x) => ({ ...x, altitudeRef: 'launch' }));
+    expect(ws.legRows()[0]).toMatchObject({ auto: true, heightM: 120 });
+    store.update((x) => ({ ...x, altitudeRef: 'agl' }));
+
     store.update((x) => ({ ...x, waypoints: x.waypoints.map((w, i) => (i === 0 ? { ...w, lat: w.lat + 0.01 } : w)) }));
     expect(ws.legRows()[0]).toMatchObject({ auto: true, heightM: 120 });
 

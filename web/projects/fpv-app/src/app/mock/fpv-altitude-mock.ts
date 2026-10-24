@@ -284,14 +284,31 @@ export function fpvAltitudePrepareMock(m: Mission): {
     }
   });
   const field = MissionAltitude.field(m);
-  const autoHeights: AutoHeight[] = [];
-  const waypoints = m.waypoints.map((w, i) => {
-    if (!free[i] || !Number.isFinite(need[i])) return w;
+  const heights = m.waypoints.map((w, i) => {
+    if (!free[i] || !Number.isFinite(need[i])) return null;
     const ground = elevation(w.lat, w.lon);
     const ceiling = toRef(ground + o.ceilingAglM, ground);
     // Whole metres: up for the floor, never over the ceiling; rounding down to it is the ceiling's too.
-    const heightM = Math.min(Math.ceil(need[i]), Math.floor(ceiling));
+    return Math.min(Math.ceil(need[i]), Math.floor(ceiling));
+  });
+  // A leg whose line, with the heights set, goes over the ceiling blocks its free ends.
+  const heightAt = (p: number) =>
+    p >= 1 && p <= n && heights[p - 1] !== null ? heights[p - 1]! : path.pts[p].h;
+  const overCeiling = new Array<boolean>(n).fill(false);
+  c.s.forEach((s, k) => {
+    const leg = c.leg[k];
+    const t = path.t(leg, s);
+    const line = heightAt(leg) + (heightAt(leg + 1) - heightAt(leg)) * t;
+    if (line <= toRef(c.ceilingMslM[k], c.groundMslM[k]) + 0.05) return;
+    if (leg >= 1 && leg <= n) overCeiling[leg - 1] = true;
+    if (leg < n) overCeiling[leg] = true;
+  });
+  const autoHeights: AutoHeight[] = [];
+  const waypoints = m.waypoints.map((w, i) => {
+    const heightM = heights[i];
+    if (heightM === null) return w;
     const capped = heightM < need[i];
+    const ceiling = capped || (overCeiling[i] && !noLink[i]);
     autoHeights.push({
       index: i,
       lat: w.lat,
@@ -299,8 +316,8 @@ export function fpvAltitudePrepareMock(m: Mission): {
       field,
       heightM,
       module: 'fpv.altitude',
-      limitedBy: capped ? 'ceiling' : by[i],
-      blocked: capped || noLink[i],
+      limitedBy: ceiling ? 'ceiling' : by[i],
+      blocked: capped || noLink[i] || overCeiling[i],
     });
     return { ...MissionAltitude.withHeight(m, w, heightM), heightSource: 'auto' as const };
   });

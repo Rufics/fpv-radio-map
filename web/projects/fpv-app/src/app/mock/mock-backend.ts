@@ -367,7 +367,7 @@ export class MockBackend {
         module: 'fpv.altitude',
         severity: 'warn',
         leg: h.index,
-        text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but its legs need more than the ceiling allows; set to the ceiling. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
+        text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but flying its legs safely takes more than the ceiling allows. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
       });
     }
     if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };

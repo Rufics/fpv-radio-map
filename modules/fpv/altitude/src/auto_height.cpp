@@ -11,6 +11,8 @@ constexpr const char* kId = "fpv.altitude";
 /// A sample this close to a fixed end of its leg cannot be helped by the other end.
 constexpr double kMinWeight = 0.05;
 constexpr double kEpsilonM = 1e-6;
+/// The tolerance route.analyze checks the ceiling with.
+constexpr double kCeilingToleranceM = 0.05;
 constexpr double kInf = std::numeric_limits<double>::infinity();
 
 std::string km(double m) { return "km " + fixed(m / 1000.0, 2); }
@@ -76,7 +78,7 @@ AutoHeight AutoHeightPlanner::capped(std::size_t i, const Point& p, const std::v
     AutoHeight h{i, p.height, p.by, p.atM, false};
     double cap = kInf;
     for (const Sample& x : xs) {
-        const bool own = x.leg == i && x.t >= 1.0;
+        const bool own = x.leg == i && x.t > 1.0 - kEpsilonM;
         if (own) cap = x.ceiling;
         if (own && h.heightM > x.ceiling + kEpsilonM) h = {i, x.ceiling, "ceiling", x.s, true};
         const bool adjacent = x.leg == i || x.leg == i + 1;
@@ -93,6 +95,22 @@ AutoHeight AutoHeightPlanner::capped(std::size_t i, const Point& p, const std::v
     return h;
 }
 
+void AutoHeightPlanner::checkLegs(std::vector<Point> pts, std::vector<AutoHeight>& hs, const std::vector<Sample>& xs) {
+    for (const AutoHeight& h : hs) pts[h.waypoint + 1].height = h.heightM;
+    const auto block = [&hs](std::size_t point, const Sample& x) {
+        for (AutoHeight& h : hs) {
+            if (h.waypoint + 1 == point && !h.blocked) h = {h.waypoint, h.heightM, "ceiling", x.s, true};
+        }
+    };
+    for (const Sample& x : xs) {
+        const double a = pts[x.leg].height;
+        const double b = pts[x.leg + 1].height;
+        if (!std::isfinite(a) || !std::isfinite(b) || a + (b - a) * x.t <= x.ceiling + kCeilingToleranceM) continue;
+        block(x.leg, x);
+        block(x.leg + 1, x);
+    }
+}
+
 std::vector<AutoHeight> AutoHeightPlanner::plan() const {
     const std::vector<Sample> xs = samples();
     const std::vector<Point> pts = lifted(xs);
@@ -101,6 +119,7 @@ std::vector<AutoHeight> AutoHeightPlanner::plan() const {
         const Point& p = pts[i + 1];
         if (p.free && std::isfinite(p.height)) out.emplace_back(capped(i, p, xs));
     }
+    checkLegs(pts, out, xs);
     return out;
 }
 
@@ -123,7 +142,7 @@ json prepare(const json& request, const IWorld& world, const LinkInputs& links) 
             if (!h.blocked) continue;
             const std::string why =
                 h.limitedBy == "ceiling"
-                    ? "its legs need more than the " + fixed(set.ceilingAglM, 0) + " m AGL ceiling allows; set to the ceiling"
+                    ? "flying its legs safely takes more than the " + fixed(set.ceilingAglM, 0) + " m AGL ceiling allows"
                     : "no height up to " + fixed(set.maxAglM, 0) + " m AGL keeps " + fixed(set.fraction * 100.0, 0) +
                           " % of the Fresnel zone clear at " + km(h.atM) + "; the height keeps " + limitText(h.limitedBy) + " only";
             json r = reason(kId, "warn", name + ": automatic height " + fixed(h.heightM, 0) + unit + ", but " + why +
