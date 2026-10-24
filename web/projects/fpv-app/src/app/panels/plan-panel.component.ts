@@ -2,6 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import {
   AltitudeRef,
   EvaluateMode,
+  FlightMode,
   JobPart,
   JobProgressComponent,
   LinkKind,
@@ -54,6 +55,11 @@ import { CompareService } from '../core/fpv-core';
       @if (!canEdit) {
         <div class="viewonly" role="note">View only · results as the owner saved them</div>
       }
+      <div class="rf-eyebrow">Flight</div>
+      @if (canEdit) {
+        <rf-segmented label="Flight" [options]="flights" [value]="m.flightMode ?? 'manual'" (valueChange)="setFlight($event)" />
+      }
+      <div class="rf-caption">{{ flightHint(m) }}</div>
       <div class="rf-eyebrow">Links to check</div>
       @if (canEdit) {
         <rf-segmented label="Links to check" [options]="modes" [value]="m.evaluate" (valueChange)="setMode($event)" />
@@ -246,6 +252,11 @@ export class PlanPanelComponent {
     { value: 'both', label: 'Both' },
     { value: 'control', label: 'Control' },
     { value: 'video', label: 'Video' },
+    { value: 'none', label: 'None' },
+  ];
+  protected readonly flights: { value: FlightMode; label: string }[] = [
+    { value: 'manual', label: 'Pilot' },
+    { value: 'autonomous', label: 'Autonomous' },
   ];
 
   protected readonly busy = this.ws.store.busy;
@@ -269,6 +280,16 @@ export class PlanPanelComponent {
   protected setMode(mode: EvaluateMode): void {
     this.ws.store.setEvaluate(mode);
     this.ws.why.set(null);
+  }
+
+  protected setFlight(mode: FlightMode): void {
+    this.ws.store.setFlightMode(mode);
+    this.ws.why.set(null);
+  }
+
+  protected flightHint(m: Mission): string {
+    if ((m.flightMode ?? 'manual') === 'manual') return 'The pilot flies the route over the control link; losing it hands the drone to the failsafe.';
+    return 'The route is uploaded before take-off and the autopilot flies it on its own. The links are optional: where one drops, the pilot cannot take over, but the flight goes on.';
   }
 
   protected setHeight(index: number, heightM: number): void {

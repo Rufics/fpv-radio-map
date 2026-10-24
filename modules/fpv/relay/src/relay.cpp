@@ -42,6 +42,9 @@ Hops evaluateRelay(const ILinkEvaluator& eval, const std::vector<std::string>& l
 json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eval) {
     const Mission mission = Mission::fromJson(request.at("mission"));
     const json options = request.value("options", json::object());
+    if (mission.links().empty()) {
+        return {{"reasons", {reason(kId, "info", "A relay helps a radio link; evaluate at least one link to plan it.")}}, {"data", json::object()}};
+    }
     const double relayAgl = options.value("relayAglM", 2.0);
     const double stepM = options.value("stepM", 250.0);
     const double cellM = options.value("cellM", 100.0);

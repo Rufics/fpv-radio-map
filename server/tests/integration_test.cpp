@@ -934,6 +934,54 @@ TEST_F(Integration, RoutePreparationSetsOnlyTheMissingHeights) {
     op.remove("test.probe");
 }
 
+TEST_F(Integration, AutonomousRouteNeedsNoLink) {
+    // The pilot uploads the route before take-off and evaluates no radio link: only the route itself.
+    json m = mission();
+    m.erase("links");
+    m["evaluate"] = "none";
+    m["flightMode"] = "autonomous";
+    const std::string session = sessionFor(m);
+    const auto r = call("POST", "/calc/route", m, bearer(session));
+    ASSERT_EQ(r.status, 200) << r.body;
+    ASSERT_EQ(r.body["legs"].size(), 3u);
+    for (const json& leg : r.body["legs"]) {
+        EXPECT_EQ(leg["status"], "ok") << leg;
+        EXPECT_TRUE(leg["worst"].empty()) << leg;
+        EXPECT_TRUE(leg["reasons"].empty()) << leg;
+        EXPECT_EQ(leg["samples"]["evaluated"], leg["samples"]["total"]) << leg;
+    }
+    EXPECT_TRUE(r.body["library"].empty());
+    EXPECT_EQ(call("POST", "/calc/coverage", m, bearer(session)).status, 422);
+
+    // Without terrain under the route the leg is still missing data, not a verdict.
+    json hole = shortMission(point(48.42, 35.36, 100));
+    hole["evaluate"] = "none";
+    const auto h = call("POST", "/calc/route", hole, bearer(sessionFor(hole)));
+    ASSERT_EQ(h.status, 200) << h.body;
+    EXPECT_EQ(h.body["legs"][0]["status"], "missing-data") << h.body["legs"][0];
+    EXPECT_EQ(h.body["legs"][0]["missingData"]["bbox"].size(), 4u);
+}
+
+TEST_F(Integration, AutonomousRouteWarnsWhereThePilotCannotTakeOver) {
+    // 5 m above the ground behind the ridge, at 10 dBm, the control link is gone.
+    json manual = shortMission(point(48.50, 35.30, 5.0));
+    manual["links"]["control"]["txPowerDbm"] = 10;
+    json autonomous = manual;
+    autonomous["flightMode"] = "autonomous";
+    const auto a = call("POST", "/calc/route", manual, bearer(sessionFor(manual)));
+    const auto b = call("POST", "/calc/route", autonomous, bearer(sessionFor(autonomous)));
+    ASSERT_EQ(a.status, 200) << a.body;
+    ASSERT_EQ(b.status, 200) << b.body;
+    const json& before = a.body["legs"][0];
+    const json& after = b.body["legs"][0];
+    ASSERT_LT(before["worst"]["control"]["marginDb"].get<double>(), 0.0) << before;
+    EXPECT_EQ(before["status"], "blocked");
+    EXPECT_EQ(after["status"], "warn") << after;
+    const json& why = after["reasons"][0];
+    EXPECT_EQ(why["severity"], "warn");
+    EXPECT_NE(why["text"].get<std::string>().find("cannot take over"), std::string::npos) << why;
+}
+
 TEST_F(Integration, CoverageCountsCellsWithoutTerrainAndHonoursLimits) {
     json m = shortMission(point(48.46, 35.32, 100));
     m["pilot"] = point(48.455, 35.325, 1.5);

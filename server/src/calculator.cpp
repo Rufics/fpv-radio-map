@@ -21,8 +21,9 @@ std::vector<LinkKind> Calculator::kindsFor(const json& mission) {
     std::vector<LinkKind> kinds;
     if (e == "both" || e == "control") kinds.push_back(LinkKind::Control);
     if (e == "both" || e == "video") kinds.push_back(LinkKind::Video);
+    const json links = mission.value("links", json::object());
     for (LinkKind k : kinds) {
-        if (!mission.at("links").contains(toString(k))) {
+        if (!links.contains(toString(k))) {
             throw HttpError(422, "evaluate asks for the " + toString(k) + " link but links." + toString(k) + " is not set");
         }
     }
@@ -79,6 +80,7 @@ json Calculator::path(const json& req) {
     if (both) {
         const json m = {{"evaluate", req.value("evaluate", "both")}, {"links", req.at("links")}};
         links = resolveLinks(req.at("links"), kindsFor(m));
+        if (links.empty()) throw HttpError(422, "evaluate none asks for no link; a path calculation needs one");
     } else {
         const LinkKind k = linkKindFromString(req.at("kind").get<std::string>());
         links.emplace_back(k, links_.resolve(req.at("link"), k));
@@ -109,7 +111,7 @@ json Calculator::path(const json& req) {
 
 json Calculator::route(const json& mission, std::optional<int> revision) {
     const CalcContext ctx = contextFor(mission);
-    const RouteEvaluator::Links links = resolveLinks(mission.at("links"), kindsFor(mission));
+    const RouteEvaluator::Links links = resolveLinks(mission.value("links", json::object()), kindsFor(mission));
     LibraryRefList refs;
     for (const auto& l : links | std::views::values) refs.addAll(l.refs);
     for (const char* kind : {"drones", "batteries"}) {
@@ -140,7 +142,9 @@ json Calculator::route(const json& mission, std::optional<int> revision) {
 
 json Calculator::coverage(const json& mission, LinkKind kind, CoverageProgress& progress, ThreadPool& pool) {
     const CalcContext ctx = contextFor(mission);
-    if (!mission.at("links").contains(toString(kind))) throw HttpError(422, "the mission has no " + toString(kind) + " link");
+    if (!mission.value("links", json::object()).contains(toString(kind))) {
+        throw HttpError(422, "the mission has no " + toString(kind) + " link");
+    }
     const ResolvedLink link = links_.resolve(mission.at("links").at(toString(kind)), kind);
     LibraryRefList refs;
     for (const auto& r : link.refs) refs.add(r.toJson());

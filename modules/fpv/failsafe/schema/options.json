@@ -4,11 +4,12 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "action": { "enum": ["rth", "land", "hover"], "default": "rth" },
+    "action": { "enum": ["rth", "land", "hover", "loiter"], "default": "rth", "description": "hover: a fixed-wing cannot hover and loiters (circles) instead" },
     "altitudeMode": { "enum": ["fixed", "max", "current"], "default": "max", "description": "fixed: fly at the RTH altitude; max: the higher of that and the current altitude; current: stay where it is" },
     "rthAltitudeAboveHomeM": { "type": "number", "minimum": 0, "maximum": 2000, "default": 0, "description": "Relative to the pilot's ground, as flight controllers measure it" },
     "terrainClearanceM": { "type": "number", "minimum": 0, "maximum": 500, "default": 10 },
     "temperatureC": { "type": "number", "minimum": -60, "maximum": 60 },
-    "stepM": { "type": "number", "minimum": 5, "maximum": 1000, "default": 50 }
+    "stepM": { "type": "number", "minimum": 5, "maximum": 1000, "default": 50 },
+    "continueMission": { "type": "boolean", "default": true, "description": "Autonomous missions only: the flight controller keeps flying the route when control drops (INAV failsafe_mission_delay = -1); false runs the failsafe action instead" }
   }
 }
