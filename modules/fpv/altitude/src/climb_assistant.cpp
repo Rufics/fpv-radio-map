@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <format>
 #include <limits>
 #include <map>
 
@@ -28,8 +29,8 @@ constexpr double kSameWh = 0.05;
 std::string km(double m) { return "km " + fixed(m / 1000.0, 2); }
 
 std::string minutes(double s) {
-    const auto whole = static_cast<long>(std::lround(s));
-    return std::to_string(whole / 60) + ":" + (whole % 60 < 10 ? "0" : "") + std::to_string(whole % 60);
+    const long whole = std::lround(s);
+    return std::format("{}:{:02}", whole / 60, whole % 60);
 }
 
 std::string lowerFirst(std::string s) {
@@ -60,6 +61,11 @@ struct Performance {
         if (!energy) return std::nullopt;
         return cruiseWh + energy->verticalClimbWh(riseM);
     }
+    /// The drone's spec or the weather could not be flown: no energy, and a note saying why.
+    void dropEnergy(const std::exception& e) {
+        energy.reset();
+        notes.push_back(std::string("Energy not estimated: ") + e.what() + ".");
+    }
 };
 
 Performance performance(const json& weather, const Route& route, const IWorld& world, const ClimbSettings& set,
@@ -77,9 +83,12 @@ Performance performance(const json& weather, const Route& route, const IWorld& w
             p.energy.emplace(spec, battery::Air::fromJson(weather, json::object()), world);
             for (const Leg& leg : route.legs()) p.cruiseWh += p.energy->levelWh(leg.from.position, leg.to.position);
             p.notes.push_back("Energy: cruise at " + fixed(p.airspeedMps, 1) + " m/s airspeed in the forecast wind, plus climbing; descents give nothing back.");
-        } catch (const std::exception& e) {
-            p.energy.reset();
-            p.notes.push_back(std::string("Energy not estimated: ") + e.what() + ".");
+        } catch (const std::runtime_error& e) {
+            p.dropEnergy(e);
+        } catch (const std::logic_error& e) {
+            p.dropEnergy(e);
+        } catch (const json::exception& e) {
+            p.dropEnergy(e);
         }
     } else {
         p.notes.push_back("No drone picked: energy is not estimated, and the profiles assume " + fixed(p.airspeedMps, 0) + " m/s.");
@@ -104,7 +113,7 @@ std::vector<Segment> segments(const std::vector<CorridorPoint>& pts, const Perfo
         double gs = perf.groundSpeed(pts[i + 1].p.courseDeg);
         if (!(gs > 0.0)) gs = perf.airspeedMps;
         const bool free = pts[i].nearPilot || pts[i + 1].nearPilot;
-        out.push_back({free ? kInf : perf.climbMps * ds / gs, free ? kInf : perf.descentMps * ds / gs, gs, perf.climbMps, perf.descentMps});
+        out.emplace_back(free ? kInf : perf.climbMps * ds / gs, free ? kInf : perf.descentMps * ds / gs, gs, perf.climbMps, perf.descentMps);
     }
     return out;
 }
@@ -118,14 +127,14 @@ json statsJson(const ProfileStats& st, const Performance& perf, std::size_t wayp
               {"steepestClimbMps", st.steepestClimbMps},
               {"steepestClimbAtM", st.steepestClimbAtM},
               {"waypoints", waypoints}};
-    if (const auto wh = perf.wh(st.riseM)) j["energyWh"] = *wh;
+    if (const auto wh = perf.wh(st.riseM); wh.has_value()) j["energyWh"] = *wh;
     return j;
 }
 
 /// What a strategy's fix changes, now and after.
 json previewRows(const ProfileStats& now, const ProfileStats& after, const Performance& perf, std::size_t nowWps, std::size_t afterWps) {
     json rows = {{{"label", "Total climb"}, {"now", fixed(now.riseM, 0) + " m"}, {"after", fixed(after.riseM, 0) + " m"}}};
-    if (const auto a = perf.wh(now.riseM), b = perf.wh(after.riseM); a && b) {
+    if (const auto a = perf.wh(now.riseM), b = perf.wh(after.riseM); a.has_value() && b.has_value()) {
         rows.push_back({{"label", "Route energy"}, {"now", fixed(*a, 1) + " Wh"}, {"after", fixed(*b, 1) + " Wh"}});
     }
     rows.push_back({{"label", "Flight time"}, {"now", minutes(now.timeS)}, {"after", minutes(after.timeS)}});
@@ -153,15 +162,15 @@ std::vector<Strategy> strategies(const ClimbPlanner& planner, const Route& route
     std::string energyText = energy.withinClimbRate
                                  ? "The least total climb through the corridor, climbing at most " + rate + " past the take-off zone."
                                  : "No profile through the corridor keeps to the drone's " + rate + " climb; this one has the least total climb.";
-    out.push_back({std::move(energy), "Energy-optimal climb", std::move(energyText)});
+    out.emplace_back(std::move(energy), "Energy-optimal climb", std::move(energyText));
     ClimbProfile over = planner.overLaunch();
     const std::string overTop = fixed(topAboveLaunch(over.mslM, route), 0) + " m";
-    out.push_back({std::move(over), "Climb over launch", "Climb to " + overTop + " above launch over the pilot, then fly level."});
+    out.emplace_back(std::move(over), "Climb over launch", "Climb to " + overTop + " above launch over the pilot, then fly level.");
     ClimbProfile gradual = planner.gradual();
     const std::string top = fixed(topAboveLaunch(gradual.mslM, route), 0) + " m";
-    out.push_back({std::move(gradual), "Gradual up and down",
-                   returns ? "Climb steadily to " + top + " above launch and descend steadily back to the pilot."
-                           : "Climb steadily to " + top + " above launch, then fly level."});
+    out.emplace_back(std::move(gradual), "Gradual up and down",
+                     returns ? "Climb steadily to " + top + " above launch and descend steadily back to the pilot."
+                             : "Climb steadily to " + top + " above launch, then fly level.");
     return out;
 }
 
@@ -270,8 +279,7 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     steepLegReasons(route, pts, seg, perf, energyFix, out.reasons);
     const bool outside = now.minClearanceM < -kCorridorToleranceM || now.overCeilingM > kCorridorToleranceM;
     const bool inside = energyStats.minClearanceM >= -kCorridorToleranceM && energyStats.overCeilingM <= kCorridorToleranceM;
-    const double saving = now.riseM - energyStats.riseM;
-    if ((outside && inside) || saving >= std::max(kMinSavingM, kMinSavingShare * now.riseM)) {
+    if (const double saving = now.riseM - energyStats.riseM; (outside && inside) || saving >= std::max(kMinSavingM, kMinSavingShare * now.riseM)) {
         out.reasons.push_back(reason(kId, "info", adviceText(now, energyStats, perf, outside && inside), energyFix));
     }
 

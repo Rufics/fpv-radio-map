@@ -404,8 +404,13 @@ export class MockBackend {
   private attachReasons(reasons: Reason[], result: RouteResult): void {
     for (const r of reasons) {
       const leg = r.leg === undefined ? undefined : result.legs?.[r.leg];
-      if (leg) (leg.reasons ??= []).push(r);
-      else (result.reasons ??= []).push(r);
+      if (leg) {
+        leg.reasons ??= [];
+        leg.reasons.push(r);
+      } else {
+        result.reasons ??= [];
+        result.reasons.push(r);
+      }
     }
   }
 

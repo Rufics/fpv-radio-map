@@ -354,7 +354,8 @@ export class ProfileFitterMock {
       ref[b] = isReturn ? pts[leg + 1].h : this.reference(b, profile[b]);
       const inner: number[] = [];
       this.split(profile, ref, a, b, inner);
-      const knots = [a, ...inner.sort((x, y) => x - y), b];
+      inner.sort((x, y) => x - y);
+      const knots = [a, ...inner, b];
       this.prune(profile, ref, knots);
       for (const k of knots.slice(1, -1)) {
         added++;

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <format>
+#include <ranges>
 #include <string>
 
 namespace fpv::altitude {
@@ -62,8 +64,10 @@ void ProfileFitter::prune(const std::vector<double>& profile, const std::vector<
     while (j + 1 < knots.size()) {
         const std::size_t a = knots[j - 1];
         const std::size_t b = knots[j + 1];
-        bool keep = rise(ref, {a, b}, 0, 1) > rise(ref, knots, j - 1, j + 1) + kPruneRiseM;
-        for (std::size_t i = a + 1; !keep && i < b; ++i) keep = outside(i, lineAt(i, a, ref[a], b, ref[b]), profile[i]);
+        const bool keep = rise(ref, {a, b}, 0, 1) > rise(ref, knots, j - 1, j + 1) + kPruneRiseM ||
+                          std::ranges::any_of(std::views::iota(a + 1, b), [&](std::size_t i) {
+                              return outside(i, lineAt(i, a, ref[a], b, ref[b]), profile[i]);
+                          });
         if (keep) {
             ++j;
         } else {
@@ -94,7 +98,7 @@ void ProfileFitter::split(const std::vector<double>& profile, std::vector<double
 FittedRoute ProfileFitter::fit(const std::vector<double>& profile) const {
     FittedRoute out;
     out.mslM.assign(pts_.size(), 0.0);
-    std::vector<double> ref(pts_.size(), 0.0);
+    std::vector ref(pts_.size(), 0.0);
     const std::string field(route_.altitude().waypointField());
     std::size_t count = 0;
     for (const Leg& leg : route_.legs()) {
@@ -111,7 +115,7 @@ FittedRoute ProfileFitter::fit(const std::vector<double>& profile) const {
         for (std::size_t j = 1; j + 1 < knots.size(); ++j) {
             const std::size_t k = knots[j];
             out.waypoints.push_back({{"lat", pts_[k].p.position.lat}, {"lon", pts_[k].p.position.lon},
-                                     {"label", "C" + std::to_string(++count)}, {field, ref[k]}, {"heightSource", "manual"}});
+                                     {"label", std::format("C{}", ++count)}, {field, ref[k]}, {"heightSource", "manual"}});
         }
         out.added += knots.size() - 2;
         if (!leg.isReturn) {

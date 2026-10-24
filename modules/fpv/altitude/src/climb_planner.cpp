@@ -193,7 +193,7 @@ bool ClimbPlanner::withinRates(const std::vector<double>& mslM) const {
 ClimbProfile ClimbPlanner::energyOptimal() const {
     if (auto p = search(true)) return {"energy", std::move(*p), true};
     // Without the rates every height is reachable from the pilot, so this always finds one.
-    return {"energy", search(false).value_or(std::vector<double>(pts_.size(), highestFloor())), false};
+    return {"energy", search(false).value_or(std::vector(pts_.size(), highestFloor())), false};
 }
 
 ClimbProfile ClimbPlanner::overLaunch() const {
