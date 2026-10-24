@@ -29,6 +29,25 @@ describe('SchemaValidator (contract schemas, ajv draft-07 strict)', () => {
     expect(v.validateMission(launch).ok).toBe(false);
   });
 
+  it('requires the envelope of a fixed-wing drone', () => {
+    const quad = {
+      id: 'fpv-10in-recon',
+      name: '10-inch recon quad',
+      version: 1,
+      verified: true,
+      massKg: 1.9,
+      cruiseAirspeedMps: 10,
+      cruisePowerW: 366,
+      climb: { method: 'potential-energy', efficiency: 0.6 },
+      source: { kind: 'measurement', reference: 'Flight log' },
+    };
+    expect(v.validateLibrary('drones', quad).issues).toEqual([]);
+    const plane = { ...quad, id: 'fw-1800-mapper', airframe: 'fixed-wing' };
+    expect(v.validateLibrary('drones', plane).ok).toBe(false);
+    const fixedWing = { stallSpeedMps: 11, maxBankDeg: 45, maxClimbAngleDeg: 8, maxDiveAngleDeg: 10 };
+    expect(v.validateLibrary('drones', { ...plane, fixedWing }).issues).toEqual([]);
+  });
+
   it('validates a battery entry with the shared common definitions', () => {
     const entry = {
       id: 'liion-6s-6000',
