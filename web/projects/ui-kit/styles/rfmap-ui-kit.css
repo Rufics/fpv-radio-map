@@ -42,12 +42,12 @@
   --rf-blocked-chip: #2a1714;
   --rf-admin: #d9b8f5;
   --rf-admin-bg: #2a1e33;
-  /* signal scale, strong → threshold */
-  --rf-heat-1: #f9e46b;
-  --rf-heat-2: #f28d3c;
-  --rf-heat-3: #c9417a;
-  --rf-heat-4: #6a2c8f;
-  --rf-heat-gradient: linear-gradient(90deg, #f9e46b, #f28d3c, #c9417a, #6a2c8f);
+  /* signal scale (viridis), strong → threshold */
+  --rf-heat-1: #fde725;
+  --rf-heat-2: #35b779;
+  --rf-heat-3: #31688e;
+  --rf-heat-4: #440154;
+  --rf-heat-gradient: linear-gradient(90deg, #fde725, #35b779, #31688e, #440154);
   /* type */
   --rf-font-sans: 'IBM Plex Sans', system-ui, sans-serif;
   --rf-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
@@ -578,6 +578,11 @@ button.rf-leg-label {
 .rf-map-tag--muted {
   border-color: var(--rf-border-strong);
   color: var(--rf-text-3);
+}
+.rf-map-tag--blocked {
+  border-color: var(--rf-blocked);
+  color: var(--rf-blocked-text);
+  background: var(--rf-blocked-bg);
 }
 
 /* MapLibre controls in the dark theme; scoped to the map so they outrank maplibre-gl.css */

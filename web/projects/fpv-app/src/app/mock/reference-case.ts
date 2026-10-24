@@ -9,6 +9,7 @@ import {
   Antenna,
   Battery,
   BudgetTerm,
+  CalcPathRequest,
   CoverageGrid,
   Drone,
   Fix,
@@ -683,7 +684,12 @@ export function coverageGrid(mission: Mission, kind: LinkKind): CoverageGrid {
 
 /** Worst knife-edge parameter ν over `samples` points of the straight path between two antennas (local km, MSL m). */
 function worstNuOnPath(a: { x: number; y: number; h: number }, b: { x: number; y: number; h: number }, dM: number, lambda: number, samples: number): number {
-  let worstNu = -10;
+  return worstEdgeOnPath(a, b, dM, lambda, samples).nu;
+}
+
+/** The worst knife edge of a path: ν, where along the path (0..1) and the ground height there. */
+function worstEdgeOnPath(a: { x: number; y: number; h: number }, b: { x: number; y: number; h: number }, dM: number, lambda: number, samples: number): { nu: number; t: number; groundM: number } {
+  let worst = { nu: -10, t: 0.5, groundM: 0 };
   for (let s = 1; s < samples; s++) {
     const t = s / samples;
     const g = elevationLocal(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
@@ -691,9 +697,38 @@ function worstNuOnPath(a: { x: number; y: number; h: number }, b: { x: number; y
     const d1 = dM * t;
     const d2 = dM - d1;
     const nu = (g - ray) * Math.sqrt((2 * dM) / (lambda * d1 * d2));
-    if (nu > worstNu) worstNu = nu;
+    if (nu > worst.nu) worst = { nu, t, groundM: g };
   }
-  return worstNu;
+  return worst;
+}
+
+/**
+ * /calc/path in the mock: one link from the pilot to a point, with the same margin as the mock
+ * coverage grid there and the dominant knife edge when the line is blocked.
+ */
+export function pathResult(req: CalcPathRequest): LinkResult {
+  const mission: Mission = { ...exampleMission(), links: { [req.kind]: req.link } };
+  const link = linkBudgetDelta(mission, req.kind);
+  const lambda = 299792458 / link.frequencyHz;
+  const a = toLocal(req.from.lat, req.from.lon);
+  const b = toLocal(req.to.lat, req.to.lon);
+  const dKm = Math.hypot(b.x - a.x, b.y - a.y);
+  const dM = Math.max(30, dKm * 1000);
+  const edge = worstEdgeOnPath({ ...a, h: elevationLocal(a.x, a.y) + req.from.aglM }, { ...b, h: elevationLocal(b.x, b.y) + req.to.aglM }, dM, lambda, 48);
+  const lossDb = knifeEdgeLossDb(edge.nu);
+  const marginDb = 37 - fspl(dM, link.frequencyHz) - lossDb - 30.7 * (dKm / 6.4) ** 2 + 95 + link.biasDb;
+  const lineOfSight = edge.nu <= 0;
+  const at = toLatLon(a.x + (b.x - a.x) * edge.t, a.y + (b.y - a.y) * edge.t);
+  const dominant = { distanceM: dM * edge.t, groundMslM: edge.groundM, lat: at.lat, lon: at.lon };
+  return {
+    kind: req.kind,
+    frequencyHz: link.frequencyHz,
+    distanceM: dM,
+    marginDb: Math.round(marginDb * 100) / 100,
+    reachable: marginDb >= 0,
+    diffraction: { lineOfSight, nu: edge.nu, lossDb, edgeHeightM: Math.round(edge.groundM), dominant },
+    uncertainty: [],
+  };
 }
 
 export function elevationProfile(from: { lat: number; lon: number }, to: { lat: number; lon: number }): Profile {

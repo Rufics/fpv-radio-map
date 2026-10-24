@@ -4,7 +4,10 @@ import type { Geometry, Position } from 'geojson';
 import {
   BaseSwitcherComponent,
   CoverageDeltaLayer,
+  CoverageIntensity,
   CoverageLayer,
+  CoverageReliefLayer,
+  LayerSectionComponent,
   MissingDataLayer,
   DrawMarker,
   RouteDeltaLayer,
@@ -39,12 +42,30 @@ import { RouteWeatherMapComponent } from './route-weather-map.component';
 import { FlightReplayMapComponent } from '../replay/flight-replay-map.component';
 import { AltitudeView } from '../core/fpv-altitude';
 import { Route3dComponent } from './route-3d.component';
+import { FlightReplay } from '../core/flight-replay.service';
+import { CoverageMiniMapComponent } from './coverage-mini-map.component';
+import { LineOfSightComponent } from './line-of-sight.component';
+import { MapPointer } from './map-pointer';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
   selector: 'fpv-map-stage',
   host: { '(document:keydown.escape)': 'cancelPlacing()' },
-  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent, FlightReplayMapComponent, Route3dComponent],
+  providers: [MapPointer],
+  imports: [
+    MapViewComponent,
+    LayerPanelComponent,
+    LayerSectionComponent,
+    BaseSwitcherComponent,
+    SlotHostComponent,
+    SegmentedComponent,
+    HeatLegendComponent,
+    RouteWeatherMapComponent,
+    FlightReplayMapComponent,
+    Route3dComponent,
+    CoverageMiniMapComponent,
+    LineOfSightComponent,
+  ],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
       <rf-map-view class="map" [class.weather-mode]="weatherShown()" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
@@ -68,18 +89,32 @@ import { Route3dComponent } from './route-3d.component';
               (forecastOffsetChange)="ws.forecastOffsetH.set($event)"
               (closed)="ws.layersOpen.set(false)"
             >
-              @if (hasRoute()) {
-                <div class="rf-eyebrow">View</div>
+              <div rfCoverageOptions class="cov-options">
                 <label class="view-toggle">
-                  <input type="checkbox" [checked]="alt.mode() === '3d'" (change)="alt.setMode($any($event.target).checked ? '3d' : '2d')" />
-                  3D terrain and route
+                  <input type="checkbox" [checked]="ws.coverageMiniMap()" (change)="ws.coverageMiniMap.set($any($event.target).checked)" />
+                  Mini-map instead of the heatmap
                 </label>
                 @if (!compact()) {
-                  <label class="view-toggle">
-                    <input type="checkbox" [checked]="alt.profileOpen()" (change)="alt.profileOpen.set($any($event.target).checked)" />
-                    Altitude profile
+                  <label class="view-toggle" [class.is-off]="!sightAvailable()">
+                    <input type="checkbox" [checked]="ws.lineOfSight()" (change)="ws.lineOfSight.set($any($event.target).checked)" />
+                    Line of sight on hover
                   </label>
+                  <span class="opt-hint">{{ sightAvailable() ? 'Point at the map to see the margin there and what blocks it.' : 'Works while you read a calculated result in 2D.' }}</span>
                 }
+              </div>
+              @if (hasRoute()) {
+                <rf-layer-section heading="View" hint="3D and the altitude profile">
+                  <label class="view-toggle">
+                    <input type="checkbox" [checked]="alt.mode() === '3d'" (change)="alt.setMode($any($event.target).checked ? '3d' : '2d')" />
+                    3D terrain and route
+                  </label>
+                  @if (!compact()) {
+                    <label class="view-toggle">
+                      <input type="checkbox" [checked]="alt.profileOpen()" (change)="alt.profileOpen.set($any($event.target).checked)" />
+                      Altitude profile
+                    </label>
+                  }
+                </rf-layer-section>
               }
             </rf-layer-panel>
           }
@@ -101,6 +136,9 @@ import { Route3dComponent } from './route-3d.component';
                 }
               </div>
               <rf-heat-legend />
+              @if (intensityNote(); as note) {
+                <div class="legend-note">{{ note }}</div>
+              }
             </div>
           }
         </div>
@@ -108,7 +146,7 @@ import { Route3dComponent } from './route-3d.component';
           <div class="overlay banner" role="status">Preview on the map · Apply to keep</div>
         }
         @if (ws.placing(); as p) {
-          <div class="overlay hint" role="status">
+          <div class="overlay hint" [class.above-mini]="miniMapShown()" role="status">
             {{ p === 'pilot' ? 'Click the map to place the pilot' : 'Click the map to add a point · the last point is the target' }}
             @if (p === 'waypoints') {
               <button type="button" class="rf-btn rf-btn--sm rf-btn--primary" (click)="ws.placing.set(null)" [disabled]="(ws.mission()?.waypoints?.length ?? 0) === 0">Done</button>
@@ -117,13 +155,17 @@ import { Route3dComponent } from './route-3d.component';
             }
           </div>
         } @else if (ws.store.pilotStale()) {
-          <div class="overlay hint" role="status">The pilot moved · recalculate to see coverage from the new position</div>
+          <div class="overlay hint" [class.above-mini]="miniMapShown()" role="status">The pilot moved · recalculate to see coverage from the new position</div>
         } @else if (ws.editingRoute()) {
-          <div class="overlay hint" role="status">Drag a point to move it · coverage is from before the edit</div>
+          <div class="overlay hint" [class.above-mini]="miniMapShown()" role="status">Drag a point to move it · coverage is from before the edit</div>
         }
         <fpv-route-weather-map [compact]="compact()" />
         <fpv-flight-replay-map [fitPadding]="fitPadding()" />
         <fpv-route-3d />
+        @if (miniMapShown()) {
+          <fpv-coverage-mini-map [grid]="heatGrid()" [route]="miniMapRoute()" />
+        }
+        <fpv-line-of-sight [active]="sightActive()" [grid]="heatGrid()" [link]="ws.heatLink()" />
         <rf-slot-host class="overlay slot" name="map.overlays" />
       </rf-map-view>
       @if (dim()) {
@@ -142,6 +184,11 @@ import { Route3dComponent } from './route-3d.component';
     .map-btn { background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); }
     .view-toggle { display: flex; gap: 10px; align-items: center; min-height: 32px; }
     .view-toggle input { width: 18px; height: 18px; accent-color: var(--rf-ok); margin: 0; }
+    .view-toggle.is-off { color: var(--rf-text-2); }
+    .cov-options { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px dashed var(--rf-border); }
+    .opt-hint { font-size: 12px; color: var(--rf-text-2); padding-left: 28px; }
+    .legend-note { font-size: 11px; color: var(--rf-text-2); }
+    .hint.above-mini { bottom: 240px; }
     .map-btn.is-on { border-color: var(--rf-ok); color: var(--rf-ok-text); background: var(--rf-ok-bg); }
     .delta-scale { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #FF6B5B, #8A96A5 50%, #35D0BA); }
     .delta-keys { display: flex; justify-content: space-between; font-size: 11px; }
@@ -178,6 +225,10 @@ export class MapStageComponent {
 
   private tool?: RouteTool;
   private readonly coverage = new CoverageLayer();
+  private readonly pointer = inject(MapPointer);
+  private readonly replay = inject(FlightReplay);
+  /** A point of the route is being dragged. */
+  private readonly dragging = signal(false);
   private readonly limits = new LimitsLayer();
   private readonly coverageDelta = new CoverageDeltaLayer();
   private readonly missingData = new MissingDataLayer();
@@ -210,7 +261,32 @@ export class MapStageComponent {
     const pad = this.fitPadding();
     return this.drawerOpen() ? { ...pad, top: 40, bottom: this.drawerHeight() + 60 } : pad;
   }
-  protected readonly showHeatLegend = computed(() => !!this.ws.store.coverage()[this.ws.heatLink()] && this.layers.isVisible('results-coverage'));
+  /** The grid the heatmap shows: none while the B − A difference map replaces it. */
+  protected readonly heatGrid = computed(() => (this.cmp.delta() ? null : (this.ws.store.coverage()[this.ws.heatLink()] ?? null)));
+  /** What the pilot is doing, which sets how strongly the heatmap is drawn. */
+  private readonly activity = computed(() =>
+    CoverageIntensity.activity({
+      flight: this.replay.mode() !== 'plan',
+      miniMap: this.ws.coverageMiniMap(),
+      dragging: this.dragging(),
+      editing: !!this.ws.placing() || this.ws.editingRoute(),
+    }),
+  );
+  protected readonly intensityNote = computed(() => CoverageIntensity.note(this.activity()));
+  protected readonly showHeatLegend = computed(() => !!this.heatGrid() && this.layers.isVisible('results-coverage') && this.activity() !== 'flight');
+  protected readonly miniMapShown = computed(() => this.ws.coverageMiniMap() && !!this.heatGrid() && this.alt.mode() !== '3d' && this.activity() !== 'flight');
+  protected readonly miniMapRoute = computed(() => {
+    const m = this.ws.mission();
+    if (!m) return [];
+    const pts = [m.pilot, ...m.waypoints];
+    return m.returnToPilot === false ? pts : [...pts, m.pilot];
+  });
+  /** The line of sight works while a calculated result is read on the flat map with a mouse. */
+  protected readonly sightAvailable = computed(() => {
+    const a = this.activity();
+    return (a === 'analyse' || a === 'mini-map') && !!this.ws.store.result() && this.alt.mode() !== '3d' && !this.ws.store.preview();
+  });
+  protected readonly sightActive = computed(() => this.ws.lineOfSight() && this.sightAvailable() && !this.compact());
   protected readonly forecastTime = computed(() => {
     const base = new Date();
     base.setMinutes(0, 0, 0);
@@ -230,9 +306,20 @@ export class MapStageComponent {
     });
     effect(() => {
       if (!this.ready()) return;
-      // while the B − A difference map is shown, it replaces the plain heatmap
-      const grid = this.cmp.delta() ? null : (this.ws.store.coverage()[this.ws.heatLink()] ?? null);
+      const grid = this.heatGrid();
       untracked(() => this.coverage.setGrid(grid));
+    });
+    effect(() => {
+      const opacity = CoverageIntensity.opacity(this.activity());
+      untracked(() => this.coverage.setOpacity(opacity));
+    });
+    // the relief is shaded over the heatmap once: by the Hillshade layer when it is on, else by the coverage relief
+    effect(() => {
+      if (!this.ready()) return;
+      const want = !!this.heatGrid() && this.layers.isVisible('results-coverage') && !this.layers.isVisible('terrain-hillshade') && CoverageIntensity.opacity(this.activity()) > 0;
+      untracked(() => {
+        if (this.layers.get('results-coverage-relief') && this.layers.isVisible('results-coverage-relief') !== want) this.layers.setVisible('results-coverage-relief', want);
+      });
     });
     effect(() => {
       if (!this.ready()) return;
@@ -297,10 +384,11 @@ export class MapStageComponent {
     this.destroyRef.onDestroy(() => {
       this.tool?.destroy();
       this.tags.forEach((t) => t.remove());
+      this.pointer.disconnect();
     });
   }
 
-  onReady(_map: MlMap): void {
+  onReady(map: MlMap): void {
     const cfg = this.ws.data.mapConfig();
     if (cfg) {
       for (const def of createStandardLayers(cfg, this.forecastTime())) {
@@ -309,12 +397,16 @@ export class MapStageComponent {
       }
     }
     this.layers.register(this.coverage);
+    const relief = cfg ? CoverageReliefLayer.fromConfig(cfg) : null;
+    if (relief) this.layers.register(relief);
+    if (map) this.pointer.connect(map);
     this.layers.register(this.limits);
     this.layers.register(this.coverageDelta);
     this.layers.register(this.missingData);
     this.layers.register(this.routeDelta);
     this.tool = new RouteTool(this.layers, this.ctx, {
       onMove: (i, p) => this.ws.store.movePoint(i, p),
+      onDrag: (active) => this.dragging.set(active),
       onSelectLeg: (i) => {
         if (this.ws.store.result()) this.ws.openWhy(i + 1);
       },

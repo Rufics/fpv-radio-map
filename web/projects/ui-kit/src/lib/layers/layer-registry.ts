@@ -152,7 +152,7 @@ export class LayerRegistry {
   }
 
   private rank(def: LayerDefinition): number {
-    return LAYER_GROUP_RANK[def.group] + (def.order ?? 0) / 1000;
+    return LAYER_GROUP_RANK[def.drawGroup ?? def.group] + (def.order ?? 0) / 1000;
   }
 
   private sorted(list: readonly LayerEntry[]): LayerEntry[] {

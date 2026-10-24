@@ -24,6 +24,10 @@ export * from './lib/map/map-view.component';
 // coverage
 export * from './lib/coverage/heat-scale';
 export * from './lib/coverage/coverage-layer';
+export * from './lib/coverage/coverage-probe';
+export * from './lib/coverage/coverage-relief-layer';
+export * from './lib/coverage/coverage-intensity';
+export * from './lib/coverage/line-of-sight-layer';
 export * from './lib/coverage/delta';
 export * from './lib/coverage/missing-data-layer';
 // charts
