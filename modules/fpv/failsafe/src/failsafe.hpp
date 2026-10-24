@@ -64,7 +64,11 @@ public:
 
     /// First point along the route where the control margin drops below zero, refined by
     /// bisection to 1 m between the last good and the first lost sample.
-    [[nodiscard]] std::optional<LossPoint> firstLoss(const Route& route) const;
+    [[nodiscard]] std::optional<LossPoint> firstLoss(const Route& route) const { return firstLoss(route, route.outboundLength()); }
+
+    /// The same up to `untilM` along the route: an autonomous mission flies its return leg on
+    /// the route too, so control can first drop there.
+    [[nodiscard]] std::optional<LossPoint> firstLoss(const Route& route, double untilM) const;
 
     /// Where control comes back along the rest of the route after `fromM`, sampled every
     /// stepM, if it comes back before the end.

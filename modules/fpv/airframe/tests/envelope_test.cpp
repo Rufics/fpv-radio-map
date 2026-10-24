@@ -172,3 +172,16 @@ TEST(Envelope, MissingTerrainIsAWarning) {
     const json r = analyze({{"mission", route(hole, {{90.0, 2000.0, 100.0}})}}, hole, wing());
     EXPECT_TRUE(hasReason(r, "warn", "not checked"));
 }
+
+TEST(Envelope, SteepDescentArrivesHighButTheLandingCirclesDown) {
+    // 120 m down to 20 m over 300 m needs 18.4°, beyond the 8° dive limit; the way home from
+    // 20 m to the pilot is a landing and is not reported.
+    const auto w = flat();
+    const json r = analyze({{"mission", route(w, {{90.0, 2000.0, 120.0}, {0.0, 300.0, 20.0}}, true)}}, w, wing());
+    const json& high = r.at("data").at("vertical").at("highArrivals");
+    ASSERT_EQ(high.size(), 1u) << high;
+    EXPECT_EQ(high.at(0).at("leg"), 1);
+    EXPECT_NEAR(high.at(0).at("abovePlanM").get<double>(), 100.0 - 300.0 * std::tan(8.0 * kDeg), 1e-6);
+    EXPECT_TRUE(hasReason(r, "warn", "above the planned height"));
+    EXPECT_FALSE(hasReason(r, "info", "can follow the planned heights"));
+}

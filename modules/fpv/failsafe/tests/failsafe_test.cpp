@@ -226,3 +226,29 @@ TEST(Failsafe, AutonomousWithoutTheControlLinkHasNothingToCheck) {
     EXPECT_EQ(r.at("reasons").at(0).at("severity"), "info");
     EXPECT_NE(r.at("reasons").at(0).at("text").get<std::string>().find("Autonomous"), std::string::npos);
 }
+
+TEST(Failsafe, AutonomousMissionChecksTheReturnLegToo) {
+    // Out 1 km east and 1 km north, then diagonally home. Control is lost only north-west of
+    // the corner, which the way out never reaches but the diagonal way home crosses.
+    class NorthWestShadow final : public ILinkProbe {
+    public:
+        double marginDb(const LatLon& p, double) const override { return p.lat > 48.5005 && p.lon < 35.207 ? -1.0 : 1.0; }
+    };
+    const auto w = hillWorld();
+    const NorthWestShadow probe;
+    const LatLon a{48.5, 35.2};
+    const LatLon b = w.direct(a, 90.0, 1000.0).point;
+    const LatLon c = w.direct(b, 0.0, 1000.0).point;
+    json m = {{"pilot", {{"lat", a.lat}, {"lon", a.lon}, {"aglM", 1.5}}},
+              {"waypoints", {{{"lat", b.lat}, {"lon", b.lon}, {"aglM", 100.0}}, {{"lat", c.lat}, {"lon", c.lon}, {"aglM", 100.0}}}},
+              {"returnToPilot", true}, {"evaluate", "control"}};
+    const json manual = analyze({{"mission", m}}, w, probe, std::nullopt, std::nullopt);
+    EXPECT_FALSE(manual.at("data").at("controlLost").get<bool>());
+
+    m["flightMode"] = "autonomous";
+    const json r = analyze({{"mission", m}}, w, probe, std::nullopt, std::nullopt);
+    const json& d = r.at("data");
+    ASSERT_TRUE(d.at("controlLost").get<bool>()) << r.dump();
+    EXPECT_GT(d.at("loss").at("distanceAlongRouteM").get<double>(), 2000.0);
+    EXPECT_GT(d.at("regainAlongRouteM").get<double>(), d.at("loss").at("distanceAlongRouteM").get<double>());
+}

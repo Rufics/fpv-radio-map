@@ -79,6 +79,11 @@ public:
             v["arrivals"].push_back({{"leg", a.leg}, {"belowPlanM", a.belowPlanM}, {"extraClimbM", a.extraClimbM}});
             describeArrival(a, route.legs().at(a.leg));
         }
+        v["highArrivals"] = json::array();
+        for (const HighArrival& a : r.highArrivals) {
+            v["highArrivals"].push_back({{"leg", a.leg}, {"abovePlanM", a.abovePlanM}, {"extraDescentM", a.extraDescentM}});
+            describeHighArrival(a, route.legs().at(a.leg));
+        }
         if (r.worst.has_value()) {
             v["worst"] = pointJson(r.worst->at);
             v["worst"]["belowPlanM"] = r.worst->belowPlanM;
@@ -88,7 +93,7 @@ public:
             v["terrain"]["gapM"] = r.terrainGapM;
             describeTerrain(*r.terrain, r.terrainGapM);
         }
-        if (!r.worst.has_value()) {
+        if (!r.worst.has_value() && r.highArrivals.empty()) {
             add("info", "Fixed-wing: the plane can follow the planned heights at its " + fixed(e.maxClimbAngleDeg, 0) + "° climb and " +
                             fixed(e.maxDiveAngleDeg, 0) + "° descent limits.");
         }
@@ -127,6 +132,14 @@ private:
             a.leg);
     }
 
+    void describeHighArrival(const HighArrival& a, const Leg& leg) {
+        add("warn",
+            "Fixed-wing: the plane reaches " + leg.to.label + " " + fixed(a.abovePlanM, 0) + " m above the planned height; at its " +
+                fixed(airframe_.envelope().maxDiveAngleDeg, 0) + "° descent it needs another " + fixed(a.extraDescentM, 0) +
+                " m of flight to get down. Lengthen the leg, add a descent circle or plan it higher.",
+            a.leg);
+    }
+
     void describeTerrain(const Shortfall& s, double gapM) {
         const std::string text = gapM < 0.0 ? "flies into terrain or clutter" : "passes " + fixed(gapM, 0) + " m over terrain or clutter";
         add(gapM < 0.0 ? "blocked" : "warn",
@@ -162,7 +175,8 @@ std::vector<ProfilePoint> VerticalProfile::of(const Route& route, const IWorld& 
             const GroundSample& g = ground[i];
             const double t = leg.lengthM > 0.0 ? std::clamp(g.distanceM / leg.lengthM, 0.0, 1.0) : 1.0;
             const double height = leg.from.heightM + t * (leg.to.heightM - leg.from.heightM);
-            out.push_back({leg.startM + g.distanceM, g.position, leg.index, altitude.mslM(height, g.groundMslM), g.groundMslM, g.obstacleM});
+            out.push_back({leg.startM + g.distanceM, g.position, leg.index, altitude.mslM(height, g.groundMslM), g.groundMslM,
+                           g.obstacleM, leg.isReturn});
         }
     }
     return out;
@@ -201,8 +215,11 @@ void ClimbSimulator::checkTerrain(const ProfilePoint& p, double achievedMsl, Cli
 }
 
 void ClimbSimulator::recordArrival(const ProfilePoint& p, double belowPlan, ClimbResult& out) const {
-    if (belowPlan <= tolerance_) return;
-    out.arrivals.push_back({p.leg, belowPlan, belowPlan / airframe_.climbGradient()});
+    if (belowPlan > tolerance_) {
+        out.arrivals.push_back({p.leg, belowPlan, belowPlan / airframe_.climbGradient()});
+    } else if (-belowPlan > tolerance_ && !p.returnLeg) {
+        out.highArrivals.push_back({p.leg, -belowPlan, -belowPlan / airframe_.diveGradient()});
+    }
 }
 
 std::vector<Turn> TurnPlanner::turns(const Route& route, const IWorld& world) const {

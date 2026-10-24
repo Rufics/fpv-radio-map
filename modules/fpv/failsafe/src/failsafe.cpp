@@ -19,9 +19,9 @@ Settings Settings::fromJson(const json& o) {
     return s;
 }
 
-std::optional<LossPoint> FailsafeAnalyzer::firstLoss(const Route& route) const {
-    // Outbound only: on the way back the drone is coming home anyway.
-    const double out = route.outboundLength();
+std::optional<LossPoint> FailsafeAnalyzer::firstLoss(const Route& route, double untilM) const {
+    // Outbound only by default: on the way back the drone is coming home anyway.
+    const double out = std::min(untilM, route.length());
     double good = 0.0;
     for (std::size_t i = 1;; ++i) {
         const double s = std::min(out, static_cast<double>(i) * s_.stepM);
@@ -164,7 +164,7 @@ void addEnergy(const json& request, const json& options, const RthPlan& rth, con
 std::optional<json> stopAtLoss(const Settings& settings, const Airframe& airframe, double airspeedMps, const std::string& where) {
     const std::string lost = "Failsafe: control is lost at " + where;
     if (settings.action == "land") {
-        const std::string how = airframe.fixedWing() ? " and the plane glides down to land there, away from home." : " and the drone lands there.";
+        const std::string how = airframe.fixedWing() ? " and the plane glides down to an emergency landing ahead of it, away from home." : " and the drone lands there.";
         return reason(kId, "blocked", lost + how);
     }
     if (settings.action != "hover" && settings.action != "loiter") return std::nullopt;
@@ -217,10 +217,12 @@ json analyze(const json& request, const IWorld& world, const ILinkProbe& link, c
     try {
         const Route route(mission, world);
         const FailsafeAnalyzer an(world, link, settings);
-        const auto loss = an.firstLoss(route);
+        const bool fliesOn = mission.autonomous && settings.continueMission;
+        const auto loss = an.firstLoss(route, fliesOn ? route.length() : route.outboundLength());
         if (!loss) {
             data["controlLost"] = false;
-            reasons.push_back(reason(kId, "info", "Failsafe: control holds along the whole way out (checked every " +
+            reasons.push_back(reason(kId, "info", std::string("Failsafe: control holds along the whole ") +
+                                                      (fliesOn ? "route" : "way out") + " (checked every " +
                                                       fixed(settings.stepM, 0) + " m)."));
             return {{"reasons", reasons}, {"data", data}};
         }
@@ -228,7 +230,7 @@ json analyze(const json& request, const IWorld& world, const ILinkProbe& link, c
         data["loss"] = {{"distanceAlongRouteM", loss->distanceAlongRouteM}, {"lat", loss->point.position.lat},
                         {"lon", loss->point.position.lon}, {"aglM", loss->point.aglM}};
         const std::string where = fixed(loss->distanceAlongRouteM / 1000.0, 2) + " km";
-        if (mission.autonomous && settings.continueMission) {
+        if (fliesOn) {
             reasons.push_back(autonomousLoss(an, route, *loss, where, data));
             return {{"reasons", reasons}, {"data", data}};
         }
