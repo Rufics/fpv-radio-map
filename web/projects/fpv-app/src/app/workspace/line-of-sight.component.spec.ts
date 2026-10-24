@@ -183,11 +183,14 @@ describe('LineOfSightComponent', () => {
     const tag = () => findTag(fixture);
     expect(tag()?.textContent).toContain('checking…');
     // a provisional reading is not announced
-    expect(tag()?.getAttribute('role')).toBeNull();
+    const live = () => fixture.nativeElement.querySelector('[role="status"]') as HTMLElement;
+    fixture.detectChanges();
+    expect(live().textContent).toBe('');
 
     await MockApiHarness.wait(3000);
     expect(tag()?.textContent).not.toContain('checking…');
-    expect(tag()?.getAttribute('role')).toBe('status');
+    fixture.detectChanges();
+    expect(live().textContent).toBe(tag()?.textContent);
 
     pointer.cursor.set(null);
     TestBed.tick();

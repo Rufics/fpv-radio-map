@@ -1,4 +1,13 @@
-import { Component, DestroyRef, computed, effect, inject, input, untracked } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+  untracked,
+} from '@angular/core';
 import { Marker } from 'maplibre-gl';
 import {
   CoverageGrid,
@@ -79,7 +88,8 @@ const SETTLE_MS = 450;
  */
 @Component({
   selector: 'fpv-line-of-sight',
-  template: '',
+  // one live region for the whole life of the component, written only with settled readings
+  template: '<span class="sr-only" role="status">{{ announcement() }}</span>',
 })
 export class LineOfSightComponent {
   readonly active = input(false);
@@ -91,6 +101,7 @@ export class LineOfSightComponent {
   private readonly api = inject(RfmapApiClient);
   private readonly layer = new LineOfSightLayer();
   private readonly probe = computed(() => CoverageProbe.of(this.grid()));
+  protected readonly announcement = signal('');
   private tag?: Marker;
   private tagLeft = false;
   private timer?: ReturnType<typeof setTimeout>;
@@ -180,8 +191,7 @@ export class LineOfSightComponent {
     tag.className = `rf-map-tag ${SIGHT_TAG_CLASS[tone]}`;
     tag.textContent = SightReadout.text(r);
     // only a settled reading is announced, not every step of the mouse
-    if (r.exact || r.failed) tag.setAttribute('role', 'status');
-    else tag.removeAttribute('role');
+    if (r.exact || r.failed) this.announcement.set(tag.textContent);
     this.tag.setLngLat([to.lon, to.lat]).addTo(map);
   }
 
@@ -189,6 +199,7 @@ export class LineOfSightComponent {
     clearTimeout(this.timer);
     this.layer.setSight(null);
     this.tag?.remove();
+    this.announcement.set('');
   }
 }
 
