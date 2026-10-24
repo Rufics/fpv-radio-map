@@ -7,6 +7,7 @@
  */
 import { HttpErrorResponse, HttpHeaders, HttpParams, HttpRequest, HttpResponse } from '@angular/common/http';
 import { fpvCoreMock } from './fpv-core-mock';
+import { fpvAltitudeMock } from './fpv-altitude-mock';
 import {
   CacheLimit,
   CacheTier,
@@ -357,6 +358,7 @@ export class MockBackend {
     const mission = req.body as Mission;
     const result = routeResult(mission, this.scenario());
     if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
+    if (mission.modules?.['fpv.altitude']) result.modules = { ...result.modules, 'fpv.altitude': fpvAltitudeMock(mission) };
     const sess = this.sessionOf(req);
     const stored = sess ? this.missions.get(sess.missionId) : undefined;
     if (stored && sess?.role === 'edit') {
@@ -533,6 +535,7 @@ export const MODULES: ModuleInfo[] = [
   { id: 'fpv.blackbox', version: '1.0.0', title: 'Betaflight Blackbox decoder', lifecycle: 'beta', provides: ['flightlog.decoder'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.airframe', version: '1.0.0', title: 'Fixed-wing flight envelope', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.failsafe', version: '1.0.0', title: 'Failsafe check', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.altitude', version: '1.0.0', title: 'Altitude corridor and 3D view', lifecycle: 'alpha', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.min-altitude', version: '0.4.0', title: 'Minimum altitude', lifecycle: 'alpha', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   {
     id: 'fpv.relay', version: '1.1.0', title: 'Relay planning', lifecycle: 'deprecated', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active',

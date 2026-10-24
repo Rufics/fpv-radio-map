@@ -337,7 +337,9 @@ TEST_F(Integration, HealthAndSeededLibrary) {
 
 TEST_F(Integration, MapConfigOffersOnlyBuiltLayers) {
     // Without a manifest every layer is offered.
-    EXPECT_TRUE(call("GET", "/config/map").body.contains("satellite"));
+    const auto all = call("GET", "/config/map");
+    EXPECT_TRUE(all.body.contains("satellite"));
+    EXPECT_EQ(all.body["dem"], json({{"pmtiles", "/tiles/terrain.pmtiles"}, {"encoding", "terrarium"}}));
 
     // A tiles-builder run without satellite imagery and without contours.
     const fs::path manifest = env->dir / "manifest.json";
@@ -354,6 +356,7 @@ TEST_F(Integration, MapConfigOffersOnlyBuiltLayers) {
     EXPECT_EQ(map.body["hillshade"]["pmtiles"], "/tiles/hillshade.pmtiles");
     EXPECT_FALSE(map.body.contains("satellite")) << map.body.dump();
     EXPECT_FALSE(map.body.contains("contours")) << map.body.dump();
+    EXPECT_FALSE(map.body.contains("dem")) << map.body.dump();
     EXPECT_EQ(map.body["attribution"], json::array({"test basemap credit"}));
 
     // A manifest the server cannot read is treated as none.

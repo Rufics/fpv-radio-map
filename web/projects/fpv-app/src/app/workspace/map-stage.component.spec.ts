@@ -1,7 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Position } from 'geojson';
-import { Mission, MissionStore, RouteDrawing, RouteResult, provideMapView } from '@rfmap/ui-kit';
+import { MapContext, Mission, MissionStore, RouteDrawing, RouteResult, provideMapView } from '@rfmap/ui-kit';
+import { AltitudeView } from '../core/fpv-altitude';
 import { coverageGrid, exampleMission, fixAltitude, fixTurnBack, routeResult } from '../mock/reference-case';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { RouteWeatherService } from '../core/route-weather.service';
@@ -54,6 +55,33 @@ describe('MapStageComponent drawing', () => {
     expect(shown()).toBe(true);
     store.preview.set({ fix: { id: 'x' }, before: m, after: m });
     expect(shown()).toBe(false);
+  });
+
+  it('fits a newly shown mission clear of the altitude drawer while it stays open', () => {
+    const fit = vi.spyOn(TestBed.inject(MapContext), 'fitTo').mockImplementation(() => undefined);
+    (fixture.componentInstance as unknown as { ready: { set(v: boolean): void } }).ready.set(true);
+    fixture.componentRef.setInput('drawerHeight', 300);
+    TestBed.inject(AltitudeView).profileOpen.set(true);
+    show(exampleMission(), null);
+    TestBed.tick();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 360, left: 80, right: 80 });
+
+    fit.mockClear();
+    store.newMission({ ...exampleMission(), name: 'Another' });
+    TestBed.tick();
+    expect(fit).toHaveBeenCalledOnce();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 360, left: 80, right: 80 });
+
+    // the open drawer grows: the route is fitted above its new edge
+    fit.mockClear();
+    fixture.componentRef.setInput('drawerHeight', 400);
+    TestBed.tick();
+    expect(fit).toHaveBeenCalledOnce();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 460, left: 80, right: 80 });
+
+    TestBed.inject(AltitudeView).profileOpen.set(false);
+    TestBed.tick();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 80, bottom: 80, left: 80, right: 80 });
   });
 
   it('draws nothing without a mission', () => {

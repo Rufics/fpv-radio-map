@@ -70,6 +70,7 @@ flowchart LR
 |---|---|---|---|
 | `basemap.pmtiles` | browser | Range requests to `/tiles/basemap.pmtiles` | roads, places, water and buildings (vector tiles, OpenMapTiles schema) |
 | `hillshade.pmtiles` | browser | Range requests | terrain shading (raster) |
+| `terrain.pmtiles` | browser | Range requests, only in the 3D view | Terrarium-encoded heights the 3D view raises the map with (raster-dem) |
 | `contours.pmtiles` | browser | Range requests | contour lines (vector) |
 | `satellite.pmtiles` | browser | Range requests | the **Satellite** base map (raster) |
 | `fonts/` | browser | `/tiles/fonts/{fontstack}/{range}.pbf` | map labels (glyphs) |

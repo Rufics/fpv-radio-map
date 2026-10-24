@@ -3,7 +3,7 @@ import { LAYER_GROUP_TITLE } from './layer-definition';
 import { LayerRegistry } from './layer-registry';
 import { HeatLegendComponent } from '../ui/ui-components';
 
-/** Layer panel (MapSources.dc.html): base pick-one, toggles per group, forecast time slider. */
+/** Layer panel (MapSources.dc.html): base pick-one, toggles per group, forecast time slider; projected content (view options) goes first. */
 @Component({
   selector: 'rf-layer-panel',
   imports: [HeatLegendComponent],
@@ -12,6 +12,7 @@ import { HeatLegendComponent } from '../ui/ui-components';
       <b>Layers</b>
       <button type="button" class="rf-icon-btn" aria-label="Close layers" (click)="closed.emit()">✕</button>
     </div>
+    <ng-content />
     @for (g of registry.groups(); track g.group) {
       <div class="rf-eyebrow">{{ title(g.group) }}</div>
       @if (g.group === 'base') {

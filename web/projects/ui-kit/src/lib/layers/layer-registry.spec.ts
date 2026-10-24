@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LayerSpecification, Map as MlMap, SourceSpecification } from 'maplibre-gl';
 import { StyleLayerSet } from './layer-definition';
 import { LayerRegistry } from './layer-registry';
-import { ContoursLayer, DarkBaseLayer, SatelliteLayer } from './standard-layers';
+import { ContoursLayer, DarkBaseLayer, SatelliteLayer, TopoBaseLayer, createStandardLayers } from './standard-layers';
 
 /** The part of a MapLibre map the registry uses: sources, ordered style layers, visibility. */
 class FakeMap {
@@ -97,5 +97,77 @@ describe('LayerRegistry with lazy tile layers', () => {
     registry.unregister('base-dark');
     expect(map.sources.has('rf-base')).toBe(false);
     expect(map.getLayer('base-water')).toBeUndefined();
+  });
+});
+
+describe('LayerRegistry suppression', () => {
+  it('hides suppressed layers without touching their toggles, and shows them again', () => {
+    const { map, registry } = setup();
+    registry.suppress(['results-test']);
+    expect(map.getLayer('results')?.visibility).toBe('none');
+    expect(registry.isVisible('results-test')).toBe(true);
+    // toggling while suppressed keeps it hidden
+    registry.setVisible('results-test', true);
+    expect(map.getLayer('results')?.visibility).toBe('none');
+    registry.suppress([]);
+    expect(map.getLayer('results')?.visibility).toBe('visible');
+  });
+
+  it('keeps a lazy layer hidden when it is first shown while suppressed', () => {
+    const { map, registry } = setup();
+    registry.suppress(['terrain-contours']);
+    registry.setVisible('terrain-contours', true);
+    expect(map.getLayer('contours-major')?.visibility).toBe('none');
+    registry.suppress([]);
+    expect(map.getLayer('contours-major')?.visibility).toBe('visible');
+  });
+});
+
+describe('TopoBaseLayer', () => {
+  it('is a third pick-one base map, made only when the server has elevation tiles', () => {
+    const ids = (dem: boolean) =>
+      createStandardLayers(
+        {
+          basemap: { pmtiles: '/tiles/basemap.pmtiles' },
+          satellite: { pmtiles: '/tiles/satellite.pmtiles' },
+          ...(dem ? { dem: { pmtiles: '/tiles/terrain.pmtiles' } } : {}),
+        },
+        '2026-01-01T00:00:00Z',
+      ).map((l) => l.id);
+    expect(ids(true)).toEqual(expect.arrayContaining(['base-dark', 'base-satellite', 'base-topo']));
+    expect(ids(false)).not.toContain('base-topo');
+  });
+
+  it('tints and shades the elevation, with contours when there are any, and replaces the other base maps', () => {
+    const map = new FakeMap();
+    const registry = new LayerRegistry();
+    registry.register(new DarkBaseLayer({ pmtiles: '/tiles/basemap.pmtiles' }));
+    registry.register(
+      new TopoBaseLayer({ pmtiles: '/tiles/terrain.pmtiles' }, { pmtiles: '/tiles/contours.pmtiles', sourceLayer: 'contours' }),
+    );
+    registry.connect(map as unknown as MlMap);
+    expect(map.getLayer('topo-tint')).toBeUndefined();
+    registry.setVisible('base-topo', true);
+    expect(map.sources.get('rf-topo-dem')).toMatchObject({ type: 'raster-dem', url: 'pmtiles:///tiles/terrain.pmtiles' });
+    expect(map.layers.filter((l) => l.id.startsWith('topo-')).map((l) => l.id)).toEqual([
+      'topo-bg',
+      'topo-tint',
+      'topo-shade',
+      'topo-contours-minor',
+      'topo-contours-index',
+    ]);
+    expect(registry.isVisible('base-dark')).toBe(false);
+    expect(map.getLayer('base-water')?.visibility).toBe('none');
+  });
+
+  it('draws without contours when the server has none', () => {
+    const map = new FakeMap();
+    const registry = new LayerRegistry();
+    registry.register(new TopoBaseLayer({ tiles: ['mockdem://{z}/{x}/{y}'] }));
+    registry.connect(map as unknown as MlMap);
+    registry.setVisible('base-topo', true);
+    expect(map.sources.has('rf-topo-contours')).toBe(false);
+    expect(map.getLayer('topo-contours-minor')).toBeUndefined();
+    expect(map.getLayer('topo-shade')).toBeDefined();
   });
 });

@@ -41,7 +41,7 @@ def parser() -> argparse.ArgumentParser:
     sub = ap.add_subparsers(dest="command", required=True, metavar="COMMAND")
     specs = {
         "basemap": ("OSM extract -> basemap.pmtiles (Planetiler, OpenMapTiles schema)", [basemap, style]),
-        "dem": ("Copernicus GLO-30 -> dem.cog.tif + hillshade.pmtiles + contours.pmtiles", [dem, style]),
+        "dem": ("Copernicus GLO-30 -> dem.cog.tif + hillshade.pmtiles + terrain.pmtiles + contours.pmtiles", [dem, style]),
         "landcover": ("ESA WorldCover 10 m -> landcover.cog.tif", [landcover, style]),
         "satellite": ("Sentinel-2 cloudless mosaic -> satellite.pmtiles", [satellite, style]),
         "all": ("run every step for one area", [basemap, dem, landcover, satellite, style]),
@@ -72,7 +72,7 @@ def verify(dirs: Dirs) -> bool:
             s = raster.raster_summary(p)
             log(f"OK   {name}: valid COG, {s['size_px'][0]}x{s['size_px'][1]} {s['data_type']}, "
                 f"block {s['block']}, {s['overviews']} overviews, {s['compression']}")
-    for name in ("basemap.pmtiles", "hillshade.pmtiles", "contours.pmtiles", "satellite.pmtiles"):
+    for name in ("basemap.pmtiles", "hillshade.pmtiles", "terrain.pmtiles", "contours.pmtiles", "satellite.pmtiles"):
         p = dirs.out / name
         if not p.exists():
             continue

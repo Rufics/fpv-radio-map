@@ -10,6 +10,7 @@ void MapConfig::dropUnbuiltLayers(json& map, const TilesManifest& manifest) {
     for (const char* layer : {"basemap", "satellite", "hillshade", "contours"}) {
         if (!files->contains(std::string(layer) + ".pmtiles")) map.erase(layer);
     }
+    if (!files->contains("terrain.pmtiles")) map.erase("dem");
 }
 
 json MapConfig::build() const {
@@ -19,6 +20,8 @@ json MapConfig::build() const {
                 {"satellite", {{"pmtiles", "/tiles/satellite.pmtiles"}}},
                 {"hillshade", {{"pmtiles", "/tiles/hillshade.pmtiles"}}},
                 {"contours", {{"pmtiles", "/tiles/contours.pmtiles"}, {"sourceLayer", "contours"}}},
+                // Heights for the 3D view, Terrarium-encoded (tiles-builder terrain.pmtiles).
+                {"dem", {{"pmtiles", "/tiles/terrain.pmtiles"}, {"encoding", "terrarium"}}},
                 {"glyphs", "/tiles/fonts/{fontstack}/{range}.pbf"},
                 {"zoom", 11}};
     // The satellite credit is the operator's: it comes from the manifest the tiles-builder wrote.

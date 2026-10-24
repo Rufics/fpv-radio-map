@@ -19,3 +19,7 @@
 **Sensitivity.** The weakest signal the receiver can still decode, from the radio's datasheet, for a given packet rate or mode.
 
 **RSSI and LQ.** Received signal strength and link quality as your radio reports them in flight. Useful for comparing a prediction with a real flight.
+
+**Safe corridor.** The band of heights the altitude profile and the 3D view draw along the route (module `fpv.altitude`). Its floor is 30 m above the highest ground and obstacles near each point, raised where the link needs more height to keep 60 % of the first Fresnel zone clear. Its ceiling is 120 m above the ground. Both numbers are mission options. Near the pilot the floor rises from the ground, so take-off and landing are not flagged.
+
+**Vertical exaggeration.** The 3D view stretches heights, ×2 by default and up to ×4, so a 50 m ridge on a 5 km route is visible. The current factor is always shown on the map; ×1 is true scale.

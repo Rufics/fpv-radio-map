@@ -37,12 +37,14 @@ import { CompareService } from '../core/fpv-core';
 import { RouteWeatherService } from '../core/route-weather.service';
 import { RouteWeatherMapComponent } from './route-weather-map.component';
 import { FlightReplayMapComponent } from '../replay/flight-replay-map.component';
+import { AltitudeView } from '../core/fpv-altitude';
+import { Route3dComponent } from './route-3d.component';
 
 /** The map with everything FPV draws on it: route, markers, coverage, limits, preview. */
 @Component({
   selector: 'fpv-map-stage',
   host: { '(document:keydown.escape)': 'cancelPlacing()' },
-  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent, FlightReplayMapComponent],
+  imports: [MapViewComponent, LayerPanelComponent, BaseSwitcherComponent, SlotHostComponent, SegmentedComponent, HeatLegendComponent, RouteWeatherMapComponent, FlightReplayMapComponent, Route3dComponent],
   template: `
     @if (ws.data.mapConfig(); as cfg) {
       <rf-map-view class="map" [class.weather-mode]="weatherShown()" [config]="cfg" label="Mission map" [zoomButtons]="!compact()" (mapReady)="onReady($event)">
@@ -65,9 +67,25 @@ import { FlightReplayMapComponent } from '../replay/flight-replay-map.component'
               [forecastTime]="forecastTime()"
               (forecastOffsetChange)="ws.forecastOffsetH.set($event)"
               (closed)="ws.layersOpen.set(false)"
-            />
+            >
+              @if (hasRoute()) {
+                <div class="rf-eyebrow">View</div>
+                <label class="view-toggle">
+                  <input type="checkbox" [checked]="alt.mode() === '3d'" (change)="alt.setMode($any($event.target).checked ? '3d' : '2d')" />
+                  3D terrain and route
+                </label>
+                @if (!compact()) {
+                  <label class="view-toggle">
+                    <input type="checkbox" [checked]="alt.profileOpen()" (change)="alt.profileOpen.set($any($event.target).checked)" />
+                    Altitude profile
+                  </label>
+                }
+              }
+            </rf-layer-panel>
           }
-          @if (cmp.delta() || routeDeltaShown()) {
+          @if (alt.mode() === '3d') {
+            <!-- 3D hides the heatmap and the difference maps, and their legends with them -->
+          } @else if (cmp.delta() || routeDeltaShown()) {
             <div class="legend" role="note" aria-label="Scenario difference legend">
               <div class="legend-head"><span>{{ (cmp.options()?.name || 'B') === 'B' ? 'B' : 'B “' + cmp.options()?.name + '”' }} − A · {{ cmp.link() }} link</span></div>
               <div class="delta-scale" aria-hidden="true"></div>
@@ -105,6 +123,7 @@ import { FlightReplayMapComponent } from '../replay/flight-replay-map.component'
         }
         <fpv-route-weather-map [compact]="compact()" />
         <fpv-flight-replay-map [fitPadding]="fitPadding()" />
+        <fpv-route-3d />
         <rf-slot-host class="overlay slot" name="map.overlays" />
       </rf-map-view>
       @if (dim()) {
@@ -121,6 +140,8 @@ import { FlightReplayMapComponent } from '../replay/flight-replay-map.component'
     .top-right { top: 16px; right: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-height: calc(100% - 32px); }
     .map-actions { display: flex; gap: 8px; align-items: center; }
     .map-btn { background: rgba(16, 22, 29, 0.95); border: 1px solid var(--rf-border); }
+    .view-toggle { display: flex; gap: 10px; align-items: center; min-height: 32px; }
+    .view-toggle input { width: 18px; height: 18px; accent-color: var(--rf-ok); margin: 0; }
     .map-btn.is-on { border-color: var(--rf-ok); color: var(--rf-ok-text); background: var(--rf-ok-bg); }
     .delta-scale { height: 10px; border-radius: 5px; background: linear-gradient(90deg, #FF6B5B, #8A96A5 50%, #35D0BA); }
     .delta-keys { display: flex; justify-content: space-between; font-size: 11px; }
@@ -162,6 +183,7 @@ export class MapStageComponent {
   private readonly missingData = new MissingDataLayer();
   private readonly routeDelta = new RouteDeltaLayer();
   protected readonly cmp = inject(CompareService);
+  protected readonly alt = inject(AltitudeView);
   private readonly wx = inject(RouteWeatherService);
   private readonly weather: WeatherLayer[] = [];
   private tags: Marker[] = [];
@@ -181,6 +203,13 @@ export class MapStageComponent {
   });
   protected readonly routeDeltaShown = computed(() => !!this.cmp.result()?.links?.[this.cmp.link()]?.points?.length && !this.ws.store.preview());
   protected readonly droneAgl = computed(() => this.ws.mission()?.coverage?.droneAglM ?? 120);
+  /** A bottom drawer (why, altitude profile) covers the lower part of the map. */
+  private readonly drawerOpen = computed(() => (!!this.ws.why() || this.alt.profileOpen()) && this.drawerHeight() > 0);
+  /** Padding for fitting the route, clear of the drawer while it is open. */
+  private routePadding() {
+    const pad = this.fitPadding();
+    return this.drawerOpen() ? { ...pad, top: 40, bottom: this.drawerHeight() + 60 } : pad;
+  }
   protected readonly showHeatLegend = computed(() => !!this.ws.store.coverage()[this.ws.heatLink()] && this.layers.isVisible('results-coverage'));
   protected readonly forecastTime = computed(() => {
     const base = new Date();
@@ -251,19 +280,19 @@ export class MapStageComponent {
       const key = m ? `${this.ws.store.missionId() ?? 'new'}:${m.name}:${m.waypoints.length > 0}` : null;
       if (!m || key === this.fittedFor || m.waypoints.length === 0) return;
       this.fittedFor = key;
-      untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], this.fitPadding()));
+      untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], this.routePadding()));
     });
     // keep the route visible above the why drawer
-    let drawerOpen = false;
+    // the drawer's height while it is open, 0 when it is closed: a change refits the route
+    let drawerCover = 0;
     effect(() => {
       if (!this.ready()) return;
-      const open = !!this.ws.why() && this.drawerHeight() > 0;
-      if (open === drawerOpen) return;
-      drawerOpen = open;
+      const cover = this.drawerOpen() ? this.drawerHeight() : 0;
+      if (cover === drawerCover) return;
+      drawerCover = cover;
       const m = untracked(() => this.ws.mission());
       if (!m || m.waypoints.length === 0) return;
-      const pad = this.fitPadding();
-      untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], open ? { ...pad, top: 40, bottom: this.drawerHeight() + 60 } : pad));
+      untracked(() => this.ctx.fitTo([m.pilot, ...m.waypoints], this.routePadding()));
     });
     this.destroyRef.onDestroy(() => {
       this.tool?.destroy();
@@ -411,7 +440,7 @@ export class MapStageComponent {
     const radio = (grid?.limitPolygon as Geometry | undefined) ?? null;
     const { radioKm, radioAnchor } = radio && m ? radioLimitExtent(radio, m.pilot) : { radioKm: null, radioAnchor: null };
     const b = r?.battery;
-    const battery = m && b?.rangeM && !turnPreview && !endsAtTurnBack(m) && !this.ws.store.pilotStale() ? { lat: m.pilot.lat, lon: m.pilot.lon, radiusM: b.rangeM / 2 } : null;
+    const battery = m && b?.rangeM && this.alt.mode() !== '3d' && !turnPreview && !endsAtTurnBack(m) && !this.ws.store.pilotStale() ? { lat: m.pilot.lat, lon: m.pilot.lon, radiusM: b.rangeM / 2 } : null;
     const linkName = this.ws.heatLink() === 'control' ? 'Control' : 'Video';
     return {
       radio,

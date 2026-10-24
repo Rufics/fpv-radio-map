@@ -32,15 +32,6 @@ struct LinkResult {
     std::vector<bool> legUnreachable;
 };
 
-/// Effective earth factor and how it was chosen: the forecast's when present, else 4/3.
-std::pair<double, std::string> refraction(const json& weather) {
-    if (weather.is_object() && weather.contains("effectiveEarthFactor") && weather.at("effectiveEarthFactor").is_number()) {
-        const double k = weather.at("effectiveEarthFactor").get<double>();
-        return {k, "k = " + fixed(k, 3) + " from the forecast refractivity gradient"};
-    }
-    return {4.0 / 3.0, "standard atmosphere, k = 4/3 (no forecast refraction for this time)"};
-}
-
 /// Sample points: regular spacing plus every leg end, skipping the pilot's own position.
 std::vector<Sample> samplePoints(const Route& route, const Mission& mission, const IWorld& world, double stepM) {
     std::vector<double> at;

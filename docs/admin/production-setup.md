@@ -65,6 +65,7 @@ service, and **no API keys or accounts are needed** for any built-in source.
 | Basemap (roads, places, water, buildings) | `basemap` | `basemap.pmtiles` | OpenStreetMap extract from Geofabrik | browser | yes |
 | Terrain for calculations | `dem` | `dem.cog.tif` | Copernicus DEM GLO-30 (AWS Open Data) | rfmap-server | yes |
 | Hillshade | `dem` | `hillshade.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
+| Terrain for the 3D view | `dem` | `terrain.pmtiles` | derived from `dem.cog.tif` | browser | recommended: without it the 3D view has no relief |
 | Contour lines | `dem` | `contours.pmtiles` | derived from `dem.cog.tif` | browser | recommended |
 | Land cover (clutter) | `landcover` | `landcover.cog.tif` | ESA WorldCover 10 m (AWS Open Data) | rfmap-server | recommended: without it the server starts, logs a warning and leaves clutter out |
 | Satellite imagery | `satellite` | `satellite.pmtiles` | none: you choose a mosaic and check its licence | browser | optional |
@@ -175,7 +176,7 @@ still runs, and the manifest records the duplication. The alternative is to spli
 50° N, but the server reads one `dem.cog.tif`, so you would run two servers. A builder image from
 before 20 October 2026 could fail the pixel check after this warning; build the image again.
 
-Output: `dem.cog.tif`, `hillshade.pmtiles`, `contours.pmtiles`.
+Output: `dem.cog.tif`, `hillshade.pmtiles`, `terrain.pmtiles`, `contours.pmtiles`. `--no-terrain` skips `terrain.pmtiles`.
 
 ### 2.5 Land cover (ESA WorldCover)
 
@@ -260,7 +261,7 @@ ls ~/rfmap-data/out
 
 `verify` checks the `.tif` and `.pmtiles` files that exist, and each must be reported `OK`. It
 does not notice a missing file, so also check the listing: you should see `dem.cog.tif`, `landcover.cog.tif`,
-`basemap.pmtiles`, `hillshade.pmtiles`, `contours.pmtiles`, `style-dark.json`, `manifest.json`
+`basemap.pmtiles`, `hillshade.pmtiles`, `terrain.pmtiles`, `contours.pmtiles`, `style-dark.json`, `manifest.json`
 and `fonts/`, plus `satellite.pmtiles` if you built it. `manifest.json` lists each file with its
 source, licence, attribution, bbox and resolution; check that the licence of your satellite
 mosaic is not `UNVERIFIED`.
@@ -410,7 +411,7 @@ the Blackbox flight log decoder and the mission tools come as the FPV module pac
 your owner key and install it on the server machine with the `rfmod` CLI: modules never enter a
 server through the API.
 
-Build and sign the seven modules (about a minute **(estimate)**; the compile reuses the server
+Build and sign the eight modules (about a minute **(estimate)**; the compile reuses the server
 image's build cache):
 
 ```sh
@@ -436,7 +437,7 @@ API call makes the running server pick them up:
 ```sh
 cd ~/fpv-radio-map/deploy
 docker compose cp "$HOME/rfmap-modules/." rfmap-server:/var/lib/rfmap/incoming/
-for m in core battery min-altitude failsafe best-launch relay blackbox; do
+for m in core battery min-altitude altitude failsafe best-launch relay blackbox; do
   docker compose exec rfmap-server rfmod install "/var/lib/rfmap/incoming/$m.rfmod" \
       --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json
 done
@@ -452,7 +453,7 @@ already installed is refused (`version.upgrade`); that is expected when you run 
 The browser's **Admin → Modules** page shows the result after **Reload**; it has no upload.
 
 Check the list: `curl -s http://127.0.0.1:8088/api/v1/modules` shows the five `rf.*` modules and
-the seven `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
+the eight `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
 
 ## 7. Fill the equipment library
 

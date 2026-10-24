@@ -13,6 +13,8 @@ export class LayerRegistry {
   private readonly entries = signal<readonly LayerEntry[]>([]);
   /** Ids of the layers whose sources and style layers are on the map. */
   private readonly attached = new Set<string>();
+  /** Ids hidden for now whatever their toggle says (a view that draws them its own way); the toggles stay as they are. */
+  private suppressed: ReadonlySet<string> = new Set();
   private map?: MlMap;
   private ready = false;
 
@@ -81,12 +83,25 @@ export class LayerRegistry {
         return e;
       }),
     );
-    if (this.map && this.ready) {
-      for (const e of this.sorted(this.entries())) {
-        if (this.attached.has(e.def.id)) e.def.setVisible(this.map, e.visible);
-        else if (this.wanted(e)) this.attachOne(e);
-      }
+    this.apply();
+  }
+
+  /** Hide these layers on the map until the next call (an empty list shows them again as toggled). */
+  suppress(ids: Iterable<string>): void {
+    this.suppressed = new Set(ids);
+    this.apply();
+  }
+
+  private apply(): void {
+    if (!this.map || !this.ready) return;
+    for (const e of this.sorted(this.entries())) {
+      if (this.attached.has(e.def.id)) e.def.setVisible(this.map, this.shown(e));
+      else if (this.wanted(e)) this.attachOne(e);
     }
+  }
+
+  private shown(entry: LayerEntry): boolean {
+    return entry.visible && !this.suppressed.has(entry.def.id);
   }
 
   toggle(id: string): void {
@@ -119,7 +134,7 @@ export class LayerRegistry {
     const beforeId = this.firstStyleLayerAbove(entry.def, map);
     try {
       entry.def.attach(map, beforeId);
-      entry.def.setVisible(map, entry.visible);
+      entry.def.setVisible(map, this.shown(entry));
       this.attached.add(entry.def.id);
     } catch (e) {
       console.error(`Layer "${entry.def.id}" could not be added`, e);
