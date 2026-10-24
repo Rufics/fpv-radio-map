@@ -30,7 +30,7 @@ import {
   ResultForecastTier,
   linksEvaluated,
 } from '@rfmap/ui-kit';
-import { LOCAL, RIDGE_FRACTION, aglPoint, elevation, elevationLocal, toLatLon, toLocal } from './mock-terrain';
+import { LOCAL, RIDGE_FRACTION, aglPoint, elevation, heightForAgl, elevationLocal, toLatLon, toLocal } from './mock-terrain';
 
 const M = '−';
 const pt = (p: { x: number; y: number }, aglM: number, label?: string): MissionPoint => ({ ...toLatLon(p.x, p.y), aglM, ...(label ? { label } : {}) });
@@ -365,7 +365,7 @@ function missingLegData(mission: Mission, from: MissionPoint, to: MissionPoint, 
 
 // ---------------- fixes ----------------
 export function fixAltitude(mission: Mission): Fix & { note: string } {
-  const wps = mission.waypoints.map((w, i, arr) => (i === arr.length - 1 ? MissionAltitude.withHeight(mission, w, 345) : w));
+  const wps = mission.waypoints.map((w, i, arr) => (i === arr.length - 1 ? MissionAltitude.withHeight(mission, w, heightForAgl(mission, w, 345)) : w));
   return {
     id: 'leg3-345m-agl',
     title: 'Fly leg 3 at 345 m AGL',
@@ -385,7 +385,7 @@ export function fixTurnBack(mission: Mission): Fix & { note: string } {
   return {
     id: 'turn-back-t',
     title: 'Turn back at T',
-    patch: { waypoints: [mission.waypoints[0], { ...TURN_BACK }] },
+    patch: { waypoints: [mission.waypoints[0], MissionAltitude.withHeight(mission, TURN_BACK, TURN_BACK.aglM)] },
     preview: [
       { label: 'Out along route', now: '10.8 km', after: '6.0 km', trend: 'neutral' },
       { label: 'Back to pilot', now: '5.3 km', after: '4.2 km', trend: 'neutral' },
@@ -407,7 +407,8 @@ export function routeResult(mission: Mission, scenario: MockScenario): RouteResu
   const evaluated = linksEvaluated(mission.evaluate);
   const last = mission.waypoints.at(-1);
   const turnback = last?.label === 'T';
-  const fixed = !turnback && (last ? MissionAltitude.height(mission, last) : 0) >= 345;
+  // the fix puts B 345 m above the ground there, whatever the mission's reference
+  const fixed = !turnback && (last ? aglPoint(mission, last).aglM : 0) >= 344.5;
   const weatherOn = !!mission.modules?.['rf.weather'];
   const timeUtc = plannedUtc(mission);
   const tier: ResultForecastTier = weatherOn ? tierFor(timeUtc) : 'off';

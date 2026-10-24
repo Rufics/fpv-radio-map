@@ -71,6 +71,11 @@ export function aglPoint(m: Mission, w: MissionWaypoint): MissionPoint {
   return { lat: w.lat, lon: w.lon, aglM, ...(w.label ? { label: w.label } : {}) };
 }
 
+/** The height in the mission's reference that puts the drone `aglM` above the ground at `w`. */
+export function heightForAgl(m: Mission, w: Pick<MissionWaypoint, 'lat' | 'lon'>, aglM: number): number {
+  return MissionAltitude.ref(m) === 'launch' ? aglM + elevation(w.lat, w.lon) - elevation(m.pilot.lat, m.pilot.lon) : aglM;
+}
+
 // ---------------- tiles ----------------
 function tileToLonLat(z: number, x: number, y: number): { lon: number; lat: number } {
   const n = 2 ** z;

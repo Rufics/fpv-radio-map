@@ -194,9 +194,9 @@ void RouteEvaluator::markBelowGround(json& leg, const LegScan& scan, std::size_t
     leg["reasons"].push_back({{"module", "rf-core"},
                               {"severity", "blocked"},
                               {"text", std::format("The planned altitude is below the ground at {} of {} positions on this "
-                                                   "leg, down to {} below it at {} along the leg. Links there are "
+                                                   "leg, down to {:.1f} m below it at {} along the leg. Links there are "
                                                    "evaluated with the drone on the ground.",
-                                                   scan.belowGround, total, fmt(-scan.lowestAglM, 3) + " m",
+                                                   scan.belowGround, total, -scan.lowestAglM,
                                                    km(scan.lowestAlongM))}});
 }
 

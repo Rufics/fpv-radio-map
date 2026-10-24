@@ -7,6 +7,7 @@
 
 #include <rfcore/constants.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <limits>
@@ -31,12 +32,15 @@ public:
 class HostLinkEvaluator final : public ILinkEvaluator {
 public:
     HostLinkEvaluator(const rfmod::HostClient& host, json mission) : host_(host), mission_(std::move(mission)) {}
+    /// A drone below the ground (a launch-referenced plan under a ridge) is evaluated on the ground, as
+    /// the core does: link.evaluate takes no negative height.
     double marginDb(const std::string& link, const End& ground, const End& drone) const override {
+        const double droneAgl = std::max(0.0, drone.aglM);
         const json r = host_.call("link.evaluate",
                                   {{"mission", mission_},
                                    {"link", link},
                                    {"ground", {{"lat", ground.position.lat}, {"lon", ground.position.lon}, {"aglM", ground.aglM}}},
-                                   {"drone", {{"lat", drone.position.lat}, {"lon", drone.position.lon}, {"aglM", drone.aglM}}}});
+                                   {"drone", {{"lat", drone.position.lat}, {"lon", drone.position.lon}, {"aglM", droneAgl}}}});
         return r.at("marginDb").get<double>();
     }
 
