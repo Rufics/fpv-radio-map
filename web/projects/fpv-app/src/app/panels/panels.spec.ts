@@ -102,6 +102,17 @@ describe('side panels', () => {
     expect(plan.flightHint(store.mission())).toContain('autopilot');
   });
 
+  it('plan panel: a fixed-wing drone opts the mission into the envelope check', () => {
+    const plan = vmOf<{ setDrone: (id: string) => void; droneHint: (m: unknown) => string | null }>(PlanPanelComponent);
+    expect(plan.droneHint(store.mission())).toBeNull();
+    plan.setDrone('fw-1800-mapper');
+    expect(store.mission()?.drone).toBe('fw-1800-mapper');
+    expect(store.mission()?.modules?.['fpv.airframe']).toEqual({});
+    expect(plan.droneHint(store.mission())).toContain('Climbs at most 8°');
+    plan.setDrone('fpv-10in-recon');
+    expect(store.mission()?.modules?.['fpv.airframe']).toBeUndefined();
+  });
+
   it('plan panel: "Move on map" puts the map into pilot placing mode', () => {
     const plan = vmOf<{ movePilot: () => void; ws: { placing: () => string | null; why: () => unknown } }>(PlanPanelComponent);
     plan.movePilot();

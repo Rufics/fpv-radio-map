@@ -318,7 +318,8 @@ describe('MissionStore', () => {
     });
 
     it('records the flight mode as an edit', () => {
-      store.newMission(mission());
+      store.loadFromServer('m2', { mission: mission(), role: 'edit', revision: 7 });
+      expect(store.dirty()).toBe(false);
       store.setFlightMode('autonomous');
       expect(store.mission()?.flightMode).toBe('autonomous');
       expect(store.dirty()).toBe(true);
