@@ -63,17 +63,29 @@ describe('fpvClimbMock', () => {
   it('warns about a leg the drone cannot climb, and points at the energy fix', () => {
     const steep = {
       ...m,
-      modules: { 'fpv.altitude': { climbRateMps: 0.5 } },
+      modules: { 'fpv.altitude': { climbRateMps: 1 } },
       waypoints: m.waypoints.map((w, i) => (i === 0 ? { ...w, aglM: 400 } : w)),
     };
     const r = fpvAltitudeAnalyzeMock(steep).reasons;
     const warn = r.find((x) => x.severity === 'warn');
-    expect(warn?.text).toMatch(/^Leg Pilot → .*the drone climbs 0\.5 m\/s\.$/);
+    expect(warn?.text).toMatch(/^Leg Pilot → .*the drone climbs 1\.0 m\/s\.$/);
     expect(warn?.leg).toBe(0);
     expect(warn?.fix?.id).toBe('fpv.altitude/climb-energy');
     expect(r.some((x) => x.severity === 'info' && x.text?.startsWith('Climb assistant'))).toBe(
       true,
     );
+  });
+
+  it("offers no fix when no profile keeps to the drone's rates", () => {
+    const slow = fpvAltitudeAnalyzeMock({
+      ...m,
+      modules: { 'fpv.altitude': { climbRateMps: 0.05 } },
+    });
+    expect(slow.data.climb!.strategies[0].withinClimbRate).toBe(false);
+    expect(slow.reasons.some((x) => x.fix?.id === 'fpv.altitude/climb-energy')).toBe(false);
+    expect(
+      slow.data.climb!.notes.some((n) => n.startsWith('No profile through the corridor')),
+    ).toBe(true);
   });
 
   it('gives no advice on a plan as good as the energy-optimal one', () => {

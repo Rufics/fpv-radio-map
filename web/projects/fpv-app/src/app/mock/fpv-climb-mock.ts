@@ -501,7 +501,7 @@ function steepLegs(
   seg: Segment[],
   route: ClimbRoute,
   perf: Perf,
-  fix: Fix,
+  fix: Fix | undefined,
 ): Reason[] {
   const worst = new Map<number, { rate: number; at: number; gs: number }>();
   for (let i = 0; i + 1 < c.s.length; i++) {
@@ -522,7 +522,7 @@ function steepLegs(
     severity: 'warn' as const,
     leg,
     text: `Leg ${name(leg)} → ${name(leg + 1)}: the plan climbs at ${fixed(w.rate, 1)} m/s at ${km(w.at)} (${fixed(w.gs, 1)} m/s over the ground); the drone climbs ${fixed(perf.climb, 1)} m/s.`,
-    fix,
+    ...(fix && { fix }),
   }));
 }
 
@@ -575,12 +575,17 @@ export function fpvClimbMock(
     };
   });
   const energy = strategies[0];
-  const reasons = steepLegs(c, seg, route, perf, energy.fix);
+  // A profile the drone cannot fly is shown, never offered as the fix.
+  const flyable = energy.withinClimbRate;
+  const reasons = steepLegs(c, seg, route, perf, flyable ? energy.fix : undefined);
   const outside = now.minClearanceM < -CORRIDOR_TOLERANCE || now.overCeilingM > CORRIDOR_TOLERANCE;
   const inside =
     energy.minClearanceM >= -CORRIDOR_TOLERANCE && energy.overCeilingM <= CORRIDOR_TOLERANCE;
   const saving = now.riseM - energy.riseM;
-  if ((outside && inside) || saving >= Math.max(MIN_SAVING_M, MIN_SAVING_SHARE * now.riseM)) {
+  if (
+    flyable &&
+    ((outside && inside) || saving >= Math.max(MIN_SAVING_M, MIN_SAVING_SHARE * now.riseM))
+  ) {
     reasons.push({
       module: 'fpv.altitude',
       severity: 'info',
@@ -601,6 +606,11 @@ export function fpvClimbMock(
     notes: [
       ...perf.notes,
       `Past the take-off zone the profiles climb at most ${fixed(perf.climb, 1)} m/s and descend at most ${fixed(perf.descent, 1)} m/s at the ground speed on each stretch; inside it the drone climbs and lands vertically.`,
+      ...(flyable
+        ? []
+        : [
+            "No profile through the corridor keeps to the drone's climb and descent rates: the energy-optimal one is shown, not offered as a fix.",
+          ]),
       ...(planner.step > step + 1e-9
         ? [
             `Heights searched every ${fixed(planner.step, 1)} m, not ${fixed(step, 1)} m: the corridor is too tall for a finer grid.`,

@@ -211,7 +211,9 @@ only the assistant uses that forecast, the corridor's refraction keeps to the re
 the strategies' heights at every corridor sample (`mslM`) and their fixes.
 A leg the plan climbs faster than the drone can gets a warning, and a plan that climbs at least
 10 m and 10 % more than the energy-optimal profile, or leaves the corridor where that profile does
-not, gets an info reason; both carry the energy-optimal fix.
+not, gets an info reason; both carry the energy-optimal fix. When the fitted energy-optimal line
+breaks either rate (`withinClimbRate` false: no profile through the corridor keeps to them), it is
+still shown, but the warnings carry no fix, the info reason is not given, and a note says so.
 
 ### route.analysis → `route.analyze`
 

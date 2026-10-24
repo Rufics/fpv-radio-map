@@ -252,6 +252,7 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     json list = json::array();
     json energyFix = nullptr;
     ProfileStats energyStats;
+    bool energyFlyable = false;
     for (const Strategy& st : strategies(planner, route, perf, returns)) {
         const FittedRoute fit = fitter.fit(st.profile.mslM);
         const ProfileStats after = planner.stats(fit.mslM);
@@ -267,13 +268,16 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
         item["title"] = st.title;
         item["summary"] = st.summary;
         // The fitted line is what the drone flies: it has to keep to both rates.
-        item["withinClimbRate"] = planner.withinRates(fit.mslM, kRateSlackMps);
+        const bool flyable = planner.withinRates(fit.mslM, kRateSlackMps);
+        item["withinClimbRate"] = flyable;
         item["addedWaypoints"] = fit.added;
         item["mslM"] = std::move(mslM);
         item["fix"] = fix;
         if (st.profile.id == "energy") {
-            energyFix = fix;
             energyStats = after;
+            energyFlyable = flyable;
+            // A profile the drone cannot fly is shown, never offered as the fix.
+            if (flyable) energyFix = fix;
         }
         list.push_back(std::move(item));
     }
@@ -281,7 +285,8 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     steepLegReasons(route, pts, seg, perf, energyFix, out.reasons);
     const bool outside = now.minClearanceM < -kCorridorToleranceM || now.overCeilingM > kCorridorToleranceM;
     const bool inside = energyStats.minClearanceM >= -kCorridorToleranceM && energyStats.overCeilingM <= kCorridorToleranceM;
-    if (const double saving = now.riseM - energyStats.riseM; (outside && inside) || saving >= std::max(kMinSavingM, kMinSavingShare * now.riseM)) {
+    if (const double saving = now.riseM - energyStats.riseM;
+        energyFlyable && ((outside && inside) || saving >= std::max(kMinSavingM, kMinSavingShare * now.riseM))) {
         out.reasons.push_back(reason(kId, "info", adviceText(now, energyStats, perf, outside && inside), energyFix));
     }
 
@@ -298,6 +303,10 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     if (drone.has_value()) out.data["drone"] = {{"id", drone->value("id", "")}, {"version", drone->value("version", 0)}};
     out.data["notes"].push_back("Past the take-off zone the profiles climb at most " + fixed(perf.climbMps, 1) + " m/s and descend at most " +
                                 fixed(perf.descentMps, 1) + " m/s at the ground speed on each stretch; inside it the drone climbs and lands vertically.");
+    if (!energyFlyable) {
+        out.data["notes"].push_back("No profile through the corridor keeps to the drone's climb and descent rates: the energy-optimal one is shown, "
+                                    "not offered as a fix.");
+    }
     if (planner.heightStepM() > set.heightStepM + 1e-9) {
         out.data["notes"].push_back("Heights searched every " + fixed(planner.heightStepM(), 1) + " m, not " + fixed(set.heightStepM, 1) +
                                     " m: the corridor is too tall for a finer grid.");

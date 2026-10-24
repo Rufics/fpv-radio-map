@@ -279,6 +279,24 @@ TEST(ClimbAssist, ARidgeIsClimbedWithinTheRateAndTheFixClearsIt) {
     EXPECT_LT(climb.at("plan").at("minClearanceM").get<double>(), 0.0);
 }
 
+TEST(ClimbAssist, ARidgeTooSteepForTheDroneGetsNoFix) {
+    // With the ceiling 185 m before the ridge and its floor 210 m, a climb at 1 m/s cannot get from one to the
+    // other: the profile is shown, never offered.
+    const LocalWorld w = ridgeWorld();
+    const json mission = oneLeg(w, 5.0, 40.0, "launch", true);
+    const json r = analyze({{"mission", mission}, {"options", {{"stepM", 100.0}, {"linkFloor", false}, {"climbRateMps", 1.0}, {"speedMps", 10.0}, {"ceilingAglM", 85.0}}}}, w, {});
+    const json& climb = r.at("data").at("climb");
+    const json* energy = strategy(climb, "energy");
+    ASSERT_NE(energy, nullptr);
+    EXPECT_FALSE(energy->at("withinClimbRate").get<bool>());
+    for (const json& x : r.at("reasons")) {
+        EXPECT_FALSE(x.contains("fix") && x.at("fix").at("id") == "fpv.altitude/climb-energy") << x.dump();
+    }
+    bool noted = false;
+    for (const json& n : climb.at("notes")) noted = noted || n.get<std::string>().starts_with("No profile through the corridor");
+    EXPECT_TRUE(noted) << climb.at("notes").dump();
+}
+
 TEST(ClimbAssist, EnergyForTheMissionsDrone) {
     const LocalWorld w = flat();
     const json mission = oneLeg(w, 3.0, 100.0, "agl", true);
