@@ -43,12 +43,15 @@ export interface LegRowVm {
   heightM: number;
   /** The end point's height is left to the server (heightSource auto). */
   auto: boolean;
+  /** heightM is the one the server set (an autoHeights entry for this point). */
+  autoSet: boolean;
 }
 
 /** A waypoint's height as shown: the server's automatic one from a fresh result, else the stored one. */
 interface HeightVm {
   heightM: number;
   auto: boolean;
+  autoSet: boolean;
   /** "auto 74 m", or "74 m" */
   text: string;
   title: string;
@@ -231,6 +234,7 @@ export class FpvWorkspace {
         lengthM: len,
         heightM: h.heightM,
         auto: h.auto,
+        autoSet: h.autoSet,
       };
     });
     const last = m.waypoints.at(-1);
@@ -255,6 +259,7 @@ export class FpvWorkspace {
         lengthM: back,
         heightM: h.heightM,
         auto: false,
+        autoSet: false,
       });
     }
     return rows;
@@ -270,14 +275,15 @@ export class FpvWorkspace {
     const set = auto ? r?.autoHeights?.find((a) => a.index === i && a.field === field && (a.lat === undefined || (a.lat === w.lat && a.lon === w.lon))) : undefined;
     // A waypoint without a stored height shows the height new points get until the server sets one.
     const heightM = set?.heightM ?? w[field] ?? MissionAltitude.defaultHeightM;
-    if (!auto) return { heightM, auto, text: RfFormat.format(heightM, 'm'), title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}` };
-    if (!set) return { heightM, auto, text: 'auto', title: 'Height set automatically when the route is calculated' };
+    if (!auto) return { heightM, auto, autoSet: false, text: RfFormat.format(heightM, 'm'), title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}` };
+    if (!set) return { heightM, auto, autoSet: false, text: 'auto', title: 'Height set automatically when the route is calculated' };
     let by = `${set.limitedBy} link clearance`;
     if (set.limitedBy === 'ceiling') by = 'the ceiling';
     else if (set.limitedBy === 'terrain' || !set.limitedBy) by = 'terrain clearance';
     return {
       heightM,
       auto,
+      autoSet: true,
       text: `auto ${RfFormat.format(heightM, 'm')}${set.blocked ? ' !' : ''}`,
       title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}, set automatically by ${by}${set.blocked ? '; not safe even at that height' : ''}`,
     };

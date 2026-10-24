@@ -135,14 +135,14 @@ describe('FpvWorkspace', () => {
     const auto = { ...m, waypoints: [w0, ...m.waypoints.slice(1)] };
     const r = routeResult(auto, 'normal');
     show(auto, { ...r, autoHeights: [{ index: 0, lat: w0.lat, lon: w0.lon, field: 'aglM', heightM: 74, module: 'fpv.altitude', limitedBy: 'control', blocked: true }] });
-    expect(ws.legRows()[0]).toMatchObject({ auto: true, heightM: 74 });
+    expect(ws.legRows()[0]).toMatchObject({ auto: true, autoSet: true, heightM: 74 });
     expect(ws.legRows()[0].info).toContain('auto 74 m !');
     expect(ws.legRows()[0].infoTitle).toContain('control link clearance');
     expect(ws.legRows()[1].auto).toBe(false);
 
     // Switched to above launch, the AGL entry no longer fits it.
     store.update((x) => ({ ...x, altitudeRef: 'launch' }));
-    expect(ws.legRows()[0]).toMatchObject({ auto: true, heightM: 120 });
+    expect(ws.legRows()[0]).toMatchObject({ auto: true, autoSet: false, heightM: 120 });
     store.update((x) => ({ ...x, altitudeRef: 'agl' }));
 
     store.update((x) => ({ ...x, waypoints: x.waypoints.map((w, i) => (i === 0 ? { ...w, lat: w.lat + 0.01 } : w)) }));

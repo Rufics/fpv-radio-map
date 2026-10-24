@@ -118,6 +118,12 @@ describe('MockBackend through the API client', () => {
     const ceiling = await route(auto(ridge, { ceilingAglM: 60, linkFloor: false }));
     expect(texts(ceiling).some((t) => t.includes('more than the ceiling allows'))).toBe(true);
     expect(texts(ceiling).some((t) => t.includes('Fresnel'))).toBe(false);
+
+    // Without fpv.altitude nothing sets the missing height: 422, as on the server.
+    const bare = { ...exampleMission(), modules: {}, waypoints: exampleMission().waypoints.map(({ lat, lon, label }) => ({ lat, lon, label, heightSource: 'auto' as const })) };
+    const refused = await rejection(settle(new Promise((resolve, reject) => api.calcRoute(null, bare).subscribe({ next: resolve, error: reject }))));
+    expect(refused.status).toBe(422);
+    expect(refused.message).toContain('waypoints[0]');
   });
 
   it('answers profiles and weather, and refuses a malformed point', async () => {

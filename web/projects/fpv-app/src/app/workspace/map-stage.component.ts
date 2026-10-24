@@ -448,9 +448,21 @@ export class MapStageComponent {
     const ground = this.ws.groundAt();
     const g = (v: number | undefined, agl: number) => (v !== undefined ? `${RfFormat.format(v, 'm', { unit: false })} + ${RfFormat.format(agl, 'm')}` : `${RfFormat.format(agl, 'm')} AGL`);
     // A launch-referenced height is not above the ground under the point: show it with its own basis.
-    const wpCaption = (v: number | undefined, w: MissionWaypoint) =>
-      MissionAltitude.ref(m) === 'launch' ? `${RfFormat.format(MissionAltitude.height(m, w), 'm')} above launch` : g(v, MissionAltitude.height(m, w));
-    const wpAria = (w: MissionWaypoint) => `${RfFormat.format(MissionAltitude.height(m, w), 'm')} ${MissionAltitude.basis(m)}`;
+    // The height the route list shows: the server's for an automatic point, none until it sets one.
+    const shownHeight = (i: number, w: MissionWaypoint): number | null => {
+      const row = rows.find((r) => !r.isReturn && r.index === i + 1);
+      if (row?.auto && !row.autoSet) return null;
+      return row?.heightM ?? MissionAltitude.height(m, w);
+    };
+    const wpCaption = (v: number | undefined, i: number, w: MissionWaypoint) => {
+      const h = shownHeight(i, w);
+      if (h === null) return 'auto height';
+      return MissionAltitude.ref(m) === 'launch' ? `${RfFormat.format(h, 'm')} above launch` : g(v, h);
+    };
+    const wpAria = (i: number, w: MissionWaypoint) => {
+      const h = shownHeight(i, w);
+      return h === null ? 'height set automatically' : `${RfFormat.format(h, 'm')} ${MissionAltitude.basis(m)}`;
+    };
     const turn = endsAtTurnBack(m);
     const pilot: DrawPoint = { ...m.pilot, caption: `Pilot · ${g(ground.pilot, m.pilot.aglM)}`, ariaLabel: `Pilot A, ${RfFormat.format(m.pilot.aglM, 'm')} above ground` };
     const waypoints: DrawPoint[] = m.waypoints.map((w, i) => {
@@ -458,8 +470,8 @@ export class MapStageComponent {
       if (last && turn) return { ...w, markerKind: 'turnback', symbol: 'T', ariaLabel: 'Turn-back point T' };
       return {
         ...w,
-        caption: last ? `Target · ${wpCaption(ground.target, w)}` : undefined,
-        ariaLabel: last ? `Target B, ${wpAria(w)}` : `Waypoint ${i + 1}, ${wpAria(w)}`,
+        caption: last ? `Target · ${wpCaption(ground.target, i, w)}` : undefined,
+        ariaLabel: last ? `Target B, ${wpAria(i, w)}` : `Waypoint ${i + 1}, ${wpAria(i, w)}`,
       };
     });
     const legs = rows.filter((r) => !r.isReturn).map((r, i) => this.legDrawing(r, i, m, preview));
@@ -485,7 +497,7 @@ export class MapStageComponent {
     if (changed) return `${km} · ${RfFormat.format(r.heightM, 'm')}`;
     const label = r.mark ? `${km} · ${r.mark}` : km;
     if (preview) return this.previewBaseLabel(i) ?? label;
-    if (r.tone === 'ok' && this.ws.store.result() && (r.auto || r.heightM !== MissionAltitude.defaultHeightM)) return `${km} · ${r.auto ? 'auto ' : ''}${RfFormat.format(r.heightM, 'm')} ✓`;
+    if (r.tone === 'ok' && this.ws.store.result() && (r.autoSet || r.heightM !== MissionAltitude.defaultHeightM)) return `${km} · ${r.autoSet ? 'auto ' : ''}${RfFormat.format(r.heightM, 'm')} ✓`;
     return label;
   }
 

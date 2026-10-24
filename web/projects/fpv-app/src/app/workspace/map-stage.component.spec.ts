@@ -125,6 +125,19 @@ describe('MapStageComponent drawing', () => {
     expect(drawing().legs[0].label).toBe('3.7 km · 80 m ✓');
   });
 
+  it('labels a height auto only when the server set it, and names it on the map', () => {
+    const m = exampleMission();
+    const auto = { ...m, waypoints: m.waypoints.map((w, i) => (i === 0 ? { ...w, heightSource: 'auto' as const } : w)) };
+    const w0 = auto.waypoints[0];
+    show(auto, routeResult(auto, 'normal'));
+    expect(drawing().legs[0].label).toBe('3.7 km · ✓');
+    expect(drawing().waypoints[0].ariaLabel).toBe('Waypoint 1, height set automatically');
+
+    show(auto, { ...routeResult(auto, 'normal'), autoHeights: [{ index: 0, lat: w0.lat, lon: w0.lon, field: 'aglM', heightM: 74, module: 'fpv.altitude' }] });
+    expect(drawing().legs[0].label).toBe('3.7 km · auto 74 m ✓');
+    expect(drawing().waypoints[0].ariaLabel).toBe('Waypoint 1, 74 m above ground');
+  });
+
   it('draws a missing-data leg as missing', () => {
     const m = exampleMission();
     show(m, routeResult(m, 'missing-elevation'));
