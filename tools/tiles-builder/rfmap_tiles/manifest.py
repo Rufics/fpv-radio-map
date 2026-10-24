@@ -7,7 +7,7 @@ import os
 from .common import Dirs, log, now_iso, read_meta, sha256_file, tool_versions
 
 OUT_NAME = "manifest.json"
-FILES = ["basemap.pmtiles", "hillshade.pmtiles", "contours.pmtiles", "satellite.pmtiles",
+FILES = ["basemap.pmtiles", "hillshade.pmtiles", "terrain.pmtiles", "contours.pmtiles", "satellite.pmtiles",
          "dem.cog.tif", "landcover.cog.tif", "style-dark.json"]
 SKIP_META_KEYS = {"file", "params"}
 

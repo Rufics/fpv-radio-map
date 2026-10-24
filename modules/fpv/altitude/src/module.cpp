@@ -1,0 +1,51 @@
+// fpv.altitude module: host glue and self-test.
+
+#include "corridor.hpp"
+
+#include <cmath>
+
+namespace fpv::altitude {
+namespace {
+constexpr const char* kManifest = R"json({"id":"fpv.altitude","version":"1.0.0"})json";
+}  // namespace
+
+class AltitudeModule final : public rfmod::Module {
+public:
+    const char* manifest() const override { return kManifest; }
+
+    json invoke(const std::string& method, const json& request) override {
+        if (method != "route.analyze") throw rfmod::UnknownMethod(method);
+        const Mission m = Mission::fromJson(request.at("mission"));
+        const LinkInputs links = readLinks(host(), m);
+        const HostWorld world(host());
+        return analyze(request, world, links);
+    }
+
+    json selftest() override {
+        // Flat ground at 100 m and a 1 km leg climbing to 50 m above launch: past a 600 m take-off
+        // zone the corridor is 130 to 220 m MSL, and the leg is over 130 m from 588 m out, so it
+        // stays inside it.
+        const LocalWorld world([](const LatLon&) { return std::optional<double>(100.0); }, 10.0);
+        const LatLon a{48.5, 35.2};
+        const LatLon b = world.direct(a, 90.0, 1000.0).point;
+        const json mission = {{"altitudeRef", "launch"},
+                              {"pilot", {{"lat", a.lat}, {"lon", a.lon}, {"aglM", 1.5}}},
+                              {"waypoints", {{{"lat", b.lat}, {"lon", b.lon}, {"altM", 50.0}}}},
+                              {"returnToPilot", false}};
+        const json r = analyze({{"mission", mission}, {"options", {{"takeoffM", 600.0}}}}, world, {});
+        const json& c = r.at("data").at("corridor");
+        const bool floor = std::abs(c.at("floorMslM").back().get<double>() - 130.0) < 1e-6;
+        const bool ceiling = std::abs(c.at("ceilingMslM").back().get<double>() - 220.0) < 1e-6;
+        const bool planned = std::abs(c.at("plannedMslM").back().get<double>() - 150.0) < 1e-6;
+        const bool quiet = r.at("reasons").empty();
+        return {{"ok", floor && ceiling && planned && quiet},
+                {"checks", {{{"name", "floor is ground + 30 m"}, {"ok", floor}},
+                            {{"name", "ceiling is ground + 120 m"}, {"ok", ceiling}},
+                            {{"name", "planned is launch + 50 m"}, {"ok", planned}},
+                            {{"name", "no warning: the low take-off is in the take-off zone"}, {"ok", quiet}}}}};
+    }
+};
+
+}  // namespace fpv::altitude
+
+RFMOD_DEFINE_MODULE(fpv::altitude::AltitudeModule)

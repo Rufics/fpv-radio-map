@@ -8,6 +8,8 @@ import { RadioSetupComponent } from '../panels/radio-setup.component';
 import { ShareDialogComponent } from '../panels/share-dialog.component';
 import { WeatherBriefingComponent } from '../panels/weather-briefing.component';
 import { WhyDrawerComponent } from '../panels/why-drawer.component';
+import { AltitudeDrawerComponent } from '../panels/altitude-drawer.component';
+import { AltitudeView } from '../core/fpv-altitude';
 import { FlightImportComponent } from '../replay/flight-import.component';
 import { PlanFactPanelComponent } from '../replay/plan-fact-panel.component';
 import { ReplayDrawerComponent } from '../replay/replay-drawer.component';
@@ -24,6 +26,7 @@ import { MapStageComponent } from './map-stage.component';
     PlanPanelComponent,
     MapStageComponent,
     WhyDrawerComponent,
+    AltitudeDrawerComponent,
     ShareDialogComponent,
     RadioSetupComponent,
     WeatherBriefingComponent,
@@ -80,6 +83,8 @@ import { MapStageComponent } from './map-stage.component';
           <fpv-replay-drawer class="drawer" />
         } @else if (ws.why()) {
           <fpv-why-drawer class="drawer" />
+        } @else if (alt.profileOpen() && ws.mission()) {
+          <fpv-altitude-drawer class="drawer" />
         }
         @if (replay.importOpen()) {
           <fpv-flight-import />
@@ -115,6 +120,7 @@ import { MapStageComponent } from './map-stage.component';
 export class DesktopLayoutComponent {
   protected readonly ws = inject(FpvWorkspace);
   protected readonly replay = inject(FlightReplay);
+  protected readonly alt = inject(AltitudeView);
   protected readonly modes: SegmentOption<WorkspaceMode>[] = [
     { value: 'plan', label: 'Plan' },
     { value: 'replay', label: 'Replay' },

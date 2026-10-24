@@ -15,7 +15,7 @@ Admin step-by-step guide: [`docs/admin/tiles-builder.md`](../../docs/admin/tiles
 | command | output (in `/data/out`) | source |
 |---|---|---|
 | `basemap` | `basemap.pmtiles`: vector, OpenMapTiles schema, z0–16 | OSM `.osm.pbf` (`--region` Geofabrik id/path, `--osm-url`, or a local `--osm-file`) |
-| `dem` | `dem.cog.tif` (**calculation DEM**), `hillshade.pmtiles`, `contours.pmtiles` | Copernicus DEM GLO-30 (AWS `copernicus-dem-30m`, no auth); `--dem-source srtm` / local `--dem-file` |
+| `dem` | `dem.cog.tif` (**calculation DEM**), `hillshade.pmtiles`, `terrain.pmtiles`, `contours.pmtiles` | Copernicus DEM GLO-30 (AWS `copernicus-dem-30m`, no auth); `--dem-source srtm` / local `--dem-file` |
 | `landcover` | `landcover.cog.tif` (clutter classes) | ESA WorldCover 10 m 2021 v200 (AWS, no auth) |
 | `satellite` | `satellite.pmtiles`: raster | `--sat-provider` (a built-in XYZ mosaic), `--sat-file` (a local raster of a listed mosaic) or `--sat-source` (any XYZ template or raster); you choose it, see licences |
 | `all` | everything above | |
@@ -47,8 +47,9 @@ Directory layout: the data directory (`--data`, default `$RFMAP_DATA` or the cur
   - Overviews are averaged; they are for previews only, and calculations read the full-resolution level.
 - Copernicus widens its longitude spacing above 50° latitude. A bbox that spans two spacing zones is **refused** unless `--allow-dem-resample` is given. With that flag only the coarser tiles are warped once, nearest-neighbour, onto the finest grid with one `gdalwarp` per coarse tile (the only warping in the DEM step), so their pixels are duplicated, never interpolated. Tiles already on that grid stay bit for bit, the COG is still verified pixel by pixel against the mosaic, and the manifest records the duplication.
 
-**Hillshade and contours are display only.** Both are derived from `dem.cog.tif`.
+**Hillshade, terrain and contours are display only.** All three are derived from `dem.cog.tif`.
 - Hillshade: the DEM is reprojected to Web Mercator with bilinear resampling. It uses `gdaldem -multidirectional`, and the scale is corrected by cos(latitude) at the bbox centre. The default output is a transparent PNG with black shadows and faint white highlights, so it overlays the dark basemap without greying it out. `--hillshade-style gray` gives classic grey.
+- Terrain (`terrain.pmtiles`, for the 3D view): the same Web Mercator copy, encoded as Terrarium RGB (height = R × 256 + G + B / 256 − 32768, no-data = 0 m). Overviews use nearest, because averaging the encoded bytes mixes up heights. `--no-terrain` skips it.
 - Contours: `gdal_contour` runs on the unmodified COG. The output has two source layers, `contours` (all contours, from z12) and `contours_index` (every 5th, from z10). Both carry the attribute `ele` (m).
 - **The server's calculations read `dem.cog.tif` directly**, never these tiles.
 

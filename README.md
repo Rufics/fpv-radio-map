@@ -91,6 +91,7 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 | ± | Uncertainty band from the DEM's stated error: *reliable*, *marginal*, *blocked*, *blocked, may work* | `rf-ext` |
 | 🔋 | Battery range with wind, temperature and climb, and a turn-back point when the pack won't last | `fpv.battery` |
 | ↕️ | Minimum altitude along the route that keeps the Fresnel zone clear | `fpv.min-altitude` |
+| 🏔️ | 3D view of the route over the terrain, with a linked altitude profile, the safe corridor (terrain clearance, link floor, ceiling) and an optional Fresnel tube | `fpv.altitude`, web |
 | 🏠 | Failsafe check: where the link is lost, and whether return-to-home clears the terrain | `fpv.failsafe` |
 | 📍 | Best launch point inside an area you draw | `fpv.best-launch` |
 | 🔁 | Relay placement: budget per hop and the best relay spot | `fpv.relay` |

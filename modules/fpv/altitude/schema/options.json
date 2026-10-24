@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Altitude corridor options (per mission)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "stepM": { "type": "number", "minimum": 10, "maximum": 2000, "default": 100, "description": "Spacing of the corridor samples along the route" },
+    "clearanceM": { "type": "number", "minimum": 0, "maximum": 1000, "default": 30, "description": "Lowest height above the ground and obstacles the floor allows" },
+    "takeoffM": { "type": "number", "minimum": 0, "maximum": 5000, "default": 200, "description": "Within this distance of the pilot the floor rises from the ground to the full clearance, and a plan under it is not warned about: the climb-out and the landing" },
+    "ceilingAglM": { "type": "number", "minimum": 10, "maximum": 5000, "default": 120, "description": "Highest height above ground: the corridor's ceiling, e.g. the legal limit" },
+    "linkFloor": { "type": "boolean", "default": true, "description": "Raise the floor to where the link's Fresnel clearance holds; off = terrain clearance only" },
+    "fresnelFraction": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.6, "description": "Share of the first Fresnel zone radius that must be clear for the link floor" },
+    "maxAglM": { "type": "number", "minimum": 10, "maximum": 5000, "default": 500, "description": "Highest height searched for the link floor" }
+  }
+}

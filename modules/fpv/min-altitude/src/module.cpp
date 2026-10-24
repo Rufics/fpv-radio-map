@@ -16,13 +16,7 @@ public:
     json invoke(const std::string& method, const json& request) override {
         if (method != "route.analyze") throw rfmod::UnknownMethod(method);
         const Mission m = Mission::fromJson(request.at("mission"));
-        LinkInputs links;
-        for (const std::string& kind : m.links()) {
-            const json setup = m.raw.value("links", json::object()).value(kind, json());
-            if (!setup.is_object()) continue;
-            const json radio = host().call("library.get", {{"kind", "radio-profiles"}, {"id", setup.at("radio")}});
-            links.try_emplace(kind, rfcore::Hertz(radio.at("frequencyHz").get<double>()), radio.value("name", ""));
-        }
+        const LinkInputs links = readLinks(host(), m);
         const HostWorld world(host());
         return analyze(request, world, links);
     }
