@@ -7,7 +7,7 @@
 
 namespace fpv::altitude {
 namespace {
-constexpr const char* kManifest = R"json({"id":"fpv.altitude","version":"1.1.0"})json";
+constexpr const char* kManifest = R"json({"id":"fpv.altitude","version":"1.2.0"})json";
 }  // namespace
 
 class AltitudeModule final : public rfmod::Module {

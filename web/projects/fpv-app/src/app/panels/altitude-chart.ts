@@ -19,17 +19,20 @@ export class AltitudeChart {
   readonly min: number;
   readonly max: number;
 
+  /** `ghost`: another profile over the same samples, kept inside the chart too. */
   constructor(
     private readonly corridor: Corridor,
     withCorridor: boolean,
+    ghost: number[] = [],
   ) {
     const c = corridor.c;
     const tops = [
       ...c.plannedMslM,
       ...c.groundMslM,
+      ...ghost,
       ...(withCorridor ? [...c.ceilingMslM, ...c.floorMslM] : []),
     ];
-    const lo = Math.min(...c.groundMslM, ...c.plannedMslM);
+    const lo = Math.min(...c.groundMslM, ...c.plannedMslM, ...ghost);
     const hi = Math.max(...tops);
     const pad = Math.max(10, (hi - lo) * 0.06);
     this.min = Math.floor((lo - pad) / 10) * 10;
@@ -57,6 +60,14 @@ export class AltitudeChart {
     const c = this.corridor.c;
     return c.s
       .map((s, i) => `${i ? 'L' : 'M'}${this.x(s).toFixed(1)},${this.y(c[key][i]).toFixed(1)}`)
+      .join('');
+  }
+
+  /** A height profile given at every sample, such as a climb strategy. */
+  profile(mslM: number[]): string {
+    const c = this.corridor.c;
+    return c.s
+      .map((s, i) => `${i ? 'L' : 'M'}${this.x(s).toFixed(1)},${this.y(mslM[i] ?? 0).toFixed(1)}`)
       .join('');
   }
 

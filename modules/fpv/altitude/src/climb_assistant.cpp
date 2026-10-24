@@ -20,7 +20,10 @@ constexpr double kRateSlackMps = 0.05;
 /// Below these the plan is as good as the energy-optimal profile: no advice.
 constexpr double kMinSavingM = 10.0;
 constexpr double kMinSavingShare = 0.1;
-constexpr double kCorridorToleranceM = 0.05;
+/// A plan this far out of the corridor (re-sampled waypoints can shift the floor a little) is out.
+constexpr double kCorridorToleranceM = 1.0;
+/// Below this an energy difference reads as none.
+constexpr double kSameWh = 0.05;
 
 std::string km(double m) { return "km " + fixed(m / 1000.0, 2); }
 
@@ -99,7 +102,7 @@ std::vector<Segment> segments(const std::vector<CorridorPoint>& pts, const Perfo
         double gs = perf.groundSpeed(pts[i + 1].p.courseDeg);
         if (!(gs > 0.0)) gs = perf.airspeedMps;
         const bool free = pts[i].nearPilot || pts[i + 1].nearPilot;
-        out.push_back({free ? kInf : perf.climbMps * ds / gs, free ? kInf : perf.descentMps * ds / gs, gs});
+        out.push_back({free ? kInf : perf.climbMps * ds / gs, free ? kInf : perf.descentMps * ds / gs, gs, perf.climbMps, perf.descentMps});
     }
     return out;
 }
@@ -160,6 +163,20 @@ std::vector<Strategy> strategies(const ClimbPlanner& planner, const Route& route
     return out;
 }
 
+/// The advice to fly the energy-optimal profile: it keeps the route in the corridor, or climbs less.
+std::string adviceText(const ProfileStats& now, const ProfileStats& energy, const Performance& perf, bool intoCorridor) {
+    std::string wh;
+    if (const auto a = perf.wh(now.riseM), b = perf.wh(energy.riseM); a && b && std::abs(*a - *b) >= kSameWh) {
+        wh = " (" + fixed(std::abs(*a - *b), 1) + (*a > *b ? " Wh less)" : " Wh more)");
+    }
+    const std::string climbs = fixed(energy.riseM, 0) + " m in all";
+    if (intoCorridor) {
+        return "Climb assistant: the energy-optimal profile keeps the whole route inside the corridor, climbing " + climbs +
+               " against the plan's " + fixed(now.riseM, 0) + " m" + wh + ".";
+    }
+    return "Climb assistant: the energy-optimal profile climbs " + climbs + " instead of " + fixed(now.riseM, 0) + " m" + wh + ".";
+}
+
 /// Legs where the plan climbs faster than the drone can, outside the take-off zone.
 void steepLegReasons(const Route& route, const std::vector<CorridorPoint>& pts, const std::vector<Segment>& seg,
                      const Performance& perf, const json& fix, json& reasons) {
@@ -215,6 +232,7 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     const ProfileFitter fitter(pts, route, waypoints, set.fitToleranceM);
 
     std::vector<double> planned;
+    planned.reserve(pts.size());
     for (const CorridorPoint& p : pts) planned.push_back(p.plannedMslM);
     const ProfileStats now = planner.stats(planned);
     const std::size_t nowWps = waypoints.size();
@@ -252,11 +270,7 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     const bool inside = energyStats.minClearanceM >= -kCorridorToleranceM && energyStats.overCeilingM <= kCorridorToleranceM;
     const double saving = now.riseM - energyStats.riseM;
     if ((outside && inside) || saving >= std::max(kMinSavingM, kMinSavingShare * now.riseM)) {
-        std::string text = "Climb assistant: the energy-optimal profile climbs " + fixed(energyStats.riseM, 0) + " m in all instead of " +
-                           fixed(now.riseM, 0) + " m";
-        if (const auto a = perf.wh(now.riseM), b = perf.wh(energyStats.riseM); a && b) text += " (" + fixed(*a - *b, 1) + " Wh less)";
-        text += outside && inside ? " and keeps the whole route inside the corridor." : ".";
-        out.reasons.push_back(reason(kId, "info", text, energyFix));
+        out.reasons.push_back(reason(kId, "info", adviceText(now, energyStats, perf, outside && inside), energyFix));
     }
 
     out.data = {{"recommended", "energy"},
@@ -272,6 +286,10 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     if (drone.has_value()) out.data["drone"] = {{"id", drone->value("id", "")}, {"version", drone->value("version", 0)}};
     out.data["notes"].push_back("Past the take-off zone the profiles climb at most " + fixed(perf.climbMps, 1) + " m/s and descend at most " +
                                 fixed(perf.descentMps, 1) + " m/s at the ground speed on each stretch; inside it the drone climbs and lands vertically.");
+    if (route.altitude().waypointField() == "aglM") {
+        out.data["notes"].push_back("Heights above the ground follow the terrain between waypoints, so following a profile over rough ground takes "
+                                    "more added waypoints than in a mission flown above launch.");
+    }
     return out;
 }
 

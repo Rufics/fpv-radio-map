@@ -3,6 +3,7 @@ import {
   LinkKind,
   Mission,
   MissionAltitude,
+  Reason,
   distanceM,
   interpolate,
   linksEvaluated,
@@ -13,6 +14,7 @@ import type {
   FpvAltitudeOptions,
   FpvAltitudeWaypoint,
 } from '../core/fpv-altitude';
+import { fpvClimbMock } from './fpv-climb-mock';
 import { elevation } from './mock-terrain';
 import { LIBRARY } from './reference-case';
 
@@ -95,6 +97,12 @@ function optionsOf(m: Mission): Required<FpvAltitudeOptions> {
     fresnelFraction: 0.6,
     maxAglM: 500,
     autoHeight: true,
+    climbAssist: true,
+    climbRateMps: 0,
+    descentRateMps: 4,
+    speedMps: 0,
+    heightStepM: 5,
+    fitToleranceM: 5,
     ...(m.modules?.['fpv.altitude'] as FpvAltitudeOptions | undefined),
   };
   o.stepM = Number.isFinite(o.stepM) ? Math.min(2000, Math.max(10, o.stepM)) : 100;
@@ -331,6 +339,11 @@ export function fpvAltitudePrepareMock(m: Mission): {
 
 /** Mock of modules/fpv/altitude: the corridor along the route (heights interpolated in the mission's reference). */
 export function fpvAltitudeMock(m: Mission): FpvAltitudeData {
+  return fpvAltitudeAnalyzeMock(m).data;
+}
+
+/** Mock of the module's route.analyze: its data, and the climb assistant's reasons. */
+export function fpvAltitudeAnalyzeMock(m: Mission): { data: FpvAltitudeData; reasons: Reason[] } {
   const { o, ref, launch, path, fresnel, link, msl, c } = corridorOf(m);
   const waypoints: FpvAltitudeWaypoint[] = m.waypoints.map((w, i) => {
     const ground = elevation(w.lat, w.lon);
@@ -345,7 +358,7 @@ export function fpvAltitudeMock(m: Mission): FpvAltitudeData {
       aboveLaunchM: mslM - launch,
     };
   });
-  return {
+  const data: FpvAltitudeData = {
     kFactor: 4 / 3,
     notes: [`Sampled every ${o.stepM} m along the route and at every waypoint (mock).`],
     reference: ref,
@@ -360,4 +373,11 @@ export function fpvAltitudeMock(m: Mission): FpvAltitudeData {
     summary: summaryOf(c),
     ...(fresnel ? { fresnel } : {}),
   };
+  if (!o.climbAssist || c.s.length < 2) return { data, reasons: [] };
+  const near = c.s.map(
+    (_, i) => distanceM(link.pilot, { lat: c.lat[i], lon: c.lon[i] }) < o.takeoffM,
+  );
+  const route = { pts: path.pts, cum: path.cum, returns: m.returnToPilot !== false, msl, launch };
+  const climb = fpvClimbMock(m, o, c, near, route);
+  return { data: { ...data, climb: climb.data }, reasons: climb.reasons };
 }

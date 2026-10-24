@@ -1,9 +1,9 @@
 {
   "schema": "rfmod/v1",
   "id": "fpv.altitude",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "title": "Altitude corridor and 3D view",
-  "description": "Ground, planned altitude and the safe corridor along the route: a floor from terrain clearance and, optionally, the link's Fresnel clearance, and a ceiling above ground. Feeds the 3D view and the altitude profile, and gives waypoints without a height (or marked auto) the lowest height that keeps their legs in the corridor.",
+  "description": "Ground, planned altitude and the safe corridor along the route: a floor from terrain clearance and, optionally, the link's Fresnel clearance, and a ceiling above ground. Feeds the 3D view and the altitude profile, and gives waypoints without a height (or marked auto) the lowest height that keeps their legs in the corridor. Its climb assistant compares the plan with the energy-optimal climb through the corridor and simpler strategies, each offered as a fix.",
   "author": "rfmap",
   "license": "MIT",
   "lifecycle": "alpha",

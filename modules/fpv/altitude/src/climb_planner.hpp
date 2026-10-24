@@ -14,6 +14,8 @@ struct Segment {
     double maxRiseM;  ///< highest climb over the segment; infinite in the take-off zone
     double maxDropM;  ///< deepest descent over the segment; infinite in the take-off zone
     double groundSpeedMps;
+    double climbMps;    ///< the drone's climb and descent rates, for the time a steep stretch takes
+    double descentMps;
 };
 
 /// A height profile along the corridor samples, above mean sea level.
@@ -28,10 +30,10 @@ struct ProfileStats {
     double riseM = 0.0;             ///< total climb, from the pilot on
     double minClearanceM = 0.0;     ///< lowest height over the floor, outside the take-off zone
     double minClearanceAtM = 0.0;
-    double overCeilingM = 0.0;      ///< highest height over the ceiling; 0 inside it
+    double overCeilingM = 0.0;      ///< highest height over the ceiling where the floor is under it; 0 inside
     double steepestClimbMps = 0.0;  ///< outside the take-off zone, at the ground speed there
     double steepestClimbAtM = 0.0;
-    double timeS = 0.0;
+    double timeS = 0.0;             ///< a stretch takes as long as its distance or its climb or descent does
 };
 
 /// The lowest-energy way through the corridor and the simpler strategies to compare it with.

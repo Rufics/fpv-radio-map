@@ -131,6 +131,16 @@ describe('MockBackend through the API client', () => {
     expect(refusedNull.status).toBe(422);
   });
 
+  it('files the climb assistant reasons under their leg, or under the route', async () => {
+    const route = (m: Mission) => settle(new Promise<RouteResult>((resolve, reject) => api.calcRoute(null, m).subscribe({ next: resolve, error: reject })));
+    const m = exampleMission();
+    const steep = { ...m, modules: { 'fpv.altitude': { climbRateMps: 0.5 } }, waypoints: m.waypoints.map((w, i) => (i === 0 ? { ...w, aglM: 400 } : w)) };
+    const r = await route(steep);
+    expect(r.legs?.[0].reasons?.some((x) => x.module === 'fpv.altitude' && x.text?.startsWith('Leg Pilot'))).toBe(true);
+    expect(r.reasons?.some((x) => x.text?.startsWith('Climb assistant'))).toBe(true);
+    expect((r.modules?.['fpv.altitude'] as { climb?: unknown }).climb).toBeTruthy();
+  });
+
   it('answers profiles and weather, and refuses a malformed point', async () => {
     const profile = await settle(api.elevationProfile({ lat: 48.54, lon: 35.2 }, { lat: 48.56, lon: 35.23 }));
     expect(profile).toBeTruthy();

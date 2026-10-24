@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { LatLon, Mission, MissionStore, RouteResult, distanceM } from '@rfmap/ui-kit';
+import { Fix, LatLon, Mission, MissionStore, RouteResult, distanceM } from '@rfmap/ui-kit';
 import { FpvDataService } from './fpv-data.service';
 
 /** Module id of the altitude corridor module (modules/fpv/altitude). Its options go to mission.modules["fpv.altitude"]. */
@@ -16,6 +16,62 @@ export interface FpvAltitudeOptions {
   maxAglM?: number;
   /** Heights for waypoints left to the server (route.prepare); default true */
   autoHeight?: boolean;
+  /** The climb assistant: the plan's climb against the energy-optimal profile; default true */
+  climbAssist?: boolean;
+  /** 0 = the drone's measured climb rate, else 3 m/s */
+  climbRateMps?: number;
+  descentRateMps?: number;
+  /** 0 = the drone's cruise airspeed, else 15 m/s */
+  speedMps?: number;
+  heightStepM?: number;
+  fitToleranceM?: number;
+}
+
+/** How a height profile does along the route, the same for the plan and every strategy. */
+export interface FpvClimbStats {
+  /** Total climb from the pilot on, m */
+  riseM: number;
+  timeS: number;
+  /** Lowest height over the safe floor past the take-off zone; negative = under it */
+  minClearanceM: number;
+  minClearanceAtM: number;
+  /** Highest height over the ceiling where the floor is under it; 0 inside */
+  overCeilingM: number;
+  steepestClimbMps: number;
+  steepestClimbAtM: number;
+  waypoints: number;
+  /** Only with a drone picked */
+  energyWh?: number;
+}
+
+export type FpvClimbStrategyId = 'energy' | 'over-launch' | 'gradual';
+
+export interface FpvClimbStrategy extends FpvClimbStats {
+  id: FpvClimbStrategyId;
+  title: string;
+  summary: string;
+  /** false when the drone cannot follow it past the take-off zone */
+  withinClimbRate: boolean;
+  addedWaypoints: number;
+  /** What its waypoints fly at every corridor sample, MSL */
+  mslM: number[];
+  /** Its waypoints as a fix, applied through the preview */
+  fix: Fix;
+}
+
+/** data.climb: the climb assistant. */
+export interface FpvClimbData {
+  recommended: FpvClimbStrategyId;
+  climbRateMps: number;
+  descentRateMps: number;
+  airspeedMps: number;
+  energyEstimated: boolean;
+  heightStepM: number;
+  fitToleranceM: number;
+  plan: FpvClimbStats;
+  strategies: FpvClimbStrategy[];
+  notes: string[];
+  drone?: { id: string; version: number };
 }
 
 /** data.corridor: parallel arrays, one entry per sample along the route; heights above mean sea level. */
@@ -70,6 +126,7 @@ export interface FpvAltitudeData {
     lowestMarginAtM: number;
   };
   fresnel?: { link: string; radio?: string; frequencyHz: number };
+  climb?: FpvClimbData;
 }
 
 /** Where the plan is at one sample relative to the corridor. */
@@ -128,11 +185,15 @@ export class Corridor {
       'groundMslM' | 'plannedMslM' | 'floorMslM' | 'ceilingMslM' | 'fresnelRadiusM' | 'lat' | 'lon',
     s: number,
   ): number {
+    return this.profileAt(this.c[key], s);
+  }
+
+  /** Any per-sample profile (such as a climb strategy's heights) at `s`, linear between samples. */
+  profileAt(v: number[], s: number): number {
     const i = this.indexAt(s);
     const j = Math.min(i + 1, this.c.s.length - 1);
     const span = this.c.s[j] - this.c.s[i];
     const t = span > 0 ? Math.min(1, Math.max(0, (s - this.c.s[i]) / span)) : 0;
-    const v = this.c[key];
     return v[i] + (v[j] - v[i]) * t;
   }
 
@@ -164,6 +225,8 @@ export class AltitudeView {
   readonly profileOpen = signal(false);
   /** Distance along the route under the profile cursor, m; null = no cursor */
   readonly cursorS = signal<number | null>(null);
+  /** The climb strategy drawn over the profile as a dashed ghost; null = none */
+  readonly ghost = signal<FpvClimbStrategyId | null>(null);
 
   /** fpv.altitude is installed and active on this server */
   readonly available = computed(() =>
@@ -175,6 +238,13 @@ export class AltitudeView {
     const r = this.result();
     const c = r?.corridor;
     return c && r.pilot && c.s.length > 1 ? new Corridor(c, r.pilot) : null;
+  });
+  /** The climb assistant's strategies, when the module ran it. */
+  readonly climb = computed(() => this.result()?.climb ?? null);
+  /** The ghost strategy, when the current result still has it. */
+  readonly ghostStrategy = computed(() => {
+    const id = this.ghost();
+    return this.climb()?.strategies.find((s) => s.id === id) ?? null;
   });
   /** The 3D view draws the corridor of the mission it was calculated for, not of an edit since. */
   readonly stale = computed(() => this.store.resultStale());

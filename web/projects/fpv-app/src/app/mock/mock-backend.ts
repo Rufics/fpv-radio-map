@@ -7,7 +7,7 @@
  */
 import { HttpErrorResponse, HttpHeaders, HttpParams, HttpRequest, HttpResponse } from '@angular/common/http';
 import { fpvCoreMock } from './fpv-core-mock';
-import { fpvAltitudeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
+import { fpvAltitudeAnalyzeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
 import {
   CacheLimit,
   CacheTier,
@@ -380,7 +380,16 @@ export class MockBackend {
       });
     }
     if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
-    if (mission.modules?.['fpv.altitude']) result.modules = { ...result.modules, 'fpv.altitude': fpvAltitudeMock(mission) };
+    if (mission.modules?.['fpv.altitude']) {
+      const altitude = fpvAltitudeAnalyzeMock(mission);
+      result.modules = { ...result.modules, 'fpv.altitude': altitude.data };
+      // As the server: a reason with a leg goes to that leg, the rest to the route.
+      for (const r of altitude.reasons) {
+        const leg = r.leg === undefined ? undefined : result.legs?.[r.leg];
+        if (leg) (leg.reasons ??= []).push(r);
+        else (result.reasons ??= []).push(r);
+      }
+    }
     const sess = this.sessionOf(req);
     const stored = sess ? this.missions.get(sess.missionId) : undefined;
     if (stored && sess?.role === 'edit') {
@@ -553,7 +562,7 @@ export const MODULES: ModuleInfo[] = [
   { id: 'fpv.battery', version: '1.0.4', title: 'Battery range', lifecycle: 'stable', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'rf.flightlog', version: '1.3.0', title: 'Flight log replay', builtIn: true, lifecycle: 'stable', provides: ['flightlog.processor'], signedBy: 'built in', isolated: false, state: 'active' },
   { id: 'fpv.blackbox', version: '1.0.0', title: 'Betaflight Blackbox decoder', lifecycle: 'beta', provides: ['flightlog.decoder'], signedBy: 'owner', isolated: true, state: 'active' },
-  { id: 'fpv.altitude', version: '1.0.0', title: 'Altitude corridor and 3D view', lifecycle: 'alpha', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.altitude', version: '1.2.0', title: 'Altitude corridor and 3D view', lifecycle: 'alpha', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.min-altitude', version: '0.4.0', title: 'Minimum altitude', lifecycle: 'alpha', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   {
     id: 'fpv.relay', version: '1.1.0', title: 'Relay planning', lifecycle: 'deprecated', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active',

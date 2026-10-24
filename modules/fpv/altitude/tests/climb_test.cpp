@@ -25,7 +25,9 @@ constexpr double kInf = std::numeric_limits<double>::infinity();
 std::vector<CorridorPoint> corridor(const std::function<double(double)>& floorAgl, double lengthM, double plannedAgl,
                                     bool returns, double takeoffM = 200.0) {
     std::vector<CorridorPoint> out;
-    for (double s = 0.0; s <= lengthM + 1e-9; s += 100.0) {
+    const auto samples = static_cast<int>(std::floor(lengthM / 100.0 + 1e-9));
+    for (int k = 0; k <= samples; ++k) {
+        const double s = 100.0 * k;
         CorridorPoint c{};
         c.s = s;
         c.p = RoutePoint{kPilot, plannedAgl, 0, 90.0, plannedAgl};
@@ -46,7 +48,7 @@ std::vector<Segment> segmentsFor(const std::vector<CorridorPoint>& pts) {
     std::vector<Segment> out;
     for (std::size_t i = 0; i + 1 < pts.size(); ++i) {
         const bool free = pts[i].nearPilot || pts[i + 1].nearPilot;
-        out.push_back({free ? kInf : 20.0, free ? kInf : 40.0, 10.0});
+        out.push_back({free ? kInf : 20.0, free ? kInf : 40.0, 10.0, 2.0, 4.0});
     }
     return out;
 }
@@ -95,6 +97,8 @@ TEST(ClimbPlanner, FlatGroundClimbsOnceInTheTakeOffZone) {
     // To 130 m (the floor, on the grid) and level after: 28.5 m of climb from the pilot's 101.5 m.
     EXPECT_NEAR(planner.stats(p.mslM).riseM, 28.5, 1e-6);
     EXPECT_NEAR(p.mslM.back(), 130.0, 1e-6);
+    // 300 s at 10 m/s, but the first 100 m take as long as climbing 28.5 m at 2 m/s.
+    EXPECT_NEAR(planner.stats(p.mslM).timeS, 290.0 + 28.5 / 2.0, 1e-6);
 }
 
 TEST(ClimbPlanner, AClimbToARidgeStartsEarlyEnoughAndKeepsToTheRate) {
@@ -169,6 +173,22 @@ TEST(ProfileFitter, AddsWaypointsOnlyWhereTheLineStraysFromTheProfile) {
     for (std::size_t i = 0; i < pts.size(); ++i) EXPECT_LE(std::abs(fit.mslM[i] - profile[i]), 5.0 + 0.1) << "at s = " << pts[i].s;
 }
 
+TEST(ProfileFitter, AddsAWaypointWhereTheLineWouldCrossTheCeiling) {
+    const LocalWorld w = flat();
+    const json mission = oneLeg(w, 3.0, 100.0, "launch", false);
+    const Route route(Mission::fromJson(mission), w);
+    auto pts = corridor([](double) { return 0.0; }, route.length(), 100.0, false);
+    // Well within the tolerance of a straight line, but the ceiling dips under it half way.
+    const std::size_t mid = pts.size() / 2;
+    std::vector<double> profile(pts.size());
+    for (std::size_t i = 0; i < pts.size(); ++i) profile[i] = 101.5 + (200.0 - 101.5) * pts[i].s / pts.back().s;
+    profile[mid] -= 6.0;
+    pts[mid].ceilingMslM = profile[mid] + 1.0;
+    const FittedRoute fit = ProfileFitter(pts, route, mission.at("waypoints"), 50.0).fit(profile);
+    EXPECT_EQ(fit.added, 1U);
+    EXPECT_LE(fit.mslM[mid], pts[mid].ceilingMslM + 0.1);
+}
+
 TEST(ClimbAssist, AWastefulPlanGetsTheEnergyOptimalFix) {
     // 100 m above flat ground where 30 m clears it: every strategy, and advice with a fix.
     const LocalWorld w = flat();
@@ -177,6 +197,7 @@ TEST(ClimbAssist, AWastefulPlanGetsTheEnergyOptimalFix) {
     const json& climb = r.at("data").at("climb");
     EXPECT_EQ(climb.at("recommended"), "energy");
     EXPECT_FALSE(climb.at("energyEstimated").get<bool>());
+    EXPECT_NE(climb.at("notes").back().get<std::string>().find("follow the terrain between waypoints"), std::string::npos);
     ASSERT_EQ(climb.at("strategies").size(), 3U);
     const json* energy = strategy(climb, "energy");
     ASSERT_NE(energy, nullptr);
@@ -192,6 +213,19 @@ TEST(ClimbAssist, AWastefulPlanGetsTheEnergyOptimalFix) {
     bool advised = false;
     for (const json& x : r.at("reasons")) advised = advised || (x.at("severity") == "info" && x.contains("fix"));
     EXPECT_TRUE(advised) << r.at("reasons").dump();
+}
+
+TEST(ClimbAssist, APlanUnderTheFloorIsAdvisedIntoTheCorridor) {
+    // 10 m above flat ground where 30 m clears it: the energy-optimal profile climbs more, but stays in.
+    const LocalWorld w = flat();
+    const json mission = oneLeg(w, 3.0, 10.0, "agl", true);
+    const json r = analyze({{"mission", mission}, {"options", {{"stepM", 100.0}, {"linkFloor", false}}}}, w, {});
+    std::string advice;
+    for (const json& x : r.at("reasons")) {
+        if (x.at("severity") == "info" && x.contains("fix")) advice = x.at("text");
+    }
+    EXPECT_TRUE(advice.starts_with("Climb assistant: the energy-optimal profile keeps the whole route inside the corridor, climbing "))
+        << advice;
 }
 
 TEST(ClimbAssist, APlanClimbingFasterThanTheDroneIsWarnedPerLeg) {

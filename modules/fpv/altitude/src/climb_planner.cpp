@@ -39,6 +39,14 @@ void relax(Lattice& l, std::size_t i, const Segment& seg, double floor, bool rat
     }
 }
 
+/// Time over a stretch: flying it, or climbing or descending its height where that takes longer.
+double stretchTime(const Segment& seg, double ds, double rise) {
+    double t = seg.groundSpeedMps > 0.0 ? ds / seg.groundSpeedMps : 0.0;
+    if (seg.climbMps > 0.0) t = std::max(t, rise / seg.climbMps);
+    if (seg.descentMps > 0.0) t = std::max(t, -rise / seg.descentMps);
+    return t;
+}
+
 }  // namespace
 
 ClimbPlanner::ClimbPlanner(const std::vector<CorridorPoint>& pts, std::vector<Segment> segments, bool returns, double heightStepM)
@@ -65,8 +73,9 @@ std::optional<std::vector<double>> ClimbPlanner::search(bool rates) const {
     const double base = top - std::ceil((top - lo) / step_ - kEpsilonM) * step_;
     const auto levels = static_cast<std::size_t>(std::ceil((hi - base) / step_)) + 1;
 
-    // The heights a sample may take: on the grid between its floor and ceiling (only the lowest
-    // over the floor where the floor is above the ceiling), and the plan's own at fixed ends.
+    // The heights a sample may take: on the grid between its floor and ceiling (the floor itself
+    // where no grid height fits, as where the floor is above the ceiling), and the plan's own at
+    // fixed ends.
     Lattice l{std::vector<std::vector<double>>(n), std::vector<std::vector<double>>(n), std::vector<std::vector<std::size_t>>(n)};
     for (std::size_t i = 0; i < n; ++i) {
         if (i == 0 || (returns_ && i == n - 1)) {
@@ -78,7 +87,7 @@ std::optional<std::vector<double>> ClimbPlanner::search(bool rates) const {
         for (std::size_t k = 0; k < levels; ++k) {
             if (const double v = base + static_cast<double>(k) * step_; v >= floor - kEpsilonM && v <= cap + kEpsilonM) l.h[i].push_back(v);
         }
-        if (l.h[i].empty()) l.h[i] = {std::ceil((floor - kEpsilonM) / step_) * step_};
+        if (l.h[i].empty()) l.h[i] = {floor};
     }
 
     // Least climb to each height of each sample; the graph only goes forward along the route.
@@ -175,13 +184,14 @@ ProfileStats ClimbPlanner::stats(const std::vector<double>& mslM) const {
             st.minClearanceM = mslM[i] - p.floorMslM();
             st.minClearanceAtM = p.s;
         }
-        st.overCeilingM = std::max(st.overCeilingM, mslM[i] - p.ceilingMslM);
+        // Where the floor is over the ceiling, every profile has to be over it.
+        if (p.ceilingMslM >= p.floorMslM()) st.overCeilingM = std::max(st.overCeilingM, mslM[i] - p.ceilingMslM);
         if (i + 1 == mslM.size()) break;
         const double d = mslM[i + 1] - mslM[i];
         const double ds = pts_[i + 1].s - p.s;
         const Segment& seg = seg_[i];
         st.riseM += std::max(0.0, d);
-        if (seg.groundSpeedMps > 0.0) st.timeS += ds / seg.groundSpeedMps;
+        st.timeS += stretchTime(seg, ds, d);
         if (ds > 0.0 && std::isfinite(seg.maxRiseM)) {
             if (const double rate = d / ds * seg.groundSpeedMps; rate > st.steepestClimbMps) {
                 st.steepestClimbMps = rate;
