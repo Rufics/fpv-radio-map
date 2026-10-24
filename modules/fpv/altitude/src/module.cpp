@@ -1,12 +1,12 @@
 // fpv.altitude module: host glue and self-test.
 
-#include "corridor.hpp"
+#include "auto_height.hpp"
 
 #include <cmath>
 
 namespace fpv::altitude {
 namespace {
-constexpr const char* kManifest = R"json({"id":"fpv.altitude","version":"1.0.0"})json";
+constexpr const char* kManifest = R"json({"id":"fpv.altitude","version":"1.1.0"})json";
 }  // namespace
 
 class AltitudeModule final : public rfmod::Module {
@@ -14,11 +14,11 @@ public:
     const char* manifest() const override { return kManifest; }
 
     json invoke(const std::string& method, const json& request) override {
-        if (method != "route.analyze") throw rfmod::UnknownMethod(method);
+        if (method != "route.analyze" && method != "route.prepare") throw rfmod::UnknownMethod(method);
         const Mission m = Mission::fromJson(request.at("mission"));
         const LinkInputs links = readLinks(host(), m);
         const HostWorld world(host());
-        return analyze(request, world, links);
+        return method == "route.prepare" ? prepare(request, world, links) : analyze(request, world, links);
     }
 
     json selftest() override {

@@ -4,6 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "autoHeight": { "type": "boolean", "default": true, "description": "Give waypoints without a height, or with heightSource auto, the lowest height that keeps their legs in the corridor (route.prepare); manual heights are never changed" },
     "stepM": { "type": "number", "minimum": 10, "maximum": 2000, "default": 100, "description": "Spacing of the corridor samples along the route" },
     "clearanceM": { "type": "number", "minimum": 0, "maximum": 1000, "default": 30, "description": "Lowest height above the ground and obstacles the floor allows" },
     "takeoffM": { "type": "number", "minimum": 0, "maximum": 5000, "default": 200, "description": "Within this distance of the pilot the floor rises from the ground to the full clearance, and a plan under it is not warned about: the climb-out and the landing" },

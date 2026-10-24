@@ -16,6 +16,9 @@ struct Waypoint {
     /// height above the ground, which is the same in both references.
     double heightM{};
     std::string label;
+    /// The height is the server's to set (route.prepare): the waypoint has none, or says
+    /// heightSource "auto". A manual height is never changed.
+    bool autoHeight = false;
 };
 
 /// The parts of mission/v1 the FPV modules read. The server has already validated the document
@@ -33,8 +36,9 @@ struct Mission {
 
     static Mission fromJson(const json& m) {
         auto wp = [](const json& p, std::string_view field, const std::string& fallback) {
-            return Waypoint{{p.at("lat").get<double>(), p.at("lon").get<double>()}, p.at(field).get<double>(),
-                            p.value("label", fallback)};
+            const bool automatic = !p.contains(field) || p.value("heightSource", "manual") == "auto";
+            return Waypoint{{p.at("lat").get<double>(), p.at("lon").get<double>()}, p.value(field, 0.0),
+                            p.value("label", fallback), automatic};
         };
         Mission out;
         out.raw = m;

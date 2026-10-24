@@ -20,11 +20,6 @@ double lerpGround(const GroundSample& a, const GroundSample& b, double d) {
 
 std::string km(double m) { return "km " + fixed(m / 1000.0, 2); }
 
-struct LinkSolver {
-    std::string kind;
-    ClearanceSolver solver;
-};
-
 /// The link with the lowest frequency: its Fresnel zone is the widest, so it is the one drawn.
 const std::pair<const std::string, LinkInput>* widestLink(const LinkInputs& links) {
     const std::pair<const std::string, LinkInput>* best = nullptr;
@@ -33,82 +28,6 @@ const std::pair<const std::string, LinkInput>* widestLink(const LinkInputs& link
     }
     return best;
 }
-
-/// The link floor at one point: the highest of the links' lowest clear heights, as MSL, and the
-/// link that sets it. Nothing when some link has no clear height up to the search limit.
-struct LinkFloor {
-    std::optional<double> mslM;
-    std::string by;
-};
-
-class CorridorBuilder {
-public:
-    CorridorBuilder(const Mission& mission, const Route& route, const IWorld& world, const Settings& set,
-                    const LinkInputs& links, double k)
-        : mission_(mission), route_(route), world_(world), set_(set) {
-        if (set_.linkFloor) {
-            // One solve per sample and link: scan in 5 m steps (the bisection still refines to 1 mm).
-            for (const auto& [kind, link] : links) solvers_.emplace_back(kind, ClearanceSolver(k, link.frequency, set_.fraction, kScanStepM));
-        }
-        if (const auto* w = widestLink(links)) lambda_ = rfcore::wavelength(w->second.frequency).value();
-        for (const Leg& leg : route_.legs()) ground_.emplace_back(world_.groundProfile(leg.from.position, leg.to.position));
-    }
-
-    [[nodiscard]] std::vector<CorridorPoint> build() const {
-        std::vector<CorridorPoint> out;
-        for (const double s : sampleDistances(route_, set_.stepM)) out.push_back(at(s));
-        return out;
-    }
-
-private:
-    [[nodiscard]] CorridorPoint at(double s) const {
-        const RoutePoint p = route_.at(s);
-        const Leg& leg = route_.legs()[p.leg];
-        const LegGround& g = ground_[p.leg];
-        const double along = std::clamp(s - leg.startM, 0.0, leg.lengthM);
-        const double ground = g.groundAt(along);
-        const InverseResult inv = world_.inverse(mission_.pilot.position, p.position);
-        // The take-off zone: the clearance grows with the distance from the pilot.
-        const double ramp = set_.takeoffM > 0.0 ? std::min(1.0, inv.distanceM / set_.takeoffM) : 1.0;
-        CorridorPoint c{s, p, ground, route_.altitude().mslM(p.heightM, ground),
-                        g.highestIn(along - set_.stepM / 2.0, along + set_.stepM / 2.0) + set_.clearanceM * ramp,
-                        ramp < 1.0, std::nullopt, false, ground + set_.ceilingAglM, 0.0, {}};
-        if (inv.distanceM < 1.0) return c;  // at the pilot: no path to clear
-        if (lambda_ > 0.0) c.fresnelRadiusM = 0.5 * std::sqrt(lambda_ * inv.distanceM);
-        if (!solvers_.empty()) {
-            const LinkFloor f = linkFloor(p, inv);
-            c.linkChecked = true;
-            c.linkFloorMslM = f.mslM;
-            c.linkFloorBy = f.by;
-        }
-        return c;
-    }
-
-    [[nodiscard]] LinkFloor linkFloor(const RoutePoint& p, const InverseResult& inv) const {
-        const DirectResult mid = world_.direct(mission_.pilot.position, inv.azimuth1Deg, inv.distanceM / 2.0);
-        const std::vector<GroundSample> path = world_.groundProfile(mission_.pilot.position, p.position);
-        const auto profile = ClearanceSolver::toProfile(path, mid.azimuthDeg, mid.point.lat);
-        double top = -std::numeric_limits<double>::infinity();
-        std::string by;
-        for (const LinkSolver& l : solvers_) {
-            const auto need = l.solver.requiredAgl(profile, mission_.pilot.heightM, set_.maxAglM);
-            if (!need.has_value()) return {std::nullopt, l.kind};
-            if (const double msl = path.back().groundMslM + *need; msl > top) {
-                top = msl;
-                by = l.kind;
-            }
-        }
-        return {top, by};
-    }
-
-    const Mission& mission_;
-    const Route& route_;
-    const IWorld& world_;
-    Settings set_;
-    std::vector<LinkSolver> solvers_;
-    std::vector<LegGround> ground_;
-    double lambda_ = 0.0;
-};
 
 json corridorJson(const std::vector<CorridorPoint>& pts, const Settings& set) {
     json c = {{"stepM", set.stepM}, {"clearanceM", set.clearanceM}, {"takeoffM", set.takeoffM}, {"ceilingAglM", set.ceilingAglM},
@@ -196,6 +115,63 @@ json legReasons(const Route& route, const std::vector<CorridorPoint>& pts, const
 }
 
 }  // namespace
+
+CorridorBuilder::CorridorBuilder(const Mission& mission, const Route& route, const IWorld& world, const Settings& set,
+                                 const LinkInputs& links, double k)
+    : mission_(mission), route_(route), world_(world), set_(set) {
+    if (set_.linkFloor) {
+        // One solve per sample and link: scan in 5 m steps (the bisection still refines to 1 mm).
+        for (const auto& [kind, link] : links) solvers_.emplace_back(kind, ClearanceSolver(k, link.frequency, set_.fraction, kScanStepM));
+    }
+    if (const auto* w = widestLink(links)) lambda_ = rfcore::wavelength(w->second.frequency).value();
+    for (const Leg& leg : route_.legs()) ground_.emplace_back(world_.groundProfile(leg.from.position, leg.to.position));
+}
+
+std::vector<CorridorPoint> CorridorBuilder::build() const {
+    std::vector<CorridorPoint> out;
+    for (const double s : sampleDistances(route_, set_.stepM)) out.push_back(at(s));
+    return out;
+}
+
+CorridorPoint CorridorBuilder::at(double s) const {
+    const RoutePoint p = route_.at(s);
+    const Leg& leg = route_.legs()[p.leg];
+    const LegGround& g = ground_[p.leg];
+    const double along = std::clamp(s - leg.startM, 0.0, leg.lengthM);
+    const double ground = g.groundAt(along);
+    const InverseResult inv = world_.inverse(mission_.pilot.position, p.position);
+    // The take-off zone: the clearance grows with the distance from the pilot.
+    const double ramp = set_.takeoffM > 0.0 ? std::min(1.0, inv.distanceM / set_.takeoffM) : 1.0;
+    CorridorPoint c{s, p, ground, route_.altitude().mslM(p.heightM, ground),
+                    g.highestIn(along - set_.stepM / 2.0, along + set_.stepM / 2.0) + set_.clearanceM * ramp,
+                    ramp < 1.0, std::nullopt, false, ground + set_.ceilingAglM, 0.0, {}};
+    if (inv.distanceM < 1.0) return c;  // at the pilot: no path to clear
+    if (lambda_ > 0.0) c.fresnelRadiusM = 0.5 * std::sqrt(lambda_ * inv.distanceM);
+    if (!solvers_.empty()) {
+        const LinkFloor f = linkFloor(p, inv);
+        c.linkChecked = true;
+        c.linkFloorMslM = f.mslM;
+        c.linkFloorBy = f.by;
+    }
+    return c;
+}
+
+CorridorBuilder::LinkFloor CorridorBuilder::linkFloor(const RoutePoint& p, const InverseResult& inv) const {
+    const DirectResult mid = world_.direct(mission_.pilot.position, inv.azimuth1Deg, inv.distanceM / 2.0);
+    const std::vector<GroundSample> path = world_.groundProfile(mission_.pilot.position, p.position);
+    const auto profile = ClearanceSolver::toProfile(path, mid.azimuthDeg, mid.point.lat);
+    double top = -std::numeric_limits<double>::infinity();
+    std::string by;
+    for (const LinkSolver& l : solvers_) {
+        const auto need = l.solver.requiredAgl(profile, mission_.pilot.heightM, set_.maxAglM);
+        if (!need.has_value()) return {std::nullopt, l.kind};
+        if (const double msl = path.back().groundMslM + *need; msl > top) {
+            top = msl;
+            by = l.kind;
+        }
+    }
+    return {top, by};
+}
 
 Settings Settings::fromOptions(const json& options) {
     // The host checks options against the schema; these keep its bounds for any other caller too,
