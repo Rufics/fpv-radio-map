@@ -139,6 +139,8 @@ export class LineOfSightComponent {
       marginDb: probe?.marginAt(cursor) ?? null,
       distanceM: distanceM(mission.pilot, cursor),
     };
+    // a new point: clear the last settled reading, so the same text announces again later
+    this.announcement.set('');
     this.show(mission.pilot, cursor, reading);
     const setup = mission.links[link];
     if (!setup) return;

@@ -4,8 +4,9 @@ import { gridBounds } from './coverage-layer';
 
 /**
  * Reads a coverage grid at a place: the margin of the cell under a point, and where a point falls
- * on the grid image. The image is stretched between its corners in Web Mercator (as MapLibre
- * places an image source), so rows are spaced in Mercator y, not in latitude.
+ * on the grid image. The grid's rows are evenly spaced in latitude, so a cell is found by
+ * latitude; the image is stretched between its corners in Web Mercator (as MapLibre places an
+ * image source), so positions on the image are in Mercator y.
  */
 export class CoverageProbe {
   private constructor(
@@ -54,7 +55,9 @@ export class CoverageProbe {
 
   /** Margin of the cell under a point in dB; null outside the grid or where the cell has no value. */
   marginAt(p: LatLon): number | null {
-    const { x, y } = this.fraction(p);
+    const [w, s, e, n] = this.bounds;
+    const x = (p.lon - w) / (e - w);
+    const y = (n - p.lat) / (n - s);
     if (x < 0 || y < 0 || x >= 1 || y >= 1) return null;
     const col = Math.floor(x * this.cols);
     const row = Math.floor(y * this.rows);

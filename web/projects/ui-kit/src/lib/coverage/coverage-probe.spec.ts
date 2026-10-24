@@ -22,6 +22,14 @@ describe('CoverageProbe', () => {
     expect(p.marginAt({ lat: 48.05, lon: 35.15 })).toBe(25);
   });
 
+  it('finds the row by latitude, as the grid is laid out, not by the Mercator image', () => {
+    const p = CoverageProbe.of(grid)!;
+    // just north of the middle latitude: the north row by latitude, the south half of the image
+    const justNorth = { lat: 48.10005, lon: 35.05 };
+    expect(p.fraction(justNorth).y).toBeGreaterThan(0.5);
+    expect(p.marginAt(justNorth)).toBe(10);
+  });
+
   it('is null outside the grid and in a cell without a value', () => {
     const p = CoverageProbe.of(grid)!;
     expect(p.marginAt({ lat: 48.15, lon: 35.15 })).toBeNull();

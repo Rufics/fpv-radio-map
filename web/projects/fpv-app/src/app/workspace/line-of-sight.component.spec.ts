@@ -191,6 +191,16 @@ describe('LineOfSightComponent', () => {
     expect(tag()?.textContent).not.toContain('checking…');
     fixture.detectChanges();
     expect(live().textContent).toBe(tag()?.textContent);
+    const settled = live().textContent;
+
+    // the same reading again at the next rest is announced again: cleared first, then restored
+    pointer.cursor.set({ ...target });
+    TestBed.tick();
+    fixture.detectChanges();
+    expect(live().textContent).toBe('');
+    await MockApiHarness.wait(3000);
+    fixture.detectChanges();
+    expect(live().textContent).toBe(settled);
 
     pointer.cursor.set(null);
     TestBed.tick();
