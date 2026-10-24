@@ -14,3 +14,9 @@ Yes, on your own server with your own terrain tiles. See [Deployment](../admin/d
 
 **How do I see the route in 3D?**
 Press **3D** on the map. The terrain rises, the right mouse button turns the map, and two sliders set the tilt and how much heights are exaggerated. **Altitude** opens the profile under the map: the ground, your planned altitude and the safe corridor. Hover the profile to read the height above launch and above the ground at that point; the 3D view marks the same spot. The first time, the profile asks to turn on the altitude corridor for the mission, which needs the `fpv.altitude` module on the server. The 3D relief needs `terrain.pmtiles`; without it the route is drawn over a flat map.
+
+**Can I plan a fixed-wing, not only a multirotor?**
+Yes. Pick a drone marked *fixed-wing* under **Drone** in the plan panel. Its library entry carries the flight envelope: stall speed, maximum bank, climb and dive angles, loiter radius. Picking it turns on the `fpv.airframe` check for the mission. The result then has a **Flight checks** card: where the plane cannot climb as steeply as the route asks and comes too close to the terrain, where it reaches a waypoint below or above the planned height, which turns do not fit their legs at the plane's turn radius, and the airspeed margin over the stall in a banked turn. The failsafe check loiters the plane instead of hovering it.
+
+**Do I need a radio link if the autopilot flies the route?**
+No. Set **Flight** to *Autonomous* when the route is uploaded before take-off. The links become optional: with **Links to check** set to *None* the server checks only that the route stays clear of the ground, and no coverage map is computed, since it needs a link. If you do evaluate a link, a leg where it is lost is a warning instead of a block, and the **Autonomous: links lost on the way** card lists where the pilot cannot take over or loses video.

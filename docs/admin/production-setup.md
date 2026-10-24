@@ -437,7 +437,7 @@ API call makes the running server pick them up:
 ```sh
 cd ~/fpv-radio-map/deploy
 docker compose cp "$HOME/rfmap-modules/." rfmap-server:/var/lib/rfmap/incoming/
-for m in core battery min-altitude altitude failsafe best-launch relay blackbox; do
+for m in core battery min-altitude altitude airframe failsafe best-launch relay blackbox; do
   docker compose exec rfmap-server rfmod install "/var/lib/rfmap/incoming/$m.rfmod" \
       --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json
 done
@@ -453,7 +453,7 @@ already installed is refused (`version.upgrade`); that is expected when you run 
 The browser's **Admin → Modules** page shows the result after **Reload**; it has no upload.
 
 Check the list: `curl -s http://127.0.0.1:8088/api/v1/modules` shows the five `rf.*` modules and
-the eight `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
+the nine `fpv.*` ones. Now delete `owner.secret` from the server, as described in step 4.
 
 ## 7. Fill the equipment library
 
