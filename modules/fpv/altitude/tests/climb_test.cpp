@@ -10,6 +10,7 @@
 
 #include <cmath>
 #include <limits>
+#include <optional>
 
 using namespace fpv;
 using namespace fpv::altitude;
@@ -267,7 +268,7 @@ TEST(ClimbAssist, EnergyForTheMissionsDrone) {
     const json mission = oneLeg(w, 3.0, 100.0, "agl", true);
     const json drone = {{"id", "d"}, {"version", 2}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
                         {"climb", {{"method", "measured"}, {"climbPowerW", 150.0}, {"climbRateMps", 2.5}}}};
-    const json r = analyze({{"mission", mission}, {"options", {{"linkFloor", false}}}}, w, {}, drone);
+    const json r = analyze({{"mission", mission}, {"options", {{"linkFloor", false}}}}, w, {}, std::optional<json>(std::in_place, drone));
     const json& climb = r.at("data").at("climb");
     EXPECT_TRUE(climb.at("energyEstimated").get<bool>());
     EXPECT_DOUBLE_EQ(climb.at("climbRateMps").get<double>(), 2.5);
@@ -283,7 +284,7 @@ TEST(ClimbAssist, TheSpeedOptionFliesTheDroneAtThatAirspeed) {
     const json drone = {{"id", "d"}, {"version", 2}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
                         {"climb", {{"method", "measured"}, {"climbPowerW", 150.0}, {"climbRateMps", 2.5}}}};
     const auto planTime = [&](const json& options) {
-        const json r = analyze({{"mission", mission}, {"options", options}}, w, {}, drone);
+        const json r = analyze({{"mission", mission}, {"options", options}}, w, {}, std::optional<json>(std::in_place, drone));
         return r.at("data").at("climb").at("plan").at("timeS").get<double>();
     };
     const json cruise = {{"linkFloor", false}};
