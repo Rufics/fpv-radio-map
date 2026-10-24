@@ -272,13 +272,15 @@ export function fpvAltitudePrepareMock(m: Mission): {
     const t = path.t(leg, s);
     const ground = c.groundMslM[k];
     const floor = toRef(c.floorMslM[k], ground);
+    // Where no height clears the link, that link is what limits the waypoint, not the terrain.
+    const blind = o.linkFloor && c.fresnelRadiusM[k] > 0 && c.linkFloorMslM[k] === null;
     const limit =
-      c.linkFloorMslM[k] !== null && c.linkFloorMslM[k]! > c.terrainFloorMslM[k]
+      blind || (c.linkFloorMslM[k] !== null && c.linkFloorMslM[k]! > c.terrainFloorMslM[k])
         ? (fresnel?.link ?? 'control')
         : 'terrain';
     if (isFree(leg + 1)) raise(leg + 1, leg, t, floor, limit);
     if (isFree(leg)) raise(leg, leg + 1, 1 - t, floor, limit);
-    if (o.linkFloor && c.fresnelRadiusM[k] > 0 && c.linkFloorMslM[k] === null) {
+    if (blind) {
       if (leg < n) noLink[leg] = true;
       if (leg >= 1 && leg - 1 < n) noLink[leg - 1] = true;
     }

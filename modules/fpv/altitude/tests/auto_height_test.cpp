@@ -163,6 +163,7 @@ TEST(AutoHeight, NoClearLinkHeightBlocksTheWaypoint) {
     const json r = run(w, eastRoute(w, {{2.0, -1.0}}), {{"stepM", 100.0}, {"maxAglM", 100.0}}, links);
     ASSERT_EQ(r.at("waypoints").size(), 1U);
     EXPECT_TRUE(r.at("waypoints")[0].at("blocked").get<bool>()) << r.dump();
+    EXPECT_EQ(r.at("waypoints")[0].at("limitedBy"), "control") << r.dump();
     ASSERT_EQ(r.at("reasons").size(), 1U);
     const std::string text = r.at("reasons")[0].at("text");
     EXPECT_NE(text.find("Fresnel zone clear"), std::string::npos) << text;

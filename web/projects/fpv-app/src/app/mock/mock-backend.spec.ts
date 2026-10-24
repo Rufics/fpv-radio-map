@@ -108,7 +108,7 @@ describe('MockBackend through the API client', () => {
     const auto = (m: Mission, options: Record<string, unknown>): Mission => ({ ...m, modules: { ...m.modules, 'fpv.altitude': options }, waypoints: m.waypoints.map((w) => MissionAltitude.withAutoHeight(w)) });
 
     const noLink = await route(auto(exampleMission(), { maxAglM: 10 }));
-    expect(noLink.autoHeights?.some((h) => h.blocked && h.limitedBy !== 'ceiling')).toBe(true);
+    expect(noLink.autoHeights?.some((h) => h.blocked && h.limitedBy === 'control')).toBe(true);
     expect(texts(noLink).some((t) => t.includes('Fresnel zone clear'))).toBe(true);
 
     const ridge = exampleMission();

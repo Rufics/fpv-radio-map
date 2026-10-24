@@ -37,9 +37,10 @@ std::vector<AutoHeightPlanner::Sample> AutoHeightPlanner::samples() const {
     for (const CorridorPoint& c : builder.build()) {
         const Leg& leg = route.legs()[c.p.leg];
         const double t = leg.lengthM > 0.0 ? std::clamp((c.s - leg.startM) / leg.lengthM, 0.0, 1.0) : 1.0;
+        // Where no height clears the link, that link is what limits the waypoint, not the terrain.
+        const bool noLink = c.linkChecked && !c.linkFloorMslM.has_value();
         out.emplace_back(c.p.leg, t, c.s, route.altitude().heightFor(c.floorMslM(), c.groundMslM),
-                         route.altitude().heightFor(c.ceilingMslM, c.groundMslM), c.floorBy(),
-                         c.linkChecked && !c.linkFloorMslM.has_value());
+                         route.altitude().heightFor(c.ceilingMslM, c.groundMslM), noLink ? c.linkFloorBy : c.floorBy(), noLink);
     }
     return out;
 }
