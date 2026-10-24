@@ -56,6 +56,8 @@ public:
     [[nodiscard]] ClimbProfile gradual() const;
 
     [[nodiscard]] ProfileStats stats(const std::vector<double>& mslM) const;
+    /// The grid step used: the one asked for, coarsened to keep at most 400 heights per sample.
+    [[nodiscard]] double heightStepM() const { return step_; }
 
 private:
     [[nodiscard]] std::optional<std::vector<double>> search(bool rates) const;

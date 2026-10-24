@@ -21,6 +21,8 @@ const SAME_WH = 0.05;
 const G = 9.80665;
 /** An added waypoint whose removal adds no more climb than this, and keeps the line in the corridor, goes. */
 const PRUNE_RISE_M = 0.5;
+/** At most this many heights per sample: a finer grid is coarsened. */
+const MAX_HEIGHTS = 400;
 
 /** What the drone can do between two neighbouring samples; free in the take-off zone. */
 interface Segment {
@@ -65,16 +67,20 @@ function minutes(s: number): string {
 export class ClimbPlannerMock {
   private readonly start: number;
   private readonly end: number;
+  /** The grid step used: the one asked for, coarsened to keep at most 400 heights per sample. */
+  readonly step: number;
 
   constructor(
     private readonly c: FpvAltitudeCorridor,
     private readonly near: boolean[],
     private readonly seg: Segment[],
     private readonly returns: boolean,
-    private readonly step: number,
+    heightStepM: number,
   ) {
     this.start = c.plannedMslM[0];
     this.end = c.plannedMslM.at(-1) ?? this.start;
+    const span = Math.max(0, ...c.s.map((_, i) => c.ceilingMslM[i] - c.floorMslM[i]));
+    this.step = Math.max(heightStepM, span / MAX_HEIGHTS);
   }
 
   private floor(i: number): number {
@@ -500,8 +506,11 @@ function steepLegs(
     if (rate > perf.climb + RATE_SLACK && rate > (worst.get(leg)?.rate ?? -Infinity))
       worst.set(leg, { rate, at: c.s[i], gs: seg[i].gs });
   }
+  // The pilot starts the route, and ends it only on a return.
   const name = (p: number) =>
-    p === 0 || p === route.pts.length - 1 ? 'Pilot' : (route.pts[p].label ?? `WP${p}`);
+    p === 0 || (route.returns && p === route.pts.length - 1)
+      ? 'Pilot'
+      : (route.pts[p].label ?? `WP${p}`);
   return [...worst].map(([leg, w]) => ({
     module: 'fpv.altitude',
     severity: 'warn' as const,
@@ -578,13 +587,18 @@ export function fpvClimbMock(
     descentRateMps: perf.descent,
     airspeedMps: perf.airspeed,
     energyEstimated: !!perf.wh,
-    heightStepM: step,
+    heightStepM: planner.step,
     fitToleranceM: o.fitToleranceM ?? 5,
     plan: now,
     strategies,
     notes: [
       ...perf.notes,
       `Past the take-off zone the profiles climb at most ${fixed(perf.climb, 1)} m/s and descend at most ${fixed(perf.descent, 1)} m/s at the ground speed on each stretch; inside it the drone climbs and lands vertically.`,
+      ...(planner.step > step + 1e-9
+        ? [
+            `Heights searched every ${fixed(planner.step, 1)} m, not ${fixed(step, 1)} m: the corridor is too tall for a finer grid.`,
+          ]
+        : []),
       ...(MissionAltitude.field(m) === 'aglM'
         ? [
             'Heights above the ground follow the terrain between waypoints, so following a profile over rough ground takes more added waypoints than in a mission flown above launch.',

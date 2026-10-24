@@ -195,7 +195,7 @@ energy and descending gives nothing back, so the energy-optimal profile is the o
 total climb that stays between the corridor's floor and ceiling within the drone's climb rate
 (`climbRateMps`, else the drone's measured rate, else 3 m/s) and descent rate (`descentRateMps`,
 4 m/s) at the ground speed on each stretch; in the take-off zone the drone climbs and lands
-vertically. It is found on a `heightStepM` grid (5 m) and compared with two simpler strategies:
+vertically. It is found on a `heightStepM` grid (5 m, coarsened to at most 400 heights a sample) and compared with two simpler strategies:
 climbing over launch to the highest floor and flying level, and a steady climb to it and a steady
 descent back. Each is turned into the fewest waypoints that follow it within `fitToleranceM` (5 m)
 in the mission's reference without crossing the floor or the ceiling (added points are labelled
@@ -205,7 +205,7 @@ descending its height at the drone's rates, whichever is longer; `overCeilingM` 
 the floor is under the ceiling. `data.climb` holds the plan's and every
 strategy's stats (`riseM`, `timeS`, `minClearanceM`, `overCeilingM`, `steepestClimbMps`, and
 `energyWh` when the mission has a drone, fetched with `library.get` and flown in the forecast wind
-from `weather.point`), the strategies' heights at every corridor sample (`mslM`) and their fixes.
+from `weather.point`; that forecast is the assistant's only, the corridor's refraction keeps to the request's `weather`), the strategies' heights at every corridor sample (`mslM`) and their fixes.
 A leg the plan climbs faster than the drone can gets a warning, and a plan that climbs at least
 10 m and 10 % more than the energy-optimal profile, or leaves the corridor where that profile does
 not, gets an info reason; both carry the energy-optimal fix.

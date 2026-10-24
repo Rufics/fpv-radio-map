@@ -62,7 +62,7 @@ struct Performance {
     }
 };
 
-Performance performance(const json& request, const Route& route, const IWorld& world, const ClimbSettings& set,
+Performance performance(const json& weather, const Route& route, const IWorld& world, const ClimbSettings& set,
                         const std::optional<json>& drone) {
     Performance p;
     double droneClimb = 0.0;
@@ -73,7 +73,7 @@ Performance performance(const json& request, const Route& route, const IWorld& w
             // The speed option flies the drone at that airspeed: ground speed, time and energy alike.
             if (set.speedMps > 0.0) spec.cruiseAirspeedMps = set.speedMps;
             p.airspeedMps = spec.cruiseAirspeedMps;
-            p.energy.emplace(spec, battery::Air::fromJson(request.value("weather", json()), json::object()), world);
+            p.energy.emplace(spec, battery::Air::fromJson(weather, json::object()), world);
             for (const Leg& leg : route.legs()) p.cruiseWh += p.energy->levelWh(leg.from.position, leg.to.position);
             p.notes.push_back("Energy: cruise at " + fixed(p.airspeedMps, 1) + " m/s airspeed in the forecast wind, plus climbing; descents give nothing back.");
         } catch (const std::exception& e) {
@@ -224,9 +224,9 @@ ClimbSettings ClimbSettings::fromOptions(const json& options) {
 }
 
 ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& world, const std::vector<CorridorPoint>& pts,
-                        const ClimbSettings& set, const std::optional<json>& drone) {
+                        const ClimbSettings& set, const std::optional<json>& drone, const json& weather) {
     ClimbAdvice out;
-    const Performance perf = performance(request, route, world, set, drone);
+    const Performance perf = performance(weather, route, world, set, drone);
     const std::vector<Segment> seg = segments(pts, perf);
     const bool returns = route.legs().back().isReturn;
     const ClimbPlanner planner(pts, seg, returns, set.heightStepM);
@@ -280,7 +280,7 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
                 {"descentRateMps", perf.descentMps},
                 {"airspeedMps", perf.airspeedMps},
                 {"energyEstimated", perf.energy.has_value()},
-                {"heightStepM", set.heightStepM},
+                {"heightStepM", planner.heightStepM()},
                 {"fitToleranceM", set.fitToleranceM},
                 {"plan", statsJson(now, perf, nowWps)},
                 {"strategies", std::move(list)},
@@ -288,6 +288,10 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     if (drone.has_value()) out.data["drone"] = {{"id", drone->value("id", "")}, {"version", drone->value("version", 0)}};
     out.data["notes"].push_back("Past the take-off zone the profiles climb at most " + fixed(perf.climbMps, 1) + " m/s and descend at most " +
                                 fixed(perf.descentMps, 1) + " m/s at the ground speed on each stretch; inside it the drone climbs and lands vertically.");
+    if (planner.heightStepM() > set.heightStepM + 1e-9) {
+        out.data["notes"].push_back("Heights searched every " + fixed(planner.heightStepM(), 1) + " m, not " + fixed(set.heightStepM, 1) +
+                                    " m: the corridor is too tall for a finer grid.");
+    }
     if (route.altitude().waypointField() == "aglM") {
         out.data["notes"].push_back("Heights above the ground follow the terrain between waypoints, so following a profile over rough ground takes "
                                     "more added waypoints than in a mission flown above launch.");

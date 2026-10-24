@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <deque>
+#include <functional>
 #include <limits>
 
 namespace fpv::altitude {
@@ -12,6 +14,15 @@ constexpr double kEpsilonM = 1e-6;
 /// Per sample and metre over the floor: prefers the lower of two profiles with the same climb,
 /// and stays far below one grid step over a whole route.
 constexpr double kLowWeight = 1e-6;
+/// At most this many heights per sample: a finer grid is coarsened, so memory and time stay bounded.
+constexpr double kMaxHeights = 400.0;
+
+/// The grid step: `wanted`, or coarser where a sample's floor-to-ceiling span would need more heights.
+double gridStep(const std::vector<CorridorPoint>& pts, double wanted) {
+    double span = 0.0;
+    for (const CorridorPoint& p : pts) span = std::max(span, p.ceilingMslM - p.floorMslM());
+    return std::max(wanted, span / kMaxHeights);
+}
 
 /// The heights each sample may take, and the least climb to each with the height it came from.
 struct Lattice {
@@ -20,21 +31,70 @@ struct Lattice {
     std::vector<std::vector<std::size_t>> from;
 };
 
-/// One step of the search: the least climb to every height of sample i + 1 from sample i.
+/// The minimum of a value over a window of indices that only moves forward, the earliest index
+/// among equals, as a monotone deque.
+class WindowMin {
+public:
+    explicit WindowMin(std::function<double(std::size_t)> value) : value_(std::move(value)) {}
+
+    void push(std::size_t k) {
+        const double v = value_(k);
+        while (!q_.empty() && value_(q_.back()) > v) q_.pop_back();
+        q_.push_back(k);
+    }
+    void dropBefore(std::size_t k) {
+        while (!q_.empty() && q_.front() < k) q_.pop_front();
+    }
+    [[nodiscard]] bool empty() const { return q_.empty(); }
+    [[nodiscard]] std::size_t front() const { return q_.front(); }
+    [[nodiscard]] double min() const { return value_(q_.front()); }
+
+private:
+    std::function<double(std::size_t)> value_;
+    std::deque<std::size_t> q_;
+};
+
+/// One step of the search: the least climb to every height of sample i + 1 from sample i. The
+/// cost from height k to height j is cost[k] + max(0, next[j] - here[k]); with both height lists
+/// ascending, a step down or level costs cost[k] and a step up next[j] + (cost[k] - here[k]), so
+/// two sliding minima over the heights in reach give each next height in O(1), not O(m).
 void relax(Lattice& l, std::size_t i, const Segment& seg, double floor, bool rates) {
     const std::vector<double>& here = l.h[i];
     const std::vector<double>& next = l.h[i + 1];
+    const std::vector<double>& cost = l.cost[i];
+    const double rise = rates ? seg.maxRiseM + kEpsilonM : kInf;
+    const double drop = rates ? seg.maxDropM + kEpsilonM : kInf;
     l.cost[i + 1].assign(next.size(), kInf);
     l.from[i + 1].assign(next.size(), 0);
+    WindowMin down([&cost](std::size_t k) { return cost[k]; });
+    WindowMin up([&cost, &here](std::size_t k) { return cost[k] - here[k]; });
+    std::size_t lowest = 0;  // first height within a climb of next[j]
+    std::size_t level = 0;   // first height at or over next[j]
+    std::size_t reach = 0;   // first height beyond a descent to next[j]
     for (std::size_t j = 0; j < next.size(); ++j) {
-        const double low = kLowWeight * std::max(0.0, next[j] - floor);
-        for (std::size_t k = 0; k < here.size(); ++k) {
-            const double d = next[j] - here[k];
-            const bool reachable = std::isfinite(l.cost[i][k]) && (!rates || (d <= seg.maxRiseM + kEpsilonM && -d <= seg.maxDropM + kEpsilonM));
-            if (const double c = l.cost[i][k] + std::max(0.0, d) + low; reachable && c < l.cost[i + 1][j]) {
-                l.cost[i + 1][j] = c;
-                l.from[i + 1][j] = k;
-            }
+        for (; reach < here.size() && here[reach] - next[j] <= drop; ++reach) {
+            if (std::isfinite(cost[reach])) down.push(reach);
+        }
+        for (; level < here.size() && here[level] < next[j]; ++level) {
+            if (std::isfinite(cost[level])) up.push(level);
+        }
+        while (lowest < here.size() && next[j] - here[lowest] > rise) ++lowest;
+        down.dropBefore(level);
+        up.dropBefore(lowest);
+        double best = kInf;
+        std::size_t from = 0;
+        // The lower heights come first, as a scan in order would pick them on a tie.
+        if (!up.empty()) {
+            best = up.min() + next[j];
+            from = up.front();
+        }
+        if (!down.empty() && down.min() < best) {
+            best = down.min();
+            from = down.front();
+        }
+        if (std::isfinite(best)) {
+            l.cost[i + 1][j] = best + kLowWeight * std::max(0.0, next[j] - floor);
+            l.from[i + 1][j] = from;
         }
     }
 }
@@ -50,7 +110,7 @@ double stretchTime(const Segment& seg, double ds, double rise) {
 }  // namespace
 
 ClimbPlanner::ClimbPlanner(const std::vector<CorridorPoint>& pts, std::vector<Segment> segments, bool returns, double heightStepM)
-    : pts_(pts), seg_(std::move(segments)), returns_(returns), step_(heightStepM),
+    : pts_(pts), seg_(std::move(segments)), returns_(returns), step_(gridStep(pts, heightStepM)),
       start_(pts.front().plannedMslM), end_(pts.back().plannedMslM) {}
 
 double ClimbPlanner::highestFloor() const {

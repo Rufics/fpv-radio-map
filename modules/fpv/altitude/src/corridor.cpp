@@ -219,7 +219,8 @@ std::vector<double> sampleDistances(const Route& route, double stepM) {
     return at;
 }
 
-json analyze(const json& request, const IWorld& world, const LinkInputs& links, const std::optional<json>& drone) {
+json analyze(const json& request, const IWorld& world, const LinkInputs& links, const std::optional<json>& drone,
+             const json& climbWeather) {
     const Mission mission = Mission::fromJson(request.at("mission"));
     const Settings set = Settings::fromOptions(request.value("options", json::object()));
     const auto [k, kNote] = refraction(request.value("weather", json()));
@@ -244,7 +245,8 @@ json analyze(const json& request, const IWorld& world, const LinkInputs& links, 
         }
         reasons = legReasons(route, pts, set);
         if (const ClimbSettings climb = ClimbSettings::fromOptions(request.value("options", json::object())); climb.enabled) {
-            ClimbAdvice advice = climbAssist(request, route, world, pts, climb, drone);
+            const json weather = climbWeather.is_null() ? request.value("weather", json()) : climbWeather;
+            ClimbAdvice advice = climbAssist(request, route, world, pts, climb, drone, weather);
             data["climb"] = std::move(advice.data);
             for (json& r : advice.reasons) reasons.push_back(std::move(r));
         }

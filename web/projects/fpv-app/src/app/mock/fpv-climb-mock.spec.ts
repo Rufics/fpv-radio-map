@@ -100,6 +100,27 @@ describe('fpvClimbMock', () => {
     expect(at(20).notes[0]).toContain('cruise at 20.0 m/s');
   });
 
+  it('names the target, not the pilot, at the end of a one-way route', () => {
+    const last = m.waypoints.length - 1;
+    const oneWay = {
+      ...m,
+      returnToPilot: false,
+      modules: { 'fpv.altitude': { climbRateMps: 0.5 } },
+      waypoints: m.waypoints.map((w, i) => (i === last ? { ...w, aglM: 400 } : w)),
+    };
+    const warn = fpvAltitudeAnalyzeMock(oneWay).reasons.find((x) => x.leg === last);
+    expect(warn?.text).toMatch(new RegExp(`→ ${m.waypoints[last].label}:`));
+  });
+
+  it('coarsens a grid too fine for the corridor, and says so', () => {
+    const fine = fpvAltitudeAnalyzeMock({
+      ...m,
+      modules: { 'fpv.altitude': { heightStepM: 0.1, ceilingAglM: 2000 } },
+    }).data.climb!;
+    expect(fine.heightStepM).toBeGreaterThan(1);
+    expect(fine.notes.some((n) => n.startsWith('Heights searched every'))).toBe(true);
+  });
+
   it('stays out when the assistant is off', () => {
     const off = fpvAltitudeAnalyzeMock({
       ...m,

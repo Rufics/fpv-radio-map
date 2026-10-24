@@ -21,20 +21,26 @@ public:
         const HostWorld world(host());
         if (method == "route.prepare") return prepare(request, world, links);
         // The climb assistant estimates energy for the mission's drone, in the forecast wind.
+        // The forecast goes to the assistant only: the corridor's refraction keeps to the request.
         std::optional<json> drone;
-        json req = request;
+        json climbWeather = request.value("weather", json());
+        // Without the drone the assistant still runs, without energy; without a forecast, in still air.
         if (!m.droneId.empty()) {
             try {
                 drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
-                if (!req.contains("weather") || req.at("weather").is_null()) {
-                    req["weather"] = host().call("weather.point", {{"lat", m.pilot.position.lat}, {"lon", m.pilot.position.lon},
-                                                                    {"time", request.value("time", "")}});
-                }
             } catch (const rfmod::HostError&) {
-                if (!req.contains("weather")) req["weather"] = nullptr;
+                drone.reset();
             }
         }
-        return analyze(req, world, links, drone);
+        if (drone && climbWeather.is_null()) {
+            try {
+                climbWeather = host().call("weather.point", {{"lat", m.pilot.position.lat}, {"lon", m.pilot.position.lon},
+                                                             {"time", request.value("time", "")}});
+            } catch (const rfmod::HostError&) {
+                climbWeather = nullptr;
+            }
+        }
+        return analyze(request, world, links, drone, climbWeather);
     }
 
     json selftest() override {

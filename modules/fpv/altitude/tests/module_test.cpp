@@ -48,3 +48,18 @@ TEST_F(AltitudeModule, ARadioWithoutAFrequencyIsABadRequest) {
     EXPECT_EQ(r.status, RFMOD_ERR_BAD_REQUEST);
     EXPECT_NE(r.body.dump().find("frequencyHz"), std::string::npos);
 }
+
+TEST_F(AltitudeModule, TheDronesForecastGoesToTheClimbAssistantOnly) {
+    host_.libraryItem("drones", "quad", {{"id", "quad"}, {"version", 1}, {"massKg", 1.0}, {"cruiseAirspeedMps", 10.0}, {"cruisePowerW", 100.0},
+                                         {"climb", {{"method", "measured"}, {"climbPowerW", 150.0}, {"climbRateMps", 2.5}}}});
+    host_.on("weather.point", [](const json&) { return json{{"effectiveEarthFactor", 2.0}}; });
+    json m = eastMission(world_, 1.0, 60.0, "both");
+    m["links"] = {{"control", {{"radio", "elrs-900"}}}, {"video", "none"}};
+    m["drone"] = "quad";
+    const auto r = module_.analyze({{"mission", m}, {"options", {{"stepM", 250.0}}}});
+    ASSERT_EQ(r.status, RFMOD_OK) << r.body.dump();
+    EXPECT_EQ(host_.calls("weather.point"), 1);
+    // The mission did not ask for rf.weather: the corridor keeps the standard atmosphere.
+    EXPECT_NEAR(r.body.at("data").at("kFactor").get<double>(), 4.0 / 3.0, 1e-12);
+    EXPECT_TRUE(r.body.at("data").at("climb").at("energyEstimated").get<bool>());
+}

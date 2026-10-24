@@ -29,8 +29,9 @@ struct ClimbAdvice {
 /// The climb assistant over a built corridor: the plan's climb against the energy-optimal profile
 /// and the simpler strategies, each turned into waypoints and offered as a fix. `drone` is the
 /// library item of the mission's drone, when it has one; without it energy is not estimated.
+/// `weather` is the forecast it flies in (null: still air at standard conditions).
 ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& world,
                         const std::vector<CorridorPoint>& pts, const ClimbSettings& set,
-                        const std::optional<json>& drone);
+                        const std::optional<json>& drone, const json& weather);
 
 }  // namespace fpv::altitude

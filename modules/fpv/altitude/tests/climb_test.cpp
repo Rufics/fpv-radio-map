@@ -297,3 +297,20 @@ TEST(ClimbAssist, OffWithTheOption) {
     const json r = analyze({{"mission", oneLeg(w, 2.0, 100.0, "agl", true)}, {"options", {{"climbAssist", false}}}}, w, {});
     EXPECT_FALSE(r.at("data").contains("climb"));
 }
+
+TEST(ClimbAssist, TheFinestOptionsTheSchemaAllowsStayFast) {
+    // 1 m heights up to a 5000 m ceiling every 10 m over 10 km: thousands of heights per sample,
+    // which a search comparing every pair of heights would take minutes over.
+    const LocalWorld w = ridgeWorld();
+    const json mission = oneLeg(w, 10.0, 100.0, "launch", true);
+    const json options = {{"stepM", 10.0}, {"heightStepM", 1.0}, {"ceilingAglM", 5000.0}, {"linkFloor", false}};
+    const json r = analyze({{"mission", mission}, {"options", options}}, w, {});
+    ASSERT_TRUE(r.at("data").contains("climb")) << r.dump();
+    const json& climb = r.at("data").at("climb");
+    EXPECT_EQ(climb.at("strategies").size(), 3U);
+    // At most 400 heights a sample: the step is coarsened, and says so.
+    EXPECT_GT(climb.at("heightStepM").get<double>(), 10.0);
+    bool told = false;
+    for (const json& n : climb.at("notes")) told = told || n.get<std::string>().starts_with("Heights searched every");
+    EXPECT_TRUE(told) << climb.at("notes").dump();
+}
