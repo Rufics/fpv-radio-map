@@ -385,7 +385,7 @@ export function fixTurnBack(mission: Mission): Fix & { note: string } {
   return {
     id: 'turn-back-t',
     title: 'Turn back at T',
-    patch: { waypoints: [mission.waypoints[0], MissionAltitude.withHeight(mission, TURN_BACK, TURN_BACK.aglM)] },
+    patch: { waypoints: [mission.waypoints[0], MissionAltitude.withHeight(mission, TURN_BACK, heightForAgl(mission, TURN_BACK, TURN_BACK.aglM))] },
     preview: [
       { label: 'Out along route', now: '10.8 km', after: '6.0 km', trend: 'neutral' },
       { label: 'Back to pilot', now: '5.3 km', after: '4.2 km', trend: 'neutral' },
