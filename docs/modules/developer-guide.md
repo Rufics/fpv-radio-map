@@ -155,9 +155,20 @@ calculation: the path is evaluated without your terms, and the failure is listed
 
 Called after the core has evaluated every leg of a route. The legs are pilot → wp1 → … → last,
 plus last → pilot when `returnToPilot` is true (the default). The core samples each leg at the
-DEM's native step. Along a leg the drone's AGL is interpolated linearly between the two
-waypoints' `aglM`, and its MSL is the DEM ground plus that AGL. The pilot's antenna is at
-`pilot.aglM`. `LegResult.worst` holds the worst sample per link, with `sample` saying where it was.
+DEM's native step. Along a leg the drone's height is interpolated linearly between the two
+waypoints in the mission's `altitudeRef`:
+
+- `"launch"`: waypoint heights are `altM`, above the ground at the pilot (a barometric altitude
+  from take-off). The drone's MSL is the launch ground plus that height, so it does not follow the
+  terrain; its AGL is that MSL minus the DEM ground under it, and a leg where it would be below
+  the ground is blocked.
+- `"agl"` (and missions without the field): waypoint heights are `aglM`. The drone's MSL is the
+  DEM ground plus that height, so it follows the terrain.
+
+The pilot's antenna is at `pilot.aglM` in both. In C++ use `fpv::Route` from `fpv/route.hpp`:
+`RoutePoint::heightM` is the height in the mission's reference, `RoutePoint::aglM` is always above
+the ground, and `Route::altitude()` converts between them (`fpv/altitude.hpp`). A fix that changes
+waypoint heights patches `AltitudeModel::waypointField(mission.altitudeRef)`. `LegResult.worst` holds the worst sample per link, with `sample` saying where it was.
 
 Modules run in dependency order (a module after those it requires or optionally uses), and
 each request carries what the earlier ones returned:

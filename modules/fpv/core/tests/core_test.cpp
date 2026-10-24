@@ -112,3 +112,27 @@ TEST(Core, UnknownFormatIsRejected) {
     EXPECT_THROW(core::analyze({{"mission", missionTo(1000.0, false)}, {"options", {{"export", {"shp"}}}}}, world(), factory()),
                  rfmod::BadRequest);
 }
+
+TEST(Core, LaunchReferencedRouteHoldsItsAltitudeOverTheTerrain) {
+    // The ground rises eastwards; above the launch point the drone does not follow it.
+    json mission = missionTo(1000.0, false);
+    mission["altitudeRef"] = "launch";
+    mission["waypoints"][0].erase("aglM");
+    mission["waypoints"][0]["altM"] = 50.0;
+    const Mission m = Mission::fromJson(mission);
+    const Route route(m, world());
+    const RoutePoint mid = route.at(500.0);
+    EXPECT_NEAR(mid.heightM, 1.5 + 0.5 * 48.5, 1e-9);
+    const double launchGround = world().groundMsl(m.pilot.position);
+    EXPECT_NEAR(mid.aglM, launchGround + mid.heightM - world().groundMsl(mid.position), 1e-9);
+    EXPECT_LT(mid.aglM, mid.heightM);
+    // Exports carry the altitude above sea level and the height above the ground under the point.
+    const json r = core::analyze({{"mission", mission}, {"options", {{"export", {"gpx"}}}}}, world(), factory());
+    const std::string gpx = r.at("data").at("export").at("gpx").at("content");
+    const LatLon t{mission["waypoints"][0]["lat"].get<double>(), mission["waypoints"][0]["lon"].get<double>()};
+    const double tGround = world().groundMsl(t);
+    EXPECT_NE(gpx.find("<ele>" + fixed(launchGround + 50.0, 3) + "</ele><name>Target</name><desc>" +
+                       fixed(launchGround + 50.0 - tGround, 3) + " m above ground"),
+              std::string::npos)
+        << gpx;
+}

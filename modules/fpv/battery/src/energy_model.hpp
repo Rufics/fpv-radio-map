@@ -75,8 +75,10 @@ public:
     /// crosswind exceeds the airspeed or the drone would be pushed backwards.
     [[nodiscard]] double groundSpeedMps(double courseDeg) const;
 
-    /// Energy for the geodesic from `a` (at aglA) to `b` (at aglB), the AGL changing linearly.
-    [[nodiscard]] double segmentWh(const LatLon& a, double aglA, const LatLon& b, double aglB) const;
+    /// Energy for the geodesic from `a` to `b`, the height changing linearly from `heightA` to
+    /// `heightB` in the reference of `altitude`.
+    [[nodiscard]] double segmentWh(const LatLon& a, double heightA, const LatLon& b, double heightB,
+                                   const AltitudeModel& altitude) const;
 
     /// Cruise energy for the geodesic a→b at constant altitude (no climbing).
     [[nodiscard]] double levelWh(const LatLon& a, const LatLon& b) const;
@@ -92,7 +94,11 @@ public:
 
 private:
     [[nodiscard]] double cruiseWh(const LatLon& a, double azimuthDeg, double length) const;
-    [[nodiscard]] double climbWh(const LatLon& a, double aglA, const LatLon& b, double aglB) const;
+    /// Climbing energy for a segment; descending gives nothing back.
+    [[nodiscard]] double climbWh(const LatLon& a, double heightA, const LatLon& b, double heightB,
+                                 const AltitudeModel& altitude) const;
+    /// Climbing energy for a total rise.
+    [[nodiscard]] double riseWh(double riseM) const;
 
     DroneSpec drone_;
     Air air_;
@@ -105,6 +111,7 @@ struct TurnBack {
     double returnM;
     LatLon position;
     double aglM;
+    double heightM;  ///< in the mission's altitude reference
     std::size_t leg;
 };
 

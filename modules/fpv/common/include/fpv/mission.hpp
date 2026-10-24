@@ -1,16 +1,20 @@
 #pragma once
 
+#include "fpv/altitude.hpp"
 #include "fpv/world.hpp"
 
 #include <format>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace fpv {
 
 struct Waypoint {
     LatLon position{};
-    double aglM{};
+    /// Height in the mission's altitude reference (altM or aglM). For the pilot it is the antenna
+    /// height above the ground, which is the same in both references.
+    double heightM{};
     std::string label;
 };
 
@@ -18,6 +22,7 @@ struct Waypoint {
 /// against schemas/mission.schema.json.
 struct Mission {
     std::string name;
+    AltitudeReference altitudeRef = AltitudeReference::Agl;
     Waypoint pilot;
     std::vector<Waypoint> waypoints;
     bool returnToPilot = true;
@@ -27,16 +32,18 @@ struct Mission {
     json raw;
 
     static Mission fromJson(const json& m) {
-        auto wp = [](const json& p, const std::string& fallback) {
-            return Waypoint{{p.at("lat").get<double>(), p.at("lon").get<double>()}, p.at("aglM").get<double>(),
+        auto wp = [](const json& p, std::string_view field, const std::string& fallback) {
+            return Waypoint{{p.at("lat").get<double>(), p.at("lon").get<double>()}, p.at(field).get<double>(),
                             p.value("label", fallback)};
         };
         Mission out;
         out.raw = m;
         out.name = m.value("name", "");
-        out.pilot = wp(m.at("pilot"), "Pilot");
+        out.altitudeRef = AltitudeModel::parseReference(m);
+        out.pilot = wp(m.at("pilot"), "aglM", "Pilot");
+        const std::string_view field = AltitudeModel::waypointField(out.altitudeRef);
         int i = 1;
-        for (const json& p : m.at("waypoints")) out.waypoints.push_back(wp(p, std::format("WP{}", i++)));
+        for (const json& p : m.at("waypoints")) out.waypoints.push_back(wp(p, field, std::format("WP{}", i++)));
         out.returnToPilot = m.value("returnToPilot", true);
         out.evaluate = m.value("evaluate", "both");
         out.droneId = m.value("drone", "");

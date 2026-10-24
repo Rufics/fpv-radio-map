@@ -79,4 +79,22 @@ describe('MissionExporter', () => {
     expect(rtepts.length).toBe(5);
     expect(rtepts[4].getElementsByTagName('name')[0].textContent).toBe('A · return');
   });
+
+  it('exports launch-referenced heights without placing them above the ground', () => {
+    const launch: Mission = { ...mission, altitudeRef: 'launch', waypoints: mission.waypoints.map((w) => ({ lat: w.lat, lon: w.lon, altM: 150 })) };
+    const kml = exporter.toKml(launch);
+    const doc = parse(kml.content);
+    const marks = Array.from(doc.getElementsByTagName('Placemark'));
+    const wp1 = marks.find((p) => p.getElementsByTagName('name')[0].textContent === 'WP1');
+    expect(wp1?.getElementsByTagName('altitudeMode')[0].textContent).toBe('clampToGround');
+    expect(wp1?.textContent).toContain('150');
+    expect(kml.content).toContain('<Data name="altM">');
+    const pilot = marks.find((p) => p.getElementsByTagName('name')[0].textContent === 'A · pilot');
+    expect(pilot?.getElementsByTagName('altitudeMode')[0].textContent).toBe('relativeToGround');
+
+    const gpx = exporter.toGpx(launch).content;
+    expect(gpx).toContain('<rfmap:altM>150</rfmap:altM>');
+    expect(gpx).toContain('<rfmap:aglM>2</rfmap:aglM>');
+    expect(gpx).toContain('above the launch point');
+  });
 });

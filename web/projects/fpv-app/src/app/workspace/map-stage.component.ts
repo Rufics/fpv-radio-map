@@ -17,7 +17,9 @@ import {
   MapContext,
   MapViewComponent,
   Mission,
+  MissionAltitude,
   MissionPoint,
+  MissionWaypoint,
   RfFormat,
   RouteDrawing,
   RouteTool,
@@ -237,7 +239,7 @@ export class MapStageComponent {
       untracked(() =>
         this.tool?.setAddPointHandler(
           placing
-            ? (p) => (placing === 'pilot' ? this.placePilot(p) : this.ws.store.addWaypoint({ lat: p.lat, lon: p.lon, aglM: 120 }))
+            ? (p) => (placing === 'pilot' ? this.placePilot(p) : this.ws.store.addWaypoint(MissionAltitude.withHeight(this.ws.store.mission() ?? {}, { lat: p.lat, lon: p.lon }, MissionAltitude.defaultHeightM)))
             : null,
         ),
       );
@@ -317,6 +319,10 @@ export class MapStageComponent {
     const rows = this.ws.legRows();
     const ground = this.ws.groundAt();
     const g = (v: number | undefined, agl: number) => (v !== undefined ? `${RfFormat.format(v, 'm', { unit: false })} + ${RfFormat.format(agl, 'm')}` : `${RfFormat.format(agl, 'm')} AGL`);
+    // A launch-referenced height is not above the ground under the point: show it with its own basis.
+    const wpCaption = (v: number | undefined, w: MissionWaypoint) =>
+      MissionAltitude.ref(m) === 'launch' ? `${RfFormat.format(MissionAltitude.height(m, w), 'm')} above launch` : g(v, MissionAltitude.height(m, w));
+    const wpAria = (w: MissionWaypoint) => `${RfFormat.format(MissionAltitude.height(m, w), 'm')} ${MissionAltitude.basis(m)}`;
     const turn = endsAtTurnBack(m);
     const pilot: DrawPoint = { ...m.pilot, caption: `Pilot · ${g(ground.pilot, m.pilot.aglM)}`, ariaLabel: `Pilot A, ${RfFormat.format(m.pilot.aglM, 'm')} above ground` };
     const waypoints: DrawPoint[] = m.waypoints.map((w, i) => {
@@ -324,8 +330,8 @@ export class MapStageComponent {
       if (last && turn) return { ...w, markerKind: 'turnback', symbol: 'T', ariaLabel: 'Turn-back point T' };
       return {
         ...w,
-        caption: last ? `Target · ${g(ground.target, w.aglM)}` : undefined,
-        ariaLabel: last ? `Target B, ${RfFormat.format(w.aglM, 'm')} above ground` : `Waypoint ${i + 1}, ${RfFormat.format(w.aglM, 'm')} above ground`,
+        caption: last ? `Target · ${wpCaption(ground.target, w)}` : undefined,
+        ariaLabel: last ? `Target B, ${wpAria(w)}` : `Waypoint ${i + 1}, ${wpAria(w)}`,
       };
     });
     const legs = rows.filter((r) => !r.isReturn).map((r, i) => this.legDrawing(r, i, m, preview));
@@ -348,10 +354,10 @@ export class MapStageComponent {
 
   private legLabel(r: LegRowVm, i: number, m: Mission, preview: FixPreview | null, changed: boolean): string | undefined {
     const km = RfFormat.format(r.lengthM, 'km1');
-    if (changed) return `${km} · ${RfFormat.format(r.aglM, 'm')}`;
+    if (changed) return `${km} · ${RfFormat.format(r.heightM, 'm')}`;
     const label = r.mark ? `${km} · ${r.mark}` : km;
     if (preview) return this.previewBaseLabel(i) ?? label;
-    if (r.tone === 'ok' && this.ws.store.result() && m.waypoints[i]?.aglM !== 120) return `${km} · ${RfFormat.format(r.aglM, 'm')} ✓`;
+    if (r.tone === 'ok' && this.ws.store.result() && r.heightM !== MissionAltitude.defaultHeightM) return `${km} · ${RfFormat.format(r.heightM, 'm')} ✓`;
     return label;
   }
 
@@ -435,9 +441,9 @@ export class MapStageComponent {
   }
 }
 
-function samePoint(a: MissionPoint | undefined, b: MissionPoint | undefined, _bm: unknown, _am: unknown, _i: number): boolean {
+function samePoint(a: MissionWaypoint | undefined, b: MissionWaypoint | undefined, _bm: unknown, _am: unknown, _i: number): boolean {
   if (!a || !b) return a === b;
-  return a.lat === b.lat && a.lon === b.lon && a.aglM === b.aglM && a.label === b.label;
+  return a.lat === b.lat && a.lon === b.lon && a.aglM === b.aglM && a.altM === b.altM && a.label === b.label;
 }
 
 function legStatusOfTone(tone: LegRowVm['tone']): LegDrawStatus {

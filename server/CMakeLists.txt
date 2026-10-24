@@ -44,6 +44,7 @@ add_library(rfmap_server_lib STATIC
   src/host_services.cpp
   src/grid_outline.cpp
   src/result_key.cpp
+  src/route_altitude.cpp
   src/route_evaluator.cpp
   src/coverage_engine.cpp
   src/calculator.cpp

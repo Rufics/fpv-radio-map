@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { CoverageGrid, Fix, GetMissionResponse, Job, JobPart, Role, RouteResult } from '../models/api.models';
-import { EvaluateMode, LinkKind, Mission, MissionPoint, linksEvaluated } from '../models/mission.models';
+import { EvaluateMode, LinkKind, Mission, MissionPoint, MissionWaypoint, linksEvaluated } from '../models/mission.models';
 import { ApiError, RfmapApiClient } from './api-client';
 import { CredentialStore } from './credential-store';
 import { applyMergePatch } from './merge-patch';
@@ -151,7 +151,7 @@ export class MissionStore {
   movePoint(index: number, p: Pick<MissionPoint, 'lat' | 'lon'>): void {
     const before = this.snapshot();
     if (!before || !this.canEdit() || this.busy() || this.preview()) return;
-    const move = <T extends MissionPoint>(point: T): T => ({ ...point, lat: p.lat, lon: p.lon });
+    const move = <T extends Pick<MissionPoint, 'lat' | 'lon'>>(point: T): T => ({ ...point, lat: p.lat, lon: p.lon });
     if (index < 0) this.update((m) => ({ ...m, pilot: move(m.pilot) }));
     else this.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? move(w) : w)) }));
     this.lastMove.set(before);
@@ -172,7 +172,7 @@ export class MissionStore {
     this.pilotStale.set(s.pilotStale);
   }
 
-  addWaypoint(p: MissionPoint): void {
+  addWaypoint(p: MissionWaypoint): void {
     this.update((m) => ({ ...m, waypoints: [...m.waypoints, p] }));
   }
 

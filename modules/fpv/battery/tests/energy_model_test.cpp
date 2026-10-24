@@ -83,7 +83,12 @@ TEST(Battery, ClimbOverTerrainCountsOnlyRises) {
     const EnergyModel m(DroneSpec::fromJson(kDrone), Air{}, ridge);
     const double cruise = 300.0 * (2000.0 / 15.0) / 3600.0;
     const double climb = 2.0 * 9.80665 * 50.0 / 0.5 / 3600.0;
-    EXPECT_NEAR(m.segmentWh(a, 10.0, b, 10.0), cruise + climb, 1e-6);
+    EXPECT_NEAR(m.segmentWh(a, 10.0, b, 10.0, AltitudeModel(AltitudeReference::Agl, 0.0)), cruise + climb, 1e-6);
+    // Above the launch point the drone holds its altitude over the ridge: only the ends count.
+    const AltitudeModel launch(AltitudeReference::Launch, 100.0);
+    EXPECT_NEAR(m.segmentWh(a, 60.0, b, 60.0, launch), cruise, 1e-6);
+    EXPECT_NEAR(m.segmentWh(a, 60.0, b, 90.0, launch), cruise + 2.0 * 9.80665 * 30.0 / 0.5 / 3600.0, 1e-6);
+    EXPECT_NEAR(m.segmentWh(a, 90.0, b, 60.0, launch), cruise, 1e-6);
 }
 
 TEST(Battery, EnoughEnergyGivesNoTurnBack) {
