@@ -21,6 +21,7 @@ struct ProfilePoint {
     double plannedMslM;  ///< where the plan puts the plane
     double groundMslM;
     double obstacleM;    ///< clutter on top of the ground
+    bool returnLeg;      ///< on the way back to the pilot, where the plane circles down to land
 };
 
 /// The route's vertical profile: the planned altitude over the ground under it.
@@ -43,11 +44,19 @@ struct LateArrival {
     double extraClimbM;  ///< more horizontal distance at the steepest climb to reach the height
 };
 
+/// A waypoint the plane reaches above its planned height because it cannot descend as steeply.
+struct HighArrival {
+    std::size_t leg;  ///< the leg that ends at the waypoint
+    double abovePlanM;
+    double extraDescentM;  ///< more horizontal distance at the steepest descent to get down
+};
+
 struct ClimbResult {
     std::optional<Shortfall> worst;          ///< the largest gap below the plan, over the tolerance
     std::optional<Shortfall> terrain;        ///< the first point closer to terrain than the clearance the plan keeps
     double terrainGapM = 0.0;                ///< the plane's height over terrain plus clutter there
     std::vector<LateArrival> arrivals;
+    std::vector<HighArrival> highArrivals;  ///< not the landing at the pilot, which circles down
 };
 
 /// Flies the profile as an autopilot holding the planned altitude would: it follows the plan
