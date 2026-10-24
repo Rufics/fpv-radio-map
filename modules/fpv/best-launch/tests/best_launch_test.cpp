@@ -96,3 +96,14 @@ TEST(BestLaunch, AsksForAnAreaFirst) {
     EXPECT_EQ(r.at("reasons").at(0).at("severity"), "info");
     EXPECT_EQ(link.calls, 0);
 }
+
+TEST(BestLaunch, NeedsALinkToScore) {
+    const LocalWorld w([](const LatLon&) { return std::optional<double>(100.0); }, 30.0);
+    const DistanceLink link(w);
+    const json mission = {{"pilot", {{"lat", 48.5}, {"lon", 35.2}, {"aglM", 1.5}}},
+                          {"waypoints", {{{"lat", 48.5}, {"lon", 35.3}, {"aglM", 50.0}}}}, {"evaluate", "none"}};
+    const json area = {{{"lat", 48.49}, {"lon", 35.21}}, {{"lat", 48.51}, {"lon", 35.21}}, {{"lat", 48.51}, {"lon", 35.22}}};
+    const json r = fpv::launch::analyze({{"mission", mission}, {"options", {{"area", area}}}}, w, link);
+    EXPECT_EQ(r.at("reasons").at(0).at("severity"), "info");
+    EXPECT_EQ(link.calls, 0);
+}

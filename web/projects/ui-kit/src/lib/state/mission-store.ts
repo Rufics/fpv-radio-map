@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { CoverageGrid, Fix, GetMissionResponse, Job, JobPart, Role, RouteResult } from '../models/api.models';
-import { EvaluateMode, LinkKind, Mission, MissionPoint, MissionWaypoint, linksEvaluated } from '../models/mission.models';
+import { EvaluateMode, FlightMode, LinkKind, Mission, MissionPoint, MissionWaypoint, linksEvaluated } from '../models/mission.models';
 import { ApiError, RfmapApiClient } from './api-client';
 import { CredentialStore } from './credential-store';
 import { applyMergePatch } from './merge-patch';
@@ -138,6 +138,10 @@ export class MissionStore {
     this.update((m) => ({ ...m, evaluate: mode }));
   }
 
+  setFlightMode(mode: FlightMode): void {
+    this.update((m) => ({ ...m, flightMode: mode }));
+  }
+
   setPilot(p: Pick<MissionPoint, 'lat' | 'lon'>): void {
     this.movePoint(-1, p);
   }
@@ -246,6 +250,12 @@ export class MissionStore {
       },
     });
 
+    if (linksEvaluated(mission.evaluate).length === 0) {
+      // No radio link is evaluated, so there is no coverage to compute.
+      jobDone = true;
+      finish();
+      return;
+    }
     try {
       const job = await this.api.startCoverage(id, mission);
       if (run !== this.runId) return;

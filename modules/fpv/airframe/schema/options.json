@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Fixed-wing envelope options (per mission)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "terrainClearanceM": { "type": "number", "minimum": 0, "maximum": 500, "default": 10, "description": "Required gap between the plane and terrain plus clutter where it cannot climb as planned" },
+    "toleranceM": { "type": "number", "minimum": 0, "maximum": 500, "default": 5, "description": "How far below the planned height the plane may be before it is reported" },
+    "windSpeedMps": { "type": "number", "minimum": 0, "maximum": 60, "description": "Use this wind instead of the forecast" }
+  }
+}

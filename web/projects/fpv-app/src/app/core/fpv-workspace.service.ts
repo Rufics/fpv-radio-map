@@ -127,7 +127,7 @@ export class FpvWorkspace {
   /** Coverage link actually shown (only evaluated links have a grid). */
   readonly heatLink = computed<LinkKind>(() => {
     const ev = this.evaluated();
-    return ev.includes(this.coverageLink()) ? this.coverageLink() : ev[0];
+    return ev.includes(this.coverageLink()) || ev.length === 0 ? this.coverageLink() : ev[0];
   });
 
   readonly batteryFailure = computed(() => this.store.result()?.moduleFailures?.find((f) => (f.module ?? '').startsWith('fpv.battery')) ?? null);
@@ -313,6 +313,7 @@ export class FpvWorkspace {
     const info = [...(r.legs ?? []).flatMap((l) => l.reasons ?? []), ...(r.reasons ?? [])].find((x) => x.severity === 'info' && x.text && x.module !== 'rf-core');
     if (info?.text) return info.text;
     const ev = this.evaluated();
+    if (ev.length === 0) return 'No radio link is checked in this mode; the route stays clear of the ground.';
     if (ev.length === 1) {
       const other = ev[0] === 'control' ? 'Video' : 'Control';
       return `${other} is not checked in this mode; the ${ev[0]} link reaches every leg.`;

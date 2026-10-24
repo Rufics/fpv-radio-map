@@ -92,6 +92,8 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 | 🔋 | Battery range with wind, temperature and climb, and a turn-back point when the pack won't last | `fpv.battery` |
 | ↕️ | Minimum altitude along the route that keeps the Fresnel zone clear | `fpv.min-altitude` |
 | 🏠 | Failsafe check: where the link is lost, and whether return-to-home clears the terrain | `fpv.failsafe` |
+| ✈️ | Fixed-wing planning: the climb angle over the terrain from take-off on, the turn radius at every waypoint, the stall margin in a banked turn, and loiter instead of hover in the failsafe | `fpv.airframe`, `fpv.failsafe` |
+| 🛰️ | Autonomous routes uploaded before take-off: the radio links become optional, and a lost link shows where the pilot cannot take over instead of blocking the route | server, `fpv.failsafe` |
 | 📍 | Best launch point inside an area you draw | `fpv.best-launch` |
 | 🔁 | Relay placement: budget per hop and the best relay spot | `fpv.relay` |
 | ⚖️ | Scenario compare, KML and GPX export | `fpv.core` |

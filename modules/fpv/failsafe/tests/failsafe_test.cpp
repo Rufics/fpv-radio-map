@@ -168,3 +168,61 @@ TEST(Failsafe, TemperatureOutsideTheMeasuredRangeSkipsTheEnergyCheck) {
     EXPECT_EQ(r.at("reasons").back().at("severity"), "warn");
     EXPECT_NE(r.at("reasons").back().at("text").get<std::string>().find("energy not checked"), std::string::npos);
 }
+
+namespace {
+
+const std::optional<json> kWing{std::in_place,
+                                json{{"id", "w"}, {"airframe", "fixed-wing"}, {"massKg", 2.0}, {"cruiseAirspeedMps", 18.0},
+                                     {"cruisePowerW", 120.0}, {"climb", {{"method", "potential-energy"}, {"efficiency", 0.5}}},
+                                     {"fixedWing", {{"stallSpeedMps", 10.0}, {"maxBankDeg", 30.0}, {"maxClimbAngleDeg", 12.0},
+                                                    {"maxDiveAngleDeg", 10.0}, {"loiterRadiusM", 75.0}}}}};
+
+}  // namespace
+
+TEST(Failsafe, FixedWingLoitersInsteadOfHovering) {
+    const auto w = hillWorld();
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    for (const char* action : {"hover", "loiter"}) {
+        const json r = analyze(lossRequest(w, {{"action", action}}), w, probe, kWing, std::nullopt);
+        EXPECT_EQ(r.at("data").at("airframe"), "fixed-wing");
+        ASSERT_EQ(r.at("reasons").size(), 1u);
+        const std::string text = r.at("reasons").at(0).at("text");
+        EXPECT_NE(text.find("circles there"), std::string::npos) << text;
+        EXPECT_NE(text.find("75 m radius"), std::string::npos) << text;
+        EXPECT_EQ(text.find("cannot hover") != std::string::npos, action == std::string("hover")) << text;
+    }
+    const json land = analyze(lossRequest(w, {{"action", "land"}}), w, probe, kWing, std::nullopt);
+    EXPECT_NE(land.at("reasons").at(0).at("text").get<std::string>().find("glides down"), std::string::npos);
+}
+
+TEST(Failsafe, AutonomousMissionFliesOnAfterTheLoss) {
+    const auto w = hillWorld();
+    // Control holds within 2 km of the pilot: lost on the way out, back on the way home.
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    json req = lossRequest(w, json::object());
+    req["mission"]["flightMode"] = "autonomous";
+    const json r = analyze(req, w, probe, std::nullopt, std::nullopt);
+    const json& d = r.at("data");
+    EXPECT_TRUE(d.at("controlLost").get<bool>());
+    EXPECT_TRUE(d.at("missionContinues").get<bool>());
+    EXPECT_FALSE(d.contains("rth"));
+    // Out 3 km, back from the far end: control returns 2 km out on the way home, 4 km along.
+    EXPECT_NEAR(d.at("regainAlongRouteM").get<double>(), 4000.0, 50.0);
+    ASSERT_EQ(r.at("reasons").size(), 1u);
+    EXPECT_EQ(r.at("reasons").at(0).at("severity"), "warn");
+    EXPECT_NE(r.at("reasons").at(0).at("text").get<std::string>().find("cannot take over"), std::string::npos);
+
+    // Set to run the failsafe anyway, it is the manual check again.
+    req["options"]["continueMission"] = false;
+    EXPECT_TRUE(analyze(req, w, probe, std::nullopt, std::nullopt).at("data").contains("rth"));
+}
+
+TEST(Failsafe, AutonomousWithoutTheControlLinkHasNothingToCheck) {
+    const auto w = hillWorld();
+    const DistanceProbe probe(w, {48.5, 35.2}, 2000.0);
+    json req = lossRequest(w, json::object(), "none");
+    req["mission"]["flightMode"] = "autonomous";
+    const json r = analyze(req, w, probe, std::nullopt, std::nullopt);
+    EXPECT_EQ(r.at("reasons").at(0).at("severity"), "info");
+    EXPECT_NE(r.at("reasons").at(0).at("text").get<std::string>().find("Autonomous"), std::string::npos);
+}

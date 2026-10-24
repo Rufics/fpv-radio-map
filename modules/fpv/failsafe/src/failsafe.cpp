@@ -15,6 +15,7 @@ Settings Settings::fromJson(const json& o) {
     s.rthAltitudeAboveHomeM = o.value("rthAltitudeAboveHomeM", s.rthAltitudeAboveHomeM);
     s.terrainClearanceM = o.value("terrainClearanceM", s.terrainClearanceM);
     s.stepM = o.value("stepM", s.stepM);
+    s.continueMission = o.value("continueMission", s.continueMission);
     return s;
 }
 
@@ -36,6 +37,14 @@ std::optional<LossPoint> FailsafeAnalyzer::firstLoss(const Route& route) const {
         }
         good = s;
         if (s >= out) return std::nullopt;
+    }
+}
+
+std::optional<double> FailsafeAnalyzer::regainAlongRoute(const Route& route, double fromM) const {
+    for (std::size_t i = 1;; ++i) {
+        const double s = std::min(route.length(), fromM + static_cast<double>(i) * s_.stepM);
+        if (const RoutePoint p = route.at(s); link_.marginDb(p.position, p.aglM) >= 0.0) return s;
+        if (s >= route.length()) return std::nullopt;
     }
 }
 
@@ -150,6 +159,47 @@ void addEnergy(const json& request, const json& options, const RthPlan& rth, con
     }
 }
 
+/// What the failsafe does when it stops at the loss point (land, hover, loiter): the reason, or
+/// nothing for a return home. A fixed-wing cannot hover, so it loiters instead.
+std::optional<json> stopAtLoss(const Settings& settings, const Airframe& airframe, double airspeedMps, const std::string& where) {
+    const std::string lost = "Failsafe: control is lost at " + where;
+    if (settings.action == "land") {
+        const std::string how = airframe.fixedWing() ? " and the plane glides down to land there, away from home." : " and the drone lands there.";
+        return reason(kId, "blocked", lost + how);
+    }
+    if (settings.action != "hover" && settings.action != "loiter") return std::nullopt;
+    if (!airframe.fixedWing()) {
+        return reason(kId, "blocked", lost + " and the drone hovers there until the link returns or the battery is empty.");
+    }
+    const std::string instead = settings.action == "hover" ? " (a fixed-wing cannot hover)" : "";
+    return reason(kId, "blocked", lost + " and the plane circles there" + instead + " on a " +
+                                      fixed(airframe.loiterRadiusM(airspeedMps), 0) +
+                                      " m radius until the link returns or the battery is empty.");
+}
+
+/// An autonomous mission flies on when control drops: where the pilot cannot take over.
+json autonomousLoss(const FailsafeAnalyzer& an, const Route& route, const LossPoint& loss, const std::string& where, json& data) {
+    data["missionContinues"] = true;
+    std::string back = "control does not come back before the end of the route";
+    if (const auto regain = an.regainAlongRoute(route, loss.distanceAlongRouteM); regain.has_value()) {
+        data["regainAlongRouteM"] = *regain;
+        back = "control is back at " + fixed(*regain / 1000.0, 2) + " km";
+    }
+    return reason(kId, "warn",
+                  "Autonomous: control is lost at " + where +
+                      " and the autopilot flies on along the route; until " + back +
+                      " the pilot cannot take over. Set the flight controller to continue the mission on link loss "
+                      "(INAV failsafe_mission_delay = -1, ArduPilot Plane FS_LONG_ACTN = 0).");
+}
+
+json noControlLink(const Mission& mission, const json& data) {
+    const std::string text = mission.autonomous
+                                 ? "Autonomous mission without the control link: the autopilot flies the whole route on its own, so "
+                                   "there is no link loss to check."
+                                 : "Failsafe check needs the control link to be evaluated.";
+    return {{"reasons", {reason(kId, "info", text)}}, {"data", data}};
+}
+
 }  // namespace
 
 json analyze(const json& request, const IWorld& world, const ILinkProbe& link, const std::optional<json>& drone,
@@ -160,8 +210,10 @@ json analyze(const json& request, const IWorld& world, const ILinkProbe& link, c
     json reasons = json::array();
     json data = {{"action", settings.action}, {"altitudeMode", settings.altitudeMode}};
     if (const std::vector<std::string> links = mission.links(); std::ranges::find(links, "control") == links.end()) {
-        return {{"reasons", {reason(kId, "info", "Failsafe check needs the control link to be evaluated.")}}, {"data", data}};
+        return noControlLink(mission, data);
     }
+    const Airframe airframe = drone.has_value() ? Airframe::fromDrone(*drone) : Airframe::multirotor();
+    data["airframe"] = std::string(airframe.name());
     try {
         const Route route(mission, world);
         const FailsafeAnalyzer an(world, link, settings);
@@ -176,13 +228,13 @@ json analyze(const json& request, const IWorld& world, const ILinkProbe& link, c
         data["loss"] = {{"distanceAlongRouteM", loss->distanceAlongRouteM}, {"lat", loss->point.position.lat},
                         {"lon", loss->point.position.lon}, {"aglM", loss->point.aglM}};
         const std::string where = fixed(loss->distanceAlongRouteM / 1000.0, 2) + " km";
-        if (settings.action == "land") {
-            reasons.push_back(reason(kId, "blocked", "Failsafe: control is lost at " + where + " and the drone lands there."));
+        if (mission.autonomous && settings.continueMission) {
+            reasons.push_back(autonomousLoss(an, route, *loss, where, data));
             return {{"reasons", reasons}, {"data", data}};
         }
-        if (settings.action == "hover") {
-            reasons.push_back(reason(kId, "blocked", "Failsafe: control is lost at " + where +
-                                                         " and the drone hovers there until the link returns or the battery is empty."));
+        const double airspeed = drone.has_value() ? drone->value("cruiseAirspeedMps", 0.0) : 0.0;
+        if (auto stop = stopAtLoss(settings, airframe, airspeed, where); stop.has_value()) {
+            reasons.push_back(std::move(*stop));
             return {{"reasons", reasons}, {"data", data}};
         }
 

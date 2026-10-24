@@ -63,6 +63,7 @@ describe('LibraryPage', () => {
     expect(page.summary({ gainDbi: 5 })).toBe('5 dBi');
     expect(page.summary({ capacityAh: 6, cellsSeries: 6, chemistry: 'liion' })).toBe('6000 mAh · 6S liion');
     expect(page.summary({ massKg: 1.9, cruiseAirspeedMps: 10 })).toBe('1.9 kg · cruise 10 m/s');
+    expect(page.summary({ airframe: 'fixed-wing', massKg: 2.4, cruiseAirspeedMps: 18 })).toBe('fixed-wing · 2.4 kg · cruise 18 m/s');
     expect(page.summary({ kind: 'control' })).toBe('control');
     expect(page.summary({ id: 'just-an-id' })).toBe('just-an-id');
     expect(page.summary({ kind: { nested: true } })).toBe('');

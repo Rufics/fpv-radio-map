@@ -26,7 +26,10 @@ struct Mission {
     Waypoint pilot;
     std::vector<Waypoint> waypoints;
     bool returnToPilot = true;
-    std::string evaluate;  ///< both | control | video
+    /// The route is uploaded to the flight controller and flown by the autopilot, so the radio
+    /// links are optional (mission flightMode "autonomous").
+    bool autonomous = false;
+    std::string evaluate;  ///< both | control | video | none
     std::string droneId;
     std::string batteryId;
     json raw;
@@ -45,14 +48,16 @@ struct Mission {
         int i = 1;
         for (const json& p : m.at("waypoints")) out.waypoints.push_back(wp(p, field, std::format("WP{}", i++)));
         out.returnToPilot = m.value("returnToPilot", true);
+        out.autonomous = m.value("flightMode", "manual") == "autonomous";
         out.evaluate = m.value("evaluate", "both");
         out.droneId = m.value("drone", "");
         out.batteryId = m.value("battery", "");
         return out;
     }
 
-    /// Links this mission evaluates, in a fixed order.
+    /// Links this mission evaluates, in a fixed order; none for evaluate "none".
     [[nodiscard]] std::vector<std::string> links() const {
+        if (evaluate == "none") return {};
         if (evaluate == "control") return {"control"};
         if (evaluate == "video") return {"video"};
         return {"control", "video"};

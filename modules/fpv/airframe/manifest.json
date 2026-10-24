@@ -1,0 +1,18 @@
+{
+  "schema": "rfmod/v1",
+  "id": "fpv.airframe",
+  "version": "1.0.0",
+  "title": "Fixed-wing flight envelope",
+  "description": "For a fixed-wing drone: whether the plane can climb as steeply as the route asks from take-off on, over the terrain; whether each turn fits its legs at the plane's turn radius; and the airspeed margin over the stall in a banked turn.",
+  "author": "rfmap",
+  "license": "MIT",
+  "lifecycle": "beta",
+  "abi": 2,
+  "host": ">=0.1.0 <1.0.0",
+  "requires": [],
+  "provides": ["route.analysis"],
+  "methods": ["route.analyze"],
+  "entry": { "linux-x86_64": "lib/libfpv_airframe.so" },
+  "optionsSchema": "schema/options.json",
+  "limits": { "memoryMb": 256, "timeoutMs": 60000 }
+}
