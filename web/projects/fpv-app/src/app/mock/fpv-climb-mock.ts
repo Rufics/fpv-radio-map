@@ -609,7 +609,7 @@ export function fpvClimbMock(
       ...(flyable
         ? []
         : [
-            "No profile through the corridor keeps to the drone's climb and descent rates: the energy-optimal one is shown, not offered as a fix.",
+            "The energy-optimal line breaks the drone's climb or descent rate: it is shown, not offered as a fix.",
           ]),
       ...(planner.step > step + 1e-9
         ? [

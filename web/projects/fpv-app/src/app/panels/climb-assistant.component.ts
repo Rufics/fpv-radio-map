@@ -94,8 +94,10 @@ function signedTime(seconds: number): string {
                 <button
                   type="button"
                   class="rf-btn rf-btn--sm rf-btn--primary"
-                  [disabled]="view.stale() || !!store.preview() || store.busy()"
-                  [title]="view.stale() ? 'Recalculate first: the mission changed since' : ''"
+                  [disabled]="
+                    !c.s.withinClimbRate || view.stale() || !!store.preview() || store.busy()
+                  "
+                  [title]="previewHint(c.s)"
                   (click)="preview(c.s)"
                 >
                   Preview fix
@@ -237,6 +239,12 @@ export class ClimbAssistantComponent {
 
   protected toggle(s: FpvClimbStrategy): void {
     this.view.ghost.set(this.view.ghostStrategy()?.id === s.id ? null : s.id);
+  }
+
+  /** Why the fix cannot be previewed, or nothing. A profile the drone cannot fly is never offered. */
+  protected previewHint(s: FpvClimbStrategy): string {
+    if (!s.withinClimbRate) return 'The drone cannot fly this line at its climb and descent rates';
+    return this.view.stale() ? 'Recalculate first: the mission changed since' : '';
   }
 
   protected preview(s: FpvClimbStrategy): void {

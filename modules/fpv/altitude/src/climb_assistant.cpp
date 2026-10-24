@@ -309,7 +309,7 @@ ClimbAdvice climbAssist(const json& request, const Route& route, const IWorld& w
     out.data["notes"].push_back("Past the take-off zone the profiles climb at most " + fixed(perf.climbMps, 1) + " m/s and descend at most " +
                                 fixed(perf.descentMps, 1) + " m/s at the ground speed on each stretch; inside it the drone climbs and lands vertically.");
     if (!energyFlyable) {
-        out.data["notes"].push_back("No profile through the corridor keeps to the drone's climb and descent rates: the energy-optimal one is shown, "
+        out.data["notes"].push_back("The energy-optimal line breaks the drone's climb or descent rate: it is shown, "
                                     "not offered as a fix.");
     }
     if (planner.heightStepM() > set.heightStepM + 1e-9) {

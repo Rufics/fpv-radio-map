@@ -198,6 +198,19 @@ describe('ClimbAssistantComponent', () => {
       expect(el().querySelector('.notes')?.textContent).toContain('No drone picked.');
     });
 
+    it('offers no fix the drone cannot fly', () => {
+      show({ climb });
+      fixture = TestBed.createComponent(ClimbAssistantComponent);
+      fixture.detectChanges();
+      const previews = [
+        ...el().querySelectorAll<HTMLButtonElement>('.card .actions .rf-btn--primary'),
+      ];
+      expect(previews.map((b) => b.disabled)).toEqual([true, false, true]);
+      expect(previews[0].title).toBe(
+        'The drone cannot fly this line at its climb and descent rates',
+      );
+    });
+
     it('says nothing without the assistant', () => {
       show({});
       fixture = TestBed.createComponent(ClimbAssistantComponent);

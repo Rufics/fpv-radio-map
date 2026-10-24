@@ -83,9 +83,9 @@ describe('fpvClimbMock', () => {
     });
     expect(slow.data.climb!.strategies[0].withinClimbRate).toBe(false);
     expect(slow.reasons.some((x) => x.fix?.id === 'fpv.altitude/climb-energy')).toBe(false);
-    expect(
-      slow.data.climb!.notes.some((n) => n.startsWith('No profile through the corridor')),
-    ).toBe(true);
+    expect(slow.data.climb!.notes.some((n) => n.startsWith('The energy-optimal line breaks'))).toBe(
+      true,
+    );
   });
 
   it('gives no advice on a plan as good as the energy-optimal one', () => {

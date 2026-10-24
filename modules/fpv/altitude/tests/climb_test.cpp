@@ -293,7 +293,7 @@ TEST(ClimbAssist, ARidgeTooSteepForTheDroneGetsNoFix) {
         EXPECT_FALSE(x.contains("fix") && x.at("fix").at("id") == "fpv.altitude/climb-energy") << x.dump();
     }
     bool noted = false;
-    for (const json& n : climb.at("notes")) noted = noted || n.get<std::string>().starts_with("No profile through the corridor");
+    for (const json& n : climb.at("notes")) noted = noted || n.get<std::string>().starts_with("The energy-optimal line breaks");
     EXPECT_TRUE(noted) << climb.at("notes").dump();
 }
 
