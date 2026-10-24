@@ -77,8 +77,8 @@ Running the same command again is safe. Finished outputs with unchanged inputs a
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder verify
 ```
 
-Expect `OK` for each of the seven builder outputs that exists (`dem.cog.tif`, `landcover.cog.tif`
-and the five `.pmtiles` files). `verify` does not notice a missing
+Expect `OK` for each builder output that exists: `dem.cog.tif`, `landcover.cog.tif` and four
+`.pmtiles` files by default, plus `satellite.pmtiles` when you built it. `verify` does not notice a missing
 file and does not check `style-dark.json`, `manifest.json` or `fonts/`, so compare the listing of
 `data/out` with this one (`satellite.pmtiles` only if you built it):
 

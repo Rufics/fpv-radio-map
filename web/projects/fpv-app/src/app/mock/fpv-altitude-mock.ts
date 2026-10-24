@@ -83,8 +83,9 @@ function lowestFrequency(
   return best;
 }
 
+/** The options with their defaults; the step keeps the module's 10–2000 m bounds, so sampling ends. */
 function optionsOf(m: Mission): Required<FpvAltitudeOptions> {
-  return {
+  const o: Required<FpvAltitudeOptions> = {
     stepM: 100,
     clearanceM: 30,
     takeoffM: 200,
@@ -94,6 +95,8 @@ function optionsOf(m: Mission): Required<FpvAltitudeOptions> {
     maxAglM: 500,
     ...(m.modules?.['fpv.altitude'] as FpvAltitudeOptions | undefined),
   };
+  o.stepM = Number.isFinite(o.stepM) ? Math.min(2000, Math.max(10, o.stepM)) : 100;
+  return o;
 }
 
 function emptyCorridor(o: Required<FpvAltitudeOptions>): FpvAltitudeCorridor {

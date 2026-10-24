@@ -57,4 +57,11 @@ describe('fpvAltitudeMock', () => {
     }).corridor!;
     expect(off.linkFloorMslM.every((v) => v === null)).toBe(true);
   });
+
+  it('keeps the step inside the module bounds', () => {
+    const zero = fpvAltitudeMock({ ...m, modules: { 'fpv.altitude': { stepM: 0 } } });
+    expect(zero.corridor!.stepM).toBe(10);
+    const nan = fpvAltitudeMock({ ...m, modules: { 'fpv.altitude': { stepM: Number.NaN } } });
+    expect(nan.corridor!.stepM).toBe(100);
+  });
 });

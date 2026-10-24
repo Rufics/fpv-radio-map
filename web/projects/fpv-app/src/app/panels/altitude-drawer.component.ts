@@ -502,7 +502,7 @@ export class AltitudeDrawerComponent {
       Home: 0,
       End: total,
     };
-    if (!(e.key in next)) return;
+    if (e.altKey || e.ctrlKey || e.metaKey || !Object.hasOwn(next, e.key)) return;
     e.preventDefault();
     this.view.cursorS.set(Math.min(total, Math.max(0, next[e.key])));
   }

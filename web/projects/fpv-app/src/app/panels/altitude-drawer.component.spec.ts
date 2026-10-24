@@ -120,6 +120,10 @@ describe('AltitudeDrawerComponent', () => {
     press('PageDown');
     expect(view.cursorS()).toBe(0);
     expect(press('a').defaultPrevented).toBe(false);
+    expect(press('constructor').defaultPrevented).toBe(false);
+    const back = new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, cancelable: true });
+    svg.dispatchEvent(back);
+    expect(back.defaultPrevented).toBe(false);
     expect(svg.getAttribute('aria-valuetext')).toMatch(/^km 0\.00: plan \d+ m MSL/);
 
     view.cursorS.set(1000);
