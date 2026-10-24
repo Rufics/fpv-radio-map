@@ -163,7 +163,12 @@
   "then": {
     "required": [
       "fixedWing"
-    ]
+    ],
+    "properties": {
+      "fixedWing": {
+        "type": "object"
+      }
+    }
   },
   "additionalProperties": false
 }

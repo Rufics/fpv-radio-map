@@ -97,8 +97,11 @@ describe('FpvWorkspace', () => {
   });
 
   it('names the all-clear after the ground when no link is checked', () => {
-    show({ ...exampleMission(), evaluate: 'none' }, null);
+    const m: Mission = { ...exampleMission(), evaluate: 'none', drone: 'fw-1800-mapper', modules: { 'fpv.airframe': {} } };
+    const r = routeResult(m, 'normal');
+    show(m, { ...r, legs: r.legs!.map((l) => ({ ...l, status: 'ok' as const, reasons: [], worst: {} })) });
     expect(ws.allClearTitle()).toBe('Route clear of the ground');
+    expect(ws.allClearText()).toBe('No radio link is checked in this mode; the route stays clear of the ground.');
     show(exampleMission(), null);
     expect(ws.allClearTitle()).toBe('All flown legs reachable by radio');
   });
