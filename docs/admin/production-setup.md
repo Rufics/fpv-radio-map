@@ -411,7 +411,7 @@ the Blackbox flight log decoder and the mission tools come as the FPV module pac
 your owner key and install it on the server machine with the `rfmod` CLI: modules never enter a
 server through the API.
 
-Build and sign the eight modules (about a minute **(estimate)**; the compile reuses the server
+Build and sign the nine modules (about a minute **(estimate)**; the compile reuses the server
 image's build cache):
 
 ```sh
