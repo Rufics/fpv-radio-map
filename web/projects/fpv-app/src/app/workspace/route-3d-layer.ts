@@ -314,11 +314,9 @@ export class Route3dLayer implements CustomLayerInterface {
 
     gl.useProgram(this.line.program);
     gl.uniformMatrix4fv(this.line.matrix, false, matrix);
-    gl.uniform2f(
-      this.line.viewport,
-      gl.drawingBufferWidth / devicePixelRatio,
-      gl.drawingBufferHeight / devicePixelRatio,
-    );
+    // Line widths are in CSS pixels; MapLibre sizes its buffer by its own pixel ratio.
+    const ratio = this.map.getPixelRatio();
+    gl.uniform2f(this.line.viewport, gl.drawingBufferWidth / ratio, gl.drawingBufferHeight / ratio);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuffer);
     attrib(gl, this.line.attribs['a_start'], 3, LINE_STRIDE, 0);
     attrib(gl, this.line.attribs['a_end'], 3, LINE_STRIDE, 3);

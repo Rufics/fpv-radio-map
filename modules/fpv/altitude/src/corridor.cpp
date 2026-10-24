@@ -10,6 +10,7 @@ namespace fpv::altitude {
 namespace {
 
 constexpr const char* kId = "fpv.altitude";
+constexpr double kScanStepM = 5.0;
 
 double lerpGround(const GroundSample& a, const GroundSample& b, double d) {
     const double span = b.distanceM - a.distanceM;
@@ -46,7 +47,8 @@ public:
                     const LinkInputs& links, double k)
         : mission_(mission), route_(route), world_(world), set_(set) {
         if (set_.linkFloor) {
-            for (const auto& [kind, link] : links) solvers_.push_back({kind, ClearanceSolver(k, link.frequency, set_.fraction)});
+            // One solve per sample and link: scan in 5 m steps (the bisection still refines to 1 mm).
+            for (const auto& [kind, link] : links) solvers_.push_back({kind, ClearanceSolver(k, link.frequency, set_.fraction, kScanStepM)});
         }
         if (const auto* w = widestLink(links)) lambda_ = rfcore::wavelength(w->second.frequency).value();
         for (const Leg& leg : route_.legs()) ground_.emplace_back(world_.groundProfile(leg.from.position, leg.to.position));
@@ -86,13 +88,17 @@ private:
         const DirectResult mid = world_.direct(mission_.pilot.position, inv.azimuth1Deg, inv.distanceM / 2.0);
         const std::vector<GroundSample> path = world_.groundProfile(mission_.pilot.position, p.position);
         const auto profile = ClearanceSolver::toProfile(path, mid.azimuthDeg, mid.point.lat);
-        LinkFloor f{-std::numeric_limits<double>::infinity(), ""};
+        double top = -std::numeric_limits<double>::infinity();
+        std::string by;
         for (const LinkSolver& l : solvers_) {
             const auto need = l.solver.requiredAgl(profile, mission_.pilot.heightM, set_.maxAglM);
             if (!need) return {std::nullopt, l.kind};
-            if (const double msl = path.back().groundMslM + *need; msl > *f.mslM) f = {msl, l.kind};
+            if (const double msl = path.back().groundMslM + *need; msl > top) {
+                top = msl;
+                by = l.kind;
+            }
         }
-        return f;
+        return {top, by};
     }
 
     const Mission& mission_;
