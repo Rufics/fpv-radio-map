@@ -33,6 +33,7 @@ const PITCH_3D = 60;
 const MAX_PITCH_3D = 80;
 /** MapLibre's default, which the 2D map keeps. */
 const MAX_PITCH_2D = 60;
+const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
 /** The 2D layers that 3D keeps: the 0 dB edge of the coverage (and the battery limit, which 3D leaves out). */
 const KEPT_IN_3D = new Set(['results-limits']);
 /** 2D layers 3D draws its own way. */
@@ -410,7 +411,11 @@ export class Route3dComponent {
       if (!map) return;
       untracked(() => {
         if (on && track) this.follow(map, track.camera(s, ex));
-        else if (chasing && this.view.mode() === '3d') this.frame(map);
+        else if (chasing) {
+          // the chase's padding stays on the map until it is put back
+          map.setPadding(NO_PADDING);
+          if (this.view.mode() === '3d') this.frame(map);
+        }
       });
       chasing = on && !!track;
     });
@@ -485,6 +490,7 @@ export class Route3dComponent {
     this.layers.suppress([]);
     map.getContainer().classList.remove('fpv-3d');
     map.setSky({});
+    map.setPadding(NO_PADDING);
     map.dragRotate.disable();
     map.setMaxPitch(MAX_PITCH_2D);
     if (map.getPitch() !== 0 || map.getBearing() !== 0)

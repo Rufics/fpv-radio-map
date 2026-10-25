@@ -33,6 +33,7 @@ function fakeMap() {
     cameraForBounds: vi.fn(() => ({ center: [35.2, 48.5], zoom: 12 })),
     setMaxPitch: vi.fn(),
     setSky: vi.fn(),
+    setPadding: vi.fn(),
     calculateCameraOptionsFromTo: vi.fn(() => ({ center: [35.2, 48.5], zoom: 16, pitch: 62, bearing: 40 })),
     jumpTo: vi.fn(),
     dragRotate: { enable: vi.fn(), disable: vi.fn() },
@@ -197,10 +198,12 @@ describe('Route3dComponent', () => {
     chase.stop();
     fixture.detectChanges();
     expect(el().querySelector('fpv-chase-hud')).toBeNull();
+    expect(map.setPadding).toHaveBeenLastCalledWith({ top: 0, bottom: 0, left: 0, right: 0 });
     expect(map.easeTo).toHaveBeenLastCalledWith(expect.objectContaining({ pitch: 60, duration: 800 }));
     // back to 2D: the sky goes too
     view.setMode('2d');
     fixture.detectChanges();
     expect(map.setSky).toHaveBeenLastCalledWith({});
+    expect(map.setPadding).toHaveBeenCalledTimes(2);
   });
 });
