@@ -74,7 +74,7 @@ describe('FpvWorkspace', () => {
   it('says where an autonomous route loses a link instead of the all-clear', () => {
     const m: Mission = { ...exampleMission(), flightMode: 'autonomous' };
     show(m, routeResult(m, 'normal'));
-    expect(ws.linkGapText()).toBe('The autopilot flies the whole route, but the pilot cannot take over where a link is lost: video on leg 3 · WP2 → B; video on leg 4 · B → A, return.');
+    expect(ws.linkGapText()).toBe('The autopilot flies the whole route, but the picture is lost on leg 3 · WP2 → B; leg 4 · B → A, return.');
     expect(ws.allClearText()).toBeNull();
     show(exampleMission(), routeResult(exampleMission(), 'normal'));
     expect(ws.linkGapText()).toBeNull();

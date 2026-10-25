@@ -378,7 +378,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Job' }
-        '422': { description: Coverage settings missing, or the grid has too many cells }
+        '422': { description: Coverage settings missing, the grid has too many cells, or the mission evaluates no link (evaluate none) }
         '503': { description: Too many jobs queued; Retry-After }
 
   /jobs/{jobId}:

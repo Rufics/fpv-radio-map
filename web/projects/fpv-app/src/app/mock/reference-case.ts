@@ -556,7 +556,6 @@ function applyAirframe(result: RouteResult, mission: Mission): void {
   if (!mission.modules?.['fpv.airframe'] || drone?.airframe !== 'fixed-wing' || !drone.fixedWing) return;
   const w = drone.fixedWing;
   const stall = w.stallSpeedMps / Math.sqrt(Math.cos((w.maxBankDeg * Math.PI) / 180));
-  const radius = drone.cruiseAirspeedMps ** 2 / (9.80665 * Math.tan((w.maxBankDeg * Math.PI) / 180));
   result.reasons = [
     ...(result.reasons ?? []),
     {
@@ -564,8 +563,6 @@ function applyAirframe(result: RouteResult, mission: Mission): void {
       severity: 'warn',
       text: `Fixed-wing: the cruise airspeed ${drone.cruiseAirspeedMps.toFixed(1)} m/s is less than 1.2 times the stall speed in a turn at ${w.maxBankDeg}° bank (${stall.toFixed(1)} m/s); a gust in a turn can stall it.`,
     },
-    { module: 'fpv.airframe', severity: 'info', text: `Fixed-wing: the plane can follow the planned heights at its ${w.maxClimbAngleDeg}° climb and ${w.maxDiveAngleDeg}° descent limits.` },
-    { module: 'fpv.airframe', severity: 'info', text: `Fixed-wing: every turn fits its legs at a ${radius.toFixed(0)} m turn radius.` },
   ];
   result.modules = { ...result.modules, 'fpv.airframe': { airframe: 'fixed-wing', speeds: { cruiseAirspeedMps: drone.cruiseAirspeedMps, stallSpeedMps: w.stallSpeedMps, turningStallSpeedMps: stall } } };
 }

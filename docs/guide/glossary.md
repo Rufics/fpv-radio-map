@@ -24,7 +24,7 @@
 
 **Vertical exaggeration.** The 3D view stretches heights, ×2 by default and up to ×4, so a 50 m ridge on a 5 km route is visible. The current factor is always shown on the map; ×1 is true scale.
 
-**Flight mode.** *Pilot* (`manual` in the mission file) means the pilot flies the drone over the radio link, so every leg needs the link. *Autonomous* means the autopilot flies a route uploaded before take-off; a lost link only means the pilot cannot take over there.
+**Flight mode.** *Pilot* (`manual` in the mission file) means the pilot flies the drone over the radio link, so every leg needs the link. *Autonomous* means the autopilot flies a route uploaded before take-off; a lost link only means the pilot cannot take over there (control) or loses the picture (video).
 
 **Flight envelope.** The limits a fixed-wing flies within (module `fpv.airframe`): the steepest climb and dive angles, the largest bank angle, and the stall speed. A multirotor has none of these limits.
 

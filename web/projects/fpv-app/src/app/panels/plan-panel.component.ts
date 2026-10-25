@@ -64,6 +64,9 @@ import { CompareService } from '../core/fpv-core';
       <label class="drone-row">
         <span class="rf-eyebrow">Drone</span>
         <select class="rf-input" [disabled]="!canEdit" (change)="setDrone($any($event.target).value)" aria-label="Drone">
+          @if (!m.drone) {
+            <option value="" selected disabled>Pick a drone</option>
+          }
           @for (d of ws.data.drones(); track d.id) {
             <option [value]="d.id" [selected]="d.id === m.drone">{{ d.name }} · {{ d.airframe === 'fixed-wing' ? 'fixed-wing' : 'multirotor' }}</option>
           }
@@ -322,7 +325,7 @@ export class PlanPanelComponent {
 
   protected flightHint(m: Mission): string {
     if ((m.flightMode ?? 'manual') === 'manual') return 'The pilot flies the route over the control link; losing it hands the drone to the failsafe.';
-    return 'The route is uploaded before take-off and the autopilot flies it on its own. The links are optional: where one drops, the pilot cannot take over, but the flight goes on.';
+    return 'The route is uploaded before take-off and the autopilot flies it on its own. The links are optional: where control drops the pilot cannot take over, where video drops the picture is lost, but the flight goes on.';
   }
 
   protected setHeight(index: number, heightM: number): void {

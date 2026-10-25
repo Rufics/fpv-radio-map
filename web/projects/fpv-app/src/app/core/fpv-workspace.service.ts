@@ -205,17 +205,21 @@ export class FpvWorkspace {
     return [...checks.filter((c) => c.tone === 'blocked'), ...checks.filter((c) => c.tone === 'warn')];
   });
 
-  /** On an autonomous route: where a link is lost and the pilot cannot take over. */
+  /** On an autonomous route: where the pilot cannot take over (control lost) or loses the picture (video lost). */
   readonly linkGapText = computed(() => {
     const r = this.shownResult();
     if (!r || !this.autonomous()) return null;
     const rows = this.legRows();
-    const gaps = (r.legs ?? [])
-      .map((leg, i) => ({ lost: this.unreachable(leg), name: rows[i]?.name ?? String(i + 1) }))
-      .filter((g) => g.lost.length > 0)
-      .map((g) => `${g.lost.join(' and ')} on leg ${g.name}`);
-    if (gaps.length === 0) return null;
-    return `The autopilot flies the whole route, but the pilot cannot take over where a link is lost: ${gaps.join('; ')}.`;
+    const legs = r.legs ?? [];
+    const where = (kind: LinkKind) => legs.flatMap((leg, i) => (this.unreachable(leg, [kind]).length ? [`leg ${rows[i]?.name ?? String(i + 1)}`] : []));
+    const control = where('control');
+    const video = where('video');
+    const parts = [
+      ...(control.length ? [`the pilot cannot take over on ${control.join('; ')}`] : []),
+      ...(video.length ? [`the picture is lost on ${video.join('; ')}`] : []),
+    ];
+    if (parts.length === 0) return null;
+    return `The autopilot flies the whole route, but ${parts.join(', and ')}.`;
   });
 
   // ---------- pills ----------
