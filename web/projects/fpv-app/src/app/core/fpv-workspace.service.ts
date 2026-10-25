@@ -349,6 +349,8 @@ export class FpvWorkspace {
       text: `auto ${RfFormat.format(heightM, 'm')}${set.blocked ? ' !' : ''}`,
       title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}, set automatically by ${by}${set.blocked ? '; not safe even at that height' : ''}`,
     };
+  }
+
   /** Links below their margin on a leg. */
   private unreachable(leg: LegResult | undefined, order: LinkKind[] = ['control', 'video']): LinkKind[] {
     return order.filter((k) => leg?.worst?.[k]?.reachable === false);
