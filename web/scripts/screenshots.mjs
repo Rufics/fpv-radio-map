@@ -82,6 +82,10 @@ try {
   await laptop.setViewportSize({ width: 1440, height: 900 });
   await laptop.getByRole('button', { name: 'Now', exact: true }).click();
   await laptop.getByRole('button', { name: 'Weather', exact: true }).click();
+  // the mission time change made the result stale; calculate again so the shots below show verdicts
+  await laptop.getByRole('button', { name: /^(Re)?[Cc]alculate$/ }).click();
+  await laptop.getByRole('button', { name: 'Show why' }).waitFor({ timeout: 20000 });
+  await settle(laptop, 4500);
   await laptop.getByRole('button', { name: 'Show why' }).click();
   await settle(laptop, 5000);
   await laptop.screenshot({ path: `${OUT}/laptop-why.png` });
@@ -146,6 +150,35 @@ try {
   await missing.getByRole('button', { name: /^Calculate$/ }).click();
   await settle(missing, 7000);
   await missing.screenshot({ path: `${OUT}/laptop-missing-data.png` });
+
+  // fixed-wing and autonomous routes: the flight checks of a plane, then the route uploaded before
+  // take-off, where a lost link is a warning instead of a block
+  const plane = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watch(plane, 'plane');
+  await plane.goto(`${BASE}/?scenario=normal`);
+  await plane.getByRole('button', { name: 'Use example route' }).click();
+  const calculate = async () => {
+    await plane.getByRole('button', { name: /^(Re)?[Cc]alculate$/ }).click();
+    await plane.locator('fpv-plan-panel .row.leg').first().waitFor({ timeout: 20000 });
+    await settle(plane, 4500);
+  };
+  // scroll the plan panel itself; scrollIntoView would also shift the page and leave blank bands
+  const scrollPanelTo = (el) => {
+    let box = el.parentElement;
+    while (box && box.scrollHeight <= box.clientHeight) box = box.parentElement;
+    if (box) box.scrollTop += el.parentElement.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
+  };
+  await plane.getByLabel('Drone').selectOption('fw-1800-mapper');
+  await calculate();
+  // the plan panel scrolls; bring the flight checks up next to the route
+  await plane.locator('#checks-title').evaluate(scrollPanelTo);
+  await settle(plane, 500);
+  await plane.screenshot({ path: `${OUT}/laptop-fixed-wing.png` });
+  await plane.getByRole('button', { name: 'Autonomous', exact: true }).click();
+  await calculate();
+  await plane.locator('#gap-title').evaluate(scrollPanelTo);
+  await settle(plane, 500);
+  await plane.screenshot({ path: `${OUT}/laptop-autonomous.png` });
 
   // ---- phone: PIN entry, then the mission view ----
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });

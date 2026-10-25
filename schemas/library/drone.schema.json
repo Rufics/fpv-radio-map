@@ -38,6 +38,14 @@
     "notes": {
       "type": "string"
     },
+    "airframe": {
+      "enum": [
+        "multirotor",
+        "fixed-wing"
+      ],
+      "default": "multirotor",
+      "description": "multirotor: hovers, climbs in place and turns on the spot. fixed-wing: needs airspeed above the stall, climbs and descends at limited angles and turns on a radius; the limits are in fixedWing. Without the field a drone is a multirotor."
+    },
     "massKg": {
       "type": "number",
       "exclusiveMinimum": 0
@@ -96,6 +104,70 @@
     },
     "source": {
       "$ref": "common.schema.json#/$defs/source"
+    },
+    "fixedWing": {
+      "type": "object",
+      "description": "Flight envelope of a fixed-wing airframe, set to match its flight controller (INAV nav_fw_*, ArduPilot TECS and navigation parameters).",
+      "required": [
+        "stallSpeedMps",
+        "maxBankDeg",
+        "maxClimbAngleDeg",
+        "maxDiveAngleDeg"
+      ],
+      "properties": {
+        "stallSpeedMps": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Level-flight stall airspeed at the drone's mass, sea-level ISA density."
+        },
+        "maxBankDeg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 75,
+          "description": "Bank angle the autopilot turns with (INAV nav_fw_bank_angle, ArduPilot ROLL_LIMIT_DEG); the turn radius is V^2 / (g tan bank)."
+        },
+        "maxClimbAngleDeg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 45,
+          "description": "Steepest climb the autopilot flies (INAV nav_fw_climb_angle, ArduPilot TECS_PITCH_MAX)."
+        },
+        "maxDiveAngleDeg": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 45,
+          "description": "Steepest descent the autopilot flies (INAV nav_fw_dive_angle, ArduPilot TECS_PITCH_MIN)."
+        },
+        "loiterRadiusM": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Radius of the circle the autopilot holds position on (INAV nav_fw_loiter_radius, ArduPilot WP_LOITER_RAD)."
+        },
+        "source": {
+          "$ref": "common.schema.json#/$defs/source"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "if": {
+    "required": [
+      "airframe"
+    ],
+    "properties": {
+      "airframe": {
+        "const": "fixed-wing"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "fixedWing"
+    ],
+    "properties": {
+      "fixedWing": {
+        "type": "object"
+      }
     }
   },
   "additionalProperties": false

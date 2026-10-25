@@ -44,7 +44,10 @@ export interface LinkSetup {
 }
 
 export type LinkKind = 'control' | 'video';
-export type EvaluateMode = 'both' | 'control' | 'video';
+export type EvaluateMode = 'both' | 'control' | 'video' | 'none';
+
+/** manual: flown over the control link. autonomous: the route is uploaded and the autopilot flies it, so the links are optional. */
+export type FlightMode = 'manual' | 'autonomous';
 
 export interface MissionTime {
   mode: 'now' | 'planned';
@@ -67,6 +70,8 @@ export interface Mission {
   /** Route in flight order; the last point is the target. */
   waypoints: MissionWaypoint[];
   returnToPilot?: boolean;
+  /** Without it a mission is 'manual'. */
+  flightMode?: FlightMode;
   links: { control?: LinkSetup; video?: LinkSetup };
   evaluate: EvaluateMode;
   drone?: string;
@@ -76,6 +81,7 @@ export interface Mission {
 }
 
 export function linksEvaluated(mode: EvaluateMode): LinkKind[] {
+  if (mode === 'none') return [];
   return mode === 'both' ? ['control', 'video'] : [mode];
 }
 

@@ -46,12 +46,16 @@ private:
         const Links& links;
         const CalcContext& ctx;
         std::vector<ModuleFailure>& failures;
+        bool autonomous;  ///< mission flightMode autonomous: the autopilot flies without the links
     };
 
     [[nodiscard]] json evaluateLeg(const json& mission, std::size_t index, const json& from, const json& to,
                                    const Links& links, const CalcContext& ctx, std::vector<ModuleFailure>& failures) const;
     /// Evaluates one drone position on a leg, or records why it was not.
     void scanSample(LegScan& scan, const Terminal& pilot, const Terminal& drone, double along, const LegContext& lc) const;
+    /// Without links to evaluate, only the ground under the drone is needed: records whether the
+    /// DEM has it.
+    void scanGround(LegScan& scan, const rfcore::GeoPoint& position, double along) const;
     /// Records a drone position the plan puts below the ground.
     static void recordBelowGround(LegScan& scan, double aglM, double along);
     /// Marks a leg whose plan goes below the ground as blocked, with the reason.
@@ -62,8 +66,7 @@ private:
     void recordWorst(LegScan& scan, const PreparedPath& p, double along, const Links& links, const CalcContext& ctx,
                      std::vector<ModuleFailure>& failures) const;
     /// The full evaluation of each link's worst sample, with the leg's status and reasons.
-    void describeWorst(json& leg, const LegScan& scan, const Links& links, const CalcContext& ctx,
-                       std::vector<ModuleFailure>& failures) const;
+    void describeWorst(json& leg, const LegScan& scan, const LegContext& lc) const;
     /// Marks a leg with terrain gaps as not evaluated.
     [[nodiscard]] static json missingDataLeg(json leg, const LegScan& scan, const DemSource& dem, std::size_t total);
     void runModules(const json& mission, json& result, const CalcContext& ctx) const;

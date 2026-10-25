@@ -29,15 +29,16 @@ std::string label(const json& p, const std::string& fallback) {
     return l.empty() ? fallback : l;
 }
 
-/// "blocked" below 0 dB, "warn" when the band says marginal, "info" otherwise.
-std::string marginSeverity(double marginDb, std::string_view verdict) {
-    if (marginDb < 0.0) return "blocked";
+/// "blocked" below 0 dB ("warn" on an autonomous route, which the autopilot flies without the
+/// link), "warn" when the band says marginal, "info" otherwise.
+std::string marginSeverity(double marginDb, std::string_view verdict, bool autonomous) {
+    if (marginDb < 0.0) return autonomous ? "warn" : "blocked";
     if (verdict == "marginal") return "warn";
     return "info";
 }
 
 /// The reason text for a link's worst sample on a leg.
-std::string worstMarginText(LinkKind k, const json& r, double along, const std::string& verdict) {
+std::string worstMarginText(LinkKind k, const json& r, double along, const std::string& verdict, bool autonomous) {
     std::string text = (k == LinkKind::Control ? "Control" : "Video") + std::string(" link: worst margin ") +
                        fmt(r.at("marginDb").get<double>()) + " dB at " + km(along) + " along the leg";
     if (r.contains("band")) {
@@ -45,6 +46,10 @@ std::string worstMarginText(LinkKind k, const json& r, double along, const std::
                 fmt(r["band"]["bestDb"].get<double>()) + " dB, " + verdict + ")";
     }
     if (r.contains("analogGrade")) text += "; picture " + r["analogGrade"].get<std::string>();
+    if (autonomous && r.at("marginDb").get<double>() < 0.0) {
+        text += k == LinkKind::Control ? "; the autopilot flies on, but the pilot cannot take over here"
+                                       : "; the autopilot flies on, but there is no picture here";
+    }
     return text;
 }
 
@@ -92,31 +97,30 @@ json RouteEvaluator::missingDataLeg(json leg, const LegScan& scan, const DemSour
     return leg;
 }
 
-void RouteEvaluator::describeWorst(json& leg, const LegScan& scan, const Links& links, const CalcContext& ctx,
-                                   std::vector<ModuleFailure>& failures) const {
+void RouteEvaluator::describeWorst(json& leg, const LegScan& scan, const LegContext& lc) const {
     std::string status = "ok";
     json reasons = json::array();
     json worstJson = json::object();
-    for (const auto& [k, l] : links) {
+    for (const auto& [k, l] : lc.links) {
         const auto found = scan.worst.find(k);
         if (found == scan.worst.end()) continue;
         const WorstSample& w = found->second;
         const std::optional<PreparedPath>& path = w.path;
         if (!path.has_value()) continue;
-        LinkEvaluation e = links_.evaluate(*path, l, ctx, true, true);
-        failures.insert(failures.end(), e.failures.begin(), e.failures.end());
+        LinkEvaluation e = links_.evaluate(*path, l, lc.ctx, true, true);
+        lc.failures.insert(lc.failures.end(), e.failures.begin(), e.failures.end());
         json& r = e.result;
         r["sample"] = {{"alongLegM", w.along},
                        {"lat", path->air.position.latitudeDeg},
                        {"lon", path->air.position.longitudeDeg},
                        {"aglM", path->air.aglM}};
         const std::string verdict = r.contains("band") ? r["band"].value("verdict", "") : "";
-        const std::string severity = marginSeverity(r.at("marginDb").get<double>(), verdict);
+        const std::string severity = marginSeverity(r.at("marginDb").get<double>(), verdict, lc.autonomous);
         if (severity == "blocked") status = "blocked";
         else if (severity == "warn" && status == "ok") status = "warn";
         reasons.push_back({{"module", "rf-core"},
                            {"severity", severity},
-                           {"text", worstMarginText(k, r, w.along, verdict)},
+                           {"text", worstMarginText(k, r, w.along, verdict, lc.autonomous)},
                            {"link", toString(k)}});
         worstJson[toString(k)] = std::move(r);
     }
@@ -127,6 +131,10 @@ void RouteEvaluator::describeWorst(json& leg, const LegScan& scan, const Links& 
 
 void RouteEvaluator::scanSample(LegScan& scan, const Terminal& pilot, const Terminal& drone, double along,
                                 const LegContext& lc) const {
+    if (lc.links.empty()) {
+        scanGround(scan, drone.position, along);
+        return;
+    }
     if (!(rfcore::Geodesy().inverse(pilot.position, drone.position).distance.value() > 0.0)) {
         ++scan.overPilot;  // the drone is over the pilot: there is no path to evaluate
         return;
@@ -138,6 +146,22 @@ void RouteEvaluator::scanSample(LegScan& scan, const Terminal& pilot, const Term
     }
     ++scan.evaluated;
     recordWorst(scan, p, along, lc.links, lc.ctx, lc.failures);
+}
+
+void RouteEvaluator::scanGround(LegScan& scan, const rfcore::GeoPoint& position, double along) const {
+    if (links_.requireDem().elevation(position).has_value()) {
+        ++scan.evaluated;
+        return;
+    }
+    ++scan.missingCount;
+    const json point = json::array({position.longitudeDeg, position.latitudeDeg, position.longitudeDeg, position.latitudeDeg});
+    scan.missingBbox = LinkService::unionBbox(scan.missingBbox, point);
+    if (scan.missing.size() < 20) {
+        scan.missing.push_back({{"alongLegM", along},
+                                {"lat", position.latitudeDeg},
+                                {"lon", position.longitudeDeg},
+                                {"missing", json::array()}});
+    }
 }
 
 void RouteEvaluator::recordBelowGround(LegScan& scan, double aglM, double along) {
@@ -174,7 +198,7 @@ json RouteEvaluator::evaluateLeg(const json& mission, std::size_t index, const j
     const double steps = std::max<double>(1.0, static_cast<double>(pts.size() - 1));
 
     LegScan scan;
-    const LegContext lc{links, ctx, failures};
+    const LegContext lc{links, ctx, failures, mission.value("flightMode", "manual") == "autonomous"};
     for (std::size_t i = 0; i < pts.size(); ++i) {
         const double f = static_cast<double>(i) / steps;
         // Without ground under the drone the path is incomplete and recorded as missing data.
@@ -186,7 +210,7 @@ json RouteEvaluator::evaluateLeg(const json& mission, std::size_t index, const j
                       {"missingData", scan.missingCount}, {"belowGround", scan.belowGround},
                       {"stepM", dem.nativeResolution().value()}};
     if (scan.missingCount > 0) return missingDataLeg(std::move(leg), scan, dem, pts.size());
-    describeWorst(leg, scan, links, ctx, failures);
+    describeWorst(leg, scan, lc);
     if (scan.belowGround > 0) markBelowGround(leg, scan, pts.size());
     return leg;
 }

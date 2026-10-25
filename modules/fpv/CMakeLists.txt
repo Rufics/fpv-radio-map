@@ -79,6 +79,10 @@ fpv_module(failsafe fpv_failsafe
   DEPENDS_ON fpv_battery fpv_min_altitude
   TESTS failsafe/tests/failsafe_test.cpp failsafe/tests/module_test.cpp)
 
+fpv_module(airframe fpv_airframe
+  SOURCES airframe/src/envelope.cpp
+  TESTS airframe/tests/envelope_test.cpp airframe/tests/module_test.cpp)
+
 fpv_module(best-launch fpv_best_launch
   SOURCES best-launch/src/best_launch.cpp
   TESTS best-launch/tests/best_launch_test.cpp best-launch/tests/module_test.cpp)

@@ -59,7 +59,20 @@ export interface Battery extends EntryMeta {
   source: Source;
 }
 
+/** Flight envelope of a fixed-wing airframe, as its flight controller is set. */
+export interface FixedWingEnvelope {
+  stallSpeedMps: number;
+  maxBankDeg: number;
+  maxClimbAngleDeg: number;
+  maxDiveAngleDeg: number;
+  loiterRadiusM?: number;
+  source?: Source;
+}
+
 export interface Drone extends EntryMeta {
+  /** Without it a drone is a multirotor. */
+  airframe?: 'multirotor' | 'fixed-wing';
+  fixedWing?: FixedWingEnvelope;
   massKg: number;
   cruiseAirspeedMps: number;
   cruisePowerW: number;

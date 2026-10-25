@@ -307,6 +307,24 @@ describe('MissionStore', () => {
       expect(Object.keys(store.coverage()).sort()).toEqual(['control', 'video']);
     });
 
+    it('starts no coverage job when no link is evaluated', async () => {
+      store.newMission(mission({ evaluate: 'none', flightMode: 'autonomous' }));
+      await store.calculate();
+      api.route.next({ legs: [] });
+      await settle();
+      expect(store.calcState()).toBe('done');
+      expect(api.calls.some((c) => c.startsWith('coverage'))).toBe(false);
+      expect(store.coverage()).toEqual({});
+    });
+
+    it('records the flight mode as an edit', () => {
+      store.loadFromServer('m2', { mission: mission(), role: 'edit', revision: 7 });
+      expect(store.dirty()).toBe(false);
+      store.setFlightMode('autonomous');
+      expect(store.mission()?.flightMode).toBe('autonomous');
+      expect(store.dirty()).toBe(true);
+    });
+
     it('saves a dirty loaded mission with its revision', async () => {
       store.loadFromServer('m2', { mission: mission(), role: 'edit', revision: 7 });
       store.setEvaluate('control');

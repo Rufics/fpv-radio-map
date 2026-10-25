@@ -80,6 +80,7 @@ json JobManager::start(std::string_view missionId, const json& mission) {
         part.name = "Coverage grid, " + part.link + " link";
         job->parts.push_back(std::move(part));
     }
+    if (job->parts.empty()) throw HttpError(422, "the mission evaluates no radio link, so there is no coverage to compute");
     // Fail fast on a mission the calculation would refuse, rather than in the background.
     (void)calc_.contextFor(mission);
     {

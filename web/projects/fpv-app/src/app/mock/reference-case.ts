@@ -71,6 +71,11 @@ export const LIBRARY: { radios: RadioProfile[]; antennas: Antenna[]; batteries: 
   ],
   drones: [
     { id: 'fpv-10in-recon', name: '10-inch recon quad', version: 1, verified: true, massKg: 1.9, cruiseAirspeedMps: 10, cruisePowerW: 366, powerDensityExponent: 0, climb: { method: 'potential-energy', efficiency: 0.6 }, defaultRadios: { control: 'elrs-433-50hz', video: 'digital-915-20mhz' }, source: { kind: 'measurement', reference: 'Bench and flight log 2026-09' } },
+    {
+      id: 'fw-1800-mapper', name: '1.8 m fixed-wing mapper', version: 1, verified: false, airframe: 'fixed-wing', massKg: 2.4, cruiseAirspeedMps: 15, cruisePowerW: 160, powerDensityExponent: 0, climb: { method: 'potential-energy', efficiency: 0.5 },
+      fixedWing: { stallSpeedMps: 11, maxBankDeg: 45, maxClimbAngleDeg: 8, maxDiveAngleDeg: 10, loiterRadiusM: 75, source: { kind: 'measurement', reference: 'INAV nav_fw_* settings of the airframe' } },
+      defaultRadios: { control: 'elrs-433-50hz', video: 'digital-915-20mhz' }, source: { kind: 'measurement', reference: 'Flight log 2026-10' },
+    },
   ],
 };
 
@@ -450,6 +455,7 @@ export function routeResult(mission: Mission, scenario: MockScenario): RouteResu
   } else {
     applyBattery(result, mission, turnback, fixed);
   }
+  applyAirframe(result, mission);
   return result;
 }
 
@@ -528,17 +534,37 @@ function legResult(f: RouteFacts, e: LegEnds, i: number): LegResult {
   }
   const worst = pickEvaluated(f.evaluated, ridgeLinks(f.mission, drone, f.fixed, alongLegM, f.tier));
   const videoBlocked = !!worst['video'] && !worst['video'].reachable;
-  return { ...base, worst, status: videoBlocked ? 'blocked' : 'ok', reasons: ridgeReasons(f.mission, videoBlocked, isReturn, f.fixed) };
+  // Like the server: on an autonomous route a lost link is a warning, the autopilot flies on.
+  const lostStatus = f.mission.flightMode === 'autonomous' ? 'warn' : 'blocked';
+  return { ...base, worst, status: videoBlocked ? lostStatus : 'ok', reasons: ridgeReasons(f.mission, videoBlocked, isReturn, f.fixed) };
 }
 
 /** rf-core reasons of a leg that ends (or, for the return, starts) at B behind the ridge. */
 function ridgeReasons(mission: Mission, videoBlocked: boolean, isReturn: boolean, fixed: boolean): Reason[] {
   if (videoBlocked) {
     const where = isReturn ? 'at B, the start of the return' : 'at B';
-    return [{ module: 'rf-core', severity: 'blocked', link: 'video', text: `Ridge 622 m blocks the video link by 100 m ${where}.`, ...(isReturn ? {} : { fix: fixAltitude(mission) }) }];
+    const severity = mission.flightMode === 'autonomous' ? 'warn' : 'blocked';
+    return [{ module: 'rf-core', severity, link: 'video', text: `Ridge 622 m blocks the video link by 100 m ${where}.`, ...(isReturn ? {} : { fix: fixAltitude(mission) }) }];
   }
   if (fixed) return [{ module: 'rf-core', severity: 'info', link: 'video', text: 'At 345 m AGL the line of sight passes 10 m over the ridge: diffraction 0.55 dB, video margin +25.32 dB.' }];
   return [];
+}
+
+/** fpv.airframe for a fixed-wing drone: the 1.8 m mapper cruises too close to its stall in a turn. */
+function applyAirframe(result: RouteResult, mission: Mission): void {
+  const drone = LIBRARY.drones.find((d) => d.id === mission.drone);
+  if (!mission.modules?.['fpv.airframe'] || drone?.airframe !== 'fixed-wing' || !drone.fixedWing) return;
+  const w = drone.fixedWing;
+  const stall = w.stallSpeedMps / Math.sqrt(Math.cos((w.maxBankDeg * Math.PI) / 180));
+  result.reasons = [
+    ...(result.reasons ?? []),
+    {
+      module: 'fpv.airframe',
+      severity: 'warn',
+      text: `Fixed-wing: the cruise airspeed ${drone.cruiseAirspeedMps.toFixed(1)} m/s is less than 1.2 times the stall speed in a turn at ${w.maxBankDeg}° bank (${stall.toFixed(1)} m/s); a gust in a turn can stall it.`,
+    },
+  ];
+  result.modules = { ...result.modules, 'fpv.airframe': { airframe: 'fixed-wing', speeds: { cruiseAirspeedMps: drone.cruiseAirspeedMps, stallSpeedMps: w.stallSpeedMps, turningStallSpeedMps: stall } } };
 }
 
 /** fpv.battery data and reason: the route is too long for the pack; turning back at T fits. */

@@ -32,8 +32,9 @@ public:
         const Mission m = Mission::fromJson(request.at("mission"));
         std::optional<json> drone;
         std::optional<json> battery;
+        // The drone alone tells the airframe; the energy check needs the battery too.
+        if (!m.droneId.empty()) drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
         if (!m.droneId.empty() && !m.batteryId.empty()) {
-            drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
             battery = host().call("library.get", {{"kind", "batteries"}, {"id", m.batteryId}});
         }
         const HostWorld world(host());

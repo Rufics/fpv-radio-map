@@ -24,6 +24,7 @@ import {
   MissionAltitude,
   ModuleInfo,
   Reason,
+  linksEvaluated,
   RouteResult,
   SchemaValidator,
   ShareLink,
@@ -417,7 +418,9 @@ export class MockBackend {
   private startJob(req: HttpRequest<unknown>): HttpResponse<unknown> {
     const sess = this.sessionOf(req);
     const id = `job-${rnd(10)}`;
-    const job: StoredJob = { id, missionId: sess?.missionId ?? null, mission: structuredClone(req.body as Mission), started: Date.now(), cancelled: false, slow: false };
+    const mission = structuredClone(req.body as Mission);
+    if (linksEvaluated(mission.evaluate).length === 0) throw this.error(422, 'the mission evaluates no radio link, so there is no coverage to compute');
+    const job: StoredJob = { id, missionId: sess?.missionId ?? null, mission, started: Date.now(), cancelled: false, slow: false };
     this.jobs.set(id, job);
     return this.ok(this.jobView(job), 202);
   }
@@ -425,7 +428,7 @@ export class MockBackend {
   /** Parts finish one after another over ~3 s; finished coverage parts can be fetched at once. */
   private jobView(job: StoredJob): Job {
     const t = (Date.now() - job.started) / 1000;
-    const kinds = job.mission.evaluate === 'both' ? (['control', 'video'] as const) : ([job.mission.evaluate] as const);
+    const kinds = linksEvaluated(job.mission.evaluate);
     const plan: { name: string; link?: LinkKind; start: number; dur: number; cached?: boolean }[] = [
       { name: 'Elevation for 16 × 16 km', start: 0, dur: 0.1, cached: true },
       { name: `Route profiles, ${job.mission.waypoints.length} legs`, start: 0, dur: 0.9 },
@@ -578,6 +581,8 @@ export const MODULES: ModuleInfo[] = [
   { id: 'rf.flightlog', version: '1.3.0', title: 'Flight log replay', builtIn: true, lifecycle: 'stable', provides: ['flightlog.processor'], signedBy: 'built in', isolated: false, state: 'active' },
   { id: 'fpv.blackbox', version: '1.0.0', title: 'Betaflight Blackbox decoder', lifecycle: 'beta', provides: ['flightlog.decoder'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.altitude', version: '1.2.0', title: 'Altitude corridor and 3D view', lifecycle: 'alpha', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.airframe', version: '1.0.0', title: 'Fixed-wing flight envelope', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.failsafe', version: '1.0.0', title: 'Failsafe check', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.min-altitude', version: '0.4.0', title: 'Minimum altitude', lifecycle: 'alpha', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   {
     id: 'fpv.relay', version: '1.1.0', title: 'Relay planning', lifecycle: 'deprecated', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active',

@@ -24,6 +24,9 @@ std::optional<WorstMargin> worstFrom(const IWorld& world, const ILinkEvaluator& 
 json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eval) {
     const Mission mission = Mission::fromJson(request.at("mission"));
     const json options = request.value("options", json::object());
+    if (mission.links().empty()) {
+        return {{"reasons", {reason(kId, "info", "The best launch point is scored by link margin; evaluate at least one link to search for it.")}}, {"data", json::object()}};
+    }
     if (!options.contains("area")) {
         return {{"reasons", {reason(kId, "info", "Draw an area to search it for the best launch point.")}}, {"data", json::object()}};
     }
