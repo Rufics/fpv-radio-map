@@ -72,13 +72,44 @@ describe('PhoneAltitudeComponent', () => {
       },
     });
     expect(button('Preview fix')).toBeUndefined();
+    const cor = data.corridor!;
+    // over the floor, but 30 m over the ceiling half way, and no flyable fix: never called safe
+    const mid = Math.floor(cor.s.length / 2);
     show({
       ...data,
-      summary: { ...data.summary!, lowestMarginM: 12 },
+      corridor: {
+        ...cor,
+        floorMslM: cor.plannedMslM.map((p) => p - 20),
+        ceilingMslM: cor.plannedMslM.map((p, i) => (i === mid ? p - 30 : p + 50)),
+      },
+      summary: { ...data.summary!, lowestMarginM: 20 },
+      climb: {
+        ...climb,
+        strategies: climb.strategies.map((s) => ({ ...s, withinClimbRate: false })),
+      },
+    });
+    expect(button('Preview fix')).toBeUndefined();
+    expect(el().querySelector('.ok')).toBeNull();
+    expect(el().querySelector('.warn')?.textContent).toContain('Up to 30 m over the ceiling');
+    // inside the corridor everywhere: nothing to fix
+    show({
+      ...data,
+      corridor: {
+        ...cor,
+        floorMslM: cor.plannedMslM.map((p) => p - 20),
+        ceilingMslM: cor.plannedMslM.map((p) => p + 50),
+      },
+      summary: { ...data.summary!, lowestMarginM: 20 },
       climb: { ...climb, plan: { ...climb.plan, overCeilingM: 0 } },
     });
     expect(button('Preview fix')).toBeUndefined();
+    expect(el().querySelector('.warn')).toBeNull();
     expect(el().querySelector('.ok')?.textContent).toContain('inside the safe corridor');
+    // after an edit the old result is not called safe
+    store.update((m) => ({ ...m, name: 'edited' }));
+    fixture.detectChanges();
+    expect(el().querySelector('.ok')).toBeNull();
+    expect(el().querySelector('.warn')?.textContent).toContain('recalculate');
   });
 
   it('opens the profile, the climb options and the chase', () => {

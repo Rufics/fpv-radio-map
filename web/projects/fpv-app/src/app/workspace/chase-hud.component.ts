@@ -78,14 +78,13 @@ function clock(seconds: number): string {
           />
         </div>
         <span class="time rf-mono">{{ time(f.timeS) }} / {{ time(duration()) }}</span>
-        <div class="rates" role="radiogroup" aria-label="Playback speed">
+        <div class="rates" role="group" aria-label="Playback speed">
           @for (r of rates; track r) {
             <button
               type="button"
-              role="radio"
               class="rate"
               [class.on]="chase.rate() === r"
-              [attr.aria-checked]="chase.rate() === r"
+              [attr.aria-pressed]="chase.rate() === r"
               (click)="setRate(r)"
             >
               ×{{ r }}

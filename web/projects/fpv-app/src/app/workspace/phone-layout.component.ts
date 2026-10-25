@@ -183,7 +183,10 @@ export class PhoneLayoutComponent {
   protected readonly assistantOpen = signal(false);
   /** How much of the map the sheet covers, px: the route is fitted and the chase timeline sits above it. */
   protected readonly cover = signal(0);
-  protected readonly padding = computed(() => ({ top: 70, bottom: this.cover() + 40, left: 70, right: 90 }));
+  /** Fits the route above the sheet, but never into less than the top half of the screen (the sheet pulled up covers more). */
+  protected readonly padding = computed(() => ({ top: 70, bottom: Math.min(this.cover() + 40, Math.round(this.height() / 2)), left: 70, right: 90 }));
+  private readonly host = inject(ElementRef<HTMLElement>);
+  private readonly height = signal(0);
   /** The plan's own sheet, not a preview or a replay over it. */
   protected readonly planShown = computed(() => !!this.ws.mission() && !this.ws.store.preview() && this.replay.mode() === 'plan');
   private readonly sheet = viewChild('sheet', { read: ElementRef });
@@ -192,11 +195,15 @@ export class PhoneLayoutComponent {
   protected readonly busy = computed(() => ['saving', 'running'].includes(this.ws.store.calcState()));
 
   constructor() {
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((e) => this.cover.set((e[0]?.target as HTMLElement | undefined)?.offsetHeight ?? 0));
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((e) => {
+            this.cover.set((e[0]?.target as HTMLElement | undefined)?.offsetHeight ?? 0);
+            this.height.set((this.host.nativeElement as HTMLElement).offsetHeight);
+          });
     effect((onCleanup) => {
       const el = this.sheet()?.nativeElement as HTMLElement | undefined;
       if (!el) return;
       this.cover.set(el.offsetHeight);
+      this.height.set((this.host.nativeElement as HTMLElement).offsetHeight);
       ro?.observe(el);
       onCleanup(() => ro?.unobserve(el));
     });

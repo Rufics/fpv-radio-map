@@ -71,7 +71,7 @@ describe('ChaseHudComponent', () => {
     rates[2].click();
     fixture.detectChanges();
     expect(chase.rate()).toBe(16);
-    expect(rates[2].getAttribute('aria-checked')).toBe('true');
+    expect(rates[2].getAttribute('aria-pressed')).toBe('true');
     [...el().querySelectorAll<HTMLButtonElement>('button')]
       .find((b) => b.textContent?.includes('Exit chase'))!
       .click();
@@ -81,14 +81,19 @@ describe('ChaseHudComponent', () => {
   });
 
   it('marks a climb steeper than the drone can fly', () => {
+    // a drone that climbs at 0.1 m/s: the plan's first climb is too steep for it
+    const store = TestBed.inject(MissionStore);
+    const data = fpvAltitudeMock(mission);
+    store.result.set({
+      ...routeResult(mission, 'normal'),
+      modules: { [FPV_ALTITUDE]: { ...data, climb: { ...data.climb!, climbRateMps: 0.1 } } },
+    });
     chase.start();
     chase.playing.set(false);
     const t = chase.track()!;
-    const lim = chase.limits()!;
-    // the first place the plan climbs faster than the drone's rate, if any
-    const s = t.corridor.c.s.find((x) => t.frame(x).verticalMps > lim.climbMps + 0.05);
-    if (s === undefined) return;
-    chase.seek(s);
+    const s = t.corridor.c.s.find((x) => t.frame(x).verticalMps > 0.2);
+    expect(s).toBeDefined();
+    chase.seek(s!);
     fixture.detectChanges();
     expect(el().querySelector('.vs')?.classList).toContain('over');
     expect(text('.vs')).toMatch(/^Climb /);

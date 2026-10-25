@@ -37,8 +37,15 @@ import { ChaseView } from '../core/fpv-chase';
         >
           Preview fix · {{ f.title }}
         </button>
-      } @else if (w.margin >= 0) {
+      } @else if (overCeiling() > 0) {
+        <div class="warn">Up to {{ m(overCeiling()) }} over the ceiling.</div>
+      } @else if (w.margin >= 0 && !view.stale()) {
         <div class="ok">The plan stays inside the safe corridor.</div>
+      }
+      @if (view.stale()) {
+        <div class="warn" role="status">
+          The mission changed since: recalculate to check the heights again.
+        </div>
       }
       <div class="more">
         <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="profile.emit()">
@@ -104,6 +111,10 @@ import { ChaseView } from '../core/fpv-chase';
     .fix {
       height: 44px;
     }
+    .warn {
+      font-size: 13px;
+      color: var(--rf-warn-text);
+    }
     .ok {
       font-size: 13px;
       color: var(--rf-ok-text);
@@ -140,12 +151,23 @@ export class PhoneAltitudeComponent {
     };
   });
 
+  /** How far the plan goes over the ceiling at worst, where the floor is under it; 0 inside. */
+  protected readonly overCeiling = computed(() => {
+    const c = this.view.corridor();
+    if (!c) return 0;
+    let over = 0;
+    for (let i = 0; i < c.c.s.length; i++) {
+      if (c.state(i) === 'high') over = Math.max(over, c.c.plannedMslM[i] - c.c.ceilingMslM[i]);
+    }
+    return over;
+  });
+
   /** The recommended strategy, offered only where the plan needs it and the drone can fly it. */
   protected readonly fix = computed(() => {
     const cl = this.view.climb();
     const w = this.worst();
     if (!cl || !w) return null;
-    const needed = w.margin < 0 || cl.plan.overCeilingM > 0;
+    const needed = w.margin < 0 || cl.plan.overCeilingM > 0 || this.overCeiling() > 0;
     const rec = cl.strategies.find((s) => s.id === cl.recommended);
     return needed && rec?.withinClimbRate ? rec : null;
   });
