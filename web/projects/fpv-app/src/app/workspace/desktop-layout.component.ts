@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, effect, inject, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { PillComponent, SegmentOption, SegmentedComponent, SlotHostComponent } from '@rfmap/ui-kit';
 import { FlightReplay, WorkspaceMode } from '../core/flight-replay.service';
@@ -78,13 +78,13 @@ import { MapStageComponent } from './map-stage.component';
         }
       </aside>
       <main class="main">
-        <fpv-map-stage class="stage" [fitPadding]="padding" [drawerHeight]="340" />
+        <fpv-map-stage class="stage" [fitPadding]="padding" [drawerHeight]="340" [style.--fpv-cover-bottom]="cover() + 'px'" />
         @if (replay.mode() !== 'plan' && replay.view()) {
-          <fpv-replay-drawer class="drawer" />
+          <fpv-replay-drawer class="drawer" #drawer />
         } @else if (ws.why()) {
-          <fpv-why-drawer class="drawer" />
+          <fpv-why-drawer class="drawer" #drawer />
         } @else if (alt.profileOpen() && ws.mission()) {
-          <fpv-altitude-drawer class="drawer" />
+          <fpv-altitude-drawer class="drawer" #drawer />
         }
         @if (replay.importOpen()) {
           <fpv-flight-import />
@@ -131,4 +131,22 @@ export class DesktopLayoutComponent {
     void this.replay.setMode(mode);
   }
   protected readonly padding = { top: 70, bottom: 70, left: 80, right: 300 };
+  /** How much of the map the bottom drawer covers, px: overlays on the map (the chase timeline) sit above it. */
+  protected readonly cover = signal(0);
+  private readonly drawer = viewChild('drawer', { read: ElementRef });
+
+  constructor() {
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((e) => this.cover.set(Math.round(e[0]?.contentRect.height ?? 0)));
+    effect((onCleanup) => {
+      const el = this.drawer()?.nativeElement as HTMLElement | undefined;
+      if (!el) {
+        this.cover.set(0);
+        return;
+      }
+      this.cover.set(el.offsetHeight);
+      ro?.observe(el);
+      onCleanup(() => ro?.unobserve(el));
+    });
+    inject(DestroyRef).onDestroy(() => ro?.disconnect());
+  }
 }

@@ -7,7 +7,8 @@ import { FpvDataService } from '../core/fpv-data.service';
 import { fpvAltitudeMock } from '../mock/fpv-altitude-mock';
 import { exampleMission, routeResult } from '../mock/reference-case';
 import { MockApiHarness } from '../tests/mock-api-harness';
-import { Route3dComponent } from './route-3d.component';
+import { ChaseView } from '../core/fpv-chase';
+import { Route3dComponent, SKY_3D } from './route-3d.component';
 
 /** The parts of a MapLibre map the 3D mode touches, as spies. */
 function fakeMap() {
@@ -31,6 +32,9 @@ function fakeMap() {
     getContainer: () => container,
     cameraForBounds: vi.fn(() => ({ center: [35.2, 48.5], zoom: 12 })),
     setMaxPitch: vi.fn(),
+    setSky: vi.fn(),
+    calculateCameraOptionsFromTo: vi.fn(() => ({ center: [35.2, 48.5], zoom: 16, pitch: 62, bearing: 40 })),
+    jumpTo: vi.fn(),
     dragRotate: { enable: vi.fn(), disable: vi.fn() },
     easeTo: vi.fn((o: { pitch?: number; bearing?: number }) => {
       pitch = o.pitch ?? pitch;
@@ -166,5 +170,37 @@ describe('Route3dComponent', () => {
     fixture.detectChanges();
     fixture.destroy();
     expect(map.easeTo).toHaveBeenLastCalledWith({ pitch: 0, bearing: 0, duration: 0 });
+  });
+
+  it('follows the drone from behind while chasing, and frames the route again after', () => {
+    const store = TestBed.inject(MissionStore);
+    const mission = { ...exampleMission(), modules: { [FPV_ALTITUDE]: {} } };
+    store.newMission(mission);
+    store.result.set({ ...routeResult(mission, 'normal'), modules: { [FPV_ALTITUDE]: fpvAltitudeMock(mission) } });
+    view.setMode('3d');
+    fixture.detectChanges();
+    expect(map.setSky).toHaveBeenLastCalledWith(SKY_3D);
+    const chase = TestBed.inject(ChaseView);
+    el().querySelector<HTMLButtonElement>('.chase')!.click();
+    chase.playing.set(false);
+    chase.seek(5000);
+    fixture.detectChanges();
+    expect(el().querySelector('fpv-chase-hud')).not.toBeNull();
+    const cam = chase.track()!.camera(5000, 2);
+    expect(map.calculateCameraOptionsFromTo).toHaveBeenLastCalledWith(
+      expect.objectContaining({ lng: cam.from.lon, lat: cam.from.lat }),
+      cam.fromAltM,
+      expect.objectContaining({ lng: cam.to.lon, lat: cam.to.lat }),
+      cam.toAltM,
+    );
+    expect(map.jumpTo).toHaveBeenLastCalledWith(expect.objectContaining({ pitch: 62, bearing: 40 }));
+    chase.stop();
+    fixture.detectChanges();
+    expect(el().querySelector('fpv-chase-hud')).toBeNull();
+    expect(map.easeTo).toHaveBeenLastCalledWith(expect.objectContaining({ pitch: 60, duration: 800 }));
+    // back to 2D: the sky goes too
+    view.setMode('2d');
+    fixture.detectChanges();
+    expect(map.setSky).toHaveBeenLastCalledWith({});
   });
 });
