@@ -152,6 +152,11 @@ function signedTime(seconds: number): string {
       max-height: 320px;
       overflow-y: auto;
     }
+    /* full screen on the phone: the screen scrolls, not the list */
+    :host-context(.phone) .cards {
+      max-height: none;
+      overflow: visible;
+    }
     .card {
       display: flex;
       flex-direction: column;

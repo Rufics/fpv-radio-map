@@ -1,4 +1,4 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, input } from '@angular/core';
 import { MissionStore, RfFormat } from '@rfmap/ui-kit';
 import { AltitudeView, CorridorState } from '../core/fpv-altitude';
 import { AltitudeChart, PROFILE_H, PROFILE_W } from './altitude-chart';
@@ -56,14 +56,16 @@ const STATE_TEXT: Record<CorridorState, string> = {
           />
           Fresnel zone (3D)</label
         >
-        <button
-          type="button"
-          class="rf-icon-btn"
-          aria-label="Close altitude profile"
-          (click)="view.profileOpen.set(false)"
-        >
-          ✕
-        </button>
+        @if (!compact()) {
+          <button
+            type="button"
+            class="rf-icon-btn"
+            aria-label="Close altitude profile"
+            (click)="view.profileOpen.set(false)"
+          >
+            ✕
+          </button>
+        }
       </div>
     </div>
     @if (chart(); as ch) {
@@ -177,15 +179,19 @@ const STATE_TEXT: Record<CorridorState, string> = {
           } @else {
             <p class="summary">{{ summary() }}</p>
             <p class="hint">
-              Hover the profile, or focus it and use the arrow keys, to read both heights; the 3D
-              view follows the cursor.
+              @if (compact()) {
+                Touch the profile to read both heights; the 3D view follows the cursor.
+              } @else {
+                Hover the profile, or focus it and use the arrow keys, to read both heights; the 3D
+                view follows the cursor.
+              }
             </p>
           }
           @if (view.stale()) {
             <p class="note">The mission changed since this profile was calculated.</p>
           }
         </div>
-        @if (view.climb()) {
+        @if (view.climb() && !compact()) {
           <fpv-climb-assistant class="climb" />
         }
       </div>
@@ -301,6 +307,17 @@ const STATE_TEXT: Record<CorridorState, string> = {
     }
     .body.has-climb {
       grid-template-columns: minmax(0, 1fr) 250px 300px;
+    }
+    :host(.compact) {
+      padding: 0;
+      background: none;
+      border: 0;
+    }
+    :host(.compact) .body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    :host(.compact) .keys {
+      flex-wrap: wrap;
     }
     .side dt {
       white-space: nowrap;
@@ -443,9 +460,11 @@ const STATE_TEXT: Record<CorridorState, string> = {
       margin: 0;
     }
   `,
-  host: { role: 'region', 'aria-labelledby': 'alt-title' },
+  host: { role: 'region', 'aria-labelledby': 'alt-title', '[class.compact]': 'compact()' },
 })
 export class AltitudeDrawerComponent {
+  /** On the phone sheet: one column, no close button, and the climb assistant on its own screen. */
+  readonly compact = input(false);
   protected readonly view = inject(AltitudeView);
   protected readonly store = inject(MissionStore);
   protected readonly w = PROFILE_W;

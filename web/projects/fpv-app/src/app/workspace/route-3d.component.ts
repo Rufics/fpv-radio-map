@@ -5,11 +5,12 @@ import {
   computed,
   effect,
   inject,
+  input,
   signal,
   untracked,
   viewChild,
 } from '@angular/core';
-import { ExpressionSpecification, LayerSpecification, LngLatBounds, Map as MlMap, SourceSpecification } from 'maplibre-gl';
+import { ExpressionSpecification, LayerSpecification, LngLat, LngLatBounds, Map as MlMap, SourceSpecification } from 'maplibre-gl';
 import {
   LAYER_GROUP_RANK,
   LayerRegistry,
@@ -18,7 +19,9 @@ import {
   initialBearingDeg,
 } from '@rfmap/ui-kit';
 import { AltitudeView } from '../core/fpv-altitude';
+import { ChaseCamera, ChaseView } from '../core/fpv-chase';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
+import { ChaseHudComponent } from './chase-hud.component';
 import { Route3dCursor, Route3dLayer, Route3dScene } from './route-3d-layer';
 
 const TERRAIN_SOURCE = 'fpv-terrain';
@@ -27,12 +30,26 @@ const RELIEF_SOURCE = 'fpv-relief';
 const CONTOUR_SOURCE = 'fpv-contours';
 export const RELIEF_LAYERS = ['fpv-relief-colour', 'fpv-relief-shade', 'fpv-contours-minor', 'fpv-contours-major'];
 const PITCH_3D = 60;
+/** The steepest tilt in 3D, by the user. */
+const MAX_PITCH_3D = 80;
 /** MapLibre's default, which the 2D map keeps. */
 const MAX_PITCH_2D = 60;
+const NO_PADDING = { top: 0, bottom: 0, left: 0, right: 0 };
 /** The 2D layers that 3D keeps: the 0 dB edge of the coverage (and the battery limit, which 3D leaves out). */
 const KEPT_IN_3D = new Set(['results-limits']);
 /** 2D layers 3D draws its own way. */
 const REPLACED_IN_3D = ['terrain-hillshade', 'terrain-contours'];
+
+/** A dusk sky and fog over the 3D horizon, so a low camera sees the far ground fade instead of a blank. */
+export const SKY_3D = {
+  'sky-color': '#16202B',
+  'horizon-color': '#2E3B4A',
+  'fog-color': '#1C2632',
+  'sky-horizon-blend': 0.6,
+  'horizon-fog-blend': 0.7,
+  'fog-ground-blend': 0.85,
+  'atmosphere-blend': 0,
+};
 
 /** Elevation tints from valley to top, spread over the heights of the route's ground. */
 const RELIEF_TINTS = ['#24382C', '#34492F', '#525A35', '#6E6142', '#8A7A5C'];
@@ -124,9 +141,12 @@ export function reliefLayers(contours: TileSourceRef | undefined, lowM: number, 
  */
 @Component({
   selector: 'fpv-route-3d',
+  imports: [ChaseHudComponent],
   template: `
     <div class="labels" #labels aria-hidden="true"></div>
-    @if (view.mode() === '3d') {
+    @if (view.mode() === '3d' && chase.active()) {
+      <fpv-chase-hud />
+    } @else if (view.mode() === '3d') {
       <div class="panel" role="group" aria-label="3D view">
         <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" aria-label="Back to 2D" (click)="view.setMode('2d')">← 2D</button>
         <label class="ex">
@@ -158,6 +178,11 @@ export function reliefLayers(contours: TileSourceRef | undefined, lowM: number, 
             <option value="edge">0 dB edge</option>
           </select>
         </label>
+        @if (chase.track()) {
+          <button type="button" class="rf-btn rf-btn--sm rf-btn--primary chase" (click)="chase.start()" title="Fly the plan with the camera behind the drone">
+            ▶ Chase
+          </button>
+        }
         @if (!hasTerrain()) {
           <span class="warn">No terrain tiles on this server: the ground is drawn flat.</span>
         }
@@ -292,10 +317,17 @@ export function reliefLayers(contours: TileSourceRef | undefined, lowM: number, 
       top: 110px;
       max-width: calc(100% - 28px);
     }
+    /* clear of the phone's sheet over the lower half of the map */
+    :host-context(.phone) .empty {
+      top: 26%;
+    }
   `,
 })
 export class Route3dComponent {
+  /** Height of the drawer or sheet over the bottom of the map, px: the chase aims above it. */
+  readonly coverBottom = input(0);
   protected readonly view = inject(AltitudeView);
+  protected readonly chase = inject(ChaseView);
   private readonly ws = inject(FpvWorkspace);
   private readonly ctx = inject(MapContext);
   private readonly layers = inject(LayerRegistry);
@@ -371,11 +403,48 @@ export class Route3dComponent {
       untracked(() => this.layer.setCursor(cursor));
     });
     effect(() => this.layer.setLabelHost(this.labelHost().nativeElement));
+    // the chase camera: behind the drone on every frame, and back to the side view when it ends
+    let chasing = false;
+    effect(() => {
+      const map = this.ctx.map();
+      const track = this.chase.track();
+      const on = this.chase.active() && this.view.mode() === '3d';
+      const s = this.chase.s();
+      const ex = this.view.exaggeration();
+      const cover = this.coverBottom();
+      if (!map) return;
+      untracked(() => {
+        if (on && track) this.follow(map, track.camera(s, ex), cover);
+        else if (chasing) {
+          // the chase's padding stays on the map until it is put back
+          map.setPadding(NO_PADDING);
+          if (this.view.mode() === '3d') this.frame(map);
+        }
+      });
+      chasing = on && !!track;
+    });
+    // leaving 3D, or a result without a corridor, ends the chase
+    effect(() => {
+      if (this.chase.active() && (this.view.mode() !== '3d' || !this.chase.track())) untracked(() => this.chase.stop());
+    });
     inject(DestroyRef).onDestroy(() => {
+      // the map went away (the phone's climb options): the chase does not wait for it
+      this.chase.stop();
       const map = this.ctx.map();
       if (map) this.leave(map, false);
       this.layer.setLabelHost(null);
     });
+  }
+
+  private follow(map: MlMap, cam: ChaseCamera, cover: number): void {
+    const opts = map.calculateCameraOptionsFromTo(
+      new LngLat(cam.from.lon, cam.from.lat),
+      cam.fromAltM,
+      new LngLat(cam.to.lon, cam.to.lat),
+      cam.toAltM,
+    );
+    // the drawer under the map hides its lower part: aim at the middle of what shows
+    map.jumpTo({ ...opts, padding: { top: 0, left: 0, right: 0, bottom: cover } });
   }
 
   protected setTilt(e: Event): void {
@@ -396,8 +465,9 @@ export class Route3dComponent {
     this.raiseTerrain(map);
     this.layers.suppress(this.hiddenIn3d());
     map.getContainer().classList.add('fpv-3d');
+    map.setSky(SKY_3D);
     if (!map.getLayer(this.layer.id)) map.addLayer(this.layer);
-    map.setMaxPitch(80);
+    map.setMaxPitch(MAX_PITCH_3D);
     map.dragRotate.enable();
     if (this.view.corridor()) this.frame(map);
     else map.easeTo({ pitch: this.tilt(), duration: 600 });
@@ -424,6 +494,8 @@ export class Route3dComponent {
     if (map.getTerrain()) map.setTerrain(null);
     this.layers.suppress([]);
     map.getContainer().classList.remove('fpv-3d');
+    map.setSky({});
+    map.setPadding(NO_PADDING);
     map.dragRotate.disable();
     map.setMaxPitch(MAX_PITCH_2D);
     if (map.getPitch() !== 0 || map.getBearing() !== 0)
