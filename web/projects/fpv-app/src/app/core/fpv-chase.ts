@@ -136,15 +136,26 @@ export class ChaseTrack {
       const st = c.state(i);
       if (BAD.has(st) && st !== here) {
         const need = Math.round(c.c.floorMslM[i] - c.c.groundMslM[i]);
-        const text =
-          st === 'high' ? 'Over the ceiling' : `Under the floor: needs ${need} m AGL`;
+        const text = st === 'high' ? 'Over the ceiling' : `Under the floor: needs ${need} m AGL`;
         out.push({ kind: 'corridor', text, inM: c.c.s[i] - s, tone: 'warn' });
         break;
       }
     }
     const next = this.waypoints.find((w) => w.s > s + 1);
-    if (next) out.unshift({ kind: 'waypoint', text: next.label ?? `WP${next.index}`, inM: next.s - s, tone: 'info' });
-    else if (s < this.length - 1) out.unshift({ kind: 'waypoint', text: this.pointName(this.legs.length), inM: this.length - s, tone: 'info' });
+    if (next)
+      out.unshift({
+        kind: 'waypoint',
+        text: next.label ?? `WP${next.index}`,
+        inM: next.s - s,
+        tone: 'info',
+      });
+    else if (s < this.length - 1)
+      out.unshift({
+        kind: 'waypoint',
+        text: this.pointName(this.legs.length),
+        inM: this.length - s,
+        tone: 'info',
+      });
     return out;
   }
 
@@ -157,7 +168,8 @@ export class ChaseTrack {
     const low = Math.max(groundBehind, f.groundMslM) * exaggeration + CAMERA_CLEAR_M;
     const fromAltM = Math.max(f.mslM * exaggeration + ABOVE_M, low);
     const to = destinationPoint(f.lat, f.lon, f.headingDeg, LOOK_AHEAD_M);
-    const toAltM = this.corridor.valueAt('groundMslM', this.clampS(s + LOOK_AHEAD_M)) * exaggeration;
+    const toAltM =
+      this.corridor.valueAt('groundMslM', this.clampS(s + LOOK_AHEAD_M)) * exaggeration;
     return { from: back, fromAltM, to, toAltM };
   }
 
@@ -185,7 +197,13 @@ export class ChaseTrack {
       let cur = legs.at(-1);
       if (cur?.leg !== leg) {
         const fromS = cur?.toS ?? 0;
-        cur = { leg, name: `${this.pointName(leg)} → ${this.pointName(leg + 1)}`, fromS, toS: c.c.s[i], tone: 'ok' };
+        cur = {
+          leg,
+          name: `${this.pointName(leg)} → ${this.pointName(leg + 1)}`,
+          fromS,
+          toS: c.c.s[i],
+          tone: 'ok',
+        };
         legs.push(cur);
       }
       cur.toS = c.c.s[i];
@@ -215,7 +233,8 @@ export class ChaseView {
     const corridor = this.alt.corridor();
     if (!corridor || corridor.length <= 0) return null;
     const climb = this.alt.climb();
-    const speed = climb?.airspeedMps && climb.airspeedMps > 0 ? climb.airspeedMps : CHASE_DEFAULT_SPEED_MPS;
+    const speed =
+      climb?.airspeedMps && climb.airspeedMps > 0 ? climb.airspeedMps : CHASE_DEFAULT_SPEED_MPS;
     return new ChaseTrack(corridor, this.alt.result()?.waypoints ?? [], speed);
   });
   /** The drone's climb and descent rates, when the climb assistant ran. */

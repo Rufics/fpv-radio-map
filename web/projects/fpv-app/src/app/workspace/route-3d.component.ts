@@ -315,6 +315,10 @@ export function reliefLayers(contours: TileSourceRef | undefined, lowM: number, 
       top: 110px;
       max-width: calc(100% - 28px);
     }
+    /* clear of the phone's sheet over the lower half of the map */
+    :host-context(.phone) .empty {
+      top: 26%;
+    }
   `,
 })
 export class Route3dComponent {

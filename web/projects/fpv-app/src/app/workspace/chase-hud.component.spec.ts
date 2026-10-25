@@ -15,14 +15,18 @@ describe('ChaseHudComponent', () => {
   let fixture: ComponentFixture<ChaseHudComponent>;
   let chase: ChaseView;
   const el = () => fixture.nativeElement as HTMLElement;
-  const text = (sel: string) => el().querySelector(sel)?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+  const text = (sel: string) =>
+    el().querySelector(sel)?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
   beforeEach(async () => {
     MockApiHarness.setUp();
     await MockApiHarness.settle(TestBed.inject(FpvDataService).load());
     const store = TestBed.inject(MissionStore);
     store.newMission(mission);
-    store.result.set({ ...routeResult(mission, 'normal'), modules: { [FPV_ALTITUDE]: fpvAltitudeMock(mission) } });
+    store.result.set({
+      ...routeResult(mission, 'normal'),
+      modules: { [FPV_ALTITUDE]: fpvAltitudeMock(mission) },
+    });
     chase = TestBed.inject(ChaseView);
     fixture = TestBed.createComponent(ChaseHudComponent);
   });
@@ -68,7 +72,9 @@ describe('ChaseHudComponent', () => {
     fixture.detectChanges();
     expect(chase.rate()).toBe(16);
     expect(rates[2].getAttribute('aria-checked')).toBe('true');
-    [...el().querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.includes('Exit chase'))!.click();
+    [...el().querySelectorAll<HTMLButtonElement>('button')]
+      .find((b) => b.textContent?.includes('Exit chase'))!
+      .click();
     fixture.detectChanges();
     expect(chase.active()).toBe(false);
     expect(el().querySelector('.bar')).toBeNull();

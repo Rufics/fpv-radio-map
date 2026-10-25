@@ -39,7 +39,8 @@ describe('ChaseTrack', () => {
     // the slope over ±50 m at 10 m/s
     const a = c.s[i] - 50;
     const b = c.s[i] + 50;
-    const slope = (t.corridor.valueAt('plannedMslM', b) - t.corridor.valueAt('plannedMslM', a)) / 100;
+    const slope =
+      (t.corridor.valueAt('plannedMslM', b) - t.corridor.valueAt('plannedMslM', a)) / 100;
     expect(f.verticalMps).toBeCloseTo(slope * 10, 6);
   });
 
@@ -48,8 +49,14 @@ describe('ChaseTrack', () => {
     const [w1, w2] = wps;
     const mid = (w1.s + w2.s) / 2;
     const f = t.frame(mid);
-    const p1 = { lat: c.lat[t.corridor.indexAt(w1.s + 200)], lon: c.lon[t.corridor.indexAt(w1.s + 200)] };
-    const p2 = { lat: c.lat[t.corridor.indexAt(w2.s - 200)], lon: c.lon[t.corridor.indexAt(w2.s - 200)] };
+    const p1 = {
+      lat: c.lat[t.corridor.indexAt(w1.s + 200)],
+      lon: c.lon[t.corridor.indexAt(w1.s + 200)],
+    };
+    const p2 = {
+      lat: c.lat[t.corridor.indexAt(w2.s - 200)],
+      lon: c.lon[t.corridor.indexAt(w2.s - 200)],
+    };
     const leg = initialBearingDeg(p1, p2);
     const diff = Math.abs(((f.headingDeg - leg + 540) % 360) - 180);
     expect(diff).toBeLessThan(5);
@@ -73,10 +80,15 @@ describe('ChaseTrack', () => {
     const data = fpvAltitudeMock(mission);
     const cor = data.corridor!;
     // the ground rises steeply behind the drone, far over the plan
-    const steep = { ...cor, groundMslM: cor.groundMslM.map((g, i) => (cor.s[i] < 4750 ? g + 900 : g)) };
+    const steep = {
+      ...cor,
+      groundMslM: cor.groundMslM.map((g, i) => (cor.s[i] < 4750 ? g + 900 : g)),
+    };
     const tt = new ChaseTrack(new Corridor(steep, data.pilot!), data.waypoints ?? [], 10);
     const cam = tt.camera(5000, 1);
-    expect(cam.fromAltM).toBeGreaterThanOrEqual(tt.corridor.valueAt('groundMslM', 4700) + 25 - 1e-6);
+    expect(cam.fromAltM).toBeGreaterThanOrEqual(
+      tt.corridor.valueAt('groundMslM', 4700) + 25 - 1e-6,
+    );
   });
 
   it('names the next waypoint, then the pilot at the end of a return', () => {
@@ -94,12 +106,22 @@ describe('ChaseTrack', () => {
     const data = fpvAltitudeMock(mission);
     const cor = data.corridor!;
     const i = cor.s.findIndex((s) => s > 3000);
-    const low = { ...cor, plannedMslM: cor.plannedMslM.map((v, k) => (k === i ? cor.floorMslM[k] - 20 : Math.max(v, cor.floorMslM[k]))) };
-    const lowCeil = { ...low, ceilingMslM: low.ceilingMslM.map((v, k) => Math.max(v, low.plannedMslM[k])) };
+    const low = {
+      ...cor,
+      plannedMslM: cor.plannedMslM.map((v, k) =>
+        k === i ? cor.floorMslM[k] - 20 : Math.max(v, cor.floorMslM[k]),
+      ),
+    };
+    const lowCeil = {
+      ...low,
+      ceilingMslM: low.ceilingMslM.map((v, k) => Math.max(v, low.plannedMslM[k])),
+    };
     const tt = new ChaseTrack(new Corridor(lowCeil, data.pilot!), data.waypoints ?? [], 10);
     const warn = tt.ahead(cor.s[i] - 500).find((a) => a.kind === 'corridor');
     expect(warn?.inM).toBeCloseTo(500, 6);
-    expect(warn?.text).toBe(`Under the floor: needs ${Math.round(cor.floorMslM[i] - cor.groundMslM[i])} m AGL`);
+    expect(warn?.text).toBe(
+      `Under the floor: needs ${Math.round(cor.floorMslM[i] - cor.groundMslM[i])} m AGL`,
+    );
     // already under it: nothing new to warn about until it gets out
     expect(tt.ahead(cor.s[i]).some((a) => a.kind === 'corridor')).toBe(false);
   });
@@ -112,8 +134,15 @@ describe('ChaseTrack', () => {
     expect(legs[0].name.startsWith('Pilot → ')).toBe(true);
     expect(legs.at(-1)!.name.endsWith('→ Pilot')).toBe(true);
     for (const l of legs) {
-      const states = c.s.map((_, i) => i).filter((i) => c.leg[i] === l.leg).map((i) => t.corridor.state(i));
-      const want = states.includes('ground') ? 'bad' : states.some((s) => s === 'low' || s === 'high') ? 'warn' : 'ok';
+      const states = c.s
+        .map((_, i) => i)
+        .filter((i) => c.leg[i] === l.leg)
+        .map((i) => t.corridor.state(i));
+      const want = states.includes('ground')
+        ? 'bad'
+        : states.some((s) => s === 'low' || s === 'high')
+          ? 'warn'
+          : 'ok';
       expect(l.tone).toBe(want);
     }
   });
@@ -128,7 +157,10 @@ describe('ChaseView', () => {
     await MockApiHarness.settle(TestBed.inject(FpvDataService).load());
     const store = TestBed.inject(MissionStore);
     store.newMission(mission);
-    store.result.set({ ...routeResult(mission, 'normal'), modules: { [FPV_ALTITUDE]: fpvAltitudeMock(mission) } });
+    store.result.set({
+      ...routeResult(mission, 'normal'),
+      modules: { [FPV_ALTITUDE]: fpvAltitudeMock(mission) },
+    });
     chase = TestBed.inject(ChaseView);
     view = TestBed.inject(AltitudeView);
   });
@@ -138,7 +170,10 @@ describe('ChaseView', () => {
   it('flies at the climb assistant airspeed, or 15 m/s', () => {
     const climb = view.climb();
     expect(chase.track()!.speedMps).toBe(climb?.airspeedMps || CHASE_DEFAULT_SPEED_MPS);
-    expect(chase.limits()).toEqual({ climbMps: climb!.climbRateMps, descentMps: climb!.descentRateMps });
+    expect(chase.limits()).toEqual({
+      climbMps: climb!.climbRateMps,
+      descentMps: climb!.descentRateMps,
+    });
   });
 
   it('starts in 3D from the profile cursor and moves the cursor with it', () => {

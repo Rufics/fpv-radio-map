@@ -30,7 +30,8 @@ function clock(seconds: number): string {
     @if (chase.frame(); as f) {
       <div class="read" role="status" aria-live="off" aria-label="Chase read-out">
         <div class="big">
-          <span class="v rf-mono">{{ m(f.aglM) }}</span><span class="u">m AGL</span>
+          <span class="v rf-mono">{{ m(f.aglM) }}</span
+          ><span class="u">m AGL</span>
         </div>
         <div class="row rf-mono">
           <span>{{ m(f.mslM) }} m MSL</span>
@@ -58,7 +59,11 @@ function clock(seconds: number): string {
         <div class="line">
           <div class="legs" aria-hidden="true">
             @for (l of legs(); track l.leg) {
-              <span [class]="'leg tone-' + l.tone" [style.flex-grow]="l.toS - l.fromS" [title]="l.name"></span>
+              <span
+                [class]="'leg tone-' + l.tone"
+                [style.flex-grow]="l.toS - l.fromS"
+                [title]="l.name"
+              ></span>
             }
           </div>
           <input
@@ -87,46 +92,204 @@ function clock(seconds: number): string {
             </button>
           }
         </div>
-        <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="chase.stop()">Exit chase</button>
+        <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="chase.stop()">
+          Exit chase
+        </button>
       </div>
     }
   `,
   styles: `
-    :host { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
-    .read, .ahead, .bar { pointer-events: auto; background: rgba(16, 22, 29, 0.92); border: 1px solid var(--rf-border); border-radius: 10px; }
-    .read { position: absolute; left: 14px; top: 64px; padding: 10px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 170px; }
-    .big { display: flex; align-items: baseline; gap: 6px; }
-    .big .v { font-size: 34px; font-weight: 600; color: var(--rf-text); line-height: 1; }
-    .big .u { color: var(--rf-text-2); font-size: 13px; }
-    .row { display: flex; gap: 12px; font-size: 13px; color: var(--rf-text-2); }
-    .vs.up { color: var(--rf-ok-text); }
-    .vs.down { color: var(--rf-info-text, #8fb8ff); }
-    .vs.over { color: var(--rf-warn-text); }
-    .state { font-size: 12px; }
-    .tone-ok { color: var(--rf-ok-text); }
-    .tone-warn { color: var(--rf-warn-text); }
-    .tone-bad { color: var(--rf-blocked-text); }
-    .ahead { position: absolute; right: 14px; top: 64px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 200px; font-size: 13px; }
-    .ahead:empty { display: none; }
-    .a { display: flex; justify-content: space-between; gap: 12px; color: var(--rf-text); }
-    .a.tone-warn { color: var(--rf-warn-text); }
-    .bar { position: absolute; left: 14px; right: 14px; bottom: calc(var(--fpv-cover-bottom, 0px) + 16px); padding: 8px 10px; display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--rf-text-2); }
-    .play { min-width: 40px; }
-    .line { position: relative; flex: 1; min-width: 80px; height: 24px; }
-    .legs { position: absolute; left: 0; right: 0; top: 9px; height: 6px; display: flex; gap: 2px; }
-    .leg { flex-basis: 0; border-radius: 3px; background: var(--rf-ok); opacity: 0.7; }
-    .leg.tone-warn { background: var(--rf-warn); }
-    .leg.tone-bad { background: var(--rf-blocked); }
-    .line input { position: absolute; inset: 0; width: 100%; margin: 0; background: transparent; accent-color: var(--rf-text); }
-    .time { white-space: nowrap; color: var(--rf-text); }
-    .rates { display: inline-flex; border: 1px solid var(--rf-border); border-radius: 6px; overflow: hidden; }
-    .rate { border: 0; background: transparent; color: var(--rf-text-2); padding: 3px 8px; font: inherit; }
-    .rate.on { background: var(--rf-surface-3); color: var(--rf-text); font-weight: 600; }
-    :host-context(.phone) .read { top: 110px; left: 12px; padding: 8px 10px; min-width: 0; }
-    :host-context(.phone) .big .v { font-size: 26px; }
-    :host-context(.phone) .ahead { top: auto; bottom: 72px; left: 12px; right: 12px; min-width: 0; }
-    :host-context(.phone) .bar { left: 8px; right: 8px; bottom: 8px; flex-wrap: wrap; }
-    :host-context(.phone) .rates, :host-context(.phone) .time { display: none; }
+    :host {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+    }
+    .read,
+    .ahead,
+    .bar {
+      pointer-events: auto;
+      background: rgba(16, 22, 29, 0.92);
+      border: 1px solid var(--rf-border);
+      border-radius: 10px;
+    }
+    .read {
+      position: absolute;
+      left: 14px;
+      top: 64px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 170px;
+    }
+    .big {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .big .v {
+      font-size: 34px;
+      font-weight: 600;
+      color: var(--rf-text);
+      line-height: 1;
+    }
+    .big .u {
+      color: var(--rf-text-2);
+      font-size: 13px;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--rf-text-2);
+    }
+    .vs.up {
+      color: var(--rf-ok-text);
+    }
+    .vs.down {
+      color: var(--rf-info-text, #8fb8ff);
+    }
+    .vs.over {
+      color: var(--rf-warn-text);
+    }
+    .state {
+      font-size: 12px;
+    }
+    .tone-ok {
+      color: var(--rf-ok-text);
+    }
+    .tone-warn {
+      color: var(--rf-warn-text);
+    }
+    .tone-bad {
+      color: var(--rf-blocked-text);
+    }
+    .ahead {
+      position: absolute;
+      right: 14px;
+      top: 64px;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 200px;
+      font-size: 13px;
+    }
+    .ahead:empty {
+      display: none;
+    }
+    .a {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--rf-text);
+    }
+    .a.tone-warn {
+      color: var(--rf-warn-text);
+    }
+    .bar {
+      position: absolute;
+      left: 14px;
+      right: 14px;
+      bottom: calc(var(--fpv-cover-bottom, 0px) + 16px);
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--rf-text-2);
+    }
+    .play {
+      min-width: 40px;
+    }
+    .line {
+      position: relative;
+      flex: 1;
+      min-width: 80px;
+      height: 24px;
+    }
+    .legs {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 9px;
+      height: 6px;
+      display: flex;
+      gap: 2px;
+    }
+    .leg {
+      flex-basis: 0;
+      border-radius: 3px;
+      background: var(--rf-ok);
+      opacity: 0.7;
+    }
+    .leg.tone-warn {
+      background: var(--rf-warn);
+    }
+    .leg.tone-bad {
+      background: var(--rf-blocked);
+    }
+    .line input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      margin: 0;
+      background: transparent;
+      accent-color: var(--rf-text);
+    }
+    .time {
+      white-space: nowrap;
+      color: var(--rf-text);
+    }
+    .rates {
+      display: inline-flex;
+      border: 1px solid var(--rf-border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .rate {
+      border: 0;
+      background: transparent;
+      color: var(--rf-text-2);
+      padding: 3px 8px;
+      font: inherit;
+    }
+    .rate.on {
+      background: var(--rf-surface-3);
+      color: var(--rf-text);
+      font-weight: 600;
+    }
+    :host-context(.phone) .read {
+      top: 108px;
+      left: 12px;
+      padding: 8px 10px;
+      min-width: 0;
+    }
+    :host-context(.phone) .big .v {
+      font-size: 26px;
+    }
+    :host-context(.phone) .ahead {
+      top: 108px;
+      left: auto;
+      right: 12px;
+      min-width: 0;
+      max-width: 46%;
+      font-size: 12px;
+    }
+    :host-context(.phone) .a {
+      flex-direction: column;
+      gap: 0;
+    }
+    :host-context(.phone) .bar {
+      left: 8px;
+      right: 8px;
+      bottom: calc(var(--fpv-cover-bottom, 0px) + 8px);
+    }
+    :host-context(.phone) .rates,
+    :host-context(.phone) .time {
+      display: none;
+    }
   `,
 })
 export class ChaseHudComponent {
@@ -144,7 +307,9 @@ export class ChaseHudComponent {
     const f = this.chase.frame();
     if (!f) return '';
     const text = STATE_TEXT[f.state];
-    return f.state === 'low' || f.state === 'ground' ? `${text}: needs ${Math.round(f.needAglM)} m AGL` : text;
+    return f.state === 'low' || f.state === 'ground'
+      ? `${text}: needs ${Math.round(f.needAglM)} m AGL`
+      : text;
   });
   protected readonly stateTone = computed(() => {
     const st = this.chase.frame()?.state;
@@ -161,7 +326,8 @@ export class ChaseHudComponent {
     const v = this.chase.frame()?.verticalMps ?? 0;
     const lim = this.chase.limits();
     if (Math.abs(v) < LEVEL_MPS) return '';
-    if (lim && (v > lim.climbMps + RATE_SLACK_MPS || -v > lim.descentMps + RATE_SLACK_MPS)) return 'over';
+    if (lim && (v > lim.climbMps + RATE_SLACK_MPS || -v > lim.descentMps + RATE_SLACK_MPS))
+      return 'over';
     return v > 0 ? 'up' : 'down';
   });
 

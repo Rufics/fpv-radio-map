@@ -135,4 +135,21 @@ describe('AltitudeDrawerComponent', () => {
     svg.dispatchEvent(new Event('blur'));
     expect(view.cursorS()).toBeNull();
   });
+
+  it('fits the phone sheet: one column, no close button, the assistant left to its own screen', () => {
+    store.newMission(mission);
+    store.result.set({
+      ...routeResult(mission, 'normal'),
+      modules: { [FPV_ALTITUDE]: fpvAltitudeMock(mission) },
+    });
+    fixture.detectChanges();
+    expect(el().querySelector('fpv-climb-assistant')).not.toBeNull();
+    expect(el().querySelector('[aria-label="Close altitude profile"]')).not.toBeNull();
+    fixture.componentRef.setInput('compact', true);
+    fixture.detectChanges();
+    expect(el().classList).toContain('compact');
+    expect(el().querySelector('fpv-climb-assistant')).toBeNull();
+    expect(el().querySelector('[aria-label="Close altitude profile"]')).toBeNull();
+    expect(el().querySelector('.hint')?.textContent).toContain('Touch the profile');
+  });
 });

@@ -136,7 +136,7 @@ export class DesktopLayoutComponent {
   private readonly drawer = viewChild('drawer', { read: ElementRef });
 
   constructor() {
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((e) => this.cover.set(Math.round(e[0]?.contentRect.height ?? 0)));
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((e) => this.cover.set((e[0]?.target as HTMLElement | undefined)?.offsetHeight ?? 0));
     effect((onCleanup) => {
       const el = this.drawer()?.nativeElement as HTMLElement | undefined;
       if (!el) {
