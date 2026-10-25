@@ -161,7 +161,7 @@ import { MapPointer } from './map-pointer';
         }
         <fpv-route-weather-map [compact]="compact()" />
         <fpv-flight-replay-map [fitPadding]="fitPadding()" />
-        <fpv-route-3d />
+        <fpv-route-3d [coverBottom]="coverBottom()" />
         @if (miniMapShown()) {
           <fpv-coverage-mini-map [grid]="heatGrid()" [route]="miniMapRoute()" />
         }
@@ -215,6 +215,8 @@ export class MapStageComponent {
   readonly interactiveEdit = input(true);
   /** Height of the bottom drawer that covers the map while "why" is open (desktop); 0 = none. */
   readonly drawerHeight = input(0);
+  /** Height of whatever covers the bottom of the map now (drawer, sheet), px: for the 3D chase. */
+  readonly coverBottom = input(0);
   /** Phone: fewer map labels (a blocked return leg is already in the leg list) */
   readonly compact = input(false);
 

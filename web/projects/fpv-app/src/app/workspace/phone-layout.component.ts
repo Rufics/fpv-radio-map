@@ -54,11 +54,11 @@ const DRAG_PX = 24;
       </section>
     } @else {
       <div class="map" [class.over]="ws.layersOpen()">
-        <fpv-map-stage class="stage" [fitPadding]="padding()" [compact]="true" [interactiveEdit]="false" [style.--fpv-cover-bottom]="cover() + 'px'" />
+        <fpv-map-stage class="stage" [fitPadding]="padding()" [compact]="true" [interactiveEdit]="false" [coverBottom]="cover()" [style.--fpv-cover-bottom]="cover() + 'px'" />
         <div class="chips">
           <span class="chip name">{{ ws.mission()?.name ?? 'FPV Radio Map' }}</span>
           <span class="chip-end">
-            @if (alt.corridor()) {
+            @if (alt.corridor() && planShown()) {
               <button
                 type="button"
                 class="chip view"

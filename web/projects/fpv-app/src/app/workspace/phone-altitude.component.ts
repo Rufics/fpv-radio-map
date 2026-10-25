@@ -28,15 +28,17 @@ import { ChaseView } from '../core/fpv-chase';
         </div>
       </div>
       @if (fix(); as f) {
-        <button
-          type="button"
-          class="rf-btn rf-btn--primary fix"
-          (click)="preview()"
-          [disabled]="!!fixHint()"
-          [title]="fixHint()"
-        >
-          Preview fix · {{ f.title }}
-        </button>
+        @if (store.canEdit()) {
+          <button
+            type="button"
+            class="rf-btn rf-btn--primary fix"
+            (click)="preview()"
+            [disabled]="!!fixHint()"
+            [title]="fixHint()"
+          >
+            Preview fix · {{ f.title }}
+          </button>
+        }
       } @else if (overCeiling() > 0) {
         <div class="warn">Up to {{ m(overCeiling()) }} over the ceiling.</div>
       } @else if (w.margin >= 0 && !view.stale()) {
@@ -129,7 +131,7 @@ import { ChaseView } from '../core/fpv-chase';
 export class PhoneAltitudeComponent {
   protected readonly view = inject(AltitudeView);
   protected readonly chase = inject(ChaseView);
-  private readonly store = inject(MissionStore);
+  protected readonly store = inject(MissionStore);
 
   /** Pull the sheet up to the profile. */
   readonly profile = output<void>();

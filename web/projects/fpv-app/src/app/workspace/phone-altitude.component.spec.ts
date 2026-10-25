@@ -61,6 +61,13 @@ describe('PhoneAltitudeComponent', () => {
     expect(TestBed.inject(AltitudeView).ghost()).toBe(rec.id);
   });
 
+  it('offers no fix to a view-only mission', () => {
+    store.role.set('view');
+    show(fpvAltitudeMock(mission));
+    expect(button('Preview fix')).toBeUndefined();
+    expect(el().querySelector('.num.bad')).not.toBeNull();
+  });
+
   it('never offers a fix the drone cannot fly, nor one the plan does not need', () => {
     const data = fpvAltitudeMock(mission);
     const climb = data.climb!;

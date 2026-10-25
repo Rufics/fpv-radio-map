@@ -17,6 +17,7 @@ class MapStageStub {
   readonly fitPadding = input<unknown>();
   readonly compact = input(false);
   readonly interactiveEdit = input(true);
+  readonly coverBottom = input(0);
 }
 
 describe('PhoneLayoutComponent verdict', () => {
@@ -172,5 +173,17 @@ describe('PhoneLayoutComponent sheet', () => {
     expect(chip.textContent?.trim()).toBe('2D');
     chip.click();
     expect(view.mode()).toBe('2d');
+  });
+
+  it('hides the 3D chip while a fix is previewed', () => {
+    const { fixture, el, button, store } = render();
+    button('Climb options')!.click();
+    fixture.detectChanges();
+    el.querySelector<HTMLButtonElement>(
+      'fpv-climb-assistant .rf-btn--primary:not([disabled])',
+    )!.click();
+    fixture.detectChanges();
+    expect(store.preview()).not.toBeNull();
+    expect(el.querySelector('.chip.view')).toBeNull();
   });
 });

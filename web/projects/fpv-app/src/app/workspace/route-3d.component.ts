@@ -5,6 +5,7 @@ import {
   computed,
   effect,
   inject,
+  input,
   signal,
   untracked,
   viewChild,
@@ -323,6 +324,8 @@ export function reliefLayers(contours: TileSourceRef | undefined, lowM: number, 
   `,
 })
 export class Route3dComponent {
+  /** Height of the drawer or sheet over the bottom of the map, px: the chase aims above it. */
+  readonly coverBottom = input(0);
   protected readonly view = inject(AltitudeView);
   protected readonly chase = inject(ChaseView);
   private readonly ws = inject(FpvWorkspace);
@@ -408,9 +411,10 @@ export class Route3dComponent {
       const on = this.chase.active() && this.view.mode() === '3d';
       const s = this.chase.s();
       const ex = this.view.exaggeration();
+      const cover = this.coverBottom();
       if (!map) return;
       untracked(() => {
-        if (on && track) this.follow(map, track.camera(s, ex));
+        if (on && track) this.follow(map, track.camera(s, ex), cover);
         else if (chasing) {
           // the chase's padding stays on the map until it is put back
           map.setPadding(NO_PADDING);
@@ -424,13 +428,15 @@ export class Route3dComponent {
       if (this.chase.active() && (this.view.mode() !== '3d' || !this.chase.track())) untracked(() => this.chase.stop());
     });
     inject(DestroyRef).onDestroy(() => {
+      // the map went away (the phone's climb options): the chase does not wait for it
+      this.chase.stop();
       const map = this.ctx.map();
       if (map) this.leave(map, false);
       this.layer.setLabelHost(null);
     });
   }
 
-  private follow(map: MlMap, cam: ChaseCamera): void {
+  private follow(map: MlMap, cam: ChaseCamera, cover: number): void {
     const opts = map.calculateCameraOptionsFromTo(
       new LngLat(cam.from.lon, cam.from.lat),
       cam.fromAltM,
@@ -438,7 +444,6 @@ export class Route3dComponent {
       cam.toAltM,
     );
     // the drawer under the map hides its lower part: aim at the middle of what shows
-    const cover = Number.parseFloat(getComputedStyle(map.getContainer()).getPropertyValue('--fpv-cover-bottom')) || 0;
     map.jumpTo({ ...opts, padding: { top: 0, left: 0, right: 0, bottom: cover } });
   }
 

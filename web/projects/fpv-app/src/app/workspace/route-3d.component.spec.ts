@@ -195,6 +195,12 @@ describe('Route3dComponent', () => {
       cam.toAltM,
     );
     expect(map.jumpTo).toHaveBeenLastCalledWith(expect.objectContaining({ pitch: 62, bearing: 40 }));
+    // the sheet grows under a paused chase: the camera aims above it again
+    fixture.componentRef.setInput('coverBottom', 220);
+    fixture.detectChanges();
+    expect(map.jumpTo).toHaveBeenLastCalledWith(
+      expect.objectContaining({ padding: { top: 0, left: 0, right: 0, bottom: 220 } }),
+    );
     chase.stop();
     fixture.detectChanges();
     expect(el().querySelector('fpv-chase-hud')).toBeNull();
@@ -205,5 +211,18 @@ describe('Route3dComponent', () => {
     fixture.detectChanges();
     expect(map.setSky).toHaveBeenLastCalledWith({});
     expect(map.setPadding).toHaveBeenCalledTimes(2);
+  });
+
+  it('ends the chase when the map goes away', () => {
+    const store = TestBed.inject(MissionStore);
+    const mission = { ...exampleMission(), modules: { [FPV_ALTITUDE]: {} } };
+    store.newMission(mission);
+    store.result.set({ ...routeResult(mission, 'normal'), modules: { [FPV_ALTITUDE]: fpvAltitudeMock(mission) } });
+    const chase = TestBed.inject(ChaseView);
+    chase.start();
+    fixture.detectChanges();
+    fixture.destroy();
+    expect(chase.active()).toBe(false);
+    expect(chase.playing()).toBe(false);
   });
 });

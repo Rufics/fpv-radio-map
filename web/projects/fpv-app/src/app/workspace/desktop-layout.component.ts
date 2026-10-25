@@ -78,7 +78,7 @@ import { MapStageComponent } from './map-stage.component';
         }
       </aside>
       <main class="main">
-        <fpv-map-stage class="stage" [fitPadding]="padding" [drawerHeight]="340" [style.--fpv-cover-bottom]="cover() + 'px'" />
+        <fpv-map-stage class="stage" [fitPadding]="padding" [drawerHeight]="340" [coverBottom]="cover()" [style.--fpv-cover-bottom]="cover() + 'px'" />
         @if (replay.mode() !== 'plan' && replay.view()) {
           <fpv-replay-drawer class="drawer" #drawer />
         } @else if (ws.why()) {
