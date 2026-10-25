@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { LatLon, destinationPoint, initialBearingDeg } from '@rfmap/ui-kit';
 import { AltitudeView, Corridor, CorridorState, FpvAltitudeWaypoint } from './fpv-altitude';
 
@@ -229,7 +229,9 @@ export class ChaseView {
   /** Distance along the route, m */
   readonly s = signal(0);
 
+  /** The plan to fly, while it matches the mission: a result from before an edit is not replayed. */
   readonly track = computed(() => {
+    if (this.alt.stale()) return null;
     const corridor = this.alt.corridor();
     if (!corridor || corridor.length <= 0) return null;
     const climb = this.alt.climb();
@@ -250,6 +252,13 @@ export class ChaseView {
     const t = this.track();
     return t && this.active() ? t.ahead(this.s()) : [];
   });
+
+  constructor() {
+    // the plan went stale or away under a running chase: end it
+    effect(() => {
+      if (!this.track()) untracked(() => this.stop());
+    });
+  }
 
   /** Into 3D, from the profile cursor if there is one, and playing. */
   start(): void {

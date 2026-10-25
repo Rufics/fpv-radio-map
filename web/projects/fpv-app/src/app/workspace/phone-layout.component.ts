@@ -201,7 +201,10 @@ export class PhoneLayoutComponent {
           });
     effect((onCleanup) => {
       const el = this.sheet()?.nativeElement as HTMLElement | undefined;
-      if (!el) return;
+      if (!el) {
+        this.cover.set(0);
+        return;
+      }
       this.cover.set(el.offsetHeight);
       this.height.set((this.host.nativeElement as HTMLElement).offsetHeight);
       ro?.observe(el);

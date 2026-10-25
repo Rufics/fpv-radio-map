@@ -210,6 +210,17 @@ describe('ChaseView', () => {
     expect(chase.frame()).toBeNull();
   });
 
+  it('does not replay a plan from before the mission changed, and ends a running chase', () => {
+    const store = TestBed.inject(MissionStore);
+    chase.start();
+    store.resultStale.set(true);
+    expect(chase.track()).toBeNull();
+    TestBed.tick();
+    expect(chase.active()).toBe(false);
+    chase.start();
+    expect(chase.active()).toBe(false);
+  });
+
   it('does nothing without a corridor', () => {
     TestBed.inject(MissionStore).result.set(null);
     chase.start();
