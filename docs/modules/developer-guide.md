@@ -190,6 +190,32 @@ waypoint the ceiling cannot make safe (at the waypoint, or anywhere along one of
 heights are set), or with no clear Fresnel height up to `maxAglM`, is `blocked`, with a reason that points to `fpv.relay` and `fpv.best-launch`. Its `autoHeight`
 option (default true) turns this off.
 
+Its route.analyze also runs a climb assistant (option `climbAssist`, default true). Climbing costs
+energy and descending gives nothing back, so the energy-optimal profile is the one with the least
+total climb that stays between the corridor's floor and ceiling within the drone's climb rate
+(`climbRateMps`, else the drone's measured rate, else 3 m/s) and descent rate (`descentRateMps`,
+4 m/s) at the ground speed on each stretch; in the take-off zone the drone climbs and lands
+vertically. It is found on a `heightStepM` grid (5 m, coarsened to at most 400 heights a sample) and compared with two simpler strategies:
+climbing over launch to the highest floor and flying level, and a steady climb to it and a steady
+descent back. Each is turned into the fewest waypoints that follow it within `fitToleranceM` (5 m)
+in the mission's reference without crossing the floor or the ceiling (added points are labelled
+C1, C2, …; one whose removal keeps the line in the corridor without more climb is dropped, so the
+fix may skip a dip of the profile by more than the tolerance) and
+offered as a fix that replaces `waypoints`. A stretch takes as long as flying it or as climbing or
+descending its height at the drone's rates, whichever is longer; `overCeilingM` counts only where
+the floor is under the ceiling. `data.climb` holds the plan's and every
+strategy's stats (`riseM`, `timeS`, `minClearanceM`, `overCeilingM`, `steepestClimbMps`, `steepestDescentMps`, and
+`energyWh` when the mission has a drone, fetched with `library.get` and flown in the request's
+`weather` or, when that is null, the forecast from `weather.point` (still air if the call fails);
+only the assistant uses that forecast, the corridor's refraction keeps to the request's `weather`),
+the strategies' heights at every corridor sample (`mslM`) and their fixes.
+A leg the plan climbs faster than the drone can gets a warning, and a plan that climbs at least
+10 m and 10 % more than the energy-optimal profile, or leaves the corridor where that profile does
+not, gets an info reason; both carry the energy-optimal fix. A fitted line that breaks either rate
+(`withinClimbRate` false, for one when no profile through the corridor keeps to them) is still
+shown, but its card offers no fix; for the energy-optimal line the warnings carry no fix, the info
+reason is not given, and a note says so.
+
 ### route.analysis → `route.analyze`
 
 Called after the core has evaluated every leg of a route. The legs are pilot → wp1 → … → last,

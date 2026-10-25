@@ -1,12 +1,14 @@
 // fpv.altitude module: host glue and self-test.
 
 #include "auto_height.hpp"
+#include "climb_assistant.hpp"
 
 #include <cmath>
+#include <optional>
 
 namespace fpv::altitude {
 namespace {
-constexpr const char* kManifest = R"json({"id":"fpv.altitude","version":"1.1.0"})json";
+constexpr const char* kManifest = R"json({"id":"fpv.altitude","version":"1.2.0"})json";
 }  // namespace
 
 class AltitudeModule final : public rfmod::Module {
@@ -18,7 +20,29 @@ public:
         const Mission m = Mission::fromJson(request.at("mission"));
         const LinkInputs links = readLinks(host(), m);
         const HostWorld world(host());
-        return method == "route.prepare" ? prepare(request, world, links) : analyze(request, world, links);
+        if (method == "route.prepare") return prepare(request, world, links);
+        // The climb assistant estimates energy for the mission's drone, in the forecast wind.
+        // The forecast goes to the assistant only: the corridor's refraction keeps to the request.
+        std::optional<json> drone;
+        json climbWeather = request.value("weather", json());
+        // Without the drone the assistant still runs, without energy; without a forecast, in still air.
+        // With the assistant off neither is needed.
+        if (ClimbSettings::fromOptions(request.value("options", json::object())).enabled && !m.droneId.empty()) {
+            try {
+                drone = host().call("library.get", {{"kind", "drones"}, {"id", m.droneId}});
+            } catch (const rfmod::HostError&) {
+                drone.reset();
+            }
+        }
+        if (drone && climbWeather.is_null()) {
+            try {
+                climbWeather = host().call("weather.point", {{"lat", m.pilot.position.lat}, {"lon", m.pilot.position.lon},
+                                                             {"time", request.value("time", "")}});
+            } catch (const rfmod::HostError&) {
+                climbWeather = nullptr;
+            }
+        }
+        return analyze(request, world, links, drone, climbWeather);
     }
 
     json selftest() override {
@@ -32,7 +56,7 @@ public:
                               {"pilot", {{"lat", a.lat}, {"lon", a.lon}, {"aglM", 1.5}}},
                               {"waypoints", {{{"lat", b.lat}, {"lon", b.lon}, {"altM", 50.0}}}},
                               {"returnToPilot", false}};
-        const json r = analyze({{"mission", mission}, {"options", {{"takeoffM", 600.0}}}}, world, {});
+        const json r = analyze({{"mission", mission}, {"options", {{"takeoffM", 600.0}, {"climbAssist", false}}}}, world, {});
         const json& c = r.at("data").at("corridor");
         const bool floor = std::abs(c.at("floorMslM").back().get<double>() - 130.0) < 1e-6;
         const bool ceiling = std::abs(c.at("ceilingMslM").back().get<double>() - 220.0) < 1e-6;

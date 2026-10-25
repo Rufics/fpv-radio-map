@@ -7,8 +7,9 @@
  */
 import { HttpErrorResponse, HttpHeaders, HttpParams, HttpRequest, HttpResponse } from '@angular/common/http';
 import { fpvCoreMock } from './fpv-core-mock';
-import { fpvAltitudeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
+import { fpvAltitudeAnalyzeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
 import {
+  AutoHeight,
   CacheLimit,
   CacheTier,
   CalcPathRequest,
@@ -22,6 +23,7 @@ import {
   Mission,
   MissionAltitude,
   ModuleInfo,
+  Reason,
   RouteResult,
   SchemaValidator,
   ShareLink,
@@ -368,9 +370,26 @@ export class MockBackend {
     if (bare >= 0) throw this.error(422, `waypoints[${bare}] has no ${field}: set its height, or turn on fpv.altitude for automatic heights`);
     const result = routeResult(mission, this.scenario());
     if (prepared.autoHeights.length) result.autoHeights = prepared.autoHeights;
-    for (const h of prepared.autoHeights.filter((a) => a.blocked)) {
+    this.warnBlockedHeights(mission, prepared.autoHeights, result);
+    if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
+    if (mission.modules?.['fpv.altitude']) {
+      const altitude = fpvAltitudeAnalyzeMock(mission);
+      result.modules = { ...result.modules, 'fpv.altitude': altitude.data };
+      this.attachReasons(altitude.reasons, result);
+    }
+    const sess = this.sessionOf(req);
+    const stored = sess ? this.missions.get(sess.missionId) : undefined;
+    if (stored && sess?.role === 'edit') {
+      result.missionRevision = stored.revision;
+      stored.lastResult = result;
+    }
+    return this.ok(result);
+  }
+
+  /** As the module says it: a blocked automatic height hit the ceiling, or a link no height up to maxAglM clears. */
+  private warnBlockedHeights(mission: Mission, autoHeights: AutoHeight[], result: RouteResult): void {
+    for (const h of autoHeights.filter((a) => a.blocked)) {
       const name = mission.waypoints[h.index].label ?? `WP${h.index + 1}`;
-      // As the module says it: the ceiling, or a link no height up to maxAglM clears.
       const why = h.limitedBy === 'ceiling' ? 'flying its legs safely takes more than the ceiling allows' : 'no height up to the highest allowed keeps the Fresnel zone clear';
       result.legs?.[h.index]?.reasons?.push({
         module: 'fpv.altitude',
@@ -379,15 +398,20 @@ export class MockBackend {
         text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but ${why}. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
       });
     }
-    if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
-    if (mission.modules?.['fpv.altitude']) result.modules = { ...result.modules, 'fpv.altitude': fpvAltitudeMock(mission) };
-    const sess = this.sessionOf(req);
-    const stored = sess ? this.missions.get(sess.missionId) : undefined;
-    if (stored && sess?.role === 'edit') {
-      result.missionRevision = stored.revision;
-      stored.lastResult = result;
+  }
+
+  /** As the server: a reason with a leg goes to that leg, the rest to the route. */
+  private attachReasons(reasons: Reason[], result: RouteResult): void {
+    for (const r of reasons) {
+      const leg = r.leg === undefined ? undefined : result.legs?.[r.leg];
+      if (leg) {
+        leg.reasons ??= [];
+        leg.reasons.push(r);
+      } else {
+        result.reasons ??= [];
+        result.reasons.push(r);
+      }
     }
-    return this.ok(result);
   }
 
   private startJob(req: HttpRequest<unknown>): HttpResponse<unknown> {
@@ -553,7 +577,7 @@ export const MODULES: ModuleInfo[] = [
   { id: 'fpv.battery', version: '1.0.4', title: 'Battery range', lifecycle: 'stable', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'rf.flightlog', version: '1.3.0', title: 'Flight log replay', builtIn: true, lifecycle: 'stable', provides: ['flightlog.processor'], signedBy: 'built in', isolated: false, state: 'active' },
   { id: 'fpv.blackbox', version: '1.0.0', title: 'Betaflight Blackbox decoder', lifecycle: 'beta', provides: ['flightlog.decoder'], signedBy: 'owner', isolated: true, state: 'active' },
-  { id: 'fpv.altitude', version: '1.0.0', title: 'Altitude corridor and 3D view', lifecycle: 'alpha', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.altitude', version: '1.2.0', title: 'Altitude corridor and 3D view', lifecycle: 'alpha', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.min-altitude', version: '0.4.0', title: 'Minimum altitude', lifecycle: 'alpha', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   {
     id: 'fpv.relay', version: '1.1.0', title: 'Relay planning', lifecycle: 'deprecated', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active',

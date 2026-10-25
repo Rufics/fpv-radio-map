@@ -9,21 +9,6 @@ namespace {
 
 constexpr const char* kId = "fpv.battery";
 
-Air airFrom(const json& weather, const json& options) {
-    Air a;
-    auto num = [](const json& j, const char* k) {
-        return j.is_object() && j.contains(k) && j.at(k).is_number() ? std::optional<double>(j.at(k).get<double>()) : std::nullopt;
-    };
-    a.densityKgM3 = num(weather, "airDensityKgM3");
-    a.windSpeedMps = num(weather, "windSpeedMps");
-    a.windFromDeg = num(weather, "windFromDeg");
-    a.temperatureC = num(weather, "temperatureC");
-    if (auto v = num(options, "temperatureC"); v.has_value()) a.temperatureC = v;
-    if (auto v = num(options, "windSpeedMps"); v.has_value()) a.windSpeedMps = v;
-    if (auto v = num(options, "windFromDeg"); v.has_value()) a.windFromDeg = v;
-    return a;
-}
-
 json resultJson(const Plan& p) {
     json r = {{"energyWh", p.energyWh}, {"usableWh", p.usableWh}, {"neededWh", p.neededWh},
               {"rangeM", p.rangeM},     {"neededM", p.neededM},   {"shortfallM", p.shortfallM},
@@ -45,7 +30,7 @@ json analyze(const json& request, const IWorld& world, const json& drone, const 
     const Mission mission = Mission::fromJson(request.at("mission"));
     const json options = request.value("options", json::object());
     const json weather = request.value("weather", json());
-    const Air air = airFrom(weather, options);
+    const Air air = Air::fromJson(weather, options);
     json reasons = json::array();
     json data = json::object();
     try {

@@ -2,6 +2,7 @@ import { Component, computed, inject } from '@angular/core';
 import { MissionStore, RfFormat } from '@rfmap/ui-kit';
 import { AltitudeView, CorridorState } from '../core/fpv-altitude';
 import { AltitudeChart, PROFILE_H, PROFILE_W } from './altitude-chart';
+import { ClimbAssistantComponent } from './climb-assistant.component';
 
 const STATE_TEXT: Record<CorridorState, string> = {
   inside: 'inside the corridor',
@@ -18,6 +19,7 @@ const STATE_TEXT: Record<CorridorState, string> = {
  */
 @Component({
   selector: 'fpv-altitude-drawer',
+  imports: [ClimbAssistantComponent],
   template: `
     <div class="head">
       <h2 id="alt-title">Altitude profile</h2>
@@ -29,6 +31,9 @@ const STATE_TEXT: Record<CorridorState, string> = {
             <span><i class="k-band"></i>Safe corridor</span>
             <span><i class="k-floor"></i>Floor</span>
             <span><i class="k-ceiling"></i>Ceiling</span>
+          }
+          @if (view.ghostStrategy(); as g) {
+            <span><i class="k-ghost"></i>{{ g.title }}</span>
           }
         </div>
       }
@@ -62,7 +67,7 @@ const STATE_TEXT: Record<CorridorState, string> = {
       </div>
     </div>
     @if (chart(); as ch) {
-      <div class="body">
+      <div class="body" [class.has-climb]="!!view.climb()">
         <div class="plot">
           <div class="yaxis rf-mono" aria-hidden="true">
             <span>{{ fmt(ch.max) }}</span
@@ -112,6 +117,9 @@ const STATE_TEXT: Record<CorridorState, string> = {
                 vector-effect="non-scaling-stroke"
               />
             }
+            @if (ghost(); as g) {
+              <path class="ghost" [attr.d]="g" vector-effect="non-scaling-stroke" />
+            }
             @for (wp of waypoints(); track wp.index) {
               <line
                 class="wp"
@@ -155,6 +163,10 @@ const STATE_TEXT: Record<CorridorState, string> = {
               <dd class="rf-mono">{{ fmt(c.planned - c.ground) }}</dd>
               <dt>Above launch</dt>
               <dd class="rf-mono">{{ fmt(c.planned - launch()) }}</dd>
+              @if (c.ghost !== null) {
+                <dt>{{ view.ghostStrategy()?.title }}</dt>
+                <dd class="rf-mono">{{ fmt(c.ghost) }} MSL</dd>
+              }
               <dt>Floor · ceiling</dt>
               <dd class="rf-mono">{{ fmt(c.floor) }} · {{ fmt(c.ceiling) }}</dd>
               <dt>Margin</dt>
@@ -173,6 +185,9 @@ const STATE_TEXT: Record<CorridorState, string> = {
             <p class="note">The mission changed since this profile was calculated.</p>
           }
         </div>
+        @if (view.climb()) {
+          <fpv-climb-assistant class="climb" />
+        }
       </div>
     } @else {
       <div class="empty">
@@ -259,6 +274,9 @@ const STATE_TEXT: Record<CorridorState, string> = {
     .k-floor {
       background: #f5a524;
     }
+    .k-ghost {
+      background: repeating-linear-gradient(90deg, #c08cff 0 5px, transparent 5px 8px);
+    }
     .k-ceiling {
       background: repeating-linear-gradient(90deg, #8a96a5 0 4px, transparent 4px 6px);
     }
@@ -280,6 +298,9 @@ const STATE_TEXT: Record<CorridorState, string> = {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 290px;
       gap: 16px;
+    }
+    .body.has-climb {
+      grid-template-columns: minmax(0, 1fr) 250px 300px;
     }
     .side dt {
       white-space: nowrap;
@@ -364,6 +385,12 @@ const STATE_TEXT: Record<CorridorState, string> = {
     .plan.is-takeoff {
       stroke: #f5a524;
     }
+    .ghost {
+      fill: none;
+      stroke: #c08cff;
+      stroke-width: 2;
+      stroke-dasharray: 7 5;
+    }
     .wp {
       stroke: var(--rf-text-3);
       stroke-width: 1;
@@ -426,7 +453,18 @@ export class AltitudeDrawerComponent {
 
   protected readonly chart = computed(() => {
     const c = this.view.corridor();
-    return c ? new AltitudeChart(c, this.view.corridorShown()) : null;
+    const ghost = this.ghostProfile();
+    return c ? new AltitudeChart(c, this.view.corridorShown(), ghost ?? []) : null;
+  });
+  /** The ghost strategy's heights, when they are over the same samples as the corridor. */
+  private readonly ghostProfile = computed(() => {
+    const g = this.view.ghostStrategy()?.mslM;
+    return g && g.length === this.view.corridor()?.c.s.length ? g : null;
+  });
+  protected readonly ghost = computed(() => {
+    const g = this.ghostProfile();
+    const ch = this.chart();
+    return g && ch ? ch.profile(g) : null;
   });
   protected readonly launch = computed(() => this.view.result()?.pilot?.groundMslM ?? 0);
 
@@ -449,7 +487,9 @@ export class AltitudeDrawerComponent {
     const state = c.state(c.indexAt(s));
     // Over the ceiling the margin that matters is to the ceiling; everywhere else, to the floor.
     const margin = state === 'high' ? ceiling - planned : planned - floor;
+    const g = this.ghostProfile();
     return {
+      ghost: g ? c.profileAt(g, s) : null,
       s,
       x: ch.x(s),
       planned,

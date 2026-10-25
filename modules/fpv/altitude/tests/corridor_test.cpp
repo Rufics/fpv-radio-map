@@ -34,8 +34,11 @@ json eastLeg(const IWorld& world, double km, double height, const std::string& r
             {"returnToPilot", false}};
 }
 
+/// The corridor alone: the climb assistant's advice is tested in climb_test.cpp.
 json run(const IWorld& world, const json& mission, const json& options = json::object(), const LinkInputs& links = {}) {
-    return analyze({{"mission", mission}, {"options", options}}, world, links);
+    json o = options;
+    if (!o.contains("climbAssist")) o["climbAssist"] = false;
+    return analyze({{"mission", mission}, {"options", o}}, world, links);
 }
 
 double back(const json& r, const char* key) { return r.at("data").at("corridor").at(key).back().get<double>(); }
