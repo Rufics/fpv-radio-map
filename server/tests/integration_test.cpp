@@ -128,6 +128,7 @@ private:
 struct Env {
     fs::path dir;
     std::unique_ptr<FakeOpenMeteo> weather;
+    json config;  ///< the server's config, for a second process on the same database
     std::unique_ptr<Application> app;
     std::thread thread;
     int port = 0;
@@ -190,6 +191,7 @@ protected:
                                     {"open", {{"perMinute", 6000}, {"burst", 1000}}},
                                     {"create", {{"perMinute", 6000}, {"burst", 1000}}},
                                     {"coverage", {{"perMinute", 6000}, {"burst", 1000}}}}}};
+        env->config = cfg;
         env->app = std::make_unique<Application>(Config::fromJson(cfg), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true,
                                                  RFMAP_SQL_DIR);
         env->port = env->app->bindAny();
@@ -768,6 +770,156 @@ TEST_F(Integration, AdminCacheLimitsAndClear) {
     const auto after = call("GET", "/admin/cache", nullptr, admin());
     EXPECT_EQ(after.body[1]["entries"], 0);
     EXPECT_EQ(after.body[2]["entries"], 0);
+}
+
+namespace {
+
+/// A second server process on the same database and module root, as a second pod would be.
+class Peer {
+public:
+    Peer()
+        : app_(Config::fromJson(env->config), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true, RFMAP_SQL_DIR),
+          port_(app_.bindAny()),
+          thread_([this] { app_.serveBound(); }) {}
+    ~Peer() {
+        app_.stop();
+        thread_.join();
+    }
+    Peer(const Peer&) = delete;
+    Peer& operator=(const Peer&) = delete;
+
+    [[nodiscard]] json get(const std::string& path) const {
+        httplib::Client c("127.0.0.1", port_);
+        const auto r = c.Get("/api/v1" + path, {{"Authorization", "Bearer integration-admin-token-0123456789"}});
+        if (!r || r->status != 200) throw std::runtime_error("peer refused " + path);
+        return json::parse(r->body);
+    }
+    /// Whether `seen` holds for the peer's answer to GET `path` within a few seconds.
+    template <class Pred>
+    [[nodiscard]] bool sees(const std::string& path, Pred seen) const {
+        for (int i = 0; i < 200; ++i) {
+            if (seen(get(path))) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        return false;
+    }
+
+private:
+    Application app_;
+    int port_;
+    std::thread thread_;
+};
+
+/// The test database; the suite skips every test without it.
+std::string databaseUrl() {
+    const char* url = std::getenv("RFMAP_TEST_DATABASE_URL");
+    return url ? url : "";
+}
+
+std::string moduleState(const json& modules, const std::string& id) {
+    for (const json& m : modules) {
+        if (m.value("id", "") == id) return m.value("state", "");
+    }
+    return "";
+}
+
+}  // namespace
+
+TEST_F(Integration, AdminSettingsReachEveryServerProcess) {
+    Peer peer;
+    const auto sync = call("GET", "/admin/settings/sync", nullptr, admin());
+    ASSERT_EQ(sync.status, 200) << sync.body;
+    EXPECT_TRUE(sync.body["listen"]["connected"].get<bool>()) << sync.body;
+    EXPECT_EQ(sync.body["topics"].size(), 3u);
+    EXPECT_NE(sync.body["instance"], peer.get("/admin/settings/sync")["instance"]);
+
+    // A switch flipped on one process: the other hears of it at once.
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.uncertainty", {{"enabled", false}}, admin()).status, 200);
+    EXPECT_TRUE(peer.sees("/modules", [](const json& m) { return moduleState(m, "rf.uncertainty") == "disabled"; }));
+
+    // Cache limits too.
+    const auto before = call("GET", "/admin/cache", nullptr, admin()).body;
+    ASSERT_EQ(call("PUT", "/admin/cache", json::array({{{"id", "results-memory"}, {"limitBytes", 3 << 20}}}), admin()).status,
+              200);
+    EXPECT_TRUE(peer.sees("/admin/cache", [](const json& t) { return t[1]["limitBytes"] == 3 << 20; }));
+
+    // A row changed by hand reaches every process on the admin's reset, not before the poll.
+    {
+        pqxx::connection c(databaseUrl());
+        pqxx::work w(c);
+        w.exec("update builtin_modules set enabled = true where id = 'rf.uncertainty'");
+        w.commit();
+    }
+    EXPECT_EQ(call("POST", "/admin/settings/reload?scope=nowhere", nullptr, admin()).status, 422);
+    const auto reset = call("POST", "/admin/settings/reload", nullptr, admin());
+    ASSERT_EQ(reset.status, 200) << reset.body;
+    EXPECT_EQ(reset.body["lastReason"], "admin reset everywhere");
+    EXPECT_EQ(moduleState(call("GET", "/modules").body, "rf.uncertainty"), "active");
+    EXPECT_TRUE(peer.sees("/modules", [](const json& m) { return moduleState(m, "rf.uncertainty") == "active"; }));
+    EXPECT_TRUE(peer.sees("/admin/settings/sync", [](const json& s) { return s["notices"].get<int>() >= 3; }));
+
+    ASSERT_EQ(call("PUT", "/admin/cache", json::array({{{"id", "results-memory"}, {"limitBytes", before[1]["limitBytes"]}}}),
+                   admin())
+                  .status,
+              200);
+}
+
+TEST_F(Integration, SettingsPollCatchesWhatNoNoticeAnnounced) {
+    Database db(databaseUrl(), 1);
+    Logger log;
+    log.setQuiet(true);
+    std::atomic<int> reloads{0};
+    std::atomic<int> fileReloads{0};
+    SettingsSync sync(db, {databaseUrl(), false, std::chrono::seconds(1)}, log);
+    sync.add(SettingsTopic::kCacheLimits, SettingsSync::Source::Database, [&reloads] { ++reloads; });
+    sync.add(SettingsTopic::kModules, SettingsSync::Source::Files, [&fileReloads] { ++fileReloads; });
+    sync.start();
+    EXPECT_EQ(reloads, 1);  // the first read after start
+    EXPECT_EQ(fileReloads, 0);
+    sync.pollNow();
+    EXPECT_EQ(reloads, 1) << "nothing changed";
+
+    db.tx([](pqxx::work& w) {
+        w.exec("insert into settings(key, value) values ('test.poll', '1'::jsonb) "
+               "on conflict (key) do update set value = excluded.value");
+    });
+    for (int i = 0; i < 100 && reloads < 2; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_EQ(reloads, 2);
+    EXPECT_EQ(fileReloads, 0) << "file topics change only by notice";
+
+    // Its own notices are skipped; others' reload their topic, an unknown topic everything.
+    sync.handle(ChangeNotice(SettingsTopic::kModules, sync.instance()));
+    EXPECT_EQ(fileReloads, 0);
+    sync.handle(ChangeNotice(SettingsTopic::kModules, "elsewhere"));
+    EXPECT_EQ(fileReloads, 1);
+    sync.handle(ChangeNotice("from.a.newer.server", "elsewhere"));
+    EXPECT_EQ(fileReloads, 2);
+    EXPECT_EQ(reloads, 3);
+    EXPECT_FALSE(sync.status()["listen"]["enabled"].get<bool>());
+    db.tx([](pqxx::work& w) { w.exec("delete from settings where key = 'test.poll'"); });
+}
+
+TEST_F(Integration, SettingsListenerReconnectsAndReloadsWhatItMayHaveMissed) {
+    const std::string url = databaseUrl();
+    Database db(url, 1);
+    Logger log;
+    log.setQuiet(true);
+    std::atomic<int> fileReloads{0};
+    SettingsSync sync(db, {url, true, std::chrono::seconds(3600)}, log);
+    sync.add(SettingsTopic::kModules, SettingsSync::Source::Files, [&fileReloads] { ++fileReloads; });
+    sync.start();
+    ASSERT_TRUE(sync.status()["listen"]["connected"].get<bool>());
+
+    // The database drops every listener, as a failover or a restart of PostgreSQL would.
+    db.tx([](pqxx::work& w) {
+        w.exec("select pg_terminate_backend(pid) from pg_stat_activity "
+               "where pid <> pg_backend_pid() and query ilike 'listen%'");
+    });
+    for (int i = 0; i < 200 && fileReloads == 0; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_EQ(fileReloads, 1) << sync.status().dump();
+    const json status = sync.status();
+    EXPECT_TRUE(status["listen"]["connected"].get<bool>()) << status.dump();
+    EXPECT_EQ(status["lastReason"], "listener reconnected");
 }
 
 TEST_F(Integration, MetricsForPrometheus) {

@@ -8,9 +8,10 @@
 
 namespace rfmap {
 
-/// The admin API: module settings and reload, the trusted keys, caches and metrics. Modules
-/// are installed and keys are trusted on the machine with the rfmod CLI; this API only shows
-/// them and picks up the result.
+/// The admin API: module settings and reload, the trusted keys, caches, metrics and the
+/// settings sync between server processes. Modules are installed and keys are trusted on the
+/// machine with the rfmod CLI; this API only shows them and picks up the result. Every change
+/// is announced to the other processes (SettingsSync).
 class AdminApi {
 public:
     using MetricsText = std::function<std::string()>;
@@ -26,6 +27,8 @@ public:
     void putCache(const HttpRequest& req, HttpReply& res) const;
     void deleteCache(const HttpRequest& req, HttpReply& res) const;
     void getMetrics(const HttpRequest& req, HttpReply& res) const;
+    void getSettingsSync(const HttpRequest& req, HttpReply& res) const;
+    void postSettingsReload(const HttpRequest& req, HttpReply& res) const;
 
 private:
     /// Applies {enabled?, options?} to an installed module; HttpError 422 when refused.

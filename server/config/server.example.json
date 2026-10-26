@@ -19,7 +19,17 @@
   "database": {
     // Prefer RFMAP_DATABASE_URL so the password stays out of the file.
     "url": "postgresql://rfmap@postgis:5432/rfmap",
-    "poolSize": 8
+    "poolSize": 8,
+    // The settings listener's own connection; empty = url. Behind a transaction-mode pooler
+    // (PgBouncer) point it at PostgreSQL directly: LISTEN needs a session of its own.
+    "listenUrl": ""
+  },
+  "settingsSync": {
+    // Admin settings are kept in memory per process. A change is announced on the
+    // rfmap_changes channel and the other processes reload it at once; the fingerprint poll
+    // catches what no notice announced (a lost one, a row changed by hand).
+    "listen": true,
+    "pollSeconds": 60
   },
   "admin": {
     // At least 24 random characters, compared in constant time. Prefer RFMAP_ADMIN_TOKEN.

@@ -56,9 +56,11 @@ Services::Services(const Config& config, Logger& log, const std::string& ownerKe
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
+    startSettingsSync();
 }
 
 Services::~Services() {
+    settings_.reset();  // its thread reloads the modules: stop it before they go
     jobs_.reset();  // running calculations hold module instances: finish them before the registry goes
     modules_.registry.reset();
 }
@@ -214,6 +216,20 @@ void Services::buildModules(const std::string& ownerKeyText) {
     flightLogs_ = std::make_unique<FlightLogService>(*modules_.runner, *store_.schemas, store_.flightLogs.get(),
                                                      *store_.builtins,
                                                      FlightLogService::Limits{config_.server.maxUploadBytes, 200});
+}
+
+void Services::startSettingsSync() {
+    const Config::Database& db = config_.database;
+    settings_ = std::make_unique<SettingsSync>(
+        *store_.db,
+        SettingsSync::Options{db.listenUrl.empty() ? db.url : db.listenUrl, config_.settingsSync.listen,
+                              std::chrono::seconds(config_.settingsSync.pollSeconds)},
+        log_);
+    using Source = SettingsSync::Source;
+    settings_->add(SettingsTopic::kBuiltins, Source::Database, [this] { store_.builtins->reload(); });
+    settings_->add(SettingsTopic::kCacheLimits, Source::Database, [this] { resultStore_.admin->loadStoredLimits(); });
+    settings_->add(SettingsTopic::kModules, Source::Files, [this] { reloadModules(); });
+    settings_->start();
 }
 
 void Services::reloadModules() const {

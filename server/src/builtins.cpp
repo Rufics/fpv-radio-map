@@ -63,6 +63,29 @@ BuiltinModules::BuiltinModules(Database* db, SchemaRegistry& schemas, std::strin
     });
 }
 
+void BuiltinModules::reload() {
+    if (!db_) return;
+    struct Row {
+        std::string id;
+        bool enabled;
+        json options;
+    };
+    const auto rows = db_->tx([](pqxx::work& w) {
+        std::vector<Row> out;
+        for (const auto& r : w.exec("select id, enabled, options::text from builtin_modules")) {
+            out.push_back({r[0].as<std::string>(), r[1].as<bool>(), json::parse(r[2].as<std::string>())});
+        }
+        return out;
+    });
+    std::lock_guard lock(mutex_);
+    for (const Row& row : rows) {
+        const auto it = entries_.find(row.id);
+        if (it == entries_.end()) continue;  // a module a newer server version builds in
+        it->second.enabled = row.enabled;
+        it->second.options = row.options;
+    }
+}
+
 bool BuiltinModules::isBuiltin(const std::string& id) const { return entries_.contains(id); }
 
 bool BuiltinModules::enabled(const std::string& id) const {

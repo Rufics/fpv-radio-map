@@ -41,7 +41,7 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
         "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "map", "metrics",
-        "enabled"});
+        "enabled", "listenUrl", "settingsSync", "listen", "pollSeconds"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -68,6 +68,24 @@ void read(const json& obj, const char* key, T& out) {
 
 void readPath(const json& obj, const char* key, std::filesystem::path& out) {
     if (obj.is_object() && obj.contains(key) && obj.at(key).is_string()) out = obj.at(key).get<std::string>();
+}
+
+Config::SettingsSync readSettingsSync(const json& sync) {
+    Config::SettingsSync out;
+    read(sync, "listen", out.listen);
+    read(sync, "pollSeconds", out.pollSeconds);
+    if (out.pollSeconds < 1 || out.pollSeconds > 3600) {
+        throw std::invalid_argument("settingsSync.pollSeconds must be between 1 and 3600");
+    }
+    return out;
+}
+
+/// Connection URLs carry the password: the admin page shows that they are set, not what they are.
+void hideDatabaseUrls(json& raw) {
+    if (!raw.contains("database") || !raw["database"].is_object()) return;
+    for (const char* secret : {"url", "listenUrl"}) {
+        if (raw["database"].contains(secret)) raw["database"][secret] = "(set)";
+    }
 }
 
 }  // namespace
@@ -126,6 +144,8 @@ Config Config::fromJson(json doc) {
     const json& db = doc.value("database", json::object());
     read(db, "url", c.database.url);
     read(db, "poolSize", c.database.poolSize);
+    read(db, "listenUrl", c.database.listenUrl);
+    c.settingsSync = readSettingsSync(doc.value("settingsSync", json::object()));
 
     read(doc.value("admin", json::object()), "token", c.adminToken);
     read(doc.value("metrics", json::object()), "enabled", c.metrics.enabled);
@@ -210,7 +230,7 @@ Config Config::fromJson(json doc) {
 
     c.raw = doc;
     if (c.raw.contains("admin")) c.raw["admin"]["token"] = "(set)";
-    if (c.raw.contains("database") && c.raw["database"].contains("url")) c.raw["database"]["url"] = "(set)";
+    hideDatabaseUrls(c.raw);
     return c;
 }
 

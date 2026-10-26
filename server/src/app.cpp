@@ -249,6 +249,8 @@ void Application::adminRoutes(const std::string& api) {
     s.Put(api + "/admin/cache", route("admin", on(a, &AdminApi::putCache)));
     s.Delete(api + "/admin/cache", route("admin", on(a, &AdminApi::deleteCache)));
     s.Get(api + "/admin/metrics", route("admin", on(a, &AdminApi::getMetrics)));
+    s.Get(api + "/admin/settings/sync", route("admin", on(a, &AdminApi::getSettingsSync)));
+    s.Post(api + "/admin/settings/reload", route("admin", on(a, &AdminApi::postSettingsReload)));
 }
 
 }  // namespace rfmap

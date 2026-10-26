@@ -24,8 +24,10 @@ void AdminApi::putModule(const HttpRequest& req, HttpReply& res) const {
         std::optional<json> options;
         if (b.contains("options")) options = b.at("options");
         s_.builtins().set(id, enabled, options);
+        s_.settings().publish(SettingsTopic::kBuiltins);
     } else {
         updateInstalled(id, b);
+        s_.settings().publish(SettingsTopic::kModules);
     }
     res.send(200, s_.catalog().list(true));
 }
@@ -33,6 +35,7 @@ void AdminApi::putModule(const HttpRequest& req, HttpReply& res) const {
 void AdminApi::postModulesReload(const HttpRequest& req, HttpReply& res) const {
     admin_.require(req);
     s_.reloadModules();
+    s_.settings().publish(SettingsTopic::kModules);
     s_.log().info("modules", "reloaded the module root and trust store on request");
     res.send(200, {{"modules", s_.catalog().list(true)}, {"notices", s_.registry().notices()}});
 }
@@ -64,6 +67,7 @@ void AdminApi::getCache(const HttpRequest& req, HttpReply& res) const {
 void AdminApi::putCache(const HttpRequest& req, HttpReply& res) const {
     admin_.require(req);
     s_.caches().setLimits(req.body());
+    s_.settings().publish(SettingsTopic::kCacheLimits);
     res.send(200, s_.caches().tiers());
 }
 
@@ -77,6 +81,20 @@ void AdminApi::getMetrics(const HttpRequest& req, HttpReply& res) const {
     admin_.require(req);
     if (!s_.config().metrics.enabled) throw HttpError(404, "metrics are off; set metrics.enabled in the server config");
     res.text(200, metrics_(), "text/plain; version=0.0.4; charset=utf-8");
+}
+
+void AdminApi::getSettingsSync(const HttpRequest& req, HttpReply& res) const {
+    admin_.require(req);
+    res.send(200, s_.settings().status());
+}
+
+void AdminApi::postSettingsReload(const HttpRequest& req, HttpReply& res) const {
+    admin_.require(req);
+    const std::string scope = req.hasParam("scope") ? req.param("scope") : "all";
+    if (scope != "all" && scope != "local") throw HttpError(422, "scope is all or local");
+    s_.settings().reloadAll(scope == "all");
+    s_.log().info("settings", "reloaded the settings on request, scope " + scope);
+    res.send(200, s_.settings().status());
 }
 
 }  // namespace rfmap
