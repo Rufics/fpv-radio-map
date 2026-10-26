@@ -3,8 +3,29 @@
 #include "route_workload.hpp"
 
 #include <format>
+#include <thread>
 
 namespace rfmap {
+
+namespace {
+
+/// The calculation gate for the config, its limits logged.
+std::unique_ptr<CalcGate> makeCalcGate(const Config& config, Logger& log) {
+    auto gate = std::make_unique<CalcGate>(
+        CalcGate::limitsFor(config.calc, config.server.threads, std::thread::hardware_concurrency()));
+    const CalcGate::Limits& l = gate->limits();
+    log.info("startup",
+             std::format("calculations: {} at once, {} waiting up to {} ms", l.concurrency, l.queue, l.wait.count()));
+    if (l.concurrency + l.queue >= config.server.threads) {
+        log.warn("startup", "calc.concurrency + calc.queue leave no server thread free during a burst of routes");
+    }
+    return gate;
+}
+
+}  // namespace
+
+MissionApi::MissionApi(const Services& services)
+    : s_(services), calcGate_(makeCalcGate(services.config(), services.log())) {}
 
 Principal MissionApi::session(const HttpRequest& req) const { return s_.auth().authenticate(req.bearer()); }
 
@@ -125,7 +146,7 @@ void MissionApi::postCalcPath(const HttpRequest& req, HttpReply& res) const {
     (void)session(req);
     const json b = req.body();
     s_.schemas().require("calc-path", b);
-    res.send(200, s_.calcGate().run([this, &b] { return s_.calc().path(b); }));
+    res.send(200, calcGate_->run([this, &b] { return s_.calc().path(b); }));
 }
 
 void MissionApi::postCalcRoute(const HttpRequest& req, HttpReply& res) const {
@@ -138,7 +159,7 @@ void MissionApi::postCalcRoute(const HttpRequest& req, HttpReply& res) const {
         revision = stored->revision;
     }
     // Checked and sized before the slot is taken, so a refused request never holds one.
-    const json result = s_.calcGate().run([this, &mission, &revision] { return s_.calc().route(mission, revision); });
+    const json result = calcGate_->run([this, &mission, &revision] { return s_.calc().route(mission, revision); });
     if (revision.has_value() && p.role == Role::Edit) s_.missions().storeResultIfCurrent(p.missionId, mission, result);
     res.send(200, result);
 }

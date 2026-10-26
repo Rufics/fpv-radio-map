@@ -5,6 +5,8 @@
 // Retry-After, so a burst of one kind of request cannot hold every request thread while health
 // checks and map viewers wait behind it. PinGate and CalcGate are the two configurations.
 
+#include "metrics.hpp"
+
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -56,6 +58,8 @@ public:
         std::uint64_t rejected{};
     };
     [[nodiscard]] Stats stats() const;
+    /// The gate as the metrics see it, under `name`.
+    [[nodiscard]] GateSample sample(std::string name) const;
     [[nodiscard]] const Limits& limits() const { return limits_; }
 
 private:

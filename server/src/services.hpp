@@ -3,7 +3,6 @@
 #include "auth.hpp"
 #include "builtins.hpp"
 #include "cache_admin.hpp"
-#include "calc_gate.hpp"
 #include "calculator.hpp"
 #include "config.hpp"
 #include "database.hpp"
@@ -29,7 +28,6 @@
 #include <filesystem>
 #include <memory>
 #include <string>
-#include <vector>
 
 namespace rfmap {
 
@@ -69,10 +67,6 @@ public:
     [[nodiscard]] FlightLogService& flightLogs() const { return *flightLogs_; }
     [[nodiscard]] JobManager& jobs() const { return *jobs_; }
     [[nodiscard]] RateLimiter& limiter() const { return *limiter_; }
-    /// The bulkhead POST /calc/path and /calc/route run in.
-    [[nodiscard]] CalcGate& calcGate() const { return *calcGate_; }
-    /// The bulkheads as the metrics see them.
-    [[nodiscard]] std::vector<GateSample> gates() const;
 
     /// Re-reads the trust store and the module root: what the rfmod CLI installed or removed.
     void reloadModules() const;
@@ -88,7 +82,6 @@ private:
     void openTerrain();
     void buildCaches();
     void buildModules(const std::string& ownerKeyText);
-    [[nodiscard]] std::unique_ptr<CalcGate> makeCalcGate() const;
 
     /// Persistent state: the database and the stores and services built on it.
     struct Stores {
@@ -145,7 +138,6 @@ private:
     std::unique_ptr<FlightLogService> flightLogs_;
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
-    std::unique_ptr<CalcGate> calcGate_;
 };
 
 }  // namespace rfmap

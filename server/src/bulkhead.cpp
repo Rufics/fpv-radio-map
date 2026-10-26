@@ -11,7 +11,9 @@ namespace rfmap {
 Bulkhead::Bulkhead(Limits limits, std::string busyMessage, const std::string& name)
     : limits_(limits), busyMessage_(std::move(busyMessage)) {
     if (limits_.concurrency < 1) throw std::invalid_argument(name + " needs at least one slot");
-    if (limits_.queue < 0 || limits_.wait.count() < 0) throw std::invalid_argument(name + " queue and wait must be >= 0");
+    if (limits_.queue < 0 || limits_.wait.count() < 0) {
+        throw std::invalid_argument(name + " queue and wait must be >= 0");
+    }
 }
 
 Bulkhead::Permit::~Permit() {
@@ -62,6 +64,11 @@ void Bulkhead::reject() {
 Bulkhead::Stats Bulkhead::stats() const {
     std::lock_guard lock(mutex_);
     return {active_, waiting_, rejected_};
+}
+
+GateSample Bulkhead::sample(std::string name) const {
+    const Stats s = stats();
+    return {std::move(name), limits_.concurrency, s.active, s.waiting, s.rejected};
 }
 
 }  // namespace rfmap
