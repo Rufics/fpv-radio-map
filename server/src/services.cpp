@@ -78,10 +78,18 @@ void Services::checkStartup(bool ownerKeyIsDev) const {
 }
 
 void Services::openDatabase(const std::filesystem::path& sqlDir) {
-    store_.db = std::make_unique<Database>(config_.database.url, config_.database.poolSize);
+    const Config::Database& db = config_.database;
+    store_.db = std::make_unique<Database>(
+        db.url, Database::Settings{db.poolSize, std::chrono::milliseconds(db.leaseTimeoutMs),
+                                   std::chrono::milliseconds(db.statementTimeoutMs)});
+    const std::string statementTimeout =
+        db.statementTimeoutMs > 0 ? std::format("{} ms", db.statementTimeoutMs) : std::string("from the server");
+    log_.info("startup", std::format("database: {} connections, lease timeout {} ms, statement timeout {}", db.poolSize,
+                                     db.leaseTimeoutMs, statementTimeout));
     // A breaking step, or a database newer than this server, stops the start: see migrations.hpp.
+    // A migration may rewrite a large table, so the statement timeout does not apply to it.
     const MigrationCatalog migrations(sqlDir);
-    store_.db->with([this, &migrations](pqxx::connection& c) {
+    store_.db->withoutStatementTimeout([this, &migrations](pqxx::connection& c) {
         return SchemaMigrator(migrations, {config_.modules.root, config_.modules.trustStore},
                               [this](const std::string& line) { log_.info("startup", line); })
             .migrate(c, {});

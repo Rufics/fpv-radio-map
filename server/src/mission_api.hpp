@@ -1,8 +1,10 @@
 #pragma once
 
+#include "calc_gate.hpp"
 #include "request.hpp"
 #include "services.hpp"
 
+#include <memory>
 #include <string_view>
 
 namespace rfmap {
@@ -10,7 +12,10 @@ namespace rfmap {
 /// Health, missions, share links, calculations, jobs and the elevation profile.
 class MissionApi {
 public:
-    explicit MissionApi(const Services& services) : s_(services) {}
+    explicit MissionApi(const Services& services);
+
+    /// The bulkhead POST /calc/path and /calc/route run in.
+    [[nodiscard]] const CalcGate& calcGate() const { return *calcGate_; }
 
     void getHealth(const HttpRequest& req, HttpReply& res) const;
     void postMission(const HttpRequest& req, HttpReply& res) const;
@@ -42,6 +47,7 @@ private:
     void checkRouteSize(const json& mission) const;
 
     const Services& s_;
+    std::unique_ptr<CalcGate> calcGate_;
 };
 
 }  // namespace rfmap

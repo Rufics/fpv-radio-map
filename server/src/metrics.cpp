@@ -111,6 +111,20 @@ void writeDatabase(PrometheusText& out, const DbPoolStats& db) {
     one("rfmap_db_pool_leases_total", "counter", "Connections lent since start.", static_cast<double>(db.leases));
     one("rfmap_db_pool_wait_seconds_total", "counter", "Time callers waited for a connection.", db.waitSeconds);
     one("rfmap_db_pool_reconnects_total", "counter", "Broken connections replaced.", static_cast<double>(db.reconnects));
+    one("rfmap_db_pool_lease_timeouts_total", "counter", "Callers turned away after waiting the lease timeout.",
+        static_cast<double>(db.leaseTimeouts));
+}
+
+void writeGates(PrometheusText& out, const std::vector<GateSample>& gates) {
+    const auto each = [&](std::string_view name, std::string_view type, std::string_view help, auto value) {
+        out.family(name, type, help);
+        for (const GateSample& g : gates) out.sample(name, static_cast<double>(value(g)), {{"gate", g.gate}});
+    };
+    each("rfmap_gate_slots", "gauge", "Callers the gate lets run at once.", [](const GateSample& g) { return g.slots; });
+    each("rfmap_gate_active", "gauge", "Callers running inside the gate.", [](const GateSample& g) { return g.active; });
+    each("rfmap_gate_waiting", "gauge", "Callers waiting for a slot.", [](const GateSample& g) { return g.waiting; });
+    each("rfmap_gate_rejected_total", "counter", "Callers turned away with 503.",
+         [](const GateSample& g) { return g.rejected; });
 }
 
 void writeJobs(PrometheusText& out, const JobStats& jobs) {
@@ -216,6 +230,7 @@ void writeServerMetrics(PrometheusText& out, const ServerSample& sample) {
     writeProcess(out, sample.process);
     writePools(out, sample.pools);
     writeDatabase(out, sample.db);
+    writeGates(out, sample.gates);
     writeJobs(out, sample.jobs);
     writeCaches(out, sample.caches);
 }

@@ -122,6 +122,7 @@ std::string Application::metricsText() const {
                     {"job-runners", sample.jobs.runners},
                     {"job-cells", sample.jobs.cells}};
     sample.db = services_.db().stats();
+    sample.gates = {services_.auth().pinGate().sample("pin"), missionApi_.calcGate().sample("calc")};
     sample.caches = {{"dem-blocks", services_.blocks().stats()},
                      {"results-memory", services_.results().memoryStats()},
                      {"results-table", services_.results().tableCounts(), false}};
