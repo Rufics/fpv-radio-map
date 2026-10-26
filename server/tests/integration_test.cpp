@@ -1279,3 +1279,39 @@ TEST_F(Integration, FlightLogsDecodeImportReplayAndCompareWithThePlan) {
     op.remove("fpv.blackbox");
     EXPECT_FALSE(has(call("GET", "/modules").body, "id", "fpv.blackbox"));
 }
+
+TEST_F(Integration, HostileInputsAreRefusedNotFatal) {
+    // Nested 400 000 levels deep (within maxBodyBytes): a recursive copy or dump of it
+    // overflowed the stack and took the whole server down, before any session was asked for.
+    json deep = mission();
+    const std::string nested = std::string(400'000, '[') + std::string(400'000, ']');
+    std::string body = deep.dump();
+    body.insert(body.size() - 1, R"(,"modules":{"x":{"y":)" + nested + "}}");
+    httplib::Client c("127.0.0.1", env->port);
+    const auto refused = c.Post("/api/v1/missions", body, "application/json");
+    ASSERT_TRUE(refused);
+    EXPECT_EQ(refused->status, 400) << refused->body;
+    EXPECT_EQ(call("GET", "/health").status, 200);
+
+    // A JSON body announced larger than server.maxBodyBytes is answered before it is read.
+    httplib::Client raw("127.0.0.1", env->port);
+    httplib::Request announce;
+    announce.method = "POST";
+    announce.path = "/api/v1/missions";
+    announce.set_header("Content-Length", "5000000");
+    announce.set_header("Content-Type", "application/json");
+    announce.set_header("Connection", "close");
+    const auto tooLarge = raw.send(announce);
+    ASSERT_TRUE(tooLarge);
+    EXPECT_EQ(tooLarge->status, 413);
+
+    // The elevation profile needs no session, so it has the bounds of every calculated path.
+    EXPECT_EQ(call("GET", "/elevation/profile?from=48.5,35.2&to=48.5,35.2").status, 422);
+    EXPECT_EQ(call("GET", "/elevation/profile?from=-60,-170&to=70,170").status, 422);
+
+    // A route whose legs cross a continent is refused before a single profile is built.
+    json far = shortMission(point(10.0, 5.0, 100));
+    const auto huge = call("POST", "/calc/route", far, bearer(sessionFor(shortMission(point(48.52, 35.22, 100)))));
+    EXPECT_EQ(huge.status, 422) << huge.body;
+    EXPECT_GT(huge.body["samples"].get<double>(), huge.body["maxSamples"].get<double>()) << huge.body;
+}

@@ -47,6 +47,7 @@ add_library(rfmap_server_lib STATIC
   src/route_altitude.cpp
   src/route_evaluator.cpp
   src/route_preparation.cpp
+  src/route_workload.cpp
   src/coverage_engine.cpp
   src/calculator.cpp
   src/rate_limiter.cpp

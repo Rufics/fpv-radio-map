@@ -39,7 +39,8 @@ public:
     [[nodiscard]] std::optional<TimePoint> time(const char* name) const;
     /// The revision in an If-Match header ("3", W/"3"); HttpError 428 without one.
     [[nodiscard]] int ifMatchRevision() const;
-    /// The body as JSON: 413 above the configured size, 400 when not JSON.
+    /// The body as JSON: 413 above the configured size, 400 when not JSON or nested deeper
+    /// than rfmod::BoundedJson::kMaxDepth.
     [[nodiscard]] json body() const;
     /// The body as the bytes of an uploaded file, bounded by the server's upload limit.
     [[nodiscard]] const std::string& file() const;
@@ -71,6 +72,23 @@ public:
 
 private:
     httplib::Response& response_;
+};
+
+/// How large a request body may be, decided from its Content-Length before httplib reads it.
+/// Only the flight log routes take files (server.maxUploadBytes); every other body is JSON and
+/// is refused above server.maxBodyBytes without first holding the whole upload in memory.
+class BodyLimit {
+public:
+    explicit BodyLimit(const Config::Server& server) : server_(server) {}
+
+    /// The limit for a request to `path`.
+    [[nodiscard]] std::size_t forPath(std::string_view path) const;
+    /// Whether a declared Content-Length is over the limit of `path`. A missing or unreadable
+    /// length is not: httplib reads (and bounds) those bodies itself.
+    [[nodiscard]] bool exceeded(std::string_view path, std::string_view contentLength) const;
+
+private:
+    const Config::Server& server_;
 };
 
 /// The admin API's one credential: a bearer token from the config, compared in constant time.

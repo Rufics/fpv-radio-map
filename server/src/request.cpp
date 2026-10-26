@@ -3,7 +3,9 @@
 #include "security.hpp"
 
 #include <httplib.h>
+#include <rfmod/bounded_json.hpp>
 
+#include <charconv>
 #include <cmath>
 #include <regex>
 
@@ -81,9 +83,11 @@ int HttpRequest::ifMatchRevision() const {
 json HttpRequest::body() const {
     if (request_.body.size() > server_.maxBodyBytes) throw HttpError(413, "request body too large");
     try {
-        return json::parse(request_.body);
+        return rfmod::BoundedJson::parse(request_.body);
     } catch (const json::exception& e) {
         throw HttpError(400, std::string("body is not valid JSON: ") + e.what());
+    } catch (const rfmod::JsonTooDeepError& e) {
+        throw HttpError(400, std::string("body is not accepted: ") + e.what());
     }
 }
 
@@ -133,6 +137,19 @@ void HttpReply::text(int status, const std::string& body, const char* contentTyp
 void HttpReply::header(const char* name, const std::string& value) { response_.set_header(name, value); }
 
 int HttpReply::status() const { return response_.status; }
+
+std::size_t BodyLimit::forPath(std::string_view path) const {
+    const bool upload = path.ends_with("/flightlogs") || path.ends_with("/flightlogs/decode");
+    return upload ? server_.maxUploadBytes : server_.maxBodyBytes;
+}
+
+bool BodyLimit::exceeded(std::string_view path, std::string_view contentLength) const {
+    std::size_t declared = 0;
+    const char* end = contentLength.data() + contentLength.size();
+    const auto [ptr, ec] = std::from_chars(contentLength.data(), end, declared);
+    if (ec == std::errc::result_out_of_range) return true;
+    return ec == std::errc{} && ptr == end && declared > forPath(path);
+}
 
 bool AdminToken::presentedBy(const HttpRequest& request) const {
     const std::string t = request.bearer();

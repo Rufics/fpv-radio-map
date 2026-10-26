@@ -35,7 +35,7 @@
       "required": ["code", "severity", "message"],
       "additionalProperties": false,
       "properties": {
-        "code": { "type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9-]*$" },
+        "code": { "type": "string", "maxLength": 64, "pattern": "^[a-z][a-z0-9-]{0,63}$" },
         "severity": { "enum": ["info", "warn", "blocked"] },
         "message": { "type": "string", "maxLength": 600 },
         "fix": { "type": "string", "maxLength": 600, "description": "What the pilot can change so the next log has it" }

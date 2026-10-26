@@ -67,6 +67,34 @@ TEST_F(ValidationTest, LongFormattedStringIsRefusedNotMatched) {
     EXPECT_NE(std::find(p.begin(), p.end(), "/time/utc"), p.end());
 }
 
+TEST_F(ValidationTest, LongPatternedStringFromADecoderIsRefusedNotMatched) {
+    // A decoder (third-party code) answers the flightlog document; the "code" pattern's regex
+    // recursed once per character and a megabyte-long code overflowed the stack.
+    json note = {{"code", std::string(1'000'000, 'a')}, {"severity", "info"}, {"message", "m"}};
+    const json doc = {{"logs", json::array({{{"notes", json::array({note})}}})}};
+    const auto p = pointers("flightlog", doc);
+    EXPECT_NE(std::find(p.begin(), p.end(), "/logs/0/notes/0/code"), p.end());
+}
+
+TEST_F(ValidationTest, MissionSizesAndRangesAreBounded) {
+    json many = goodMission();
+    many["waypoints"] = json::array();
+    for (int i = 0; i < 1001; ++i) many["waypoints"].push_back({{"lat", 48.54}, {"lon", 35.21}, {"aglM", 100}});
+    EXPECT_EQ(pointers("mission", many), std::vector<std::string>{"/waypoints"});
+    many["waypoints"].erase(1000);
+    EXPECT_TRUE(schemas.check("mission", many).empty());
+
+    json high = goodMission();
+    high["waypoints"][0]["aglM"] = 1e300;
+    high["pilot"]["label"] = std::string(121, 'x');
+    high["links"]["control"]["radio"] = std::string(65, 'r');
+    high["links"]["control"]["requiredMarginDb"] = 1e9;
+    const auto p = pointers("mission", high);
+    for (const char* field : {"/waypoints/0/aglM", "/pilot/label", "/links/control/radio", "/links/control/requiredMarginDb"}) {
+        EXPECT_NE(std::find(p.begin(), p.end(), field), p.end()) << field;
+    }
+}
+
 TEST_F(ValidationTest, RequireThrows422WithTheReport) {
     json m = goodMission();
     m.erase("evaluate");
@@ -159,6 +187,13 @@ TEST(ConfigTest, EnvironmentOverridesTheFile) {
     // A zero cap would silently become the policy's 1 MB / 1 ms floor and time every call out.
     EXPECT_THROW(Config::fromJson({{"modules", {{"maxMemoryMb", 0}}}}), std::invalid_argument);
     EXPECT_THROW(Config::fromJson({{"modules", {{"maxTimeoutMs", 0}}}}), std::invalid_argument);
+    EXPECT_THROW(Config::fromJson({{"calc", {{"maxRouteSamples", 0}}}}), std::invalid_argument);
+}
+
+TEST(ConfigTest, RouteSampleLimit) {
+    EXPECT_EQ(Config::fromJson(json::object()).calc.maxRouteSamples, Config::Calc{}.maxRouteSamples);
+    EXPECT_EQ(Config::fromJson({{"calc", {{"maxRouteSamples", 1e6}}}}).calc.maxRouteSamples, 1e6);
+    EXPECT_EQ(Config::load({}, {{"RFMAP__CALC__MAXROUTESAMPLES", "2000"}}).calc.maxRouteSamples, 2000.0);
 }
 
 TEST(ConfigTest, MetricsAreOffUnlessEnabled) {

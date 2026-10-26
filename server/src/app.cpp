@@ -138,6 +138,15 @@ void Application::configureServer() {
         return std::make_unique<CountingTaskQueue>(static_cast<std::size_t>(threads), httpMetrics_).release();
     };
     s.set_payload_max_length(config_.server.maxUploadBytes);
+    // Runs before httplib reads the body: a JSON request announcing more than maxBodyBytes is
+    // answered at once instead of after up to maxUploadBytes have been buffered for it.
+    s.set_pre_routing_handler([limit = BodyLimit(config_.server)](const Req& req, Res& res) {
+        if (!req.has_header("Content-Length") || !limit.exceeded(req.path, req.get_header_value("Content-Length"))) {
+            return httplib::Server::HandlerResponse::Unhandled;
+        }
+        sendJson(res, 413, {{"message", "request body too large"}});
+        return httplib::Server::HandlerResponse::Handled;
+    });
     s.set_read_timeout(30, 0);
     s.set_write_timeout(120, 0);
     s.set_logger([this](const Req& req, const Res& res) {

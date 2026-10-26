@@ -54,7 +54,8 @@
         "$ref": "#/$defs/waypoint"
       },
       "minItems": 1,
-      "description": "Route in flight order; the last point is the target."
+      "description": "Route in flight order; the last point is the target. At most 1000 waypoints; the server also bounds the work of one route calculation (calc.maxRouteSamples).",
+      "maxItems": 1000
     },
     "returnToPilot": {
       "type": "boolean",
@@ -91,18 +92,21 @@
     },
     "drone": {
       "type": "string",
-      "description": "Drone profile id"
+      "description": "Drone profile id",
+      "maxLength": 64
     },
     "battery": {
       "type": "string",
-      "description": "Battery id"
+      "description": "Battery id",
+      "maxLength": 64
     },
     "modules": {
       "type": "object",
       "description": "Opt-in modules for this mission, with their options.",
       "additionalProperties": {
         "type": "object"
-      }
+      },
+      "maxProperties": 64
     },
     "coverage": {
       "type": "object",
@@ -118,7 +122,8 @@
         },
         "droneAglM": {
           "type": "number",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "maximum": 100000
         }
       }
     }
@@ -145,10 +150,12 @@
         "aglM": {
           "type": "number",
           "minimum": 0,
-          "description": "Height above ground; MSL is computed from the DEM."
+          "description": "Height above ground; MSL is computed from the DEM.",
+          "maximum": 100000
         },
         "label": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 120
         }
       }
     },
@@ -173,10 +180,12 @@
         "aglM": {
           "type": "number",
           "minimum": 0,
-          "description": "Antenna height above the ground at the pilot, in both altitude references."
+          "description": "Antenna height above the ground at the pilot, in both altitude references.",
+          "maximum": 100000
         },
         "label": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 120
         }
       }
     },
@@ -200,7 +209,8 @@
         "aglM": {
           "type": "number",
           "minimum": 0,
-          "description": "Height above the ground under the drone (altitudeRef agl); MSL is computed from the DEM."
+          "description": "Height above the ground under the drone (altitudeRef agl); MSL is computed from the DEM.",
+          "maximum": 100000
         },
         "altM": {
           "type": "number",
@@ -216,7 +226,8 @@
           "description": "Who sets the height. manual: the height field of the mission's altitudeRef (aglM or altM) is the user's and is never changed. auto: the server sets it before the calculation (route.prepare, fpv.altitude) and a stored value is only the last one it set. Without the field a waypoint with a height is manual and one without is auto."
         },
         "label": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 120
         }
       }
     },
@@ -231,20 +242,26 @@
       ],
       "properties": {
         "radio": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 64
         },
         "txPowerDbm": {
-          "type": "number"
+          "type": "number",
+          "minimum": -60,
+          "maximum": 70
         },
         "groundAntenna": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 64
         },
         "airAntenna": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 64
         },
         "requiredMarginDb": {
           "type": "number",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 100
         }
       }
     }

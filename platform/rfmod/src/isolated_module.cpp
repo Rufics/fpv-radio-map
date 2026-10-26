@@ -1,5 +1,7 @@
 #include "rfmod/host.hpp"
 
+#include "rfmod/bounded_json.hpp"
+
 #include "worker_exec.hpp"
 
 #include <fcntl.h>
@@ -170,7 +172,7 @@ void IsolatedModule::acceptReady(const json& ready) {
                                       manifest_.id, sandbox_.describe()));
     }
     if (failed) throw ModuleError("init_failed", ready.value("message", std::string("module init failed")));
-    if (const json embedded = json::parse(ready.value("manifest", std::string("{}")));
+    if (const json embedded = BoundedJson::parse(ready.value("manifest", std::string("{}")));
         embedded.value("id", "") != manifest_.id || embedded.value("version", "") != manifest_.version.str()) {
         throw ModuleError("load_failed", "library manifest does not match manifest.json");
     }
@@ -241,10 +243,14 @@ std::optional<json> IsolatedModule::handleBufferedMessages(std::string_view type
         const std::string line = outBuffer_.substr(0, nl);
         outBuffer_.erase(0, nl + 1);
         json msg;
+        // The worker runs third-party code: a reply nested deep enough to overflow the server's
+        // stack is as malformed as one that is not JSON.
         try {
-            msg = json::parse(line);
+            msg = BoundedJson::parse(line);
         } catch (const json::exception&) {
             throw ModuleError("protocol", manifest_.id + ": worker sent a malformed message");
+        } catch (const JsonTooDeepError& e) {
+            throw ModuleError("protocol", manifest_.id + ": worker sent a malformed message: " + e.what());
         }
         if (const std::string t = msg.value("t", ""); t == "log") {
             services_.log(manifest_.id, msg.value("level", 1), msg.value("message", ""));

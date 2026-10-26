@@ -38,6 +38,8 @@ private:
     [[nodiscard]] std::string missionName(const std::string& missionId) const;
     /// HttpError 422 when the grid would be larger than the server allows.
     void checkCoverageSize(const json& mission) const;
+    /// HttpError 422 when the route would read more terrain samples than the server allows.
+    void checkRouteSize(const json& mission) const;
 
     const Services& s_;
 };
