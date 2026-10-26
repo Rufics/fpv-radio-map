@@ -8,13 +8,16 @@
 #include "host_services.hpp"
 #include "jobs.hpp"
 #include "library.hpp"
+#include "lifecycle.hpp"
 #include "logger.hpp"
 #include "metrics.hpp"
 #include "missions.hpp"
 #include "module_runner.hpp"
+#include "ops_server.hpp"
 #include "pg_auth_store.hpp"
 #include "rate_limiter.hpp"
 #include "raster.hpp"
+#include "readiness.hpp"
 #include "result_cache.hpp"
 #include "schemas.hpp"
 #include "weather.hpp"
@@ -42,12 +45,23 @@ public:
     Application(Config config, const std::string& ownerKeyText, bool ownerKeyIsDev, const std::filesystem::path& sqlDir);
     ~Application();
 
-    /// Binds and serves until stop(). Returns false if the port could not be bound.
+    /// Binds the API and, when enabled, the operations listener, and serves until stop() or a
+    /// shutdown request has run its course. Returns false if a port could not be bound.
     bool listen();
-    /// Binds to an ephemeral port on the configured address; returns it (for tests).
+    /// Binds the API to an ephemeral port on the configured address; returns it (for tests).
     int bindAny();
+    /// Binds the operations listener to an ephemeral port; returns it (for tests).
+    int bindAnyOps();
     void serveBound();
+    /// Stops at once: the listening sockets close and the requests in flight finish.
     void stop();
+    /// Begins the graceful stop: /readyz answers 503, the server keeps serving for
+    /// ops.drainSeconds, then stop(). A second request (a second Ctrl-C) stops at once. Safe
+    /// from a signal handler, as the previous immediate stop was.
+    void requestShutdown() noexcept {
+        if (stopper_->requested()) stop();
+        else stopper_->request();
+    }
 
     [[nodiscard]] Logger& log() { return log_; }
     [[nodiscard]] const Config& config() const { return config_; }
@@ -71,8 +85,10 @@ private:
     std::unique_ptr<PinGate> makePinGate();
     void loadCacheSettings() const;
     [[nodiscard]] json cacheTiers() const;
-    /// The Prometheus text of GET /admin/metrics.
+    /// The Prometheus text of GET /metrics on the operations listener.
     [[nodiscard]] std::string metricsText();
+    /// The operations listener with this server's readiness checks and metrics attached.
+    std::unique_ptr<OpsServer> makeOpsServer();
     json moduleList(bool admin);
     json mapConfig() const;
 
@@ -139,6 +155,9 @@ private:
     double startTimeSeconds_ = 0.0;
     std::unique_ptr<httplib::Server> http_;
     BundleGrants grants_;  ///< signs the UI bundle URLs of alpha modules
+    std::unique_ptr<DatabaseProbe> dbProbe_;
+    std::unique_ptr<OpsServer> ops_;  ///< reads the services above for /readyz and /metrics: destroyed first
+    std::unique_ptr<GracefulStop> stopper_;
 };
 
 }  // namespace rfmap

@@ -32,11 +32,11 @@ protected:
     std::ostringstream err;
 };
 
-/// A server whose /api/v1/health answers with the status it is given.
+/// A server whose /readyz answers with the status it is given.
 class HealthEndpoint {
 public:
     explicit HealthEndpoint(int status) {
-        server_.Get("/api/v1/health", [status](const httplib::Request&, httplib::Response& res) {
+        server_.Get("/readyz", [status](const httplib::Request&, httplib::Response& res) {
             res.status = status;
             res.set_content("{}", "application/json");
         });
@@ -96,6 +96,14 @@ TEST_F(CommandLineTest, HealthTakesAnUrl) {
     EXPECT_EQ(cl.action(), Action::Health);
     EXPECT_EQ(cl.healthUrl(), "http://10.0.0.2:9000");
     EXPECT_EQ(cl.configFile(), "c.json");
+}
+
+TEST_F(CommandLineTest, HealthUrlWithoutAPathAsksTheReadinessProbe) {
+    using Split = std::pair<std::string, std::string>;
+    EXPECT_EQ(CommandLine::splitUrl("http://10.0.0.2:9000"), Split("http://10.0.0.2:9000", "/readyz"));
+    EXPECT_EQ(CommandLine::splitUrl("http://10.0.0.2:9000/"), Split("http://10.0.0.2:9000", "/readyz"));
+    EXPECT_EQ(CommandLine::splitUrl("http://10.0.0.2:9000/healthz"), Split("http://10.0.0.2:9000", "/healthz"));
+    EXPECT_EQ(CommandLine::splitUrl("http://[::1]:9090/readyz"), Split("http://[::1]:9090", "/readyz"));
 }
 
 TEST_F(CommandLineTest, HelpInEitherSpellingPrintsTheUsage) {

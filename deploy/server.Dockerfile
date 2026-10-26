@@ -56,7 +56,9 @@ USER rfmap
 WORKDIR /var/lib/rfmap
 ENV RFMAP_CONFIG=/etc/rfmap/rfmap.json \
     RFMAP_SQL_DIR=/usr/share/rfmap/sql
-EXPOSE 8080
+# 8080 is the API; 9090 the operations listener (/healthz, /readyz, /metrics), which binds
+# 127.0.0.1 unless ops.listen says otherwise (RFMAP__OPS__LISTEN=0.0.0.0 for Kubernetes probes).
+EXPOSE 8080 9090
 VOLUME ["/var/lib/rfmap"]
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["/usr/bin/rfmap-server", "--health", "http://127.0.0.1:8080"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["/usr/bin/rfmap-server", "--health", "http://127.0.0.1:9090/readyz"]
 ENTRYPOINT ["/usr/bin/rfmap-server"]

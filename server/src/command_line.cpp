@@ -45,11 +45,22 @@ int CommandLine::answerWithoutServing(std::ostream& out, std::ostream& err) cons
     return 0;
 }
 
-int CommandLine::health(const std::string& base, std::ostream& err) {
-    httplib::Client client(base);
+std::pair<std::string, std::string> CommandLine::splitUrl(const std::string& url) {
+    const auto scheme = url.find("://");
+    const auto hostStart = scheme == std::string::npos ? 0 : scheme + 3;
+    const auto slash = url.find('/', hostStart);
+    if (slash == std::string::npos || slash + 1 == url.size()) {
+        return {url.substr(0, slash), std::string(kDefaultHealthPath)};
+    }
+    return {url.substr(0, slash), url.substr(slash)};
+}
+
+int CommandLine::health(const std::string& url, std::ostream& err) {
+    const auto [origin, path] = splitUrl(url);
+    httplib::Client client(origin);
     client.set_connection_timeout(3);
     client.set_read_timeout(3);
-    const auto res = client.Get("/api/v1/health");
+    const auto res = client.Get(path);
     if (res && res->status == 200) return 0;
     err << "rfmap-server: health check failed" << (res ? std::format(" with HTTP {}", res->status) : "") << "\n";
     return 1;

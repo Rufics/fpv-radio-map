@@ -1,7 +1,7 @@
 // rfmap-server: the FPV Radio Map HTTP API.
 //
 //   rfmap-server [--config /etc/rfmap/server.json] [--sql /usr/share/rfmap/sql]
-//   rfmap-server --health [http://127.0.0.1:8080]   exit 0 if /api/v1/health answers 200
+//   rfmap-server --health [http://127.0.0.1:9090/readyz]   exit 0 if the readiness probe answers 200
 //
 // The config file is optional (RFMAP_CONFIG names it too); environment variables override it.
 
@@ -22,8 +22,9 @@ std::atomic<rfmap::Application*>& runningApplication() {
     return running;
 }
 
+/// SIGTERM and SIGINT begin the graceful stop; requestShutdown only sets a flag.
 void onSignal(int) {
-    if (rfmap::Application* app = runningApplication().load()) app->stop();
+    if (rfmap::Application* app = runningApplication().load()) app->requestShutdown();
 }
 }  // namespace
 

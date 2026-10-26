@@ -168,8 +168,8 @@ environment variable:
 - `RFMAP__<SECTION>__<KEY>=value` sets `config[section][key]`. Names are matched without
   regard to case, and values are parsed as JSON when they parse, for example
   `RFMAP__CACHE__DEMBLOCKSMB=512` or `RFMAP__WEATHER__TIERS='[{"name":"hourly","models":"dwd_icon"}]'`.
-- Short forms: `RFMAP_DATABASE_URL`, `RFMAP_ADMIN_TOKEN`, `RFMAP_PORT`, `RFMAP_OPEN_METEO_URL`,
-  `RFMAP_DEM`, `RFMAP_LANDCOVER`.
+- Short forms: `RFMAP_DATABASE_URL`, `RFMAP_ADMIN_TOKEN`, `RFMAP_METRICS_TOKEN`, `RFMAP_PORT`,
+  `RFMAP_OPEN_METEO_URL`, `RFMAP_DEM`, `RFMAP_LANDCOVER`.
 
 Settings you will most likely touch:
 
@@ -183,8 +183,40 @@ Settings you will most likely touch:
 | `coverage.maxCells`, `coverage.threads` | 250000, 4 | Larger grids are refused with 422. |
 | `cache.*` | 256 MB DEM blocks, 64 MB results in memory, 20000 rows / 1 GB results table | Also changeable at run time under **Admin → Cache** (`PUT /api/v1/admin/cache`). Changes made there are stored and survive a restart. |
 | `weather.metaUrl` | empty | The synced model's `meta.json`. With it, results give the forecast run time (`runUtc`). |
-| `metrics.enabled` | `false` | Serves `GET /api/v1/admin/metrics` in the Prometheus text format, behind the admin token: request rates and durations, the request, job and cell thread pools, the database pool, the caches, and the process's CPU time, memory, threads and open files. Scrape it with the admin token as bearer credentials. |
+| `ops.listen`, `ops.port`, `ops.drainSeconds` | `127.0.0.1`, 9090, 5 | The operations listener: `GET /healthz`, `/readyz` and `/metrics` on a port of its own, see [Health, readiness and metrics](#health-readiness-and-metrics). |
+| `metrics.enabled`, `metrics.token`, `metrics.allowFrom` | `false`, empty, `[]` | Serves `GET /metrics` on the operations listener in the Prometheus text format: request rates and durations, the request, job and cell thread pools, the database pool, the caches, and the process's CPU time, memory, threads and open files. Guarded by a token of its own (`RFMAP_METRICS_TOKEN`) and/or the scraper's networks; with neither, only loopback may read it. |
 | `map` | — | Merged over the map sources `GET /api/v1/config/map` returns. Attribution comes from `manifest.json` next to the DEM. |
+
+### Health, readiness and metrics
+
+Next to the API port the server opens an operations listener (`ops.listen:ops.port`,
+`127.0.0.1:9090` by default) for whatever watches the process rather than uses it. It has
+threads of its own and is never behind the rate limiter, so a probe is answered while every
+request thread is busy.
+
+| Route | Answers | For |
+|---|---|---|
+| `GET /healthz` | `200 {"status":"ok"}` while the process runs | liveness probes, container health checks |
+| `GET /readyz` | `200` when the server can take traffic, `503` with the failing check otherwise | load balancers, Kubernetes readiness |
+| `GET /metrics` | the Prometheus text format; `404` unless `metrics.enabled` | Prometheus |
+
+`/readyz` runs its checks on every call: `database` (a `select 1` on a connection of its own,
+required), `dem` and `weather` (reported, not required). It also answers `503` from the moment a
+stop is requested. On `SIGTERM` the server first drains: `/readyz` answers `503` while requests
+are still served for `ops.drainSeconds`, so a balancer takes the instance out of rotation before
+it stops listening; then it closes the listening sockets and lets the requests in flight finish.
+Compose gives it `stop_grace_period: 60s` for that; set `terminationGracePeriodSeconds` the same
+way on Kubernetes, where `ops.listen` must be `0.0.0.0` (`RFMAP__OPS__LISTEN=0.0.0.0`) so the
+kubelet reaches the probes. The image's `HEALTHCHECK` and `rfmap-server --health` ask
+`http://127.0.0.1:9090/readyz`; `--health` takes another URL, and one without a path asks
+`/readyz` there.
+
+Metrics describe the deployment, so they never share the admin token. Give Prometheus a bearer
+token of its own in `metrics.token` (`RFMAP_METRICS_TOKEN`, from a secret), or list the networks
+the scraper connects from in `metrics.allowFrom` (`["10.42.0.0/16", "fd00::/8"]`), or both:
+every configured guard must hold. With neither, only loopback may read the metrics. The
+operations port is not published by compose; on Kubernetes, scrape each pod on it through a
+`ServiceMonitor` or pod annotations, and keep it off the Ingress.
 
 ## 4. Open-Meteo
 

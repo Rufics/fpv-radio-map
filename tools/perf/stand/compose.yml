@@ -48,6 +48,7 @@ services:
     environment:
       RFMAP_DATABASE_URL: postgresql://rfmap:perf@postgis:5432/rfmap
       RFMAP_ADMIN_TOKEN: ${RFMAP_PERF_ADMIN_TOKEN:?perf.py sets the admin token}
+      RFMAP_METRICS_TOKEN: ${RFMAP_PERF_METRICS_TOKEN:?perf.py sets the metrics token}
     volumes:
       - ./server.perf.json:/etc/rfmap/rfmap.json:ro
       - ${RFMAP_PERF_DATA:?perf.py passes the dataset folder}:/data:ro
@@ -73,7 +74,7 @@ services:
   prometheus:
     image: prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
     profiles: [monitoring]
-    # The caller's user, so it can read the admin token perf.py wrote with mode 0600.
+    # The caller's user, so it can read the metrics token perf.py wrote with mode 0600.
     user: ${RFMAP_PERF_USER:-12345:12345}
     command:
       - --config.file=/etc/prometheus/prometheus.yml

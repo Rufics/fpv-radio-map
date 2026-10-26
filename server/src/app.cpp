@@ -265,20 +265,49 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
         std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
     http_ = std::make_unique<httplib::Server>();
     routes();
+    ops_ = makeOpsServer();
+    stopper_ = std::make_unique<GracefulStop>(
+        std::chrono::seconds(config_.ops.drainSeconds),
+        [this] {
+            log_.info("http", std::format("stop requested: not ready, draining for {} s", config_.ops.drainSeconds));
+            ops_->setDraining(true);
+        },
+        [this] { stop(); });
 }
 
 Application::~Application() {
+    stopper_.reset();
+    ops_->stop();
     if (http_) http_->stop();
     jobs_.reset();
     modules_.registry.reset();
 }
 
+std::unique_ptr<OpsServer> Application::makeOpsServer() {
+    auto ops = std::make_unique<OpsServer>(config_.ops, MetricsAccess::fromConfig(config_.metrics),
+                                           config_.metrics.enabled, log_);
+    dbProbe_ = std::make_unique<DatabaseProbe>(config_.database.url, std::chrono::milliseconds(1000), log_);
+    ops->readiness().addRequired("database", [this] { return dbProbe_->check(); });
+    ops->readiness().addInformational("dem", [this] {
+        return CheckResult{terrain_.dem != nullptr, terrain_.dem ? "" : "no DEM configured: calculations answer 503"};
+    });
+    ops->readiness().addInformational("weather", [this] {
+        return CheckResult{forecast_.service->configured(), forecast_.service->configured() ? "" : "no forecasts"};
+    });
+    ops->setMetricsSource([this] { return metricsText(); });
+    return ops;
+}
+
 bool Application::listen() {
+    if (config_.ops.enabled && !ops_->listen()) return false;
     log_.info("http", std::format("listening on {}:{}", config_.server.listen, config_.server.port));
-    return http_->listen(config_.server.listen, config_.server.port);
+    const bool ok = http_->listen(config_.server.listen, config_.server.port);
+    ops_->stop();
+    return ok;
 }
 
 int Application::bindAny() { return http_->bind_to_any_port(config_.server.listen); }
+int Application::bindAnyOps() { return ops_->bindAny(); }
 void Application::serveBound() { http_->listen_after_bind(); }
 void Application::stop() { http_->stop(); }
 
@@ -455,7 +484,7 @@ struct Application::DataApi {
     void getModuleFile(const Req& req, Res& res) const;
 };
 
-/// The admin API: modules, trusted keys and caches.
+/// The admin API: modules, trusted keys and caches. Metrics are on the operations listener.
 struct Application::AdminApi {
     Application& app;
     void postAdminModule(const Req& req, Res& res) const;
@@ -468,7 +497,6 @@ struct Application::AdminApi {
     void getAdminCache(const Req& req, Res& res) const;
     void putAdminCache(const Req& req, Res& res) const;
     void deleteAdminCache(const Req& req, Res& res) const;
-    void getAdminMetrics(const Req& req, Res& res) const;
 };
 
 template <typename Run>
@@ -592,7 +620,6 @@ void Application::routes() {
     s.Get(api + "/admin/cache", route<AdminApi>("admin", &AdminApi::getAdminCache));
     s.Put(api + "/admin/cache", route<AdminApi>("admin", &AdminApi::putAdminCache));
     s.Delete(api + "/admin/cache", route<AdminApi>("admin", &AdminApi::deleteAdminCache));
-    s.Get(api + "/admin/metrics", route<AdminApi>("admin", &AdminApi::getAdminMetrics));
 }
 
 void Application::MissionApi::getHealth(const Req&, Res& res) const {
@@ -992,13 +1019,6 @@ void Application::AdminApi::deleteAdminCache(const Req& req, Res& res) const {
         throw HttpError(422, "unknown cache tier " + tier);
     }
     res.status = 204;
-}
-
-void Application::AdminApi::getAdminMetrics(const Req& req, Res& res) const {
-    app.requireAdmin(req);
-    if (!app.config_.metrics.enabled) throw HttpError(404, "metrics are off; set metrics.enabled in the server config");
-    res.status = 200;
-    res.set_content(app.metricsText(), "text/plain; version=0.0.4; charset=utf-8");
 }
 
 }  // namespace rfmap

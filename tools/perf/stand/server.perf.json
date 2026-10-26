@@ -2,9 +2,11 @@
   // rfmap-server for the perf stand (tools/perf/stand/compose.yml). Like the shipped example,
   // except: metrics on, no weather (k = 4/3), rate limits far above any scenario so k6 from one
   // address measures the server and not the limiter. PIN hashing keeps the production cost, so
-  // sign-ins cost what they cost. The admin token and database URL come from the environment.
+  // sign-ins cost what they cost. The admin token, the metrics token and the database URL come
+  // from the environment; Prometheus scrapes the operations port from its own container.
   "server": { "listen": "0.0.0.0", "port": 8080, "threads": 16, "trustProxy": false },
   "database": { "poolSize": 8 },
+  "ops": { "listen": "0.0.0.0", "port": 9090 },
   "metrics": { "enabled": true },
   "data": {
     "dem": "/data/dem.cog.tif",

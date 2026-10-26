@@ -64,7 +64,7 @@ class StandTestCase(unittest.TestCase):
         # Prometheus and Grafana answer on the fake server's port too.
         settings = {"prometheus_port": self.port, "grafana_port": self.port, **settings}
         stand = Stand(StandSettings(self.root / "data", port=self.port, **settings), self.runner, "admin-token",
-                      sleep=lambda _s: None)
+                      sleep=lambda _s: None, metrics_token="metrics-token")
         stand.run_dir = self.root / "run"
         return stand
 
@@ -85,6 +85,7 @@ class StandTest(StandTestCase):
         self.assertEqual(down[-3:], ["down", "-v", "--remove-orphans"])
         env = self.runner.envs[0]
         self.assertEqual(env["RFMAP_PERF_ADMIN_TOKEN"], "admin-token")
+        self.assertEqual(env["RFMAP_PERF_METRICS_TOKEN"], "metrics-token")
         self.assertEqual(env["RFMAP_PERF_RUN_DIR"], str(self.root / "run"))
         self.assertEqual(env["RFMAP_PERF_SERVER_CPUS"], "2")
         self.assertEqual(env["RFMAP_PERF_PROMETHEUS_PORT"], str(self.port))
@@ -117,8 +118,8 @@ class StandTest(StandTestCase):
 
     def test_work_folder_holds_the_token_for_prometheus(self):
         stand = self.stand()
-        token = stand.work_dir / "admin-token"
-        self.assertEqual(token.read_text(encoding="utf-8"), "admin-token")
+        token = stand.work_dir / "metrics-token"
+        self.assertEqual(token.read_text(encoding="utf-8"), "metrics-token")
         if hasattr(token, "owner"):
             self.assertEqual(token.stat().st_mode & 0o777, 0o600)
         source = self.root / "board.json"
@@ -161,6 +162,8 @@ class StandTest(StandTestCase):
         with self.assertRaisesRegex(PerfError, "no run folder"):
             stand.environment()
         self.assertGreater(len(stand.admin_token), 30)
+        self.assertGreater(len(stand.metrics_token), 30)
+        self.assertNotEqual(stand.admin_token, stand.metrics_token)
 
     def test_logs(self):
         stand = self.stand()
