@@ -126,6 +126,10 @@ private:
     /// Runs the reloads of the topics `which` selects, each on its own, and counts them.
     void reloadWhere(const std::function<bool(const Topic&)>& which, const std::string& reason);
     void reloadDatabase(const std::string& reason);
+    /// Whether `which` selects every database topic: only such a reload may move the fingerprint.
+    [[nodiscard]] bool coversDatabase(const std::function<bool(const Topic&)>& which) const;
+    /// Runs the selected reloads; returns how many failed (logged).
+    [[nodiscard]] std::uint64_t runReloads(const std::function<bool(const Topic&)>& which) const;
     /// A digest of the rows the database topics read; nullopt when the database cannot answer.
     [[nodiscard]] std::optional<std::string> fingerprint() const;
     void noteListener(bool listening, const std::string& error);

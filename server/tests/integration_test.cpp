@@ -883,20 +883,45 @@ TEST_F(Integration, SettingsPollCatchesWhatNoNoticeAnnounced) {
         w.exec("insert into settings(key, value) values ('test.poll', '1'::jsonb) "
                "on conflict (key) do update set value = excluded.value");
     });
+    // A notice for a file topic reloads only that one, and must not hide the row change from the poll.
+    sync.handle(ChangeNotice(SettingsTopic::kModules, "elsewhere"));
+    EXPECT_EQ(fileReloads, 1);
     for (int i = 0; i < 100 && reloads < 2; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
     EXPECT_EQ(reloads, 2);
-    EXPECT_EQ(fileReloads, 0) << "file topics change only by notice";
+    EXPECT_EQ(fileReloads, 1) << "file topics change only by notice";
 
-    // Its own notices are skipped; others' reload their topic, an unknown topic everything.
+    // Its own notices are skipped; an unknown topic reloads everything.
     sync.handle(ChangeNotice(SettingsTopic::kModules, sync.instance()));
-    EXPECT_EQ(fileReloads, 0);
-    sync.handle(ChangeNotice(SettingsTopic::kModules, "elsewhere"));
     EXPECT_EQ(fileReloads, 1);
     sync.handle(ChangeNotice("from.a.newer.server", "elsewhere"));
     EXPECT_EQ(fileReloads, 2);
     EXPECT_EQ(reloads, 3);
     EXPECT_FALSE(sync.status()["listen"]["enabled"].get<bool>());
     db.tx([](pqxx::work& w) { w.exec("delete from settings where key = 'test.poll'"); });
+}
+
+TEST_F(Integration, SettingsPollRetriesAReloadThatFailed) {
+    Database db(databaseUrl(), 1);
+    Logger log;
+    log.setQuiet(true);
+    std::atomic<int> attempts{0};
+    SettingsSync sync(db, {databaseUrl(), false, std::chrono::seconds(3600)}, log);
+    sync.add(SettingsTopic::kBuiltins, SettingsSync::Source::Database, [&attempts] {
+        if (++attempts == 2) throw std::runtime_error("the database went away mid-read");
+    });
+    sync.start();
+    db.tx([](pqxx::work& w) {
+        w.exec("insert into settings(key, value) values ('test.retry', '1'::jsonb) "
+               "on conflict (key) do update set value = excluded.value");
+    });
+    sync.pollNow();  // sees the change; the reload fails
+    EXPECT_EQ(attempts, 2);
+    EXPECT_EQ(sync.status()["failedReloads"], 1);
+    sync.pollNow();  // the fingerprint did not move: tries again
+    EXPECT_EQ(attempts, 3);
+    sync.pollNow();  // now it did
+    EXPECT_EQ(attempts, 3);
+    db.tx([](pqxx::work& w) { w.exec("delete from settings where key = 'test.retry'"); });
 }
 
 TEST_F(Integration, SettingsListenerReconnectsAndReloadsWhatItMayHaveMissed) {

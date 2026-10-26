@@ -183,8 +183,25 @@ void SettingsSync::reloadDatabase(const std::string& reason) {
 
 void SettingsSync::reloadWhere(const std::function<bool(const Topic&)>& which, const std::string& reason) {
     std::lock_guard lock(reloadMutex_);
-    // Taken before the reads: a change after this point shows at the next poll.
-    if (auto f = fingerprint()) fingerprint_ = std::move(f);
+    // Taken before the reads, so a change after this point shows at the next poll. Only a reload
+    // of every database topic may move it, and only when all of them succeeded: otherwise the
+    // poll would treat rows that no reload has read as up to date.
+    std::optional<std::string> before;
+    if (coversDatabase(which)) before = fingerprint();
+    const std::uint64_t failed = runReloads(which);
+    if (before && failed == 0) fingerprint_ = std::move(before);
+    std::lock_guard state(stateMutex_);
+    ++state_.reloads;
+    state_.failures += failed;
+    state_.lastReloadAt = Clock::now();
+    state_.lastReason = reason;
+}
+
+bool SettingsSync::coversDatabase(const std::function<bool(const Topic&)>& which) const {
+    return std::ranges::all_of(topics_, [&which](const Topic& t) { return t.source != Source::Database || which(t); });
+}
+
+std::uint64_t SettingsSync::runReloads(const std::function<bool(const Topic&)>& which) const {
     std::uint64_t failed = 0;
     for (const Topic& t : topics_) {
         if (!which(t)) continue;
@@ -195,11 +212,7 @@ void SettingsSync::reloadWhere(const std::function<bool(const Topic&)>& which, c
             log_.error("settings", std::format("reloading {} failed: {}", t.name, e.what()));
         }
     }
-    std::lock_guard state(stateMutex_);
-    ++state_.reloads;
-    state_.failures += failed;
-    state_.lastReloadAt = Clock::now();
-    state_.lastReason = reason;
+    return failed;
 }
 
 std::optional<std::string> SettingsSync::fingerprint() const {
