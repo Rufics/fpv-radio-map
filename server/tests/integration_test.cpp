@@ -131,10 +131,37 @@ struct Env {
     json config;  ///< the server's config, for a second process on the same database
     std::unique_ptr<Application> app;
     std::thread thread;
+    bool listened = false;  ///< what Application::listen returned
     int port = 0;
+    int opsPort = 0;
     std::string missionId, ownerKey, editSession, viewSession, linkId, linkToken;
 };
 Env* env = nullptr;
+
+/// A loopback port nothing listens on right now: bound to port 0, read back, closed.
+int freePort() {
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    socklen_t len = sizeof addr;
+    const bool bound = fd >= 0 && ::bind(fd, reinterpret_cast<const sockaddr*>(&addr), len) == 0 &&  // NOSONAR
+                       ::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len) == 0;             // NOSONAR
+    const int port = bound ? ntohs(addr.sin_port) : 0;
+    if (fd >= 0) ::close(fd);
+    return port;
+}
+
+/// Polls the operations listener until it answers, so the tests start against a serving app.
+bool waitUntilServing(int opsPort) {
+    httplib::Client ops("127.0.0.1", opsPort);
+    ops.set_connection_timeout(0, 200000);
+    for (int i = 0; i < 100; ++i) {
+        if (const auto r = ops.Get("/healthz"); r && r->status == 200) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
 
 /// RFMAP_IT_DUMP_DIR=<dir> keeps chosen responses for inspection.
 void dump(const std::string& name, const json& body) {
@@ -163,10 +190,14 @@ protected:
             w.exec("drop schema public cascade; create schema public;");
             w.commit();
         }
-        json cfg = {{"server", {{"listen", "127.0.0.1"}, {"threads", 8}}},
+        // Real ports, as in production: Application::listen binds both listeners itself.
+        env->port = freePort();
+        env->opsPort = freePort();
+        json cfg = {{"server", {{"listen", "127.0.0.1"}, {"port", env->port}, {"threads", 8}}},
                     {"database", {{"url", url}, {"poolSize", 4}}},
                     {"admin", {{"token", "integration-admin-token-0123456789"}}},
-                    {"metrics", {{"enabled", true}}},
+                    {"ops", {{"listen", "127.0.0.1"}, {"port", env->opsPort}, {"drainSeconds", 0}}},
+                    {"metrics", {{"enabled", true}, {"token", "integration-metrics-token"}}},
                     {"data",
                      {{"dem", (env->dir / "dem.cog.tif").string()},
                       {"demStatedErrorM", 4.0},
@@ -194,14 +225,16 @@ protected:
         env->config = cfg;
         env->app = std::make_unique<Application>(Config::fromJson(cfg), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true,
                                                  RFMAP_SQL_DIR);
-        env->port = env->app->bindAny();
-        env->thread = std::thread([] { env->app->serveBound(); });
+        env->thread = std::thread([] { env->listened = env->app->listen(); });
+        if (!waitUntilServing(env->opsPort)) throw std::runtime_error("the server did not start listening");
     }
 
     static void TearDownTestSuite() {
         if (!env) return;
-        env->app->stop();
+        // The production path: a stop request drains (0 s here), then listen() returns.
+        env->app->requestShutdown();
         env->thread.join();
+        EXPECT_TRUE(env->listened);
         env->app.reset();
         env->weather.reset();
         fs::remove_all(env->dir);
@@ -1059,13 +1092,33 @@ TEST_F(Integration, SettingsListenerReconnectsAndReloadsWhatItMayHaveMissed) {
     EXPECT_EQ(status["lastReason"], "listener reconnected");
 }
 
-TEST_F(Integration, MetricsForPrometheus) {
-    EXPECT_EQ(call("GET", "/admin/metrics", nullptr, bearer("wrong")).status, 401);
+TEST_F(Integration, OperationsListenerAnswersHealthReadinessAndMetrics) {
+    // Metrics left the admin API: the route is gone there and lives on the operations port.
+    EXPECT_EQ(call("GET", "/admin/metrics", nullptr, admin()).status, 404);
+    EXPECT_EQ(call("GET", "/admin/cache", nullptr, bearer("wrong")).status, 401);
     ASSERT_EQ(call("GET", "/health").status, 200);
-    const auto r = call("GET", "/admin/metrics", nullptr, admin());
-    ASSERT_EQ(r.status, 200);
-    EXPECT_EQ(r.headers.find("Content-Type")->second, "text/plain; version=0.0.4; charset=utf-8");
-    const std::string text = r.body.get<std::string>();
+
+    httplib::Client ops("127.0.0.1", env->opsPort);
+    const auto live = ops.Get("/healthz");
+    ASSERT_TRUE(live);
+    EXPECT_EQ(live->status, 200);
+    const auto ready = ops.Get("/readyz");
+    ASSERT_TRUE(ready);
+    EXPECT_EQ(ready->status, 200) << ready->body;
+    const json readiness = json::parse(ready->body);
+    EXPECT_TRUE(readiness.at("ready").get<bool>());
+    EXPECT_TRUE(readiness.at("checks").at("database").at("ok").get<bool>());
+    EXPECT_TRUE(readiness.at("checks").at("dem").at("ok").get<bool>());
+    EXPECT_TRUE(readiness.at("checks").at("weather").at("ok").get<bool>());
+
+    // The metrics token is its own secret: the admin token does not open the scrape.
+    EXPECT_EQ(ops.Get("/metrics")->status, 401);
+    EXPECT_EQ(ops.Get("/metrics", admin())->status, 403);
+    const auto r = ops.Get("/metrics", bearer("integration-metrics-token"));
+    ASSERT_TRUE(r);
+    ASSERT_EQ(r->status, 200);
+    EXPECT_EQ(r->get_header_value("Content-Type"), "text/plain; version=0.0.4; charset=utf-8");
+    const std::string& text = r->body;
     for (const char* part : {"rfmap_http_requests_total{class=\"default\",method=\"GET\",status=\"200\"}",
                              "rfmap_http_requests_total{class=\"admin\",method=\"GET\",status=\"401\"}",
                              "rfmap_pool_threads{pool=\"http\"} 8\n",
@@ -1073,11 +1126,14 @@ TEST_F(Integration, MetricsForPrometheus) {
                              "rfmap_cache_limit_bytes{tier=\"dem-blocks\"}", "rfmap_jobs_started_total"}) {
         EXPECT_NE(text.find(part), std::string::npos) << part << "\n" << text;
     }
-    // The scrape's own thread is busy; the thread of the call before may not have returned yet.
-    const std::string busy = "rfmap_pool_busy_threads{pool=\"http\"} ";
-    const auto at = text.find(busy);
-    ASSERT_NE(at, std::string::npos) << text;
-    EXPECT_GE(std::stoi(text.substr(at + busy.size())), 1) << text;
+    // A scrape runs on the operations threads, so no request thread is busy with it. The thread
+    // of the last API call may still be returning, so give the gauge a moment to reach zero.
+    const auto idle = [&] {
+        const auto again = ops.Get("/metrics", bearer("integration-metrics-token"));
+        return again && again->body.find("rfmap_pool_busy_threads{pool=\"http\"} 0\n") != std::string::npos;
+    };
+    for (int i = 0; i < 50 && !idle(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    EXPECT_TRUE(idle());
 }
 
 TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {

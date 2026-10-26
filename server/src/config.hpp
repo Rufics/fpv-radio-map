@@ -21,8 +21,8 @@ public:
 ///
 /// Overrides: RFMAP__<SECTION>__<KEY>=value sets config[section][key] (names matched without
 /// regard to case; the value is parsed as JSON when it parses, else taken as a string). A few
-/// common ones have short aliases: RFMAP_DATABASE_URL, RFMAP_ADMIN_TOKEN, RFMAP_PORT,
-/// RFMAP_OPEN_METEO_URL, RFMAP_DEM, RFMAP_LANDCOVER.
+/// common ones have short aliases: RFMAP_DATABASE_URL, RFMAP_ADMIN_TOKEN, RFMAP_METRICS_TOKEN,
+/// RFMAP_PORT, RFMAP_OPEN_METEO_URL, RFMAP_DEM, RFMAP_LANDCOVER.
 class Config {
 public:
     /// Environment variables by name.
@@ -62,12 +62,30 @@ public:
     /// A shorter token is a configuration error: the admin API changes what the server runs.
     static constexpr std::size_t kMinAdminTokenLength = 24;
 
-    /// GET /api/v1/admin/metrics: the server's internal counters for Prometheus, behind the
-    /// admin token. Off by default; the perf stand turns it on.
+    /// The operations listener (ops_server.hpp): GET /healthz, /readyz and /metrics on a port of
+    /// its own, never behind the rate limiter or the request threads.
+    struct Ops {
+        bool enabled = true;
+        std::string listen = "127.0.0.1";  ///< 0.0.0.0 where probes come from outside, e.g. Kubernetes
+        int port = 9090;
+        /// Seconds the server keeps serving after a stop request while /readyz already answers
+        /// 503, so a load balancer takes it out of rotation before it stops listening.
+        int drainSeconds = 5;
+    };
+    Ops ops;
+
+    /// GET /metrics on the operations listener: the server's internal counters for Prometheus.
+    /// Off by default; the perf stand turns it on. Guarded by `token` (RFMAP_METRICS_TOKEN,
+    /// never the admin token) and/or `allowFrom`; with neither, loopback only.
     struct Metrics {
         bool enabled = false;
+        std::string token;
+        std::vector<std::string> allowFrom;  ///< networks in CIDR notation or single addresses
     };
     Metrics metrics;
+    /// The operations listener is outside the rate limiter, so a short metrics token could be
+    /// guessed; the perf stand generates 43 characters (secrets.token_urlsafe(32)).
+    static constexpr std::size_t kMinMetricsTokenLength = 16;
 
     struct Data {
         std::filesystem::path dem;

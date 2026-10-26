@@ -60,23 +60,55 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
       missionApi_(services_),
       flightLogApi_(services_),
       dataApi_(services_, admin_),
-      adminApi_(services_, admin_, [this] { return metricsText(); }),
+      adminApi_(services_, admin_),
       startTimeSeconds_(std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count()),
       http_(std::make_unique<httplib::Server>()) {
     configureServer();
     routes();
+    ops_ = makeOpsServer();
+    stopper_ = std::make_unique<GracefulStop>(
+        std::chrono::seconds(config_.ops.drainSeconds),
+        [this] {
+            log_.info("http", std::format("stop requested: not ready, draining for {} s", config_.ops.drainSeconds));
+            ops_->setDraining(true);
+        },
+        [this] { stop(); });
 }
 
 Application::~Application() {
+    stopper_.reset();
+    ops_->stop();
     if (http_) http_->stop();
 }
 
+std::unique_ptr<OpsServer> Application::makeOpsServer() {
+    auto ops = std::make_unique<OpsServer>(config_.ops, MetricsAccess::fromConfig(config_.metrics),
+                                           config_.metrics.enabled, log_);
+    dbProbe_ = std::make_unique<DatabaseProbe>(config_.database.url, std::chrono::milliseconds(1000), log_);
+    ops->readiness().addRequired("database", [this] { return dbProbe_->check(); });
+    ops->readiness().addInformational("dem", [this] {
+        const bool dem = services_.dem() != nullptr;
+        return CheckResult{dem, dem ? "" : "no DEM configured: calculations answer 503"};
+    });
+    ops->readiness().addInformational("weather", [this] {
+        const bool weather = services_.weather().configured();
+        return CheckResult{weather, weather ? "" : "no forecasts"};
+    });
+    ops->setMetricsSource([this] { return metricsText(); });
+    return ops;
+}
+
 bool Application::listen() {
+    if (config_.ops.enabled && !ops_->listen()) return false;
     log_.info("http", std::format("listening on {}:{}", config_.server.listen, config_.server.port));
-    return http_->listen(config_.server.listen, config_.server.port);
+    const bool ok = http_->listen(config_.server.listen, config_.server.port);
+    if (!ok) log_.error("http", std::format("could not listen on {}:{}", config_.server.listen, config_.server.port));
+    ops_->stop();
+    return ok;
 }
 
 int Application::bindAny() { return http_->bind_to_any_port(config_.server.listen); }
+int Application::bindAnyOps() { return ops_->bindAny(); }
 void Application::serveBound() { http_->listen_after_bind(); }
 void Application::stop() { http_->stop(); }
 
@@ -248,7 +280,7 @@ void Application::adminRoutes(const std::string& api) {
     s.Get(api + "/admin/cache", route("admin", on(a, &AdminApi::getCache)));
     s.Put(api + "/admin/cache", route("admin", on(a, &AdminApi::putCache)));
     s.Delete(api + "/admin/cache", route("admin", on(a, &AdminApi::deleteCache)));
-    s.Get(api + "/admin/metrics", route("admin", on(a, &AdminApi::getMetrics)));
+    // Metrics are on the operations listener (ops_server.hpp), not behind the admin token.
     s.Get(api + "/admin/settings/sync", route("admin", on(a, &AdminApi::getSettingsSync)));
     s.Post(api + "/admin/settings/reload", route("admin", on(a, &AdminApi::postSettingsReload)));
 }
