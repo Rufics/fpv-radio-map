@@ -11,6 +11,11 @@
 
 #include <httplib.h>
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -41,6 +46,25 @@ double terrain(int c, int r) {
 double landcover(int c, int) {
     const double lon = kWest + (c + 0.5) * kPx;
     return lon > 35.21 && lon < 35.23 ? 10.0 : 0.0;
+}
+
+/// Status of a request written byte for byte to the server, for framing httplib's client would
+/// correct (it adds Content-Length to every POST). 0 when no status line came back.
+int rawStatus(int port, const std::string& request) {
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return 0;
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(static_cast<std::uint16_t>(port));
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    std::string reply(256, '\0');
+    ssize_t got = 0;
+    if (::connect(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof addr) == 0 &&
+        ::send(fd, request.data(), request.size(), 0) == static_cast<ssize_t>(request.size()))
+        got = ::recv(fd, reply.data(), reply.size(), 0);
+    ::close(fd);
+    // "HTTP/1.1 411 ..."
+    return got >= 12 ? std::stoi(reply.substr(9, 3)) : 0;
 }
 
 std::string readFile(const fs::path& p) {
@@ -1304,12 +1328,11 @@ TEST_F(Integration, HostileInputsAreRefusedNotFatal) {
     const auto tooLarge = raw.send(announce);
     ASSERT_TRUE(tooLarge);
     EXPECT_EQ(tooLarge->status, 413);
-    httplib::Request chunked = announce;
-    chunked.headers.erase("Content-Length");
-    chunked.set_header("Transfer-Encoding", "chunked");
-    const auto noLength = httplib::Client("127.0.0.1", env->port).send(chunked);
-    ASSERT_TRUE(noLength);
-    EXPECT_EQ(noLength->status, 411);
+    // Chunked, with no Content-Length at all: the size is unknown until it has been read.
+    EXPECT_EQ(rawStatus(env->port, "POST /api/v1/missions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                                   "Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n"
+                                   "Connection: close\r\n\r\n2\r\n{}\r\n0\r\n\r\n"),
+              411);
 
     // The elevation profile needs no session, so it has the bounds of every calculated path.
     EXPECT_EQ(call("GET", "/elevation/profile?from=48.5,35.2&to=48.5,35.2").status, 422);
