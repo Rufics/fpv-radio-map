@@ -101,8 +101,9 @@ void AdminApi::postSettingsReload(const HttpRequest& req, HttpReply& res) const 
     if (scope != "all" && scope != "local") throw HttpError(422, "scope is all or local");
     const auto outcome = s_.settings().reloadAll(scope == "all");
     if (!outcome.reloaded) {
-        throw HttpError(503, "some settings could not be reloaded on this server process (see its log); retry",
-                        {{"announced", outcome.announced}});
+        json body = json::object();
+        if (scope == "all") body["announced"] = outcome.announced;  // a local reset tells no one
+        throw HttpError(503, "some settings could not be reloaded on this server process (see its log); retry", body);
     }
     if (!outcome.announced) {
         throw HttpError(503, "reloaded this server process, but the others could not be told; retry");
