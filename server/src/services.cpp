@@ -41,13 +41,45 @@ json linkCreateSchema() {
               {"expiresAt", {{"type", "string"}, {"format", "date-time"}}}}}};
 }
 
+/// Refuses a start the configuration does not allow; warns about what it allows but should not.
+void checkStartup(const Config& config, Logger& log, bool ownerKeyIsDev) {
+    if (ownerKeyIsDev && !config.modules.allowDevOwnerKey) {
+        throw ConfigError("this build carries the PUBLIC development owner key (RFMAP_OWNER_KEY_IS_DEV=1): anyone could "
+                          "sign modules it runs in-process. Rebuild with -DRFMAP_OWNER_PUBKEY, or set "
+                          "modules.allowDevOwnerKey for a development server");
+    }
+    if (ownerKeyIsDev) log.warn("startup", "built with the PUBLIC development owner key; modules.allowDevOwnerKey is set");
+    if (config.adminToken.empty()) {
+        log.warn("startup", "admin.token is not set: the admin API is disabled");
+    } else if (config.adminToken.size() < Config::kMinAdminTokenLength) {
+        throw ConfigError(std::format("admin.token must be at least {} characters", Config::kMinAdminTokenLength));
+    }
+}
+
+/// The settings sync of `s`, with a topic for each copy of the admin settings it keeps, started.
+std::unique_ptr<SettingsSync> startSettingsSync(const Services& s) {
+    const Config& config = s.config();
+    const Config::Database& db = config.database;
+    auto sync = std::make_unique<SettingsSync>(
+        s.db(),
+        SettingsSync::Options{db.listenUrl.empty() ? db.url : db.listenUrl, config.settingsSync.listen,
+                              std::chrono::seconds(config.settingsSync.pollSeconds)},
+        s.log());
+    using Source = SettingsSync::Source;
+    sync->add(SettingsTopic::kBuiltins, Source::Database, [&s] { s.builtins().reload(); });
+    sync->add(SettingsTopic::kCacheLimits, Source::Database, [&s] { s.caches().loadStoredLimits(); });
+    sync->add(SettingsTopic::kModules, Source::Files, [&s] { s.reloadModules(); });
+    sync->start();
+    return sync;
+}
+
 }  // namespace
 
 Services::Services(const Config& config, Logger& log, const std::string& ownerKeyText, bool ownerKeyIsDev,
                    const std::filesystem::path& sqlDir)
     : config_(config), log_(log), forecast_(config.weather, log, clock_) {
     Secrets::init();
-    checkStartup(ownerKeyIsDev);
+    checkStartup(config_, log_, ownerKeyIsDev);
     openDatabase(sqlDir);
     buildStores();
     openTerrain();
@@ -56,27 +88,13 @@ Services::Services(const Config& config, Logger& log, const std::string& ownerKe
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
-    startSettingsSync();
+    settings_ = startSettingsSync(*this);
 }
 
 Services::~Services() {
     settings_.reset();  // its thread reloads the modules: stop it before they go
     jobs_.reset();  // running calculations hold module instances: finish them before the registry goes
     modules_.registry.reset();
-}
-
-void Services::checkStartup(bool ownerKeyIsDev) const {
-    if (ownerKeyIsDev && !config_.modules.allowDevOwnerKey) {
-        throw ConfigError("this build carries the PUBLIC development owner key (RFMAP_OWNER_KEY_IS_DEV=1): anyone could "
-                          "sign modules it runs in-process. Rebuild with -DRFMAP_OWNER_PUBKEY, or set "
-                          "modules.allowDevOwnerKey for a development server");
-    }
-    if (ownerKeyIsDev) log_.warn("startup", "built with the PUBLIC development owner key; modules.allowDevOwnerKey is set");
-    if (config_.adminToken.empty()) {
-        log_.warn("startup", "admin.token is not set: the admin API is disabled");
-    } else if (config_.adminToken.size() < Config::kMinAdminTokenLength) {
-        throw ConfigError(std::format("admin.token must be at least {} characters", Config::kMinAdminTokenLength));
-    }
 }
 
 void Services::openDatabase(const std::filesystem::path& sqlDir) {
@@ -216,20 +234,6 @@ void Services::buildModules(const std::string& ownerKeyText) {
     flightLogs_ = std::make_unique<FlightLogService>(*modules_.runner, *store_.schemas, store_.flightLogs.get(),
                                                      *store_.builtins,
                                                      FlightLogService::Limits{config_.server.maxUploadBytes, 200});
-}
-
-void Services::startSettingsSync() {
-    const Config::Database& db = config_.database;
-    settings_ = std::make_unique<SettingsSync>(
-        *store_.db,
-        SettingsSync::Options{db.listenUrl.empty() ? db.url : db.listenUrl, config_.settingsSync.listen,
-                              std::chrono::seconds(config_.settingsSync.pollSeconds)},
-        log_);
-    using Source = SettingsSync::Source;
-    settings_->add(SettingsTopic::kBuiltins, Source::Database, [this] { store_.builtins->reload(); });
-    settings_->add(SettingsTopic::kCacheLimits, Source::Database, [this] { resultStore_.admin->loadStoredLimits(); });
-    settings_->add(SettingsTopic::kModules, Source::Files, [this] { reloadModules(); });
-    settings_->start();
 }
 
 void Services::reloadModules() const {

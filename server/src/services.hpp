@@ -79,13 +79,11 @@ public:
 private:
     // Also runs reloads from parallel admin requests in turn.
     std::unique_ptr<ModuleGate> moduleGate_ = std::make_unique<ModuleGate>();
-    void checkStartup(bool ownerKeyIsDev) const;
     void openDatabase(const std::filesystem::path& sqlDir);
     void buildStores();
     void openTerrain();
     void buildCaches();
     void buildModules(const std::string& ownerKeyText);
-    void startSettingsSync();
 
     /// Persistent state: the database and the stores and services built on it.
     struct Stores {

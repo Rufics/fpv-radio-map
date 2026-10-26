@@ -112,7 +112,8 @@ private:
     };
     /// Which topics a reload reads: all of them, the database ones, or one by name.
     struct Pick {
-        enum class Kind { All, Database, One } kind = Kind::All;
+        enum class Kind { All, Database, One };
+        Kind kind = Kind::All;
         std::string name;  ///< for One
 
         [[nodiscard]] static Pick all() { return {}; }
