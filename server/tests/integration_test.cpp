@@ -724,8 +724,14 @@ TEST_F(Integration, OperationsListenerAnswersHealthReadinessAndMetrics) {
                              "rfmap_cache_limit_bytes{tier=\"dem-blocks\"}", "rfmap_jobs_started_total"}) {
         EXPECT_NE(text.find(part), std::string::npos) << part << "\n" << text;
     }
-    // A scrape runs on the operations threads, so no request thread is busy with it.
-    EXPECT_NE(text.find("rfmap_pool_busy_threads{pool=\"http\"} 0\n"), std::string::npos) << text;
+    // A scrape runs on the operations threads, so no request thread is busy with it. The thread
+    // of the last API call may still be returning, so give the gauge a moment to reach zero.
+    const auto idle = [&] {
+        const auto again = ops.Get("/metrics", bearer("integration-metrics-token"));
+        return again && again->body.find("rfmap_pool_busy_threads{pool=\"http\"} 0\n") != std::string::npos;
+    };
+    for (int i = 0; i < 50 && !idle(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    EXPECT_TRUE(idle());
 }
 
 TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {

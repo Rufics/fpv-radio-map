@@ -95,6 +95,24 @@ TEST(ReadinessChecksTest, AThrowingCheckFailsWithItsMessage) {
     EXPECT_EQ(report.body.at("checks").at("probe").at("detail"), "connection refused");
 }
 
+TEST(DatabaseProbeTest, ProbeUrlAddsClientSideTimeoutsUnlessTheOperatorSetThem) {
+    EXPECT_EQ(DatabaseProbe::probeUrl("postgresql://u@h/db", 1000ms),
+              "postgresql://u@h/db?connect_timeout=2&tcp_user_timeout=1000");
+    EXPECT_EQ(DatabaseProbe::probeUrl("postgresql://u@h/db?sslmode=require", 2500ms),
+              "postgresql://u@h/db?sslmode=require&connect_timeout=3&tcp_user_timeout=2500");
+    EXPECT_EQ(DatabaseProbe::probeUrl("postgresql://u@h/db?connect_timeout=10", 1000ms),
+              "postgresql://u@h/db?connect_timeout=10&tcp_user_timeout=1000");
+    EXPECT_EQ(DatabaseProbe::probeUrl("host=h dbname=db", 1000ms),
+              "host=h dbname=db connect_timeout=2 tcp_user_timeout=1000");
+}
+
+TEST(DatabaseProbeTest, BudgetIsConnectPlusStatementTimeout) {
+    Logger log;
+    log.setQuiet(true);
+    const DatabaseProbe probe("postgresql://u@h/db", 500ms, log);
+    EXPECT_EQ(probe.budget(), 2500ms);
+}
+
 TEST(DatabaseProbeTest, UnreachableDatabaseIsNotReady) {
     Logger log;
     log.setQuiet(true);

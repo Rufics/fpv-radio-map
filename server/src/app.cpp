@@ -302,6 +302,7 @@ bool Application::listen() {
     if (config_.ops.enabled && !ops_->listen()) return false;
     log_.info("http", std::format("listening on {}:{}", config_.server.listen, config_.server.port));
     const bool ok = http_->listen(config_.server.listen, config_.server.port);
+    if (!ok) log_.error("http", std::format("could not listen on {}:{}", config_.server.listen, config_.server.port));
     ops_->stop();
     return ok;
 }

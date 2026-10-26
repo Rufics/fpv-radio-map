@@ -10,7 +10,6 @@
 
 #include <atomic>
 #include <csignal>
-#include <format>
 #include <iostream>
 #include <string_view>
 #include <vector>
@@ -44,8 +43,8 @@ int main(int argc, char** argv) {
         const bool ok = app.listen();
         runningApplication() = nullptr;
         if (!ok) {
-            const auto& server = app.config().server;
-            app.log().error("http", std::format("could not listen on {}:{}", server.listen, server.port));
+            // The listener that failed has already said which address it could not bind.
+            app.log().error("server", "not started: a listener could not bind, see the error above");
             return 1;
         }
         app.log().info("http", "stopped");

@@ -53,11 +53,14 @@ private:
 
 /// Whether PostgreSQL answers, on a connection of its own so that a probe never waits behind the
 /// request threads for a pooled connection. One probe runs at a time; a probe that arrives while
-/// another is in flight gets the last answer, so a slow database cannot pile up connections.
+/// another is in flight gets the last answer, so a slow database cannot pile up connections, and
+/// a failure once the probe in flight has outlived its budget, so a black-holed database cannot
+/// keep an old "ready" alive.
 class DatabaseProbe {
 public:
-    /// `statementTimeout` bounds the probe query on the server side.
-    DatabaseProbe(std::string url, std::chrono::milliseconds statementTimeout, Logger& log);
+    /// `statementTimeout` bounds the probe query on the server side; the client side gets a
+    /// connect timeout and a TCP user timeout of the same order (see probeUrl).
+    DatabaseProbe(const std::string& url, std::chrono::milliseconds statementTimeout, Logger& log);
     ~DatabaseProbe();
     DatabaseProbe(const DatabaseProbe&) = delete;
     DatabaseProbe& operator=(const DatabaseProbe&) = delete;
@@ -66,18 +69,30 @@ public:
 
     [[nodiscard]] CheckResult check();
 
+    /// `url` with client-side bounds added unless it names them already: connect_timeout (whole
+    /// seconds, at least 2, as libpq rounds anyway) and tcp_user_timeout (milliseconds), so a
+    /// probe is bounded even when the network drops packets instead of refusing. Takes a URI
+    /// ("postgresql://...") or a keyword string ("host=... dbname=...").
+    static std::string probeUrl(const std::string& url, std::chrono::milliseconds statementTimeout);
+    /// The longest a well-behaved probe takes: connect timeout plus statement timeout.
+    [[nodiscard]] std::chrono::milliseconds budget() const { return budget_; }
+
 private:
     /// Connects when there is no open connection; throws pqxx::failure when it cannot.
     void ensureConnected();
     CheckResult probe();
 
+    using Clock = std::chrono::steady_clock;
+
     std::string url_;
     std::chrono::milliseconds statementTimeout_;
+    std::chrono::milliseconds budget_;
     Logger& log_;
     std::mutex mutex_;  ///< serialises probes and guards conn_
     std::unique_ptr<pqxx::connection> conn_;
-    std::mutex lastMutex_;
+    std::mutex lastMutex_;  ///< guards last_ and started_
     CheckResult last_{false, "not probed yet"};
+    Clock::time_point started_{};  ///< when the probe in flight began; meaningful while mutex_ is held
 };
 
 }  // namespace rfmap

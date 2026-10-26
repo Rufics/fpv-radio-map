@@ -1,6 +1,9 @@
 #include "readiness.hpp"
 
+#include <algorithm>
 #include <exception>
+#include <format>
+#include <string_view>
 
 namespace rfmap {
 
@@ -23,16 +26,51 @@ ReadinessChecks::Report ReadinessChecks::run() const {
     return report;
 }
 
-DatabaseProbe::DatabaseProbe(std::string url, std::chrono::milliseconds statementTimeout, Logger& log)
-    : url_(std::move(url)), statementTimeout_(statementTimeout), log_(log) {}
+namespace {
+
+constexpr std::chrono::seconds kMinConnectTimeout{2};  // libpq treats anything shorter as 2 s
+
+std::chrono::seconds connectTimeoutFor(std::chrono::milliseconds statementTimeout) {
+    return std::max(std::chrono::ceil<std::chrono::seconds>(statementTimeout), kMinConnectTimeout);
+}
+
+}  // namespace
+
+std::string DatabaseProbe::probeUrl(const std::string& url, std::chrono::milliseconds statementTimeout) {
+    const bool uri = url.starts_with("postgresql://") || url.starts_with("postgres://");
+    std::string out = url;
+    const auto add = [&](std::string_view key, long long value) {
+        if (url.find(key) != std::string::npos) return;  // the operator's setting wins
+        if (uri) {
+            out += out.find('?') == std::string::npos ? '?' : '&';
+        } else if (!out.empty()) {
+            out += ' ';
+        }
+        out += std::format("{}={}", key, value);
+    };
+    add("connect_timeout", connectTimeoutFor(statementTimeout).count());
+    add("tcp_user_timeout", statementTimeout.count());
+    return out;
+}
+
+DatabaseProbe::DatabaseProbe(const std::string& url, std::chrono::milliseconds statementTimeout, Logger& log)
+    : url_(probeUrl(url, statementTimeout)), statementTimeout_(statementTimeout),
+      budget_(connectTimeoutFor(statementTimeout) + statementTimeout), log_(log) {}
 
 DatabaseProbe::~DatabaseProbe() = default;
 
 CheckResult DatabaseProbe::check() {
     std::unique_lock lock(mutex_, std::try_to_lock);
     if (!lock.owns_lock()) {
+        // Another probe is in flight. Its last answer stands while it is within budget; past
+        // that the database is not answering in time, whatever it said before.
         const std::lock_guard last(lastMutex_);
+        if (Clock::now() - started_ > budget_) return {false, "database probe timed out"};
         return last_;
+    }
+    {
+        const std::lock_guard last(lastMutex_);
+        started_ = Clock::now();
     }
     CheckResult result = probe();
     const std::lock_guard last(lastMutex_);
