@@ -213,6 +213,7 @@ TEST(ConfigTest, OperationsListenerAndMetricsGuards) {
     EXPECT_EQ(c.raw["metrics"]["token"], "(set)");  // never echoed
     EXPECT_EQ(Config::load({}, {{"RFMAP_METRICS_TOKEN", "from-the-environment"}}).metrics.token, "from-the-environment");
     EXPECT_THROW(Config::fromJson({{"ops", {{"port", 8080}}}}), std::invalid_argument);  // the API port
+    EXPECT_THROW(Config::fromJson({{"ops", {{"port", 70000}}}}), std::invalid_argument);
     EXPECT_THROW(Config::fromJson({{"ops", {{"drainSeconds", -1}}}}), std::invalid_argument);
     // A short token on a listener outside the rate limiter could be guessed.
     EXPECT_THROW(Config::fromJson({{"metrics", {{"token", "short"}}}}), std::invalid_argument);

@@ -16,7 +16,7 @@
 
 #include <array>
 #include <atomic>
-#include <cstdint>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
@@ -47,7 +47,7 @@ public:
     [[nodiscard]] static bool isLoopback(std::string_view address);
 
 private:
-    using Bytes = std::array<std::uint8_t, 16>;
+    using Bytes = std::array<std::byte, 16>;
     struct Network {
         Bytes address{};
         int prefix = 0;  ///< bits of the 128-bit form
@@ -123,7 +123,7 @@ private:
     MetricsSource metrics_;
     std::atomic<bool> draining_{false};
     std::unique_ptr<httplib::Server> http_;
-    std::thread thread_;
+    std::jthread thread_;
 };
 
 }  // namespace rfmap

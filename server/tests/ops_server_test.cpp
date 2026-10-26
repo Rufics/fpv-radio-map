@@ -3,7 +3,12 @@
 #include <gtest/gtest.h>
 #include <httplib.h>
 
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 using namespace rfmap;
@@ -39,6 +44,34 @@ private:
 };
 
 MetricsAccess openToLoopback() { return {"", CidrList::parse({})}; }
+
+/// A loopback port held by a plain socket (without SO_REUSEPORT, so a listener cannot share it)
+/// until released; afterwards nothing listens on it.
+class HeldPort {
+public:
+    HeldPort() : fd_(::socket(AF_INET, SOCK_STREAM, 0)) {
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        socklen_t len = sizeof addr;
+        const bool bound = fd_ >= 0 && ::bind(fd_, reinterpret_cast<const sockaddr*>(&addr), len) == 0 &&  // NOSONAR
+                           ::getsockname(fd_, reinterpret_cast<sockaddr*>(&addr), &len) == 0;             // NOSONAR
+        port_ = bound ? ntohs(addr.sin_port) : 0;
+    }
+    HeldPort(const HeldPort&) = delete;
+    HeldPort& operator=(const HeldPort&) = delete;
+    ~HeldPort() { release(); }
+
+    [[nodiscard]] int port() const { return port_; }
+    void release() {
+        if (fd_ >= 0) ::close(fd_);
+        fd_ = -1;
+    }
+
+private:
+    int fd_;
+    int port_ = 0;
+};
 
 }  // namespace
 
@@ -210,6 +243,36 @@ TEST(OpsServerTest, MetricsRefusedFromOutsideTheAllowedNetworks) {
     const auto res = f.get("/metrics");
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 403);
+}
+
+TEST(OpsServerTest, ListenLogsABusyPortAndTakesAFreeOne) {
+    HeldPort held;
+    ASSERT_GT(held.port(), 0);
+    Config::Ops ops = localOps();
+    ops.port = held.port();
+    Logger log;
+    log.setQuiet(true);
+    OpsServer blocked(ops, openToLoopback(), false, log);
+    EXPECT_FALSE(blocked.listen());  // the port is taken; the error is logged, not thrown
+
+    held.release();
+    OpsServer server(ops, openToLoopback(), false, log);  // as a restarted process would
+    ASSERT_TRUE(server.listen());
+    httplib::Client client("127.0.0.1", ops.port);
+    const auto live = client.Get("/healthz");
+    ASSERT_TRUE(live);
+    EXPECT_EQ(live->status, 200);
+    server.stop();
+}
+
+TEST(OpsServerTest, AMetricsSourceThatThrowsIsA500WithoutDetails) {
+    OpsFixture f(openToLoopback(), true);
+    f.log.setQuiet(true);
+    f.server.setMetricsSource([]() -> std::string { throw std::runtime_error("the counters are broken"); });
+    const auto r = f.get("/metrics");
+    ASSERT_TRUE(r);
+    EXPECT_EQ(r->status, 500);
+    EXPECT_EQ(r->body, R"({"message":"internal error"})");
 }
 
 TEST(OpsServerTest, UnknownPathIsJson404) {

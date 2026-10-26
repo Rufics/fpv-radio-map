@@ -130,11 +130,37 @@ struct Env {
     std::unique_ptr<FakeOpenMeteo> weather;
     std::unique_ptr<Application> app;
     std::thread thread;
+    bool listened = false;  ///< what Application::listen returned
     int port = 0;
     int opsPort = 0;
     std::string missionId, ownerKey, editSession, viewSession, linkId, linkToken;
 };
 Env* env = nullptr;
+
+/// A loopback port nothing listens on right now: bound to port 0, read back, closed.
+int freePort() {
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    socklen_t len = sizeof addr;
+    const bool bound = fd >= 0 && ::bind(fd, reinterpret_cast<const sockaddr*>(&addr), len) == 0 &&  // NOSONAR
+                       ::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len) == 0;             // NOSONAR
+    const int port = bound ? ntohs(addr.sin_port) : 0;
+    if (fd >= 0) ::close(fd);
+    return port;
+}
+
+/// Polls the operations listener until it answers, so the tests start against a serving app.
+bool waitUntilServing(int opsPort) {
+    httplib::Client ops("127.0.0.1", opsPort);
+    ops.set_connection_timeout(0, 200000);
+    for (int i = 0; i < 100; ++i) {
+        if (const auto r = ops.Get("/healthz"); r && r->status == 200) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
 
 /// RFMAP_IT_DUMP_DIR=<dir> keeps chosen responses for inspection.
 void dump(const std::string& name, const json& body) {
@@ -163,10 +189,13 @@ protected:
             w.exec("drop schema public cascade; create schema public;");
             w.commit();
         }
-        json cfg = {{"server", {{"listen", "127.0.0.1"}, {"threads", 8}}},
+        // Real ports, as in production: Application::listen binds both listeners itself.
+        env->port = freePort();
+        env->opsPort = freePort();
+        json cfg = {{"server", {{"listen", "127.0.0.1"}, {"port", env->port}, {"threads", 8}}},
                     {"database", {{"url", url}, {"poolSize", 4}}},
                     {"admin", {{"token", "integration-admin-token-0123456789"}}},
-                    {"ops", {{"listen", "127.0.0.1"}, {"drainSeconds", 0}}},
+                    {"ops", {{"listen", "127.0.0.1"}, {"port", env->opsPort}, {"drainSeconds", 0}}},
                     {"metrics", {{"enabled", true}, {"token", "integration-metrics-token"}}},
                     {"data",
                      {{"dem", (env->dir / "dem.cog.tif").string()},
@@ -194,15 +223,16 @@ protected:
                                     {"coverage", {{"perMinute", 6000}, {"burst", 1000}}}}}};
         env->app = std::make_unique<Application>(Config::fromJson(cfg), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true,
                                                  RFMAP_SQL_DIR);
-        env->port = env->app->bindAny();
-        env->opsPort = env->app->bindAnyOps();
-        env->thread = std::thread([] { env->app->serveBound(); });
+        env->thread = std::thread([] { env->listened = env->app->listen(); });
+        if (!waitUntilServing(env->opsPort)) throw std::runtime_error("the server did not start listening");
     }
 
     static void TearDownTestSuite() {
         if (!env) return;
-        env->app->stop();
+        // The production path: a stop request drains (0 s here), then listen() returns.
+        env->app->requestShutdown();
         env->thread.join();
+        EXPECT_TRUE(env->listened);
         env->app.reset();
         env->weather.reset();
         fs::remove_all(env->dir);

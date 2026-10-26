@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cstddef>
 #include <format>
 #include <stdexcept>
 
@@ -49,10 +50,10 @@ std::optional<CidrList::Bytes> CidrList::toBytes(std::string_view address) {
     const std::string text(address);
     Bytes out{};
     if (inet_pton(AF_INET6, text.c_str(), out.data()) == 1) return out;
-    std::array<std::uint8_t, 4> v4{};
+    std::array<std::byte, 4> v4{};
     if (inet_pton(AF_INET, text.c_str(), v4.data()) != 1) return std::nullopt;
-    out[10] = 0xff;
-    out[11] = 0xff;
+    out[10] = std::byte{0xff};
+    out[11] = std::byte{0xff};
     std::copy(v4.begin(), v4.end(), out.begin() + 12);
     return out;
 }
@@ -75,7 +76,7 @@ bool CidrList::matches(const Network& net, const Bytes& addr) {
     int bits = net.prefix;
     for (std::size_t i = 0; i < addr.size() && bits > 0; ++i, bits -= 8) {
         const int take = std::min(bits, 8);
-        const auto mask = static_cast<std::uint8_t>(0xff << (8 - take));
+        const auto mask = static_cast<std::byte>(0xffU << (8 - take));
         if ((net.address[i] & mask) != (addr[i] & mask)) return false;
     }
     return true;
@@ -195,7 +196,7 @@ int OpsServer::bindAny() {
 }
 
 void OpsServer::serveOnThread() {
-    thread_ = std::thread([this] { http_->listen_after_bind(); });
+    thread_ = std::jthread([this] { http_->listen_after_bind(); });
 }
 
 void OpsServer::stop() {

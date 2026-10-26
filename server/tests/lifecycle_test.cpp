@@ -3,6 +3,10 @@
 
 #include <gtest/gtest.h>
 
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <atomic>
 #include <chrono>
 #include <stdexcept>
@@ -124,6 +128,52 @@ TEST(DatabaseProbeTest, BudgetIsConnectPlusStatementTimeout) {
     log.setQuiet(true);
     const DatabaseProbe probe("postgresql://u@h/db", 500ms, log);
     EXPECT_EQ(probe.budget(), 2500ms);
+}
+
+namespace {
+
+/// A TCP port that accepts connections at the kernel and never speaks: a database that hangs.
+class SilentListener {
+public:
+    SilentListener() : fd_(::socket(AF_INET, SOCK_STREAM, 0)) {
+        sockaddr_in addr{};
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        socklen_t len = sizeof addr;
+        if (fd_ >= 0 && ::bind(fd_, reinterpret_cast<const sockaddr*>(&addr), len) == 0 &&  // NOSONAR
+            ::listen(fd_, 4) == 0 && ::getsockname(fd_, reinterpret_cast<sockaddr*>(&addr), &len) == 0) {  // NOSONAR
+            port_ = ntohs(addr.sin_port);
+        }
+    }
+    ~SilentListener() {
+        if (fd_ >= 0) ::close(fd_);
+    }
+    SilentListener(const SilentListener&) = delete;
+    SilentListener& operator=(const SilentListener&) = delete;
+    [[nodiscard]] int port() const { return port_; }
+
+private:
+    int fd_;
+    int port_ = 0;
+};
+
+}  // namespace
+
+TEST(DatabaseProbeTest, ACallerThatFindsAProbeInFlightGetsTheLastAnswer) {
+    const SilentListener silent;
+    ASSERT_GT(silent.port(), 0);
+    Logger log;
+    log.setQuiet(true);
+    // The connect hangs until connect_timeout (2 s, the floor libpq applies), so the first probe
+    // holds the probe lock for about that long.
+    DatabaseProbe probe("postgresql://rfmap@127.0.0.1:" + std::to_string(silent.port()) + "/none", 100ms, log);
+    std::thread first([&probe] { (void)probe.check(); });
+    std::this_thread::sleep_for(300ms);
+    const CheckResult meanwhile = probe.check();
+    first.join();
+    EXPECT_FALSE(meanwhile.ok);
+    EXPECT_EQ(meanwhile.detail, "not probed yet");  // the first probe had no answer yet
+    EXPECT_EQ(probe.check().detail, "database unreachable");
 }
 
 TEST(DatabaseProbeTest, UnreachableDatabaseIsNotReady) {

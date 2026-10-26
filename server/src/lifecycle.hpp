@@ -15,7 +15,7 @@
 namespace rfmap {
 
 /// Runs the two phases of a stop on a thread of its own once `request` is called. `request` is
-/// async-signal-safe: it only sets an atomic flag that the thread polls, so a signal handler may
+/// async-signal-safe: it only sets atomic flags that the thread polls, so a signal handler may
 /// call it. Destroying the object ends the thread without running phases it has not reached.
 class GracefulStop {
 public:
@@ -32,9 +32,9 @@ public:
     /// Asks for a stop. Safe from a signal handler: it only sets atomic flags. A second call
     /// (a second Ctrl-C) cuts the drain short, so the stop phase runs at the next poll.
     void request() noexcept {
-        if (requested_.exchange(true, std::memory_order_relaxed)) hurried_.store(true, std::memory_order_relaxed);
+        if (requested_.exchange(true)) hurried_.store(true);
     }
-    [[nodiscard]] bool requested() const noexcept { return requested_.load(std::memory_order_relaxed); }
+    [[nodiscard]] bool requested() const noexcept { return requested_.load(); }
     /// True from the moment the drain phase began.
     [[nodiscard]] bool draining() const noexcept { return draining_.load(); }
     /// True once the stop phase has run.
@@ -42,12 +42,12 @@ public:
 
 private:
     static constexpr std::chrono::milliseconds kPoll{50};
-    void run(const std::stop_token& stop);
-    /// Sleeps `duration` or less, returning early on a stop request of the thread.
-    [[nodiscard]] bool sleepUnlessStopped(const std::stop_token& stop, std::chrono::milliseconds duration);
+    void run();
+    /// Sleeps `duration` or less; false once the object is being destroyed.
+    [[nodiscard]] bool sleepUnlessStopped(std::chrono::milliseconds duration);
     /// Waits out the drain window in polls, ending early on a second request. False if the
-    /// thread was asked to stop.
-    [[nodiscard]] bool drain(const std::stop_token& stop);
+    /// object is being destroyed.
+    [[nodiscard]] bool drain();
 
     std::chrono::milliseconds drain_;
     Phase onDrain_;
@@ -57,8 +57,9 @@ private:
     std::atomic<bool> draining_{false};
     std::atomic<bool> stopped_{false};
     std::mutex mutex_;
-    std::condition_variable_any wake_;
-    std::jthread thread_;  ///< declared last: started after every member it reads exists
+    std::condition_variable wake_;
+    bool ending_ = false;  ///< set by the destructor, under mutex_
+    std::jthread thread_;  ///< declared last: started after every member it reads exists, joined first
 };
 
 }  // namespace rfmap

@@ -84,7 +84,7 @@ void DatabaseProbe::ensureConnected() {
     conn_ = std::make_unique<pqxx::connection>(url_);
     // Session-level, so it holds for every later probe on this connection.
     pqxx::nontransaction tx(*conn_);
-    tx.exec("set statement_timeout = " + std::to_string(statementTimeout_.count()));
+    tx.exec(std::format("set statement_timeout = {}", statementTimeout_.count()));
 }
 
 CheckResult DatabaseProbe::probe() {

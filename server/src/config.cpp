@@ -114,6 +114,33 @@ Config Config::load(const std::filesystem::path& file, const Environment& env) {
     return fromJson(std::move(doc));
 }
 
+namespace {
+
+/// The operations listener and the metrics behind it, with their checks (ops.port against
+/// server.port, which is read before this runs).
+void readOperations(const json& doc, Config& c) {
+    const json& ops = doc.value("ops", json::object());
+    read(ops, "enabled", c.ops.enabled);
+    read(ops, "listen", c.ops.listen);
+    read(ops, "port", c.ops.port);
+    read(ops, "drainSeconds", c.ops.drainSeconds);
+
+    const json& me = doc.value("metrics", json::object());
+    read(me, "enabled", c.metrics.enabled);
+    read(me, "token", c.metrics.token);
+    read(me, "allowFrom", c.metrics.allowFrom);
+
+    if (c.ops.port < 0 || c.ops.port > 65535) throw std::invalid_argument("ops.port out of range");
+    if (c.ops.enabled && c.ops.port == c.server.port) throw std::invalid_argument("ops.port must differ from server.port");
+    if (c.ops.drainSeconds < 0) throw std::invalid_argument("ops.drainSeconds must be >= 0");
+    if (!c.metrics.token.empty() && c.metrics.token.size() < Config::kMinMetricsTokenLength) {
+        throw std::invalid_argument(
+            std::format("metrics.token must be at least {} characters", Config::kMinMetricsTokenLength));
+    }
+}
+
+}  // namespace
+
 Config Config::fromJson(json doc) {
     Config c;
     const json& s = doc.value("server", json::object());
@@ -129,17 +156,7 @@ Config Config::fromJson(json doc) {
     read(db, "poolSize", c.database.poolSize);
 
     read(doc.value("admin", json::object()), "token", c.adminToken);
-
-    const json& ops = doc.value("ops", json::object());
-    read(ops, "enabled", c.ops.enabled);
-    read(ops, "listen", c.ops.listen);
-    read(ops, "port", c.ops.port);
-    read(ops, "drainSeconds", c.ops.drainSeconds);
-
-    const json& me = doc.value("metrics", json::object());
-    read(me, "enabled", c.metrics.enabled);
-    read(me, "token", c.metrics.token);
-    read(me, "allowFrom", c.metrics.allowFrom);
+    readOperations(doc, c);
 
     const json& d = doc.value("data", json::object());
     readPath(d, "dem", c.data.dem);
@@ -207,12 +224,6 @@ Config Config::fromJson(json doc) {
     read(doc.value("calc", json::object()), "maxRouteSamples", c.calc.maxRouteSamples);
 
     if (c.server.port <= 0 || c.server.port > 65535) throw std::invalid_argument("server.port out of range");
-    if (c.ops.port < 0 || c.ops.port > 65535) throw std::invalid_argument("ops.port out of range");
-    if (c.ops.enabled && c.ops.port == c.server.port) throw std::invalid_argument("ops.port must differ from server.port");
-    if (c.ops.drainSeconds < 0) throw std::invalid_argument("ops.drainSeconds must be >= 0");
-    if (!c.metrics.token.empty() && c.metrics.token.size() < kMinMetricsTokenLength) {
-        throw std::invalid_argument(std::format("metrics.token must be at least {} characters", kMinMetricsTokenLength));
-    }
     if (c.auth.pinMaxAttempts < 1) throw std::invalid_argument("auth.pinMaxAttempts must be >= 1");
     if (c.auth.pinConcurrency < 0 || c.auth.pinQueue < 0 || c.auth.pinWaitMs < 0) {
         throw std::invalid_argument("auth.pinConcurrency, auth.pinQueue and auth.pinWaitMs must be >= 0");
