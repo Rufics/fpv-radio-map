@@ -115,6 +115,9 @@ public:
     /// Every PIN hash and check passes through `gate`, so PIN work cannot take every request thread.
     AuthService(IAuthStore& store, const PinHasher& pins, PinGate& gate, const IClock& clock, Settings settings);
 
+    /// The bulkhead PIN checks run in.
+    [[nodiscard]] const PinGate& pinGate() const { return gate_; }
+
     struct OwnerKey {
         std::string plain;  ///< returned to the creator once
         Digest hash{};      ///< what is stored

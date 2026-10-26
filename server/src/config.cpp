@@ -34,14 +34,14 @@ std::string matchKey(const json& obj, const std::string& wanted) {
     // Keys absent from the file still get their proper spelling.
     static constexpr auto known = std::to_array<std::string_view>({
         "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "maxUploadBytes", "database", "url",
-        "poolSize", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
+        "poolSize", "leaseTimeoutMs", "statementTimeoutMs", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
         "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "allowDevOwnerKey", "requireSandbox", "maxMemoryMb",
         "maxTimeoutMs", "weather",
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
-        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "map", "metrics",
-        "enabled", "allowFrom", "ops", "drainSeconds", "listenUrl", "settingsSync", "pollSeconds"});
+        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "concurrency",
+        "queue", "waitMs", "map", "metrics", "enabled", "allowFrom", "ops", "drainSeconds", "listenUrl", "settingsSync", "pollSeconds"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -68,6 +68,28 @@ void read(const json& obj, const char* key, T& out) {
 
 void readPath(const json& obj, const char* key, std::filesystem::path& out) {
     if (obj.is_object() && obj.contains(key) && obj.at(key).is_string()) out = obj.at(key).get<std::string>();
+}
+
+void readDatabase(const json& db, Config::Database& out) {
+    read(db, "url", out.url);
+    read(db, "poolSize", out.poolSize);
+    read(db, "leaseTimeoutMs", out.leaseTimeoutMs);
+    read(db, "statementTimeoutMs", out.statementTimeoutMs);
+    read(db, "listenUrl", out.listenUrl);
+    if (out.leaseTimeoutMs < 0 || out.statementTimeoutMs < 0) {
+        throw std::invalid_argument("database.leaseTimeoutMs and database.statementTimeoutMs must be >= 0");
+    }
+}
+
+void readCalc(const json& calc, Config::Calc& out) {
+    read(calc, "maxRouteSamples", out.maxRouteSamples);
+    read(calc, "concurrency", out.concurrency);
+    read(calc, "queue", out.queue);
+    read(calc, "waitMs", out.waitMs);
+    if (!(out.maxRouteSamples >= 1.0)) throw std::invalid_argument("calc.maxRouteSamples must be >= 1");
+    if (out.concurrency < 0 || out.queue < 0 || out.waitMs < 0) {
+        throw std::invalid_argument("calc.concurrency, calc.queue and calc.waitMs must be >= 0");
+    }
 }
 
 Config::SettingsSync readSettingsSync(const json& sync) {
@@ -169,10 +191,7 @@ Config Config::fromJson(json doc) {
     read(s, "maxBodyBytes", c.server.maxBodyBytes);
     read(s, "maxUploadBytes", c.server.maxUploadBytes);
 
-    const json& db = doc.value("database", json::object());
-    read(db, "url", c.database.url);
-    read(db, "poolSize", c.database.poolSize);
-    read(db, "listenUrl", c.database.listenUrl);
+    readDatabase(doc.value("database", json::object()), c.database);
     c.settingsSync = readSettingsSync(doc.value("settingsSync", json::object()));
 
     read(doc.value("admin", json::object()), "token", c.adminToken);
@@ -241,7 +260,7 @@ Config Config::fromJson(json doc) {
     read(cv, "maxCells", c.coverage.maxCells);
     read(cv, "maxJobs", c.coverage.maxJobs);
     read(cv, "keepMinutes", c.coverage.keepMinutes);
-    read(doc.value("calc", json::object()), "maxRouteSamples", c.calc.maxRouteSamples);
+    readCalc(doc.value("calc", json::object()), c.calc);
 
     if (c.server.port <= 0 || c.server.port > 65535) throw std::invalid_argument("server.port out of range");
     if (c.auth.pinMaxAttempts < 1) throw std::invalid_argument("auth.pinMaxAttempts must be >= 1");
@@ -251,7 +270,6 @@ Config Config::fromJson(json doc) {
     if (c.data.demStatedErrorM.has_value() && !(*c.data.demStatedErrorM >= 0.0)) {
         throw std::invalid_argument("data.demStatedErrorM must be >= 0");
     }
-    if (!(c.calc.maxRouteSamples >= 1.0)) throw std::invalid_argument("calc.maxRouteSamples must be >= 1");
     if (c.modules.maxMemoryMb == 0 || c.modules.maxTimeoutMs == 0) {
         throw std::invalid_argument("modules.maxMemoryMb and modules.maxTimeoutMs must be >= 1");
     }

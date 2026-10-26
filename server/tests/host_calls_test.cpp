@@ -94,7 +94,7 @@ private:
 class HostRig {
 public:
     explicit HostRig(const std::string& url)
-        : dir_(rfmap::test::scratchDir("host-calls")), db_(prepare(url), 1), schemas_(RFMAP_SCHEMAS_DIR),
+        : dir_(rfmap::test::scratchDir("host-calls")), db_(prepare(url), Database::Settings{.poolSize = 1}), schemas_(RFMAP_SCHEMAS_DIR),
           library_(db_, schemas_),
           blocks_(16u << 20, [](const RasterBlock& b) { return b.values.size() * sizeof(float) + sizeof(RasterBlock); }),
           weather_(weatherConfig_, &forecast_, clock_) {

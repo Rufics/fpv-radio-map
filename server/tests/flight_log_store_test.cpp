@@ -17,7 +17,7 @@ namespace {
 /// A store on a fresh database with one mission in it.
 class StoreRig {
 public:
-    explicit StoreRig(const std::string& url) : db_(prepare(url), 1), store_(db_) {
+    explicit StoreRig(const std::string& url) : db_(prepare(url), Database::Settings{.poolSize = 1}), store_(db_) {
         rfmap::test::migrate(db_, RFMAP_SQL_DIR);
         db_.tx([](pqxx::work& w) {
             w.exec("insert into missions(id, owner_key_hash, name, doc) values ('m1', '\\x00', 'test', '{}')");

@@ -916,7 +916,7 @@ TEST_F(Integration, AdminSettingsReachEveryServerProcess) {
 }
 
 TEST_F(Integration, SettingsPollCatchesWhatNoNoticeAnnounced) {
-    Database db(databaseUrl(), 1);
+    Database db(databaseUrl(), Database::Settings{.poolSize = 1});
     Logger log;
     log.setQuiet(true);
     std::atomic<int> reloads{0};
@@ -952,7 +952,7 @@ TEST_F(Integration, SettingsPollCatchesWhatNoNoticeAnnounced) {
 }
 
 TEST_F(Integration, SettingsPollRetriesAReloadThatFailed) {
-    Database db(databaseUrl(), 1);
+    Database db(databaseUrl(), Database::Settings{.poolSize = 1});
     Logger log;
     log.setQuiet(true);
     std::atomic<int> attempts{0};
@@ -976,8 +976,8 @@ TEST_F(Integration, SettingsPollRetriesAReloadThatFailed) {
 }
 
 TEST_F(Integration, SettingsNoticeThatCannotBeSentIsReported) {
-    Database db(databaseUrl(), 1);
-    Database other(databaseUrl(), 1);
+    Database db(databaseUrl(), Database::Settings{.poolSize = 1});
+    Database other(databaseUrl(), Database::Settings{.poolSize = 1});
     Logger log;
     log.setQuiet(true);
     SettingsSync sync(db, {databaseUrl(), false, std::chrono::seconds(3600)}, log);
@@ -999,7 +999,7 @@ TEST_F(Integration, SettingsNoticeThatCannotBeSentIsReported) {
 }
 
 TEST_F(Integration, SettingsSyncStartsWithoutItsListenerAndIgnoresStrangeMessages) {
-    Database db(databaseUrl(), 1);
+    Database db(databaseUrl(), Database::Settings{.poolSize = 1});
     Logger log;
     log.setQuiet(true);
     // Nothing listens on port 1: the start goes on, and the status says why it is not listening.
@@ -1071,7 +1071,7 @@ TEST_F(Integration, AdminModuleChangeForAnUnknownModuleIsRefused) {
 
 TEST_F(Integration, SettingsListenerReconnectsAndReloadsWhatItMayHaveMissed) {
     const std::string url = databaseUrl();
-    Database db(url, 1);
+    Database db(url, Database::Settings{.poolSize = 1});
     Logger log;
     log.setQuiet(true);
     std::atomic<int> fileReloads{0};
