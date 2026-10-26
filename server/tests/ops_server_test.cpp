@@ -29,9 +29,9 @@ public:
           client_("127.0.0.1", port_) {
         server.setMetricsSource([] { return std::string("rfmap_up 1\n"); });
     }
-    httplib::Result get(const std::string& path, const std::string& bearer = "") {
+    httplib::Result get(const std::string& path, const std::string& bearer = "", const char* scheme = "Bearer ") {
         httplib::Headers headers;
-        if (!bearer.empty()) headers.emplace("Authorization", "Bearer " + bearer);
+        if (!bearer.empty()) headers.emplace("Authorization", scheme + bearer);
         return client_.Get(path, headers);
     }
 
@@ -235,6 +235,8 @@ TEST(OpsServerTest, MetricsBehindTheirOwnToken) {
     res = f.get("/metrics", "metrics-token");
     EXPECT_EQ(res->status, 200);
     EXPECT_EQ(res->body, "rfmap_up 1\n");
+    EXPECT_EQ(f.get("/metrics", "metrics-token", "bearer ")->status, 200);  // the scheme is case-insensitive
+    EXPECT_EQ(f.get("/metrics", "metrics-token", "Basic ")->status, 401);
 }
 
 TEST(OpsServerTest, MetricsRefusedFromOutsideTheAllowedNetworks) {

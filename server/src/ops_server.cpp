@@ -7,10 +7,12 @@
 #include <arpa/inet.h>
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cstddef>
 #include <format>
 #include <stdexcept>
+#include <string_view>
 
 namespace rfmap {
 
@@ -18,10 +20,16 @@ namespace {
 
 constexpr int kOpsThreads = 2;
 
+/// The token of an `Authorization: Bearer <token>` header; the scheme name is case-insensitive
+/// (RFC 9110), so `bearer` and `BEARER` count too.
 std::string bearerOf(const httplib::Request& req) {
     if (!req.has_header("Authorization")) return {};
     const std::string h = req.get_header_value("Authorization");
-    return h.starts_with("Bearer ") ? h.substr(7) : std::string{};
+    constexpr std::string_view scheme = "Bearer ";
+    const bool bearer = h.size() > scheme.size() &&
+                        std::ranges::equal(scheme, std::string_view(h).substr(0, scheme.size()),
+                                           [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
+    return bearer ? h.substr(scheme.size()) : std::string{};
 }
 
 void sendJson(httplib::Response& res, int status, const json& body) {
