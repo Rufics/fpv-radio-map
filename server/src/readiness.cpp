@@ -60,16 +60,17 @@ DatabaseProbe::DatabaseProbe(const std::string& url, std::chrono::milliseconds s
 DatabaseProbe::~DatabaseProbe() = default;
 
 CheckResult DatabaseProbe::check() {
-    std::unique_lock lock(mutex_, std::try_to_lock);
-    if (!lock.owns_lock()) {
-        // Another probe is in flight. Its last answer stands while it is within budget; past
-        // that the database is not answering in time, whatever it said before.
-        const std::lock_guard last(lastMutex_);
-        if (Clock::now() - started_ > budget_) return {false, "database probe timed out"};
-        return last_;
-    }
+    std::unique_lock lock(mutex_, std::defer_lock);
     {
+        // Winning the probe and stamping its start happen under lastMutex_ together, so a caller
+        // that loses never reads the start of an earlier probe as this one's.
         const std::lock_guard last(lastMutex_);
+        if (!lock.try_lock()) {
+            // Another probe is in flight. Its last answer stands while it is within budget; past
+            // that the database is not answering in time, whatever it said before.
+            if (Clock::now() - started_ > budget_) return {false, "database probe timed out"};
+            return last_;
+        }
         started_ = Clock::now();
     }
     CheckResult result = probe();

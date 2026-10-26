@@ -92,7 +92,7 @@ private:
     std::unique_ptr<pqxx::connection> conn_;
     std::mutex lastMutex_;  ///< guards last_ and started_
     CheckResult last_{false, "not probed yet"};
-    Clock::time_point started_{};  ///< when the probe in flight began; meaningful while mutex_ is held
+    Clock::time_point started_{};  ///< when the probe holding mutex_ began; stamped under lastMutex_
 };
 
 }  // namespace rfmap
