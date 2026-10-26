@@ -46,6 +46,13 @@ TEST(RouteWorkloadTest, BoundsTheProfilesFromThePilot) {
     EXPECT_LE(w.samples(), w.positions() * (1000.0 / 100.0 + 2.0));
 }
 
+TEST(RouteWorkloadTest, CountsACoincidentLegAsOnePosition) {
+    // A waypoint on the pilot: the evaluator samples that leg at its one point.
+    const RouteWorkload w(route(json::array({point(48.50, 35.20)}), false), 100.0, false);
+    EXPECT_EQ(w.positions(), 1.0);
+    EXPECT_EQ(w.samples(), 1.0);
+}
+
 TEST(RouteWorkloadTest, CountsThreeReadsForAShortProfile) {
     // 50 m out with a 100 m step: two positions, each profile reads both ends and the middle.
     const RouteWorkload w(route(json::array({point(48.50045, 35.20)}), false), 100.0, true);
@@ -88,6 +95,12 @@ TEST(BodyLimitTest, OnlyFlightLogRoutesTakeFiles) {
     EXPECT_FALSE(limit.exceeded("/api/v1/missions", ""));
     EXPECT_FALSE(limit.exceeded("/api/v1/missions", "12ab"));
     EXPECT_FALSE(limit.exceeded("/api/v1/missions", "-5"));
+
+    // Compressed bodies inflate past every limit.
+    EXPECT_TRUE(BodyLimit::encodingRefused("gzip"));
+    EXPECT_TRUE(BodyLimit::encodingRefused("BR"));
+    EXPECT_FALSE(BodyLimit::encodingRefused(""));
+    EXPECT_FALSE(BodyLimit::encodingRefused("Identity"));
 
     // A chunked JSON body has no length to judge; a chunked flight log is bounded by httplib.
     EXPECT_TRUE(limit.lengthRequired("/api/v1/missions", "chunked"));

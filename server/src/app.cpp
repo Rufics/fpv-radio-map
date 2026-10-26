@@ -141,9 +141,14 @@ void Application::configureServer() {
     // Runs before httplib reads the body: a JSON request announcing more than maxBodyBytes is
     // answered at once instead of after up to maxUploadBytes have been buffered for it.
     // A JSON body sent chunked (no length to judge) is refused too: httplib would bound it only
-    // by maxUploadBytes.
+    // by maxUploadBytes. A compressed body is refused on every route: the limits count the
+    // bytes received, and httplib would inflate it while reading.
     s.set_pre_routing_handler([limit = BodyLimit(config_.server)](const Req& req, Res& res) {
         using enum httplib::Server::HandlerResponse;
+        if (BodyLimit::encodingRefused(req.get_header_value("Content-Encoding"))) {
+            sendJson(res, 415, {{"message", "compressed request bodies are not accepted"}});
+            return Handled;
+        }
         if (limit.lengthRequired(req.path, req.get_header_value("Transfer-Encoding"))) {
             sendJson(res, 411, {{"message", "send JSON bodies with a Content-Length"}});
             return Handled;

@@ -5,6 +5,8 @@
 #include <httplib.h>
 #include <rfmod/bounded_json.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <regex>
@@ -153,6 +155,12 @@ bool BodyLimit::exceeded(std::string_view path, std::string_view contentLength) 
     const auto [ptr, ec] = std::from_chars(text.c_str(), end, declared);
     if (ec == std::errc::result_out_of_range) return true;
     return ec == std::errc{} && ptr == end && declared > forPath(path);
+}
+
+bool BodyLimit::encodingRefused(std::string_view contentEncoding) {
+    std::string lower(contentEncoding);
+    std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return !lower.empty() && lower != "identity";
 }
 
 bool BodyLimit::lengthRequired(std::string_view path, std::string_view transferEncoding) const {

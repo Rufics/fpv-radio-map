@@ -19,7 +19,8 @@ info:
 
     Input limits: a JSON body larger than server.maxBodyBytes is refused with 413, from its
     Content-Length before it is read (only the flight log uploads take up to server.maxUploadBytes);
-    a JSON body sent chunked, without a Content-Length, is refused with 411.
+    a JSON body sent chunked, without a Content-Length, is refused with 411. A compressed body
+    (any Content-Encoding but identity) is refused with 415: its size limit could not hold.
     A JSON body that nests arrays and objects more than 64 levels deep is refused with 400.
 servers:
   - url: /api/v1

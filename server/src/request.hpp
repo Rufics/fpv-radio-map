@@ -88,6 +88,9 @@ public:
     /// Whether a declared Content-Length is over the limit of `path`. A missing or unreadable
     /// length is not: httplib reads (and bounds) those bodies itself.
     [[nodiscard]] bool exceeded(std::string_view path, std::string_view contentLength) const;
+    /// Whether a compressed body must be refused with 415: any Content-Encoding but identity.
+    /// The limits count the bytes received; a few MB of gzip or Brotli inflate to gigabytes.
+    [[nodiscard]] static bool encodingRefused(std::string_view contentEncoding);
     /// Whether a body sent without a length (chunked) must be refused with 411: only the
     /// upload routes take one, since httplib would bound it by maxUploadBytes alone.
     [[nodiscard]] bool lengthRequired(std::string_view path, std::string_view transferEncoding) const;

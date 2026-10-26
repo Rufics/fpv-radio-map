@@ -1338,6 +1338,12 @@ TEST_F(Integration, HostileInputsAreRefusedNotFatal) {
                                    "Connection: close\r\n\r\n2\r\n{}\r\n0\r\n\r\n"),
               411);
 
+    // A compressed body is refused before it is inflated, on the upload routes too.
+    EXPECT_EQ(rawStatus(env->port, "POST /api/v1/flightlogs/decode HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                                   "Content-Type: application/octet-stream\r\nContent-Encoding: gzip\r\n"
+                                   "Content-Length: 0\r\nConnection: close\r\n\r\n"),
+              415);
+
     // The elevation profile needs no session, so it has the bounds of every calculated path.
     EXPECT_EQ(call("GET", "/elevation/profile?from=48.5,35.2&to=48.5,35.2").status, 422);
     EXPECT_EQ(call("GET", "/elevation/profile?from=-60,-170&to=70,170").status, 422);
