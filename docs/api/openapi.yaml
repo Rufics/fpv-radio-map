@@ -433,7 +433,8 @@ paths:
     get:
       tags: [calc]
       summary: >-
-        The DEM profile between two points, sampled at the DEM's native step. No authentication,
+        The DEM profile between two points, sampled at the DEM's native step (at half the path
+        length when the path is shorter than two steps; stepM says which). No authentication,
         so it has the bounds of every calculated path: both ends the same point, or a path longer
         than 100 000 DEM samples, is a 422.
       parameters:
