@@ -7,22 +7,28 @@
  */
 import { HttpErrorResponse, HttpHeaders, HttpParams, HttpRequest, HttpResponse } from '@angular/common/http';
 import { fpvCoreMock } from './fpv-core-mock';
+import { fpvAltitudeAnalyzeMock, fpvAltitudePrepareMock } from './fpv-altitude-mock';
 import {
+  AutoHeight,
   CacheLimit,
   CacheTier,
+  CalcPathRequest,
   CoverageGrid,
   CreateLinkRequest,
+  FlightView,
   Job,
   LIBRARY_KINDS,
   LibraryKind,
   LinkKind,
   Mission,
+  MissionAltitude,
   ModuleInfo,
+  Reason,
+  linksEvaluated,
   RouteResult,
   SchemaValidator,
   ShareLink,
   TrustedKey,
-  ValidationReport,
 } from '@rfmap/ui-kit';
 import {
   LIBRARY,
@@ -31,10 +37,12 @@ import {
   elevationProfile,
   exampleMission,
   horizon,
+  pathResult,
   routeResult,
   weatherAt,
 } from './reference-case';
 import { baseMap, contourLines } from './mock-terrain';
+import { MockFlights } from './mock-flights';
 
 interface StoredMission {
   id: string;
@@ -42,6 +50,7 @@ interface StoredMission {
   revision: number;
   ownerKey: string;
   lastResult?: RouteResult;
+  flights?: FlightView[];
   links: (ShareLink & { token: string; pin: string; wrong: number; pausedUntilMs?: number })[];
 }
 
@@ -85,12 +94,12 @@ export class MockBackend {
     { id: 'results-memory', label: 'Results in memory', limitBytes: 5e8, usedBytes: 1.8e8, entries: 61, hits: 830, misses: 520, evictions: 4, hitRate: 0.61 },
     { id: 'results-table', label: 'Results table (Postgres)', limitBytes: 4e9, limitRows: 50000, usedBytes: 0.9e9, entries: 8120, hits: 2210, misses: 1430, evictions: 0, hitRate: 0.61 },
   ];
-  private keys: TrustedKey[] = [
+  private readonly keys: TrustedKey[] = [
     { id: '9f3a1c0b', label: 'Server owner key', key: 'rfmod-ed25519 9f3a1c0b5e7d…', builtIn: true, firstParty: true },
     { id: '4be27d11', label: 'club.ham publisher', key: 'rfmod-ed25519 4be27d11a0c3…', builtIn: false, firstParty: false },
   ];
   private readonly history = new Map<string, { version: number; verified: boolean; item: Record<string, unknown>; changedBy: string; changedAt: string }[]>();
-  private modules: ModuleInfo[] = structuredClone(MODULES);
+  private readonly modules: ModuleInfo[] = structuredClone(MODULES);
   private readonly validator = new SchemaValidator();
   private readonly routes: [string, RegExp, Handler][] = [];
 
@@ -107,12 +116,18 @@ export class MockBackend {
     r('GET', /^\/links\/([^/]+)$/, (_req, m) => this.linkInfo(m[1]));
     r('POST', /^\/links\/([^/]+)\/open$/, (req, m) => this.openLink(m[1], (req.body as { pin?: string })?.pin ?? ''));
     r('POST', /^\/calc\/route$/, (req) => this.calcRoute(req));
+    r('POST', /^\/calc\/path$/, (req) => new HttpResponse({ status: 200, body: pathResult(req.body as CalcPathRequest) }));
     r('POST', /^\/calc\/path$/, () => { throw this.error(501, 'Not part of the mock'); });
     r('POST', /^\/calc\/coverage$/, (req) => this.startJob(req));
     r('GET', /^\/jobs\/([^/]+)$/, (_req, m) => this.getJob(m[1]));
     r('DELETE', /^\/jobs\/([^/]+)$/, (_req, m) => this.cancelJob(m[1]));
     r('GET', /^\/jobs\/([^/]+)\/coverage\/(control|video)\.json$/, (_req, m) => this.coverage(m[1], m[2] as LinkKind));
     r('GET', /^\/elevation\/profile$/, (req) => this.profile(req));
+    r('POST', /^\/flightlogs\/decode$/, (req) => this.decodeLog(req));
+    r('GET', /^\/missions\/([^/]+)\/flightlogs$/, (req, m) => this.withSession(req, m[1], false, (s) => this.ok((s.flights ?? []).map(MockFlights.row))));
+    r('POST', /^\/missions\/([^/]+)\/flightlogs$/, (req, m) => this.withSession(req, m[1], true, (s) => this.importLog(req, s)));
+    r('GET', /^\/missions\/([^/]+)\/flightlogs\/([^/]+)$/, (req, m) => this.withSession(req, m[1], false, (s) => this.flightView(s, m[2])));
+    r('DELETE', /^\/missions\/([^/]+)\/flightlogs\/([^/]+)$/, (req, m) => this.withSession(req, m[1], true, (s) => this.deleteLog(s, m[2])));
     r('GET', /^\/library\/([a-z-]+)$/, (_req, m) => this.ok(this.library[m[1] as LibraryKind] ?? []));
     r('POST', /^\/library\/([a-z-]+)$/, (req, m) => this.admin(req, () => this.saveLibrary(m[1] as LibraryKind, null, req.body)));
     r('GET', /^\/library\/([a-z-]+)\/([^/]+)\/history$/, (_req, m) => this.ok(this.history.get(`${m[1]}/${m[2]}`) ?? []));
@@ -122,12 +137,9 @@ export class MockBackend {
     r('GET', /^\/weather\/point$/, (req) => this.ok(weatherAt(req.params.get('timeUtc') ?? undefined, this.scenario() === 'stale-forecast', MockBackend.placeOf(req.params))));
     r('GET', /^\/modules$/, () => this.ok(this.modules));
     r('PUT', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.setModule(decodeURIComponent(m[1]), req.body as { enabled?: boolean })));
-    r('DELETE', /^\/admin\/modules\/([^/]+)$/, (req, m) => this.admin(req, () => this.removeModule(decodeURIComponent(m[1]))));
-    r('POST', /^\/admin\/modules$/, (req) => this.admin(req, () => this.uploadModule(req)));
+    r('POST', /^\/admin\/modules\/reload$/, (req) => this.admin(req, () => this.ok({ modules: this.modules, notices: [] })));
     r('GET', /^\/admin\/modules\/notices$/, (req) => this.admin(req, () => this.ok([])));
     r('GET', /^\/admin\/keys$/, (req) => this.admin(req, () => this.ok(this.keys)));
-    r('POST', /^\/admin\/keys$/, (req) => this.admin(req, () => this.addKey(req.body as { key?: string; label?: string })));
-    r('DELETE', /^\/admin\/keys\/([^/]+)$/, (req, m) => this.admin(req, () => this.deleteKey(m[1])));
     r('DELETE', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(null, 204)));
     r('GET', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(this.cache)));
     r('PUT', /^\/admin\/cache$/, (req) => this.admin(req, () => this.putCache(req.body as CacheLimit[])));
@@ -204,6 +216,50 @@ export class MockBackend {
     if (!s) throw this.error(404, 'No such mission');
     if (req.headers.get('X-Owner-Key') !== s.ownerKey) throw this.error(403, 'Owner key required');
     return fn(s);
+  }
+
+  private withSession(req: HttpRequest<unknown>, id: string, edit: boolean, fn: (s: StoredMission) => HttpResponse<unknown>) {
+    const s = this.missions.get(id);
+    const sess = this.sessionOf(req);
+    if (!s) throw this.error(404, 'No such mission');
+    if (!sess) throw this.error(401, 'Session required');
+    if (sess.missionId !== id) throw this.error(403, 'this session is for another mission');
+    if (edit && sess.role !== 'edit') throw this.error(403, 'this is a read-only link');
+    return fn(s);
+  }
+
+  // ---- flight logs (see mock-flights.ts: a synthetic flight along the route) ----
+  private static logFile(req: HttpRequest<unknown>): { name: string; bytes: number } {
+    const body = req.body as Blob | ArrayBuffer | null;
+    const bytes = body instanceof Blob ? body.size : (body?.byteLength ?? 0);
+    return { name: req.params.get('fileName') ?? 'flight.log', bytes };
+  }
+
+  private decodeLog(req: HttpRequest<unknown>): HttpResponse<unknown> {
+    const { name, bytes } = MockBackend.logFile(req);
+    if (bytes === 0) throw this.error(400, 'the request body is empty: send the log file\'s bytes');
+    const mission = this.missions.get(this.sessionOf(req)?.missionId ?? '')?.mission ?? null;
+    const flights = MockFlights.decode(name, bytes, mission);
+    return this.ok({ decoder: 'fpv.blackbox', source: { decoder: 'fpv.blackbox', decoderVersion: '1.0.0', format: 'betaflight-blackbox', fileName: name, bytes }, flights });
+  }
+
+  private importLog(req: HttpRequest<unknown>, s: StoredMission): HttpResponse<unknown> {
+    const { name, bytes } = MockBackend.logFile(req);
+    const flights = MockFlights.decode(name, bytes, s.mission).map((v) => ({ ...v, id: `fl-${rnd(10)}` }));
+    s.flights = [...flights, ...(s.flights ?? [])];
+    return this.ok({ decoder: 'fpv.blackbox', fileName: name, flights: flights.map(MockFlights.row) }, 201);
+  }
+
+  private flightView(s: StoredMission, logId: string): HttpResponse<unknown> {
+    const v = s.flights?.find((f) => f.id === logId);
+    if (!v) throw this.error(404, 'no such flight log in this mission');
+    return this.ok({ ...v, plan: MockFlights.planFact(v, s.mission, s.lastResult) });
+  }
+
+  private deleteLog(s: StoredMission, logId: string): HttpResponse<unknown> {
+    if (!s.flights?.some((f) => f.id === logId)) throw this.error(404, 'no such flight log in this mission');
+    s.flights = s.flights.filter((f) => f.id !== logId);
+    return this.ok(null, 204);
   }
 
   private createMission(mission: Mission): HttpResponse<unknown> {
@@ -305,9 +361,23 @@ export class MockBackend {
   }
 
   private calcRoute(req: HttpRequest<unknown>): HttpResponse<unknown> {
-    const mission = req.body as Mission;
+    // route.prepare first: the legs and the modules see the automatic heights.
+    const body = req.body as Mission;
+    const prepared = body.modules?.['fpv.altitude'] ? fpvAltitudePrepareMock(body) : { mission: body, autoHeights: [] };
+    const mission = prepared.mission;
+    // As the server: a waypoint route.prepare left without a height cannot be evaluated.
+    const field = MissionAltitude.field(mission);
+    const bare = mission.waypoints.findIndex((w) => w[field] === undefined || w[field] === null);
+    if (bare >= 0) throw this.error(422, `waypoints[${bare}] has no ${field}: set its height, or turn on fpv.altitude for automatic heights`);
     const result = routeResult(mission, this.scenario());
+    if (prepared.autoHeights.length) result.autoHeights = prepared.autoHeights;
+    this.warnBlockedHeights(mission, prepared.autoHeights, result);
     if (mission.modules?.['fpv.core']) result.modules = { ...result.modules, 'fpv.core': fpvCoreMock(mission) };
+    if (mission.modules?.['fpv.altitude']) {
+      const altitude = fpvAltitudeAnalyzeMock(mission);
+      result.modules = { ...result.modules, 'fpv.altitude': altitude.data };
+      this.attachReasons(altitude.reasons, result);
+    }
     const sess = this.sessionOf(req);
     const stored = sess ? this.missions.get(sess.missionId) : undefined;
     if (stored && sess?.role === 'edit') {
@@ -317,10 +387,40 @@ export class MockBackend {
     return this.ok(result);
   }
 
+  /** As the module says it: a blocked automatic height hit the ceiling, or a link no height up to maxAglM clears. */
+  private warnBlockedHeights(mission: Mission, autoHeights: AutoHeight[], result: RouteResult): void {
+    for (const h of autoHeights.filter((a) => a.blocked)) {
+      const name = mission.waypoints[h.index].label ?? `WP${h.index + 1}`;
+      const why = h.limitedBy === 'ceiling' ? 'flying its legs safely takes more than the ceiling allows' : 'no height up to the highest allowed keeps the Fresnel zone clear';
+      result.legs?.[h.index]?.reasons?.push({
+        module: 'fpv.altitude',
+        severity: 'warn',
+        leg: h.index,
+        text: `${name}: automatic height ${h.heightM} ${MissionAltitude.unit(mission)}, but ${why}. A relay (fpv.relay) or another launch point (fpv.best-launch) may help.`,
+      });
+    }
+  }
+
+  /** As the server: a reason with a leg goes to that leg, the rest to the route. */
+  private attachReasons(reasons: Reason[], result: RouteResult): void {
+    for (const r of reasons) {
+      const leg = r.leg === undefined ? undefined : result.legs?.[r.leg];
+      if (leg) {
+        leg.reasons ??= [];
+        leg.reasons.push(r);
+      } else {
+        result.reasons ??= [];
+        result.reasons.push(r);
+      }
+    }
+  }
+
   private startJob(req: HttpRequest<unknown>): HttpResponse<unknown> {
     const sess = this.sessionOf(req);
     const id = `job-${rnd(10)}`;
-    const job: StoredJob = { id, missionId: sess?.missionId ?? null, mission: structuredClone(req.body as Mission), started: Date.now(), cancelled: false, slow: false };
+    const mission = structuredClone(req.body as Mission);
+    if (linksEvaluated(mission.evaluate).length === 0) throw this.error(422, 'the mission evaluates no radio link, so there is no coverage to compute');
+    const job: StoredJob = { id, missionId: sess?.missionId ?? null, mission, started: Date.now(), cancelled: false, slow: false };
     this.jobs.set(id, job);
     return this.ok(this.jobView(job), 202);
   }
@@ -328,7 +428,7 @@ export class MockBackend {
   /** Parts finish one after another over ~3 s; finished coverage parts can be fetched at once. */
   private jobView(job: StoredJob): Job {
     const t = (Date.now() - job.started) / 1000;
-    const kinds = job.mission.evaluate === 'both' ? (['control', 'video'] as const) : ([job.mission.evaluate] as const);
+    const kinds = linksEvaluated(job.mission.evaluate);
     const plan: { name: string; link?: LinkKind; start: number; dur: number; cached?: boolean }[] = [
       { name: 'Elevation for 16 × 16 km', start: 0, dur: 0.1, cached: true },
       { name: `Route profiles, ${job.mission.waypoints.length} legs`, start: 0, dur: 0.9 },
@@ -428,49 +528,6 @@ export class MockBackend {
     return this.ok(this.modules);
   }
 
-  private removeModule(id: string): HttpResponse<unknown> {
-    const mod = this.modules.find((x) => x.id === id);
-    if (!mod) throw this.error(422, 'Unknown module');
-    if (mod.builtIn) throw this.error(422, 'Built-in modules can be disabled, not removed');
-    const users = this.modules.filter((x) => x.id !== id && x.state === 'active' && (x.requires ?? []).some((r) => r.split(/[<>=]/)[0] === id));
-    if (users.length) throw this.error(422, `Required by ${users.map((u) => u.id).join(', ')}`);
-    this.modules = this.modules.filter((x) => x.id !== id);
-    return this.ok(null, 204);
-  }
-
-  private addKey(body: { key?: string; label?: string }): HttpResponse<unknown> {
-    const key = (body?.key ?? '').trim();
-    const m = /^rfmod-ed25519 ([0-9a-f]{8})[0-9a-f]{8,}$/.exec(key);
-    if (!m) throw this.error(422, 'Not a valid key (expected "rfmod-ed25519 <hex>")');
-    if (!this.keys.some((k) => k.id === m[1])) this.keys.push({ id: m[1], label: body.label || 'Publisher key', key: `${key.slice(0, 26)}…`, builtIn: false, firstParty: false });
-    return this.ok(this.keys, 201);
-  }
-
-  private deleteKey(id: string): HttpResponse<unknown> {
-    const k = this.keys.find((x) => x.id === id);
-    if (!k || k.builtIn) throw this.error(409, k ? 'The built-in owner key cannot be removed' : 'No such key');
-    this.keys = this.keys.filter((x) => x !== k);
-    return this.ok(null, 204);
-  }
-
-  private async uploadModule(req: HttpRequest<unknown>): Promise<HttpResponse<ValidationReport>> {
-    const blob = req.body as Blob;
-    const size = blob.size ?? 0;
-    const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
-    const isZip = head[0] === 0x50 && head[1] === 0x4b;
-    const checks = [
-      { name: 'Package format', ok: isZip, detail: isZip ? '.rfmod archive (zip) read' : 'Not a .rfmod archive (expected a zip container)' },
-      { name: 'Size', ok: size <= 50 * 1024 * 1024, detail: `${(size / 1024 / 1024).toFixed(2)} MB of max 50 MB` },
-      { name: 'Signature', ok: isZip, detail: isZip ? 'Signature valid, publisher key trusted' : 'No signature found' },
-      { name: 'Manifest', ok: isZip, detail: isZip ? 'manifest.json matches schema rfmod/v1' : 'manifest.json missing' },
-      { name: 'ABI', ok: isZip, detail: 'Needs rf-core ≥1.2 <2, installed 1.3.0; ABI 2' },
-      { name: 'Dependencies', ok: isZip, detail: 'Dependencies resolved: rf.weather 1.1.0' },
-      { name: 'Deprecated API', ok: true, detail: 'warning: calls link::budget_v1, deprecated in 1.3, removed in 1.6. Use link::budget.' },
-      { name: 'Self-test', ok: isZip, detail: isZip ? 'Conformance tests 48 / 48 on reference cases' : 'not run' },
-    ];
-    return this.ok({ ok: checks.every((c) => c.ok), checks });
-  }
-
   /** The place a request names, or none when lat or lon is missing (the pilot's reference weather). */
   private static placeOf(params: HttpParams): { lat: number; lon: number } | undefined {
     const lat = Number(params.get('lat') ?? Number.NaN);
@@ -521,6 +578,11 @@ export const MODULES: ModuleInfo[] = [
   { id: 'rf.clutter', version: '0.9.2', title: 'Land cover clutter', lifecycle: 'beta', requires: ['rf-core>=1.2'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.core', version: '1.0.0', title: 'FPV core', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.battery', version: '1.0.4', title: 'Battery range', lifecycle: 'stable', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'rf.flightlog', version: '1.3.0', title: 'Flight log replay', builtIn: true, lifecycle: 'stable', provides: ['flightlog.processor'], signedBy: 'built in', isolated: false, state: 'active' },
+  { id: 'fpv.blackbox', version: '1.0.0', title: 'Betaflight Blackbox decoder', lifecycle: 'beta', provides: ['flightlog.decoder'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.altitude', version: '1.2.0', title: 'Altitude corridor and 3D view', lifecycle: 'alpha', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.airframe', version: '1.0.0', title: 'Fixed-wing flight envelope', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
+  { id: 'fpv.failsafe', version: '1.0.0', title: 'Failsafe check', lifecycle: 'beta', provides: ['route.analysis'], signedBy: 'owner', isolated: true, state: 'active' },
   { id: 'fpv.min-altitude', version: '0.4.0', title: 'Minimum altitude', lifecycle: 'alpha', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active' },
   {
     id: 'fpv.relay', version: '1.1.0', title: 'Relay planning', lifecycle: 'deprecated', requires: ['fpv.core>=1'], signedBy: 'owner', isolated: true, state: 'active',

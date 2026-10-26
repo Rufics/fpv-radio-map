@@ -5,9 +5,17 @@
 #include "test_support.hpp"
 
 #include <rfcore/constants.hpp>
+#include <rfmod/installer.hpp>
 #include <rfmod/package.hpp>
+#include <sample_log.hpp>
 
 #include <httplib.h>
+
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
 
 #include <gtest/gtest.h>
 
@@ -39,6 +47,28 @@ double terrain(int c, int r) {
 double landcover(int c, int) {
     const double lon = kWest + (c + 0.5) * kPx;
     return lon > 35.21 && lon < 35.23 ? 10.0 : 0.0;
+}
+
+/// Status of a request written byte for byte to the server, for framing httplib's client would
+/// correct (it adds Content-Length to every POST). 0 when no status line came back.
+int rawStatus(int port, const std::string& request) {
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return 0;
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(static_cast<std::uint16_t>(port));
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    // A server that never answers fails the test in seconds, not at the ctest timeout.
+    const timeval deadline{.tv_sec = 10, .tv_usec = 0};
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &deadline, sizeof deadline);
+    std::string reply(256, '\0');
+    ssize_t got = 0;
+    if (::connect(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof addr) == 0 &&
+        ::send(fd, request.data(), request.size(), 0) == static_cast<ssize_t>(request.size()))
+        got = ::recv(fd, reply.data(), reply.size(), 0);
+    ::close(fd);
+    // "HTTP/1.1 411 ..."
+    return got >= 12 ? std::stoi(reply.substr(9, 3)) : 0;
 }
 
 std::string readFile(const fs::path& p) {
@@ -150,7 +180,8 @@ protected:
                     {"modules",
                      {{"root", (env->dir / "modules").string()},
                       {"worker", RFMOD_WORKER},
-                      {"trustStore", (env->dir / "keys.json").string()}}},
+                      {"trustStore", (env->dir / "keys.json").string()},
+                      {"allowDevOwnerKey", true}}},
                     {"weather", {{"baseUrl", "http://127.0.0.1:" + std::to_string(env->weather->port)}}},
                     {"auth", {{"argon2Cost", "interactive"}, {"pinLockoutMinutes", 15}}},
                     {"coverage", {{"threads", 4}, {"maxCells", 20000}}},
@@ -268,6 +299,46 @@ protected:
     static bool has(const json& list, const std::string& key, const json& value) {
         return std::ranges::any_of(list, [&](const json& j) { return j.is_object() && j.value(key, json()) == value; });
     }
+
+    /// The operator at the machine: installs and removes modules and trusts keys with the rfmod
+    /// CLI's classes, then asks the server to pick the result up. The API itself offers no way in.
+    class Operator {
+    public:
+        Operator() : trust_(readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), env->dir / "keys.json") {
+            log_.setQuiet(true);
+            rfmod::InstallerConfig c;
+            c.root = env->dir / "modules";
+            c.workerExecutable = RFMOD_WORKER;
+            c.hostVersion = rfmod::Version::parse(RFMAP_HOST_VERSION);
+            installer_ = std::make_unique<rfmod::ModuleInstaller>(c, trust_, host_);
+        }
+        rfmod::ValidationReport install(const std::string& package) {
+            const auto report = installer_->install(package);
+            reload();
+            return report;
+        }
+        void remove(const std::string& id) {
+            installer_->remove(id);
+            reload();
+        }
+        void trustKey(const std::string& keyText, const std::string& label) {
+            trust_.add(rfmod::PublicKey::fromText(keyText), label);
+            reload();
+        }
+        static void reload() {
+            const auto r = call("POST", "/admin/modules/reload", nullptr, admin());
+            if (r.status != 200) throw std::runtime_error("reload refused: " + r.body.dump());
+        }
+
+    private:
+        Logger log_;
+        ServerHostServices host_{log_};  ///< the self-tests of the test modules make no host calls
+        rfmod::TrustStore trust_;
+        std::unique_ptr<rfmod::ModuleInstaller> installer_;
+    };
+    static std::string packed(const fs::path& stage, const char* secretKeyFile) {
+        return rfmod::PackageWriter::pack(stage, rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS + std::string(secretKeyFile))));
+    }
 };
 
 }  // namespace
@@ -297,7 +368,9 @@ TEST_F(Integration, HealthAndSeededLibrary) {
 
 TEST_F(Integration, MapConfigOffersOnlyBuiltLayers) {
     // Without a manifest every layer is offered.
-    EXPECT_TRUE(call("GET", "/config/map").body.contains("satellite"));
+    const auto all = call("GET", "/config/map");
+    EXPECT_TRUE(all.body.contains("satellite"));
+    EXPECT_EQ(all.body["dem"], json({{"pmtiles", "/tiles/terrain.pmtiles"}, {"encoding", "terrarium"}}));
 
     // A tiles-builder run without satellite imagery and without contours.
     const fs::path manifest = env->dir / "manifest.json";
@@ -314,6 +387,7 @@ TEST_F(Integration, MapConfigOffersOnlyBuiltLayers) {
     EXPECT_EQ(map.body["hillshade"]["pmtiles"], "/tiles/hillshade.pmtiles");
     EXPECT_FALSE(map.body.contains("satellite")) << map.body.dump();
     EXPECT_FALSE(map.body.contains("contours")) << map.body.dump();
+    EXPECT_FALSE(map.body.contains("dem")) << map.body.dump();
     EXPECT_EQ(map.body["attribution"], json::array({"test basemap credit"}));
 
     // A manifest the server cannot read is treated as none.
@@ -525,7 +599,7 @@ TEST_F(Integration, BothLinksAndWeather) {
     EXPECT_NE(env->weather->lastQuery.find("geopotential_height_850hPa"), std::string::npos);
 
     // Beyond the forecast: said so, standard k, no rain.
-    req["timeUtc"] = isoUtc(Clock::now() + std::chrono::hours(24 * 30));
+    req["timeUtc"] = UtcTime::format(Clock::now() + std::chrono::hours(24 * 30));
     const auto far = call("POST", "/calc/path", req, bearer(env->editSession));
     ASSERT_EQ(far.status, 200);
     EXPECT_EQ(far.body["video"]["weather"]["tier"], "none");
@@ -565,7 +639,7 @@ TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
 
     // Same inputs, same hash: served from the result cache.
     json planned = m;
-    planned["time"] = {{"mode", "planned"}, {"utc", isoUtc(Clock::now())}};
+    planned["time"] = {{"mode", "planned"}, {"utc", UtcTime::format(Clock::now())}};
     const auto first = call("POST", "/calc/route", planned, bearer(env->editSession));
     ASSERT_EQ(first.status, 200) << first.body;
     const auto again = call("POST", "/calc/route", planned, bearer(env->editSession));
@@ -576,24 +650,24 @@ TEST_F(Integration, CalcRouteWorstSamplePerLinkPerLeg) {
 }
 
 TEST_F(Integration, ThirdPartyModuleAddsItsTermAndForeignBundlesStayPrivate) {
-    // Admin trusts the third-party test key and uploads the example module packed with it.
+    // The API neither installs modules nor trusts keys: those are the operator's, at the machine.
     const std::string pub = readFile(RFMOD_TEST_KEYS "/dev-thirdparty.pub");
-    EXPECT_EQ(call("POST", "/admin/keys", {{"key", pub}, {"label", "test vendor"}}).status, 401);
-    ASSERT_EQ(call("POST", "/admin/keys", {{"key", pub}, {"label", "test vendor"}}, admin()).status, 201);
-    const auto keys = call("GET", "/admin/keys", nullptr, admin());
-    ASSERT_EQ(keys.body.size(), 2u);
-    EXPECT_EQ(call("DELETE", "/admin/keys/" + keys.body[0]["id"].get<std::string>(), nullptr, admin()).status, 409);
+    EXPECT_EQ(call("POST", "/admin/keys", {{"key", pub}, {"label", "test vendor"}}, admin()).status, 404);
+    EXPECT_EQ(call("POST", "/admin/modules", nullptr, admin()).status, 404);
+    EXPECT_EQ(call("POST", "/admin/modules/reload").status, 401);
 
-    const std::string pkg = rfmod::PackageWriter::pack(
-        fs::path(BODY_SHADOW_STAGE), rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-thirdparty.secret")));
-    httplib::Client c("127.0.0.1", env->port);
-    c.set_read_timeout(60, 0);
-    auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
-    ASSERT_TRUE(up);
-    ASSERT_EQ(up->status, 200) << up->body;
-    const json report = json::parse(up->body);
-    ASSERT_TRUE(report["ok"].get<bool>()) << report.dump(2);
-    dump("upload-report", report);
+    // A package signed by a key the server does not trust stays out, whoever installs it.
+    const std::string pkg = packed(fs::path(BODY_SHADOW_STAGE), "/dev-thirdparty.secret");
+    Operator op;
+    EXPECT_FALSE(op.install(pkg).ok());
+    EXPECT_FALSE(has(call("GET", "/modules").body, "id", "example.body-shadow"));
+
+    op.trustKey(pub, "test vendor");
+    const auto keys = call("GET", "/admin/keys", nullptr, admin());
+    ASSERT_EQ(keys.body.size(), 2u) << keys.body;
+    const rfmod::ValidationReport report = op.install(pkg);
+    ASSERT_TRUE(report.ok()) << report.toJson().dump(2);
+    dump("install-report", report.toJson());
 
     const auto opts = call("PUT", "/admin/modules/example.body-shadow",
                            {{"options", {{"lossDb", 3.5}, {"source", "test measurement"}, {"uncertaintyDb", 1.0}}}}, admin());
@@ -630,6 +704,15 @@ TEST_F(Integration, ThirdPartyModuleAddsItsTermAndForeignBundlesStayPrivate) {
     const auto noBand = call("POST", "/calc/path", req, bearer(env->viewSession));
     EXPECT_FALSE(noBand.body.contains("band"));
     ASSERT_EQ(call("PUT", "/admin/modules/rf.uncertainty", {{"enabled", true}}, admin()).status, 200);
+
+    // The bundle is served as a resource, never as a page, and the module can be taken out again.
+    httplib::Client c("127.0.0.1", env->port);
+    const auto schema = c.Get("/api/v1/modules/example.body-shadow/schema/options.json");
+    ASSERT_TRUE(schema);
+    EXPECT_EQ(schema->get_header_value("X-Content-Type-Options"), "nosniff");
+    EXPECT_EQ(schema->get_header_value("Content-Security-Policy"), "default-src 'none'; sandbox");
+    op.remove("example.body-shadow");
+    EXPECT_FALSE(has(call("GET", "/modules").body, "id", "example.body-shadow"));
 }
 
 TEST_F(Integration, CoverageJob) {
@@ -735,14 +818,9 @@ TEST_F(Integration, OperationsListenerAnswersHealthReadinessAndMetrics) {
 }
 
 TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {
-    const std::string pkg = rfmod::PackageWriter::pack(
-        fs::path(PROBE_STAGE), rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-owner.secret")));
-    httplib::Client c("127.0.0.1", env->port);
-    c.set_read_timeout(60, 0);
-    const auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
-    ASSERT_TRUE(up);
-    ASSERT_EQ(up->status, 200) << up->body;
-    ASSERT_TRUE(json::parse(up->body)["ok"].get<bool>()) << up->body;
+    Operator op;
+    const auto installed = op.install(packed(fs::path(PROBE_STAGE), "/dev-owner.secret"));
+    ASSERT_TRUE(installed.ok()) << installed.toJson().dump(2);
 
     // Good reasons land on their leg or the route, an unknown severity becomes info, and the
     // module's data and battery estimate are kept.
@@ -807,12 +885,18 @@ TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {
                                   nullptr, bearer(failingSession));
     EXPECT_TRUE(has(failingGrid.body["moduleFailures"], "module", "test.probe")) << failingGrid.body;
 
-    // Removal: built-ins can only be disabled; an uploaded module goes away.
+    // Options that do not fit the module's schema are refused before anything runs.
+    const json badOptions = shortMission(point(48.51, 35.22, 100), {{"test.probe", {{"mode", 42}}}});
+    const auto refused = call("POST", "/calc/route", badOptions, bearer(sessionFor(badOptions)));
+    EXPECT_EQ(refused.status, 422) << refused.body;
+    EXPECT_NE(refused.body.dump().find("test.probe"), std::string::npos) << refused.body;
+
+    // Removal is the operator's: the API has no such route, built in or not.
     EXPECT_EQ(call("GET", "/admin/modules/notices", nullptr, admin()).status, 200);
     EXPECT_EQ(call("GET", "/admin/modules/notices").status, 401);
-    EXPECT_EQ(call("DELETE", "/admin/modules/rf.weather", nullptr, admin()).status, 422);
-    const auto removed = call("DELETE", "/admin/modules/test.probe", nullptr, admin());
-    EXPECT_LT(removed.status, 300) << removed.body;
+    EXPECT_EQ(call("DELETE", "/admin/modules/rf.weather", nullptr, admin()).status, 404);
+    EXPECT_EQ(call("DELETE", "/admin/modules/test.probe", nullptr, admin()).status, 404);
+    op.remove("test.probe");
     EXPECT_FALSE(has(call("GET", "/modules").body, "id", "test.probe"));
 }
 
@@ -828,6 +912,128 @@ TEST_F(Integration, RouteIntoTheHoleIsMissingDataNotAVerdict) {
     EXPECT_TRUE(leg["missing"][0].contains("alongLegM"));
     EXPECT_EQ(leg["missingData"]["bbox"].size(), 4u);
     EXPECT_EQ(leg["reasons"][0]["severity"], "blocked");
+}
+
+TEST_F(Integration, LaunchReferencedRouteFliesLevelAndMayHitTheRidge) {
+    // Above the launch point the drone holds a straight line in altitude: 60 m above the pilot's
+    // 150 m ground does not clear the 270 m ridge between them.
+    json m = shortMission({{"lat", 48.50}, {"lon", 35.30}, {"altM", 60.0}});
+    m["altitudeRef"] = "launch";
+    const auto r = call("POST", "/calc/route", m, bearer(sessionFor(m)));
+    ASSERT_EQ(r.status, 200) << r.body;
+    const json& leg = r.body["legs"][0];
+    EXPECT_EQ(leg["status"], "blocked") << leg;
+    EXPECT_GT(leg["samples"]["belowGround"].get<int>(), 0);
+    bool below = false;
+    for (const json& reason : leg["reasons"]) below = below || reason["text"].get<std::string>().find("below the ground") != std::string::npos;
+    EXPECT_TRUE(below) << leg["reasons"];
+
+    // The same numbers above the ground follow the ridge and never touch it.
+    json agl = shortMission(point(48.50, 35.30, 60.0));
+    const auto a = call("POST", "/calc/route", agl, bearer(sessionFor(agl)));
+    ASSERT_EQ(a.status, 200) << a.body;
+    EXPECT_EQ(a.body["legs"][0]["samples"]["belowGround"], 0);
+
+    // A manual launch-referenced waypoint needs altM; without heightSource it is left to the
+    // server, which cannot set it without a route.preparation module.
+    json wrong = shortMission(point(48.50, 35.30, 60.0));
+    wrong["altitudeRef"] = "launch";
+    wrong["waypoints"][0]["heightSource"] = "manual";
+    EXPECT_EQ(call("POST", "/missions", wrong).status, 422);
+    wrong["waypoints"][0].erase("heightSource");
+    const auto unset = call("POST", "/calc/route", wrong, bearer(sessionFor(wrong)));
+    EXPECT_EQ(unset.status, 422) << unset.body;
+    EXPECT_NE(unset.body.dump().find("fpv.altitude"), std::string::npos) << unset.body;
+}
+
+TEST_F(Integration, RoutePreparationSetsOnlyTheMissingHeights) {
+    Operator op;
+    const auto installed = op.install(packed(fs::path(PROBE_STAGE), "/dev-owner.secret"));
+    ASSERT_TRUE(installed.ok()) << installed.toJson().dump(2);
+
+    // The probe offers 77 m for every waypoint: the first has none and takes it, the second is
+    // manual and keeps its 60 m.
+    json m = shortMission({{"lat", 48.51}, {"lon", 35.22}}, {{"test.probe", {{"mode", "answer"}}}});
+    m["waypoints"].push_back(point(48.50, 35.30, 60.0));
+    const auto r = call("POST", "/calc/route", m, bearer(sessionFor(m)));
+    ASSERT_EQ(r.status, 200) << r.body;
+    ASSERT_EQ(r.body["autoHeights"].size(), 1u) << r.body["autoHeights"];
+    const json& h = r.body["autoHeights"][0];
+    EXPECT_EQ(h["index"], 0);
+    EXPECT_EQ(h["lat"], 48.51);
+    EXPECT_EQ(h["lon"], 35.22);
+    EXPECT_EQ(h["field"], "aglM");
+    EXPECT_EQ(h["heightM"], 77.0);
+    EXPECT_EQ(h["module"], "test.probe");
+    EXPECT_EQ(h["limitedBy"], "probe");
+    EXPECT_TRUE(h["blocked"].get<bool>());
+    EXPECT_TRUE(has(r.body["legs"][0]["reasons"], "text", "probe set heights")) << r.body["legs"][0]["reasons"];
+    EXPECT_TRUE(r.body["moduleFailures"].empty()) << r.body["moduleFailures"];
+
+    // With every height manual the module is not asked.
+    const json manual = shortMission(point(48.51, 35.22, 100), {{"test.probe", {{"mode", "answer"}}}});
+    const auto kept = call("POST", "/calc/route", manual, bearer(sessionFor(manual)));
+    ASSERT_EQ(kept.status, 200) << kept.body;
+    EXPECT_FALSE(kept.body.contains("autoHeights")) << kept.body["autoHeights"];
+
+    // A malformed answer sets nothing and is listed; an automatic waypoint keeps its last height.
+    for (const char* mode : {"bad-height", "bad-type", "bad-list"}) {
+        json stale = shortMission(point(48.51, 35.22, 90), {{"test.probe", {{"mode", mode}}}});
+        stale["waypoints"][0]["heightSource"] = "auto";
+        const auto bad = call("POST", "/calc/route", stale, bearer(sessionFor(stale)));
+        ASSERT_EQ(bad.status, 200) << mode << ": " << bad.body;
+        EXPECT_FALSE(bad.body.contains("autoHeights")) << mode;
+        EXPECT_NE(bad.body["moduleFailures"].dump().find("malformed"), std::string::npos) << mode << ": " << bad.body["moduleFailures"];
+    }
+    op.remove("test.probe");
+}
+
+TEST_F(Integration, AutonomousRouteNeedsNoLink) {
+    // The pilot uploads the route before take-off and evaluates no radio link: only the route itself.
+    json m = mission();
+    m.erase("links");
+    m["evaluate"] = "none";
+    m["flightMode"] = "autonomous";
+    const std::string session = sessionFor(m);
+    const auto r = call("POST", "/calc/route", m, bearer(session));
+    ASSERT_EQ(r.status, 200) << r.body;
+    ASSERT_EQ(r.body["legs"].size(), 3u);
+    for (const json& leg : r.body["legs"]) {
+        EXPECT_EQ(leg["status"], "ok") << leg;
+        EXPECT_TRUE(leg["worst"].empty()) << leg;
+        EXPECT_TRUE(leg["reasons"].empty()) << leg;
+        EXPECT_EQ(leg["samples"]["evaluated"], leg["samples"]["total"]) << leg;
+    }
+    EXPECT_TRUE(r.body["library"].empty());
+    EXPECT_EQ(call("POST", "/calc/coverage", m, bearer(session)).status, 422);
+
+    // Without terrain under the route the leg is still missing data, not a verdict.
+    json hole = shortMission(point(48.42, 35.36, 100));
+    hole["evaluate"] = "none";
+    const auto h = call("POST", "/calc/route", hole, bearer(sessionFor(hole)));
+    ASSERT_EQ(h.status, 200) << h.body;
+    EXPECT_EQ(h.body["legs"][0]["status"], "missing-data") << h.body["legs"][0];
+    EXPECT_EQ(h.body["legs"][0]["missingData"]["bbox"].size(), 4u);
+}
+
+TEST_F(Integration, AutonomousRouteWarnsWhereThePilotCannotTakeOver) {
+    // 5 m above the ground behind the ridge, at 10 dBm, the control link is gone.
+    json manual = shortMission(point(48.50, 35.30, 5.0));
+    manual["links"]["control"]["txPowerDbm"] = 10;
+    json autonomous = manual;
+    autonomous["flightMode"] = "autonomous";
+    const auto a = call("POST", "/calc/route", manual, bearer(sessionFor(manual)));
+    const auto b = call("POST", "/calc/route", autonomous, bearer(sessionFor(autonomous)));
+    ASSERT_EQ(a.status, 200) << a.body;
+    ASSERT_EQ(b.status, 200) << b.body;
+    const json& before = a.body["legs"][0];
+    const json& after = b.body["legs"][0];
+    ASSERT_LT(before["worst"]["control"]["marginDb"].get<double>(), 0.0) << before;
+    EXPECT_EQ(before["status"], "blocked");
+    EXPECT_EQ(after["status"], "warn") << after;
+    const json& why = after["reasons"][0];
+    EXPECT_EQ(why["severity"], "warn");
+    EXPECT_NE(why["text"].get<std::string>().find("cannot take over"), std::string::npos) << why;
 }
 
 TEST_F(Integration, CoverageCountsCellsWithoutTerrainAndHonoursLimits) {
@@ -901,7 +1107,7 @@ TEST_F(Integration, DataEndpointsAndRequestErrors) {
     // Share links with an expiry.
     const httplib::Headers ownerKey = {{"X-Owner-Key", created.body["ownerKey"]}};
     const auto expiring = call("POST", "/missions/" + id + "/links",
-                               {{"role", "view"}, {"pin", "246810"}, {"expiresAt", isoUtc(Clock::now() + std::chrono::hours(2))}},
+                               {{"role", "view"}, {"pin", "246810"}, {"expiresAt", UtcTime::format(Clock::now() + std::chrono::hours(2))}},
                                ownerKey);
     ASSERT_EQ(expiring.status, 201) << expiring.body;
     EXPECT_TRUE(expiring.body.contains("expiresAt"));
@@ -982,15 +1188,13 @@ TEST_F(Integration, AlphaBundlesNeedTheAdminOrTheirGrant) {
     std::ofstream(stage / "manifest.json") << manifest.dump(2);
     fs::create_directories(stage / "ui");
     std::ofstream(stage / "ui" / "panel.js") << "export default {};\n";
-    const std::string pkg =
-        rfmod::PackageWriter::pack(stage, rfmod::SecretKey::fromText(readFile(RFMOD_TEST_KEYS "/dev-owner.secret")));
+    const std::string pkg = packed(stage, "/dev-owner.secret");
     fs::remove_all(stage);
+    Operator op;
+    const auto installed = op.install(pkg);
+    ASSERT_TRUE(installed.ok()) << installed.toJson().dump(2);
     httplib::Client c("127.0.0.1", env->port);
     c.set_read_timeout(60, 0);
-    const auto up = c.Post("/api/v1/admin/modules?install=true", admin(), pkg, "application/octet-stream");
-    ASSERT_TRUE(up);
-    ASSERT_EQ(up->status, 200) << up->body;
-    ASSERT_TRUE(json::parse(up->body)["ok"].get<bool>()) << up->body;
 
     const auto probeIn = [](const json& list) {
         const auto it = std::ranges::find_if(list, [](const json& m) { return m["id"] == "test.probe"; });
@@ -1013,7 +1217,7 @@ TEST_F(Integration, AlphaBundlesNeedTheAdminOrTheirGrant) {
     EXPECT_EQ(c.Get(file + "?grant=1.forged")->status, 404);
     EXPECT_EQ(c.Get(file, admin())->status, 200);
 
-    EXPECT_LT(call("DELETE", "/admin/modules/test.probe", nullptr, admin()).status, 300);
+    op.remove("test.probe");
 }
 
 TEST_F(Integration, AntennasOutOfBandOrCrossPolarisedAreNoted) {
@@ -1030,4 +1234,149 @@ TEST_F(Integration, AntennasOutOfBandOrCrossPolarisedAreNoted) {
     const std::string body = r.body.dump();
     EXPECT_NE(body.find("Test 5.8 GHz patch is specified for 5600-6000 MHz"), std::string::npos) << body;
     EXPECT_NE(body.find("differ in polarisation"), std::string::npos) << body;
+}
+
+TEST_F(Integration, FlightLogsDecodeImportReplayAndCompareWithThePlan) {
+    const std::vector<std::uint8_t> log = fpv::blackbox::SampleLog::build();
+    const std::string bytes(log.begin(), log.end());
+    const json m = shortMission(point(50.001, 30.001, 60));
+    const std::string session = sessionFor(m);
+    httplib::Client c("127.0.0.1", env->port);
+    c.set_read_timeout(120, 0);
+    const auto post = [&c, &session](const std::string& path, const std::string& body) {
+        return c.Post("/api/v1" + path, bearer(session), body, "application/octet-stream");
+    };
+
+    // Before any decoder is installed the server says so instead of guessing a format.
+    auto none = post("/flightlogs/decode?fileName=LOG00001.BFL", bytes);
+    ASSERT_TRUE(none);
+    EXPECT_EQ(none->status, 422) << none->body;
+    EXPECT_EQ(c.Post("/api/v1/flightlogs/decode", bytes, "application/octet-stream")->status, 401);
+
+    Operator op;
+    const auto installed = op.install(packed(fs::path(BLACKBOX_STAGE), "/dev-owner.secret"));
+    ASSERT_TRUE(installed.ok()) << installed.toJson().dump(2);
+    const auto mods = call("GET", "/modules");
+    for (const json& mod : mods.body) {
+        if (mod["id"] == "fpv.blackbox") {
+            EXPECT_TRUE(mod["isolated"].get<bool>()) << "decoders parse uploads in a worker";
+        }
+        if (mod["id"] == "rf.flightlog") {
+            EXPECT_EQ(mod["state"], "active");
+        }
+    }
+
+    auto preview = post("/flightlogs/decode?fileName=../../etc/LOG00001.BFL", bytes);
+    ASSERT_EQ(preview->status, 200) << preview->body;
+    const json p = json::parse(preview->body);
+    EXPECT_EQ(p["decoder"], "fpv.blackbox");
+    EXPECT_EQ(p["source"]["fileName"], "LOG00001.BFL");
+    ASSERT_EQ(p["flights"].size(), 1u);
+    EXPECT_EQ(p["flights"][0]["schema"], "flightview/v1");
+    // The probe sees only the first 64 KiB; the decode still reads every log in the file.
+    std::string many;
+    while (many.size() <= 65'536) many += bytes;
+    const auto longer = post("/flightlogs/decode?fileName=LOG00002.BFL", many);
+    ASSERT_EQ(longer->status, 200) << longer->body;
+    EXPECT_EQ(json::parse(longer->body)["flights"].size(), many.size() / bytes.size());
+    EXPECT_EQ(post("/flightlogs/decode", "PK\x03\x04 not a log")->status, 422);
+    EXPECT_EQ(post("/flightlogs/decode", "")->status, 400);
+
+    // Import into the mission, list it, replay it with plan against fact, delete it.
+    const auto created = call("POST", "/missions", m);
+    ASSERT_EQ(created.status, 201);
+    const std::string id = created.body["missionId"];
+    const std::string edit = created.body["session"];
+    const auto imported = c.Post("/api/v1/missions/" + id + "/flightlogs?fileName=LOG00001.BFL", bearer(edit), bytes,
+                                 "application/octet-stream");
+    ASSERT_EQ(imported->status, 201) << imported->body;
+    const json flights = json::parse(imported->body)["flights"];
+    ASSERT_EQ(flights.size(), 1u);
+    const std::string flightId = flights[0]["id"];
+    const auto again = c.Post("/api/v1/missions/" + id + "/flightlogs?fileName=copy.BFL", bearer(edit), bytes,
+                              "application/octet-stream");
+    EXPECT_EQ(json::parse(again->body)["flights"][0]["id"], flightId) << "the same file is not stored twice";
+
+    const auto list = call("GET", "/missions/" + id + "/flightlogs", nullptr, bearer(edit));
+    ASSERT_EQ(list.status, 200);
+    ASSERT_EQ(list.body.size(), 1u);
+    EXPECT_EQ(list.body[0]["fileName"], "copy.BFL");
+    EXPECT_FALSE(list.body[0].contains("timeline"));
+
+    const auto view = call("GET", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(edit));
+    ASSERT_EQ(view.status, 200) << view.body;
+    EXPECT_EQ(view.body["schema"], "flightview/v1");
+    EXPECT_TRUE(view.body["timeline"]["channels"].contains("lat"));
+    EXPECT_FALSE(view.body["plan"]["evaluated"].get<bool>());
+    EXPECT_TRUE(view.body["plan"].contains("rows"));
+    EXPECT_EQ(call("GET", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(session)).status, 403)
+        << "another mission's session";
+    EXPECT_EQ(call("GET", "/missions/" + id + "/flightlogs/nope", nullptr, bearer(edit)).status, 404);
+
+    // Read-only links can replay but not import or delete.
+    const auto link = call("POST", "/missions/" + id + "/links", {{"role", "view"}, {"pin", "123456"}},
+                           {{"X-Owner-Key", created.body["ownerKey"].get<std::string>()}});
+    ASSERT_EQ(link.status, 201) << link.body;
+    const auto opened = call("POST", "/links/" + link.body["token"].get<std::string>() + "/open", {{"pin", "123456"}});
+    ASSERT_EQ(opened.status, 200) << opened.body;
+    const std::string viewer = opened.body["session"];
+    EXPECT_EQ(call("GET", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(viewer)).status, 200);
+    EXPECT_EQ(call("DELETE", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(viewer)).status, 403);
+
+    EXPECT_EQ(call("DELETE", "/missions/" + id + "/flightlogs/" + flightId, nullptr, bearer(edit)).status, 204);
+    EXPECT_EQ(call("GET", "/missions/" + id + "/flightlogs", nullptr, bearer(edit)).body.size(), 0u);
+
+    // The admin can switch replay off.
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.flightlog", {{"enabled", false}}, admin()).status, 200);
+    EXPECT_EQ(post("/flightlogs/decode", bytes)->status, 403);
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.flightlog", {{"enabled", true}, {"options", {{"timelineHz", 5}}}}, admin()).status, 200);
+    op.remove("fpv.blackbox");
+    EXPECT_FALSE(has(call("GET", "/modules").body, "id", "fpv.blackbox"));
+}
+
+TEST_F(Integration, HostileInputsAreRefusedNotFatal) {
+    // Nested 400 000 levels deep (within maxBodyBytes): a recursive copy or dump of it
+    // overflowed the stack and took the whole server down, before any session was asked for.
+    json deep = mission();
+    const std::string nested = std::string(400'000, '[') + std::string(400'000, ']');
+    std::string body = deep.dump();
+    body.insert(body.size() - 1, R"(,"modules":{"x":{"y":)" + nested + "}}");
+    httplib::Client c("127.0.0.1", env->port);
+    const auto refused = c.Post("/api/v1/missions", body, "application/json");
+    ASSERT_TRUE(refused);
+    EXPECT_EQ(refused->status, 400) << refused->body;
+    EXPECT_EQ(call("GET", "/health").status, 200);
+
+    // A JSON body announced larger than server.maxBodyBytes is answered before it is read.
+    httplib::Client raw("127.0.0.1", env->port);
+    httplib::Request announce;
+    announce.method = "POST";
+    announce.path = "/api/v1/missions";
+    announce.set_header("Content-Length", "5000000");
+    announce.set_header("Content-Type", "application/json");
+    announce.set_header("Connection", "close");
+    const auto tooLarge = raw.send(announce);
+    ASSERT_TRUE(tooLarge);
+    EXPECT_EQ(tooLarge->status, 413);
+    // Chunked, with no Content-Length at all: the size is unknown until it has been read.
+    EXPECT_EQ(rawStatus(env->port, "POST /api/v1/missions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                                   "Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n"
+                                   "Connection: close\r\n\r\n2\r\n{}\r\n0\r\n\r\n"),
+              411);
+
+    // A compressed body is refused before it is inflated, on the upload routes too.
+    EXPECT_EQ(rawStatus(env->port, "POST /api/v1/flightlogs/decode HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                                   "Content-Type: application/octet-stream\r\nContent-Encoding: gzip\r\n"
+                                   "Content-Length: 0\r\nConnection: close\r\n\r\n"),
+              415);
+
+    // The elevation profile needs no session, so it has the bounds of every calculated path.
+    EXPECT_EQ(call("GET", "/elevation/profile?from=48.5,35.2&to=48.5,35.2").status, 422);
+    EXPECT_EQ(call("GET", "/elevation/profile?from=-60,-170&to=70,170").status, 422);
+
+    // A route whose legs cross a continent is refused before a single profile is built.
+    json far = shortMission(point(10.0, 5.0, 100));
+    const auto huge = call("POST", "/calc/route", far, bearer(sessionFor(shortMission(point(48.52, 35.22, 100)))));
+    EXPECT_EQ(huge.status, 422) << huge.body;
+    EXPECT_GT(huge.body["samples"].get<double>(), huge.body["maxSamples"].get<double>()) << huge.body;
 }

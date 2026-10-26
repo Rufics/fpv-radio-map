@@ -221,7 +221,7 @@ public:
             refuse("manifest.schema", std::string("manifest.json is not JSON: ") + e.what());
             return std::nullopt;
         }
-        return ManifestParser::parse(document, hostVersion, *report_);
+        return ManifestParser(hostVersion).parse(document, *report_);
     }
 
     /// Every file the manifest names is in the package, and its options schema is JSON.
@@ -386,15 +386,13 @@ std::string PackageWriter::pack(const fs::path& sourceDir, const SecretKey& key)
     return pack(files, key);
 }
 
-std::optional<VerifiedPackage> PackageVerifier::verify(const std::string& archiveBytes, const TrustStore& trust,
-                                                       const Version& hostVersion, ValidationReport& report,
-                                                       const PackageLimits& limits) {
-    auto files = PackageReader::read(archiveBytes, limits, report);
+std::optional<VerifiedPackage> PackageVerifier::verify(std::string_view archiveBytes, ValidationReport& report) const {
+    auto files = PackageReader::read(archiveBytes, limits_, report);
     if (!files) return std::nullopt;
     SignedPackageCheck check(std::move(*files), report);
-    auto signer = check.signer(trust);
+    auto signer = check.signer(trust_);
     if (!signer || !check.integrity()) return std::nullopt;
-    auto manifest = check.manifest(hostVersion);
+    auto manifest = check.manifest(hostVersion_);
     if (!manifest || !check.referencedFiles(*manifest)) return std::nullopt;
     return VerifiedPackage{std::move(check).take(), std::move(*manifest), std::move(*signer)};
 }

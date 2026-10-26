@@ -62,7 +62,7 @@ std::vector<json> Library::history(const std::string& kind, const std::string& i
             out.push_back({{"version", r[0].as<int>()},
                            {"verified", r[1].as<bool>()},
                            {"item", json::parse(r[2].as<std::string>())},
-                           {"changedAt", isoUtc(TimePoint(t))},
+                           {"changedAt", UtcTime::format(TimePoint(t))},
                            {"changedBy", r[4].as<std::string>()}});
         }
         return out;

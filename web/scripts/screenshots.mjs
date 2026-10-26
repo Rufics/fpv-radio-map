@@ -36,6 +36,27 @@ try {
   await laptop.getByText('Recalculate').or(laptop.getByText('Calculated')).first().waitFor({ timeout: 20000 }).catch(() => {});
   await settle(laptop, 4500);
   await laptop.screenshot({ path: `${OUT}/laptop-result.png` });
+  // coverage options: the Layers panel in sections with the mini-map on, then the line of sight
+  // to a point past the ridge; both are switched off again for the shots after them
+  await laptop.getByRole('button', { name: 'Layers' }).click();
+  await laptop.getByLabel('Mini-map instead of the heatmap').check();
+  await laptop.locator('fpv-coverage-mini-map canvas').waitFor({ timeout: 10000 });
+  await settle(laptop, 1500);
+  await laptop.screenshot({ path: `${OUT}/laptop-coverage-layers.png` });
+  await laptop.getByLabel('Mini-map instead of the heatmap').uncheck();
+  await laptop.getByLabel('Line of sight on hover').check();
+  await laptop.getByRole('button', { name: 'Close layers' }).click();
+  const ridgeFrom = await laptop.locator('.rf-marker--waypoint', { hasText: '2' }).boundingBox();
+  const ridgeTo = await laptop.locator('.rf-marker--target').boundingBox();
+  await laptop.mouse.move(ridgeFrom.x + ridgeFrom.width / 2 + (ridgeTo.x - ridgeFrom.x) * 0.75, ridgeFrom.y + ridgeFrom.height / 2 + (ridgeTo.y - ridgeFrom.y) * 0.75);
+  // the live region gets text only once the exact path answer is in
+  await laptop.locator('fpv-line-of-sight [role=status]').filter({ hasText: /\S/ }).waitFor({ state: 'attached', timeout: 15000 });
+  await settle(laptop, 800);
+  await laptop.screenshot({ path: `${OUT}/laptop-line-of-sight.png` });
+  await laptop.getByRole('button', { name: 'Layers' }).click();
+  await laptop.getByLabel('Line of sight on hover').uncheck();
+  await laptop.getByRole('button', { name: 'Close layers' }).click();
+  await laptop.mouse.move(5, 450);
   // weather mode: the route coloured by the weather, the read-out where the cursor meets leg 3,
   // then the pre-flight briefing; weather mode is switched off again for the shots after it
   await laptop.getByRole('button', { name: 'Weather', exact: true }).click();
@@ -61,6 +82,10 @@ try {
   await laptop.setViewportSize({ width: 1440, height: 900 });
   await laptop.getByRole('button', { name: 'Now', exact: true }).click();
   await laptop.getByRole('button', { name: 'Weather', exact: true }).click();
+  // the mission time change made the result stale; calculate again so the shots below show verdicts
+  await laptop.getByRole('button', { name: /^(Re)?[Cc]alculate$/ }).click();
+  await laptop.getByRole('button', { name: 'Show why' }).waitFor({ timeout: 20000 });
+  await settle(laptop, 4500);
   await laptop.getByRole('button', { name: 'Show why' }).click();
   await settle(laptop, 5000);
   await laptop.screenshot({ path: `${OUT}/laptop-why.png` });
@@ -125,6 +150,35 @@ try {
   await missing.getByRole('button', { name: /^Calculate$/ }).click();
   await settle(missing, 7000);
   await missing.screenshot({ path: `${OUT}/laptop-missing-data.png` });
+
+  // fixed-wing and autonomous routes: the flight checks of a plane, then the route uploaded before
+  // take-off, where a lost link is a warning instead of a block
+  const plane = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watch(plane, 'plane');
+  await plane.goto(`${BASE}/?scenario=normal`);
+  await plane.getByRole('button', { name: 'Use example route' }).click();
+  const calculate = async () => {
+    await plane.getByRole('button', { name: /^(Re)?[Cc]alculate$/ }).click();
+    await plane.locator('fpv-plan-panel .row.leg').first().waitFor({ timeout: 20000 });
+    await settle(plane, 4500);
+  };
+  // scroll the plan panel itself; scrollIntoView would also shift the page and leave blank bands
+  const scrollPanelTo = (el) => {
+    let box = el.parentElement;
+    while (box && box.scrollHeight <= box.clientHeight) box = box.parentElement;
+    if (box) box.scrollTop += el.parentElement.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
+  };
+  await plane.getByLabel('Drone').selectOption('fw-1800-mapper');
+  await calculate();
+  // the plan panel scrolls; bring the flight checks up next to the route
+  await plane.locator('#checks-title').evaluate(scrollPanelTo);
+  await settle(plane, 500);
+  await plane.screenshot({ path: `${OUT}/laptop-fixed-wing.png` });
+  await plane.getByRole('button', { name: 'Autonomous', exact: true }).click();
+  await calculate();
+  await plane.locator('#gap-title').evaluate(scrollPanelTo);
+  await settle(plane, 500);
+  await plane.screenshot({ path: `${OUT}/laptop-autonomous.png` });
 
   // ---- phone: PIN entry, then the mission view ----
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });

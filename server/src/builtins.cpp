@@ -38,6 +38,18 @@ BuiltinModules::BuiltinModules(Database* db, SchemaRegistry& schemas, std::strin
     entries_[kRadioProfiles] = {"Radio profiles",
                                 "The radio-profiles library kind, seeded unverified from data/library/radio-profiles.",
                                 {"library.kind"}, noOptions, true, json::object()};
+    const json flightLogOptions = {
+        {"type", "object"},
+        {"additionalProperties", false},
+        {"properties",
+         {{"timelineHz", {{"type", "number"}, {"exclusiveMinimum", 0}, {"maximum", 50}}},
+          {"lowLinkPct", {{"type", "number"}, {"minimum", 1}, {"maximum", 100}}},
+          {"lowCellV", {{"type", "number"}, {"minimum", 2.5}, {"maximum", 4.5}}}}}};
+    entries_[kFlightLog] = {"Flight log replay",
+                            "Turns a decoded flight log into the replay on the map: timeline, energy used, flight "
+                            "modes, the story of the flight and plan against fact. Decoders are modules that provide "
+                            "flightlog.decoder (fpv.blackbox reads Betaflight Blackbox logs).",
+                            {"flightlog.processor"}, flightLogOptions, true, json::object()};
     for (const auto& [id, e] : entries_) schemas_.addInline("builtin:" + id, e.optionsSchema);
 
     if (!db_) return;

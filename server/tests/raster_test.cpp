@@ -1,6 +1,7 @@
 // Raster files the server refuses, land cover codes, and the tiles-builder manifest next to the data.
 
 #include "raster.hpp"
+#include "tiles_manifest.hpp"
 #include "test_support.hpp"
 
 #include <gdal_priv.h>
@@ -119,41 +120,41 @@ TEST_F(RasterTest, LandCoverZeroIsNoData) {
 
 TEST_F(RasterTest, ManifestNamesTheSourceOfAFile) {
     const fs::path dem = dir_ / "dem.cog.tif";
-    EXPECT_EQ(manifestSourceName(dem), "");  // no manifest
+    EXPECT_EQ(TilesManifest(dem).sourceName(), "");  // no manifest
     manifest(R"({"files": {"dem.cog.tif": {"source": "Copernicus GLO-30"}}})");
-    EXPECT_EQ(manifestSourceName(dem), "Copernicus GLO-30");
+    EXPECT_EQ(TilesManifest(dem).sourceName(), "Copernicus GLO-30");
     manifest(R"({"files": [{"name": "other.tif", "source": "x"}, {"file": "dem.cog.tif", "source": "FABDEM"}]})");
-    EXPECT_EQ(manifestSourceName(dem), "FABDEM");
+    EXPECT_EQ(TilesManifest(dem).sourceName(), "FABDEM");
     manifest(R"({"files": [{"name": "other.tif", "source": "x"}]})");
-    EXPECT_EQ(manifestSourceName(dem), "");
+    EXPECT_EQ(TilesManifest(dem).sourceName(), "");
     manifest(R"({"files": "dem.cog.tif"})");
-    EXPECT_EQ(manifestSourceName(dem), "");
+    EXPECT_EQ(TilesManifest(dem).sourceName(), "");
     manifest(R"({"files": [42]})");
-    EXPECT_EQ(manifestSourceName(dem), "");  // an entry of the wrong type
+    EXPECT_EQ(TilesManifest(dem).sourceName(), "");  // an entry of the wrong type
     manifest("not json");
-    EXPECT_EQ(manifestSourceName(dem), "");
+    EXPECT_EQ(TilesManifest(dem).sourceName(), "");
     manifest(R"({"version": 1})");
-    EXPECT_EQ(manifestSourceName(dem), "");
+    EXPECT_EQ(TilesManifest(dem).sourceName(), "");
 }
 
 TEST_F(RasterTest, ManifestAttributionsAndFiles) {
     const fs::path tiles = dir_ / "basemap.pmtiles";
-    EXPECT_TRUE(manifestAttributions(tiles).empty());
-    EXPECT_FALSE(manifestFiles(tiles).has_value());
+    EXPECT_TRUE(TilesManifest(tiles).attributions().empty());
+    EXPECT_FALSE(TilesManifest(tiles).files().has_value());
 
     manifest(R"({"files": [{"file": "a.pmtiles", "attribution": "A"}, {"file": "b.pmtiles", "attribution": "A"},
                            {"file": "c.pmtiles"}, {"attribution": "B"}]})");
-    EXPECT_EQ(manifestAttributions(tiles), (std::vector<std::string>{"A", "B"}));
-    const auto files = manifestFiles(tiles);
+    EXPECT_EQ(TilesManifest(tiles).attributions(), (std::vector<std::string>{"A", "B"}));
+    const auto files = TilesManifest(tiles).files();
     ASSERT_TRUE(files.has_value());
     EXPECT_EQ(files->size(), 3u);
 
     manifest(R"({"files": [{"file": "a.pmtiles"}], "attribution_display_text": "All sources"})");
-    EXPECT_EQ(manifestAttributions(tiles), (std::vector<std::string>{"All sources"}));
+    EXPECT_EQ(TilesManifest(tiles).attributions(), (std::vector<std::string>{"All sources"}));
     manifest(R"({"attribution_display_text": ""})");
-    EXPECT_TRUE(manifestAttributions(tiles).empty());
-    EXPECT_FALSE(manifestFiles(tiles).has_value());
+    EXPECT_TRUE(TilesManifest(tiles).attributions().empty());
+    EXPECT_FALSE(TilesManifest(tiles).files().has_value());
     manifest(R"({"files": ["a.pmtiles"]})");
-    EXPECT_TRUE(manifestAttributions(tiles).empty());
-    EXPECT_FALSE(manifestFiles(tiles).has_value());
+    EXPECT_TRUE(TilesManifest(tiles).attributions().empty());
+    EXPECT_FALSE(TilesManifest(tiles).files().has_value());
 }

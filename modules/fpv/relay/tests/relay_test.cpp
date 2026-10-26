@@ -131,3 +131,13 @@ TEST(Relay, EvaluateRelayTakesTheWorstLinkOnTheFirstHop) {
     EXPECT_DOUBLE_EQ(h.first.marginDb, -3.0);
     EXPECT_DOUBLE_EQ(h.score(), -3.0);
 }
+
+TEST(Relay, NeedsALinkToPlan) {
+    const DistanceLink link(flat());
+    json m = missionTo(2.0);
+    m["evaluate"] = "none";
+    const json r = relay::analyze({{"mission", m}, {"options", {{"relay", relayAt(1.0)}}}}, flat(), link);
+    ASSERT_EQ(r.at("reasons").size(), 1u);
+    EXPECT_EQ(r.at("reasons").at(0).at("severity"), "info");
+    EXPECT_TRUE(r.at("data").empty());
+}

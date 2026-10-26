@@ -2,8 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { ApiError, CredentialStore, Job, RFMAP_API_BASE, RfmapApiClient, WeatherPoint } from '@rfmap/ui-kit';
+import { ApiError, CredentialStore, Job, Mission, MissionAltitude, RFMAP_API_BASE, RfmapApiClient, RouteResult, WeatherPoint } from '@rfmap/ui-kit';
 import { MockApiHarness } from '../tests/mock-api-harness';
+import { LOCAL, RIDGE, toLatLon } from './mock-terrain';
 import { LIBRARY, exampleMission, weatherAt } from './reference-case';
 
 /** The dev mock backend, walked through with the app's own API client, keeps to the contract. */
@@ -101,6 +102,45 @@ describe('MockBackend through the API client', () => {
     expect((await rejection(api.getCoverage(null, 'job-none', 'video'))).status).toBe(404);
   });
 
+  it('names what blocked an automatic height: the ceiling, or a link no height clears', async () => {
+    const route = (m: Mission) => settle(new Promise<RouteResult>((resolve, reject) => api.calcRoute(null, m).subscribe({ next: resolve, error: reject })));
+    const texts = (r: RouteResult) => (r.legs ?? []).flatMap((l) => l.reasons ?? []).map((x) => x.text ?? '');
+    const auto = (m: Mission, options: Record<string, unknown>): Mission => ({ ...m, modules: { ...m.modules, 'fpv.altitude': options }, waypoints: m.waypoints.map((w) => MissionAltitude.withAutoHeight(w)) });
+
+    const noLink = await route(auto(exampleMission(), { maxAglM: 10 }));
+    expect(noLink.autoHeights?.some((h) => h.blocked && h.limitedBy === 'control')).toBe(true);
+    expect(texts(noLink).some((t) => t.includes('Fresnel zone clear'))).toBe(true);
+
+    const ridge = exampleMission();
+    ridge.altitudeRef = 'launch';
+    ridge.returnToPilot = false;
+    ridge.waypoints = [toLatLon(RIDGE.x, RIDGE.y), toLatLon(LOCAL.B.x, LOCAL.B.y)].map((p, i) => ({ ...p, label: `W${i + 1}` }));
+    const ceiling = await route(auto(ridge, { ceilingAglM: 60, linkFloor: false }));
+    expect(texts(ceiling).some((t) => t.includes('more than the ceiling allows'))).toBe(true);
+    expect(texts(ceiling).some((t) => t.includes('Fresnel'))).toBe(false);
+
+    // Without fpv.altitude nothing sets the missing height: 422, as on the server.
+    const bare = { ...exampleMission(), modules: {}, waypoints: exampleMission().waypoints.map(({ lat, lon, label }) => ({ lat, lon, label, heightSource: 'auto' as const })) };
+    const refused = await rejection(settle(new Promise((resolve, reject) => api.calcRoute(null, bare).subscribe({ next: resolve, error: reject }))));
+    expect(refused.status).toBe(422);
+    expect(refused.message).toContain('waypoints[0]');
+    // A null height is missing too, not zero.
+    const field = MissionAltitude.field(bare);
+    const nulled = { ...bare, waypoints: bare.waypoints.map((w, i) => (i === 1 ? { ...w, heightSource: 'manual' as const, [field]: 50 } : { ...w, [field]: null })) } as unknown as Mission;
+    const refusedNull = await rejection(settle(new Promise((resolve, reject) => api.calcRoute(null, nulled).subscribe({ next: resolve, error: reject }))));
+    expect(refusedNull.status).toBe(422);
+  });
+
+  it('files the climb assistant reasons under their leg, or under the route', async () => {
+    const route = (m: Mission) => settle(new Promise<RouteResult>((resolve, reject) => api.calcRoute(null, m).subscribe({ next: resolve, error: reject })));
+    const m = exampleMission();
+    const steep = { ...m, modules: { 'fpv.altitude': { climbRateMps: 1 } }, waypoints: m.waypoints.map((w, i) => (i === 0 ? { ...w, aglM: 400 } : w)) };
+    const r = await route(steep);
+    expect(r.legs?.[0].reasons?.some((x) => x.module === 'fpv.altitude' && x.text?.startsWith('Leg Pilot'))).toBe(true);
+    expect(r.reasons?.some((x) => x.text?.startsWith('Climb assistant'))).toBe(true);
+    expect((r.modules?.['fpv.altitude'] as { climb?: unknown }).climb).toBeTruthy();
+  });
+
   it('answers profiles and weather, and refuses a malformed point', async () => {
     const profile = await settle(api.elevationProfile({ lat: 48.54, lon: 35.2 }, { lat: 48.56, lon: 35.23 }));
     expect(profile).toBeTruthy();
@@ -142,22 +182,10 @@ describe('MockBackend through the API client', () => {
     const off = await settle(api.setModule('fpv.relay', { enabled: false }));
     expect(off.filter((m) => m.id === 'fpv.relay').every((m) => m.state === 'disabled')).toBe(true);
     expect((await rejection(api.setModule('nope', { enabled: true }))).status).toBe(422);
-    expect((await rejection(api.removeModule('rf-core'))).message).toContain('Built-in');
-    expect((await rejection(api.removeModule('fpv.core'))).message).toContain('Required by');
-    await settle(api.removeModule('fpv.example'));
-    expect((await rejection(api.removeModule('fpv.example'))).status).toBe(422);
     expect(await settle(api.moduleNotices())).toEqual([]);
-
-    const notZip = await settle(api.uploadModule(new Blob(['nope']), false));
-    expect(notZip.ok).toBe(false);
-    const zip = await settle(api.uploadModule(new Blob([new Uint8Array([0x50, 0x4b, 3, 4])]), false));
-    expect(zip.ok).toBe(true);
-
-    const keys = await settle(api.addKey('rfmod-ed25519 0123456789abcdef', 'Lab'));
-    expect(keys.some((k) => k.id === '01234567')).toBe(true);
-    expect((await rejection(api.addKey('ssh-rsa AAAA'))).status).toBe(422);
-    await settle(api.deleteKey('01234567'));
-    expect((await rejection(api.deleteKey('01234567'))).status).toBe(409);
+    // Installing and trusting happen on the server machine; the API only reloads and lists.
+    const reloaded = await settle(api.reloadModules());
+    expect(reloaded.modules?.length).toBe(off.length);
     expect((await settle(api.adminKeys())).length).toBeGreaterThan(0);
 
     const tiers = await settle(api.adminCache());
@@ -168,5 +196,38 @@ describe('MockBackend through the API client', () => {
     expect((await rejection(api.putAdminCache([{ id: tableId, limitBytes: -1 }]))).status).toBe(400);
     expect((await rejection(api.putAdminCache([{ id: 'nope' as never }]))).status).toBe(400);
     await settle(api.clearCache());
+  });
+  it('decodes, keeps, replays against the plan and deletes flight logs', async () => {
+    const created = await settle(api.createMission(exampleMission()));
+    creds.setSession(created.missionId, created.session);
+    const big = new Blob([new Uint8Array(32 * 1024)]);
+
+    const preview = await settle(api.decodeFlightLog(created.missionId, big, 'LOG00007.BFL'));
+    expect(preview.flights[0].status).toBe('ok');
+    expect(preview.flights[0].index).toBe(1);
+    expect(preview.flights[0].story.length).toBeGreaterThan(0);
+    const headerOnly = await settle(api.decodeFlightLog(null, new Blob(['H Product:Blackbox']), 'btfl_016.bbl'));
+    expect(headerOnly.flights[0].status).toBe('header-only');
+    expect((await rejection(api.decodeFlightLog(null, new Blob([]), 'empty.bbl'))).status).toBe(400);
+
+    const kept = await settle(api.importFlightLog(created.missionId, big, 'LOG00007.BFL'));
+    const id = kept.flights[0].id ?? '';
+    expect(id).not.toBe('');
+    const rows = await settle(api.listFlightLogs(created.missionId));
+    expect(rows.map((r) => r.id)).toEqual([id]);
+    expect((rows[0] as unknown as Record<string, unknown>)['timeline']).toBeUndefined();
+
+    const view = await settle(api.getFlightLog(created.missionId, id));
+    expect(view.plan?.rows.map((r) => r.metric)).toEqual(['distance', 'energy', 'whPerKm', 'weakestLink', 'maxOffRoute']);
+    expect(view.plan?.offRouteM).toHaveLength(view.timeline.t.length);
+
+    await settle(api.deleteFlightLog(created.missionId, id));
+    expect(await settle(api.listFlightLogs(created.missionId))).toEqual([]);
+    expect((await rejection(api.getFlightLog(created.missionId, id))).status).toBe(404);
+    const other = await settle(api.createMission(exampleMission()));
+    creds.setSession(created.missionId, other.session);
+    expect((await rejection(api.listFlightLogs(created.missionId))).status).toBe(403);
+    creds.setSession(created.missionId, null);
+    expect((await rejection(api.listFlightLogs(created.missionId))).status).toBe(401);
   });
 });

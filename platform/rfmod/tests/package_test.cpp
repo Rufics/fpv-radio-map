@@ -4,6 +4,7 @@
 #include <archive_entry.h>
 #include <gtest/gtest.h>
 
+#include <fstream>
 #include <map>
 
 using namespace rfmod;
@@ -63,7 +64,7 @@ std::string tarOf(const Entries& entries) {
 std::pair<std::string, std::string> refusal(const Entries& entries) {
     const TrustStore trust(ownerPublicText(), {});
     ValidationReport r;
-    if (PackageVerifier::verify(tarOf(entries), trust, kHost, r)) return {"", "verified"};
+    if (PackageVerifier(trust, kHost).verify(tarOf(entries), r)) return {"", "verified"};
     for (const auto& c : r.checks()) {
         if (!c.ok) return {c.name, c.detail};
     }
@@ -99,7 +100,7 @@ TEST(Package, SignedPackageVerifies) {
     const TrustStore trust(ownerPublicText(), {});
     const std::string pkg = PackageWriter::pack(packageWith(baseManifest("test.alpha", "1.0.0"), RFMOD_LIB_ALPHA), ownerSecret());
     ValidationReport r;
-    const auto v = PackageVerifier::verify(pkg, trust, kHost, r);
+    const auto v = PackageVerifier(trust, kHost).verify(pkg, r);
     ASSERT_TRUE(v) << r.toJson().dump(2);
     EXPECT_TRUE(r.ok());
     EXPECT_EQ(v->manifest.id, "test.alpha");
@@ -116,8 +117,20 @@ TEST(Package, UntrustedKeyIsRefused) {
     const std::string pkg = PackageWriter::pack(packageWith(baseManifest("test.alpha", "1.0.0"), RFMOD_LIB_ALPHA),
                                                 SecretKey::generate());
     ValidationReport r;
-    EXPECT_FALSE(PackageVerifier::verify(pkg, trust, kHost, r));
+    EXPECT_FALSE(PackageVerifier(trust, kHost).verify(pkg, r));
     EXPECT_EQ(failedCheck(r), "signature");
+}
+
+TEST(Package, ADamagedTrustStoreFileKeepsTheKeysOnReload) {
+    const auto path = scratchDir("package") / "rfmod-trust-damaged.json";
+    std::filesystem::remove(path);
+    TrustStore trust(ownerPublicText(), path);
+    trust.add(thirdPartySecret().publicKey(), "Test vendor");
+    std::ofstream(path) << "{ not json";
+    EXPECT_THROW(trust.reload(), nlohmann::json::exception);
+    ASSERT_EQ(trust.keys().size(), 2u);
+    EXPECT_TRUE(trust.find(thirdPartySecret().publicKey().id()).has_value());
+    std::filesystem::remove(path);
 }
 
 TEST(Package, ThirdPartyKeyIsNotFirstParty) {
@@ -133,7 +146,7 @@ TEST(Package, ThirdPartyKeyIsNotFirstParty) {
     const std::string pkg = PackageWriter::pack(packageWith(baseManifest("test.alpha", "1.0.0"), RFMOD_LIB_ALPHA),
                                                 thirdPartySecret());
     ValidationReport r;
-    const auto v = PackageVerifier::verify(pkg, reloaded, kHost, r);
+    const auto v = PackageVerifier(reloaded, kHost).verify(pkg, r);
     ASSERT_TRUE(v);
     EXPECT_FALSE(v->signer.firstParty());
     std::filesystem::remove(path);
@@ -150,7 +163,7 @@ TEST(Package, TamperedFileIsRefused) {
     unpacked.files["lib/libmod.so"][100] ^= 1;
     std::vector<std::pair<std::string, std::string>> entries(unpacked.files.begin(), unpacked.files.end());
     ValidationReport r;
-    EXPECT_FALSE(PackageVerifier::verify(rawTar(entries), trust, kHost, r));
+    EXPECT_FALSE(PackageVerifier(trust, kHost).verify(rawTar(entries), r));
     EXPECT_EQ(failedCheck(r), "files.integrity");
 
     // Add a file the signature does not cover.
@@ -158,7 +171,7 @@ TEST(Package, TamperedFileIsRefused) {
     unpacked.files["lib/extra.so"] = "x";
     entries.assign(unpacked.files.begin(), unpacked.files.end());
     ValidationReport r2;
-    EXPECT_FALSE(PackageVerifier::verify(rawTar(entries), trust, kHost, r2));
+    EXPECT_FALSE(PackageVerifier(trust, kHost).verify(rawTar(entries), r2));
     EXPECT_EQ(failedCheck(r2), "files.integrity");
 }
 
@@ -186,7 +199,7 @@ TEST(Package, MissingReferencedFileIsRefused) {
     m["optionsSchema"] = "schema/options.json";
     const std::string pkg = PackageWriter::pack(packageWith(m, RFMOD_LIB_ALPHA), ownerSecret());
     ValidationReport r;
-    EXPECT_FALSE(PackageVerifier::verify(pkg, trust, kHost, r));
+    EXPECT_FALSE(PackageVerifier(trust, kHost).verify(pkg, r));
     EXPECT_EQ(failedCheck(r), "files.referenced");
 }
 

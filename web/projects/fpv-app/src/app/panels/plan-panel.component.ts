@@ -1,9 +1,13 @@
 import { Component, computed, inject } from '@angular/core';
 import {
+  AltitudeRef,
   EvaluateMode,
+  FlightMode,
   JobPart,
   JobProgressComponent,
   LinkKind,
+  Mission,
+  MissionAltitude,
   RadioProfile,
   RfFormat,
   RfNumComponent,
@@ -12,10 +16,12 @@ import {
   StepperComponent,
 } from '@rfmap/ui-kit';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
+import { autoHeightsOn } from '../core/fpv-altitude';
 import { exampleMissionFor } from '../core/example-mission';
 import { MissionTimeComponent } from './mission-time.component';
 import { PreviewPanelComponent } from './preview-panel.component';
 import { StateCardsComponent } from './state-cards.component';
+import { FlightChecksComponent } from './flight-checks.component';
 import { WeatherCardComponent } from './weather-card.component';
 import { ComparePanelComponent } from './compare-panel.component';
 import { CompareService } from '../core/fpv-core';
@@ -23,7 +29,7 @@ import { CompareService } from '../core/fpv-core';
 /** Side panel of layout A: new mission, links, radios, time, route, calculate, results. */
 @Component({
   selector: 'fpv-plan-panel',
-  imports: [SegmentedComponent, JobProgressComponent, SlotHostComponent, StepperComponent, MissionTimeComponent, PreviewPanelComponent, StateCardsComponent, RfNumComponent, ComparePanelComponent, WeatherCardComponent],
+  imports: [SegmentedComponent, JobProgressComponent, SlotHostComponent, StepperComponent, MissionTimeComponent, PreviewPanelComponent, StateCardsComponent, FlightChecksComponent, RfNumComponent, ComparePanelComponent, WeatherCardComponent],
   template: `
     @if (!ws.mission()) {
       @if (ws.placing() === 'pilot') {
@@ -49,6 +55,25 @@ import { CompareService } from '../core/fpv-core';
       @let canEdit = ws.store.canEdit();
       @if (!canEdit) {
         <div class="viewonly" role="note">View only · results as the owner saved them</div>
+      }
+      <div class="rf-eyebrow">Flight</div>
+      @if (canEdit) {
+        <rf-segmented label="Flight" [options]="flights" [value]="m.flightMode ?? 'manual'" (valueChange)="setFlight($event)" />
+      }
+      <div class="rf-caption">{{ flightHint(m) }}</div>
+      <label class="drone-row">
+        <span class="rf-eyebrow">Drone</span>
+        <select class="rf-input" [disabled]="!canEdit" (change)="setDrone($any($event.target).value)" aria-label="Drone">
+          @if (!m.drone) {
+            <option value="" selected disabled>Pick a drone</option>
+          }
+          @for (d of ws.data.drones(); track d.id) {
+            <option [value]="d.id" [selected]="d.id === m.drone">{{ d.name }} · {{ d.airframe === 'fixed-wing' ? 'fixed-wing' : 'multirotor' }}</option>
+          }
+        </select>
+      </label>
+      @if (droneHint(m); as h) {
+        <div class="rf-caption">{{ h }}</div>
       }
       <div class="rf-eyebrow">Links to check</div>
       @if (canEdit) {
@@ -86,6 +111,10 @@ import { CompareService } from '../core/fpv-core';
           <div class="edit">
             <rf-stepper label="Height above ground, pilot" [value]="m.pilot.aglM" unit="m AGL" [step]="1" [max]="1500" [dense]="true" (valueChange)="ws.store.setPilotAgl($event)" />
           </div>
+          <div class="edit ref">
+            <rf-segmented label="Waypoint heights" [options]="refs" [value]="alt.ref(m)" (valueChange)="setRef($event)" />
+          </div>
+          <div class="rf-caption">{{ refHint(m) }}</div>
         }
         @for (r of ws.legRows(); track r.index) {
           @if (ws.store.result() && r.mark && !ws.editingRoute()) {
@@ -99,7 +128,10 @@ import { CompareService } from '../core/fpv-core';
           }
           @if (ws.editingRoute() && !r.isReturn) {
             <div class="edit">
-              <rf-stepper [label]="'Height above ground, point ' + r.to" [value]="r.aglM" unit="m AGL" [step]="5" [max]="1500" [dense]="true" (valueChange)="setAgl(r.index - 1, $event)" />
+              <rf-stepper [label]="'Height ' + alt.basis(m) + ', point ' + r.to" [value]="r.heightM" [unit]="alt.unit(m)" [step]="5" [min]="alt.ref(m) === 'launch' ? -1500 : 0" [max]="1500" [dense]="true" (valueChange)="setHeight(r.index - 1, $event)" />
+              @if (autoOn(m) || r.auto) {
+                <button type="button" class="rf-btn rf-btn--dense auto" [class.on]="r.auto" [attr.aria-pressed]="r.auto" [disabled]="!autoOn(m)" (click)="setAuto(r.index - 1, !r.auto)" [title]="r.auto ? 'Set by the server from the terrain and the links. Change the height to set it yourself.' : 'Let the server set this height from the terrain and the links'" [attr.aria-label]="'Automatic height, point ' + r.to">Auto</button>
+              }
               <button type="button" class="rf-btn rf-btn--dense rf-btn--danger" (click)="ws.store.removeWaypoint(r.index - 1)" [disabled]="m.waypoints.length <= 1" [attr.aria-label]="'Delete point ' + r.to">Delete</button>
             </div>
           }
@@ -157,10 +189,11 @@ import { CompareService } from '../core/fpv-core';
       }
       @if (ws.allClearText(); as t) {
         <section class="rf-card rf-card--ok clear">
-          <b>All flown legs reachable by radio</b>
+          <b>{{ ws.allClearTitle() }}</b>
           <div class="rf-body">{{ t }}</div>
         </section>
       }
+      <fpv-flight-checks />
       @if (ws.batteryCard(); as b) {
         <section class="rf-card rf-card--warn battery">
           <b>Battery will not last with return</b>
@@ -204,9 +237,12 @@ import { CompareService } from '../core/fpv-core';
     .leg.tone-warn .mark { color: var(--rf-warn-text); }
     .edit { display: flex; gap: 8px; align-items: flex-end; padding: 0 0 6px 10px; }
     .edit rf-stepper { flex: 1; }
+    .edit .auto { color: var(--rf-text-2); }
+    .edit .auto.on { background: var(--rf-ok-bg); color: var(--rf-ok-text); border-color: var(--rf-ok-border); }
     .pilot .info { margin-left: auto; }
     .add { border: 1px dashed var(--rf-border-strong); color: var(--rf-text-2); }
     .section-head { display: flex; justify-content: space-between; align-items: center; min-height: 32px; }
+    .drone-row { display: flex; flex-direction: column; gap: 6px; }
     .battery-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
     .battery-row .rf-mono { font-size: 13px; }
     .verdict, .clear, .battery { display: flex; flex-direction: column; gap: 8px; padding: 14px; }
@@ -224,10 +260,20 @@ import { CompareService } from '../core/fpv-core';
 export class PlanPanelComponent {
   protected readonly ws = inject(FpvWorkspace);
   protected readonly cmp = inject(CompareService);
+  protected readonly alt = MissionAltitude;
+  protected readonly refs: { value: AltitudeRef; label: string }[] = [
+    { value: 'launch', label: 'Above launch' },
+    { value: 'agl', label: 'Above ground' },
+  ];
   protected readonly modes: { value: EvaluateMode; label: string }[] = [
     { value: 'both', label: 'Both' },
     { value: 'control', label: 'Control' },
     { value: 'video', label: 'Video' },
+    { value: 'none', label: 'None' },
+  ];
+  protected readonly flights: { value: FlightMode; label: string }[] = [
+    { value: 'manual', label: 'Pilot' },
+    { value: 'autonomous', label: 'Autonomous' },
   ];
 
   protected readonly busy = this.ws.store.busy;
@@ -253,8 +299,63 @@ export class PlanPanelComponent {
     this.ws.why.set(null);
   }
 
-  protected setAgl(index: number, aglM: number): void {
-    this.ws.store.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? { ...w, aglM } : w)) }));
+  protected setFlight(mode: FlightMode): void {
+    this.ws.store.setFlightMode(mode);
+    this.ws.why.set(null);
+  }
+
+  /** Picks the drone; a fixed-wing also gets its flight envelope checked (fpv.airframe). */
+  protected setDrone(id: string): void {
+    const fixedWing = this.ws.data.drones().find((d) => d.id === id)?.airframe === 'fixed-wing';
+    this.ws.store.update((m) => {
+      const modules = { ...m.modules };
+      if (fixedWing) modules['fpv.airframe'] = modules['fpv.airframe'] ?? {};
+      else delete modules['fpv.airframe'];
+      return { ...m, drone: id, modules };
+    });
+  }
+
+  protected droneHint(m: Mission): string | null {
+    const d = this.ws.data.drones().find((x) => x.id === m.drone);
+    const w = d?.fixedWing;
+    if (!d || d.airframe !== 'fixed-wing' || !w) return null;
+    const checked = m.modules?.['fpv.airframe'] ? 'The route is checked against these limits.' : 'The fixed-wing envelope check is off for this mission; pick the drone again to turn it on.';
+    return `Climbs at most ${w.maxClimbAngleDeg}°, descends at most ${w.maxDiveAngleDeg}°, banks ${w.maxBankDeg}°, stalls at ${RfFormat.format(w.stallSpeedMps, 'mps')}. ${checked}`;
+  }
+
+  protected flightHint(m: Mission): string {
+    if ((m.flightMode ?? 'manual') === 'manual') return 'The pilot flies the route over the control link; losing it hands the drone to the failsafe.';
+    return 'The route is uploaded before take-off and the autopilot flies it on its own. The links are optional: where control drops the pilot cannot take over, where video drops the picture is lost, but the flight goes on.';
+  }
+
+  protected setHeight(index: number, heightM: number): void {
+    this.ws.store.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? MissionAltitude.withManualHeight(m, w, heightM) : w)) }));
+  }
+
+  protected autoOn(m: Mission): boolean {
+    return autoHeightsOn(m);
+  }
+
+  /** Leaves a point's height to the server, or keeps the height it shows as the user's own. */
+  protected setAuto(index: number, auto: boolean): void {
+    const shown = this.ws.legRows().find((r) => r.index === index + 1)?.heightM;
+    this.ws.store.update((m) => ({
+      ...m,
+      waypoints: m.waypoints.map((w, i) => {
+        if (i !== index) return w;
+        return auto ? MissionAltitude.withAutoHeight(w) : MissionAltitude.withManualHeight(m, w, shown ?? MissionAltitude.height(m, w));
+      }),
+    }));
+  }
+
+  protected setRef(ref: AltitudeRef): void {
+    this.ws.store.update((m) => MissionAltitude.withRef(m, ref));
+  }
+
+  protected refHint(m: Mission): string {
+    return MissionAltitude.ref(m) === 'launch'
+      ? 'Heights are above the launch point, as a barometric altimeter reads them. The drone climbs or descends evenly between points and does not follow the terrain.'
+      : 'Heights are above the ground under the drone. Between points the drone follows the terrain, which costs climbs over every rise.';
   }
 
   protected toggleEdit(): void {

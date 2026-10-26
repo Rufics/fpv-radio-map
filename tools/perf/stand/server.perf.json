@@ -23,8 +23,7 @@
     "create": { "perMinute": 1000000, "burst": 100000 },
     "calc": { "perMinute": 1000000, "burst": 100000 },
     "coverage": { "perMinute": 1000000, "burst": 100000 },
-    "admin": { "perMinute": 1000000, "burst": 100000 },
-    "upload": { "perMinute": 1000000, "burst": 100000 }
+    "admin": { "perMinute": 1000000, "burst": 100000 }
   },
   "coverage": { "threads": 4, "maxCells": 250000, "maxJobs": 4, "keepMinutes": 30 }
 }

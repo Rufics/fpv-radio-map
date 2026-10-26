@@ -1,6 +1,7 @@
 #pragma once
 
 #include <analysis.hpp>  // fpv.battery: energy model
+#include <fpv/airframe.hpp>
 
 #include <optional>
 #include <string>
@@ -30,11 +31,14 @@ private:
 
 /// What the flight controller does when the control link drops (set to match the drone).
 struct Settings {
-    std::string action = "rth";         ///< rth | land | hover
+    std::string action = "rth";         ///< rth | land | hover | loiter (a fixed-wing loiters for hover)
     std::string altitudeMode = "max";   ///< fixed | max | current: RTH altitude rule
     double rthAltitudeAboveHomeM = 0.0; ///< relative to the pilot's ground, as flight controllers measure it
     double terrainClearanceM = 10.0;    ///< required gap between the drone and terrain plus clutter on the way home
     double stepM = 50.0;
+    /// On an autonomous mission the autopilot keeps flying the route when control drops (the
+    /// flight controller set to continue the mission on link loss); false runs the failsafe.
+    bool continueMission = true;
 
     static Settings fromJson(const json& options);
 };
@@ -60,7 +64,15 @@ public:
 
     /// First point along the route where the control margin drops below zero, refined by
     /// bisection to 1 m between the last good and the first lost sample.
-    [[nodiscard]] std::optional<LossPoint> firstLoss(const Route& route) const;
+    [[nodiscard]] std::optional<LossPoint> firstLoss(const Route& route) const { return firstLoss(route, route.outboundLength()); }
+
+    /// The same up to `untilM` along the route: an autonomous mission flies its return leg on
+    /// the route too, so control can first drop there.
+    [[nodiscard]] std::optional<LossPoint> firstLoss(const Route& route, double untilM) const;
+
+    /// Where control comes back along the rest of the route after `fromM`, sampled every
+    /// stepM, if it comes back before the end.
+    [[nodiscard]] std::optional<double> regainAlongRoute(const Route& route, double fromM) const;
 
     /// Return-to-home from the loss point at constant altitude.
     [[nodiscard]] RthPlan planRth(const Mission& mission, const Route& route, const LossPoint& loss,

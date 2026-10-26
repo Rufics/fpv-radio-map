@@ -1,12 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Position } from 'geojson';
-import { Mission, MissionStore, RouteDrawing, RouteResult, provideMapView } from '@rfmap/ui-kit';
+import { MapContext, Mission, MissionStore, RouteDrawing, RouteResult, provideMapView } from '@rfmap/ui-kit';
+import { AltitudeView } from '../core/fpv-altitude';
 import { coverageGrid, exampleMission, fixAltitude, fixTurnBack, routeResult } from '../mock/reference-case';
 import { FpvWorkspace } from '../core/fpv-workspace.service';
 import { RouteWeatherService } from '../core/route-weather.service';
 import { MockApiHarness } from '../tests/mock-api-harness';
 import { MapStageComponent } from './map-stage.component';
+import { FlightReplay } from '../core/flight-replay.service';
 
 interface LimitShapes {
   radio: unknown;
@@ -56,6 +58,33 @@ describe('MapStageComponent drawing', () => {
     expect(shown()).toBe(false);
   });
 
+  it('fits a newly shown mission clear of the altitude drawer while it stays open', () => {
+    const fit = vi.spyOn(TestBed.inject(MapContext), 'fitTo').mockImplementation(() => undefined);
+    (fixture.componentInstance as unknown as { ready: { set(v: boolean): void } }).ready.set(true);
+    fixture.componentRef.setInput('drawerHeight', 300);
+    TestBed.inject(AltitudeView).profileOpen.set(true);
+    show(exampleMission(), null);
+    TestBed.tick();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 360, left: 80, right: 80 });
+
+    fit.mockClear();
+    store.newMission({ ...exampleMission(), name: 'Another' });
+    TestBed.tick();
+    expect(fit).toHaveBeenCalledOnce();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 360, left: 80, right: 80 });
+
+    // the open drawer grows: the route is fitted above its new edge
+    fit.mockClear();
+    fixture.componentRef.setInput('drawerHeight', 400);
+    TestBed.tick();
+    expect(fit).toHaveBeenCalledOnce();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 40, bottom: 460, left: 80, right: 80 });
+
+    TestBed.inject(AltitudeView).profileOpen.set(false);
+    TestBed.tick();
+    expect(fit).toHaveBeenLastCalledWith(expect.any(Array), { top: 80, bottom: 80, left: 80, right: 80 });
+  });
+
   it('draws nothing without a mission', () => {
     expect(drawing()).toEqual({ pilot: null, waypoints: [], legs: [] });
   });
@@ -94,6 +123,19 @@ describe('MapStageComponent drawing', () => {
     const low = { ...m, waypoints: m.waypoints.map((w, i) => (i === 0 ? { ...w, aglM: 80 } : w)) };
     show(low, routeResult(low, 'normal'));
     expect(drawing().legs[0].label).toBe('3.7 km · 80 m ✓');
+  });
+
+  it('labels a height auto only when the server set it, and names it on the map', () => {
+    const m = exampleMission();
+    const auto = { ...m, waypoints: m.waypoints.map((w, i) => (i === 0 ? { ...w, heightSource: 'auto' as const } : w)) };
+    const w0 = auto.waypoints[0];
+    show(auto, routeResult(auto, 'normal'));
+    expect(drawing().legs[0].label).toBe('3.7 km · ✓');
+    expect(drawing().waypoints[0].ariaLabel).toBe('Waypoint 1, height set automatically');
+
+    show(auto, { ...routeResult(auto, 'normal'), autoHeights: [{ index: 0, lat: w0.lat, lon: w0.lon, field: 'aglM', heightM: 74, module: 'fpv.altitude' }] });
+    expect(drawing().legs[0].label).toBe('3.7 km · auto 74 m ✓');
+    expect(drawing().waypoints[0].ariaLabel).toBe('Waypoint 1, 74 m above ground');
   });
 
   it('draws a missing-data leg as missing', () => {
@@ -220,6 +262,17 @@ describe('MapStageComponent drawing', () => {
     expect(stage.ws.placing()).toBeNull();
   });
 
+  it('adds points at the default height, left to the server when fpv.altitude sets heights', () => {
+    const add = (p: { lat: number; lon: number }) => (fixture.componentInstance as unknown as { addWaypoint: (p: { lat: number; lon: number }) => void }).addWaypoint(p);
+    const m = exampleMission();
+    show(m, null);
+    add({ lat: 48.6, lon: 35.3 });
+    expect(store.mission()!.waypoints.at(-1)).toEqual({ lat: 48.6, lon: 35.3, aglM: 120 });
+    store.update((x) => ({ ...x, modules: { ...x.modules, 'fpv.altitude': {} } }));
+    add({ lat: 48.61, lon: 35.31 });
+    expect(store.mission()!.waypoints.at(-1)).toEqual({ lat: 48.61, lon: 35.31, aglM: 120, heightSource: 'auto' });
+  });
+
   it('accepts line and polygon limits and ignores other geometry', () => {
     const m = exampleMission();
     show(m, null);
@@ -234,6 +287,29 @@ describe('MapStageComponent drawing', () => {
     expect(label({ type: 'LineString', coordinates: ring }).radioLabel).toMatch(/km$/);
     expect(label({ type: 'MultiLineString', coordinates: [ring] }).radioLabel).toMatch(/km$/);
     expect(label({ type: 'Point', coordinates: ring[0] })).toMatchObject({ radioLabel: '', radioAnchor: null });
+  });
+
+  it('fades the heatmap while the route is edited, hides it in a replay and in mini-map mode, and says so', () => {
+    const ws = TestBed.inject(FpvWorkspace);
+    const replay = TestBed.inject(FlightReplay);
+    const c = fixture.componentInstance as unknown as { activity: () => string; intensityNote: () => string | null; sightAvailable: () => boolean };
+    const m = exampleMission();
+    show(m, routeResult(m, 'normal'));
+    expect(c.activity()).toBe('analyse');
+    expect(c.intensityNote()).toBeNull();
+    expect(c.sightAvailable()).toBe(true);
+    ws.editingRoute.set(true);
+    expect(c.activity()).toBe('edit');
+    expect(c.intensityNote()).toMatch(/edit/);
+    expect(c.sightAvailable()).toBe(false);
+    ws.editingRoute.set(false);
+    ws.coverageMiniMap.set(true);
+    expect(c.activity()).toBe('mini-map');
+    expect(c.sightAvailable()).toBe(true);
+    replay.mode.set('replay');
+    expect(c.activity()).toBe('flight');
+    expect(c.sightAvailable()).toBe(false);
+    replay.mode.set('plan');
   });
 
   it('keeps drawing after the map is ready and cleans up on destroy', () => {

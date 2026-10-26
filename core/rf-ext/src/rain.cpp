@@ -79,7 +79,7 @@ double RainAttenuation::specificDbPerKm(rfcore::Hertz frequency, double rate, do
 RainContributor::RainContributor(double rate, double tiltDeg, std::string rateSource)
     : rate_(rate), tilt_(tiltDeg), source_(std::move(rateSource)) {}
 
-std::vector<rfcore::BudgetTerm> RainContributor::contribute(const rfcore::PathContext& ctx) const {
+rfcore::LossContribution RainContributor::contribute(const rfcore::PathContext& ctx) const {
     if (rate_ <= 0.0) return {};
     const auto a = ctx.geometry.antennaStart();
     const auto b = ctx.geometry.antennaEnd();
@@ -90,13 +90,9 @@ std::vector<rfcore::BudgetTerm> RainContributor::contribute(const rfcore::PathCo
     std::ostringstream label;
     label.precision(3);
     label << "Rain " << rate_ << " mm/h";
-    return {{"rf.weather/rain", label.str(), rfcore::Decibel(loss), "ITU-R P.838-3, rate from " + source_}};
-}
-
-std::vector<rfcore::UncertaintyNote> RainContributor::notes(const rfcore::PathContext&) const {
-    if (rate_ <= 0.0) return {};
-    return {{"Rain", "hourly mean rate from " + source_ +
-                         ", taken as uniform along the whole path; real showers are patchier and vary within the hour"}};
+    return {{{"rf.weather/rain", label.str(), rfcore::Decibel(loss), "ITU-R P.838-3, rate from " + source_}},
+            {{"Rain", "hourly mean rate from " + source_ +
+                          ", taken as uniform along the whole path; real showers are patchier and vary within the hour"}}};
 }
 
 }  // namespace rfext

@@ -16,8 +16,8 @@ public:
     using std::logic_error::logic_error;
 };
 
-/// One geodesic leg between two waypoints. The drone's AGL changes linearly in along-leg
-/// distance between the two ends (the server's convention).
+/// One geodesic leg between two waypoints. The drone's height changes linearly in along-leg
+/// distance between the two ends, in the mission's altitude reference (the server's convention).
 struct Leg {
     std::size_t index;
     Waypoint from;
@@ -30,15 +30,17 @@ struct Leg {
 
 struct RoutePoint {
     LatLon position;
-    double aglM;
+    double aglM;         ///< above the ground under the drone; negative when the plan is below it
     std::size_t leg;
     double courseDeg;    ///< forward azimuth of the geodesic at this point
+    double heightM;      ///< in the mission's altitude reference
 };
 
 /// The route pilot → waypoints → (pilot), measured on the ellipsoid.
 class Route {
 public:
-    Route(const Mission& mission, const IWorld& world) : world_(world) {
+    /// Throws MissingTerrain when the mission is launch-referenced and the DEM has no ground at the pilot.
+    Route(const Mission& mission, const IWorld& world) : world_(world), altitude_(modelFor(mission, world)) {
         std::vector<Waypoint> pts;
         pts.push_back(mission.pilot);
         pts.insert(pts.end(), mission.waypoints.begin(), mission.waypoints.end());
@@ -55,6 +57,7 @@ public:
     }
 
     [[nodiscard]] const std::vector<Leg>& legs() const { return legs_; }
+    [[nodiscard]] const AltitudeModel& altitude() const { return altitude_; }
     [[nodiscard]] double length() const { return length_; }
     /// Length up to the target (the last waypoint), without the return leg.
     [[nodiscard]] double outboundLength() const { return outbound_; }
@@ -69,11 +72,26 @@ public:
         const double along = std::clamp(s - leg.startM, 0.0, leg.lengthM);
         const DirectResult d = world_.direct(leg.from.position, leg.azimuthDeg, along);
         const double t = leg.lengthM > 0.0 ? along / leg.lengthM : 0.0;
-        return {d.point, leg.from.aglM + t * (leg.to.aglM - leg.from.aglM), i, d.azimuthDeg};
+        const double height = leg.from.heightM + t * (leg.to.heightM - leg.from.heightM);
+        return {d.point, aglAt(d.point, height), i, d.azimuthDeg, height};
+    }
+
+    /// Height above the ground at a position for a height in the mission's reference. Asks the
+    /// world for the ground only when the reference is the launch point.
+    [[nodiscard]] double aglAt(const LatLon& p, double heightM) const {
+        if (altitude_.followsTerrain()) return heightM;
+        return altitude_.aglM(heightM, world_.groundMsl(p));
     }
 
 private:
+    static AltitudeModel modelFor(const Mission& mission, const IWorld& world) {
+        using enum AltitudeReference;
+        if (mission.altitudeRef == Agl) return {Agl, 0.0};
+        return {Launch, world.groundMsl(mission.pilot.position)};
+    }
+
     const IWorld& world_;
+    AltitudeModel altitude_;
     std::vector<Leg> legs_;
     double length_ = 0.0;
     double outbound_ = 0.0;

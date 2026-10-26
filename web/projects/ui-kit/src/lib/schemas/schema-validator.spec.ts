@@ -19,6 +19,35 @@ describe('SchemaValidator (contract schemas, ajv draft-07 strict)', () => {
     expect(bad.issues.map((i) => i.path)).toEqual(expect.arrayContaining(['/time/mode', '/pilot/lat', '/pilot/aglM', '/waypoints']));
   });
 
+  it('accepts a waypoint left to the server but not a manual one without its height', () => {
+    const m = { schema: 'mission/v1', name: 'Auto', time: { mode: 'now' }, pilot: { lat: 48.53, lon: 35.2, aglM: 2 }, links: {}, evaluate: 'both' };
+    const r = v.validateMission({ ...m, waypoints: [{ lat: 48.557, lon: 35.258 }] });
+    expect(r.issues).toEqual([]);
+    expect(v.validateMission({ ...m, waypoints: [{ lat: 48.557, lon: 35.258, aglM: 90, heightSource: 'auto' }] }).issues).toEqual([]);
+    expect(v.validateMission({ ...m, waypoints: [{ lat: 48.557, lon: 35.258, heightSource: 'manual' }] }).ok).toBe(false);
+    const launch = { ...m, altitudeRef: 'launch', waypoints: [{ lat: 48.557, lon: 35.258, aglM: 90, heightSource: 'manual' }] };
+    expect(v.validateMission(launch).ok).toBe(false);
+  });
+
+  it('requires the envelope of a fixed-wing drone', () => {
+    const quad = {
+      id: 'fpv-10in-recon',
+      name: '10-inch recon quad',
+      version: 1,
+      verified: true,
+      massKg: 1.9,
+      cruiseAirspeedMps: 10,
+      cruisePowerW: 366,
+      climb: { method: 'potential-energy', efficiency: 0.6 },
+      source: { kind: 'measurement', reference: 'Flight log' },
+    };
+    expect(v.validateLibrary('drones', quad).issues).toEqual([]);
+    const plane = { ...quad, id: 'fw-1800-mapper', airframe: 'fixed-wing' };
+    expect(v.validateLibrary('drones', plane).ok).toBe(false);
+    const fixedWing = { stallSpeedMps: 11, maxBankDeg: 45, maxClimbAngleDeg: 8, maxDiveAngleDeg: 10 };
+    expect(v.validateLibrary('drones', { ...plane, fixedWing }).issues).toEqual([]);
+  });
+
   it('validates a battery entry with the shared common definitions', () => {
     const entry = {
       id: 'liion-6s-6000',

@@ -35,12 +35,13 @@ std::string matchKey(const json& obj, const std::string& wanted) {
     static constexpr auto known = std::to_array<std::string_view>({
         "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "maxUploadBytes", "database", "url",
         "poolSize", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
-        "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "weather",
+        "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "allowDevOwnerKey", "requireSandbox", "maxMemoryMb",
+        "maxTimeoutMs", "weather",
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
-        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "map", "metrics", "enabled", "allowFrom",
-        "ops", "drainSeconds"});
+        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "map", "metrics",
+        "enabled", "allowFrom", "ops", "drainSeconds"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -158,6 +159,10 @@ Config Config::fromJson(json doc) {
     readPath(m, "worker", c.modules.worker);
     readPath(m, "trustStore", c.modules.trustStore);
     read(m, "isolateAll", c.modules.isolateAll);
+    read(m, "allowDevOwnerKey", c.modules.allowDevOwnerKey);
+    read(m, "requireSandbox", c.modules.requireSandbox);
+    read(m, "maxMemoryMb", c.modules.maxMemoryMb);
+    read(m, "maxTimeoutMs", c.modules.maxTimeoutMs);
 
     const json& w = doc.value("weather", json::object());
     read(w, "baseUrl", c.weather.baseUrl);
@@ -199,6 +204,7 @@ Config Config::fromJson(json doc) {
     read(cv, "maxCells", c.coverage.maxCells);
     read(cv, "maxJobs", c.coverage.maxJobs);
     read(cv, "keepMinutes", c.coverage.keepMinutes);
+    read(doc.value("calc", json::object()), "maxRouteSamples", c.calc.maxRouteSamples);
 
     if (c.server.port <= 0 || c.server.port > 65535) throw std::invalid_argument("server.port out of range");
     if (c.ops.port < 0 || c.ops.port > 65535) throw std::invalid_argument("ops.port out of range");
@@ -210,6 +216,10 @@ Config Config::fromJson(json doc) {
     }
     if (c.data.demStatedErrorM.has_value() && !(*c.data.demStatedErrorM >= 0.0)) {
         throw std::invalid_argument("data.demStatedErrorM must be >= 0");
+    }
+    if (!(c.calc.maxRouteSamples >= 1.0)) throw std::invalid_argument("calc.maxRouteSamples must be >= 1");
+    if (c.modules.maxMemoryMb == 0 || c.modules.maxTimeoutMs == 0) {
+        throw std::invalid_argument("modules.maxMemoryMb and modules.maxTimeoutMs must be >= 1");
     }
 
     c.raw = doc;

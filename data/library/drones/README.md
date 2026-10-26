@@ -25,3 +25,22 @@ Not included:
 
 Replace a derived profile with your own flight-log measurement (`"kind": "measurement"`) when
 you have one.
+
+## Fixed-wing profiles
+
+A drone is a multirotor unless its profile says `"airframe": "fixed-wing"`. A fixed-wing profile
+also needs `fixedWing`, the flight envelope as the flight controller is set, because the plane
+flies the route within it:
+
+- `stallSpeedMps`: level-flight stall airspeed at the profile's mass. In a turn at the bank
+  angle the stall rises to Vs / sqrt(cos bank), and `fpv.airframe` compares the cruise airspeed
+  with that.
+- `maxBankDeg`: the bank the autopilot turns with (INAV `nav_fw_bank_angle`, ArduPilot
+  `ROLL_LIMIT_DEG`). The turn radius is V² / (g tan bank), with the wind added to V over the ground.
+- `maxClimbAngleDeg` and `maxDiveAngleDeg`: the steepest climb and descent (INAV
+  `nav_fw_climb_angle` and `nav_fw_dive_angle`, ArduPilot `TECS_PITCH_MAX` and `TECS_PITCH_MIN`).
+- `loiterRadiusM` (optional): the circle the plane holds position on (INAV `nav_fw_loiter_radius`,
+  ArduPilot `WP_LOITER_RAD`); without it the tightest turn at cruise is used.
+
+The seeds hold no fixed-wing profile yet: copy these values from your flight controller and add a
+`source` for the stall speed, which is the one figure the controller does not hold.

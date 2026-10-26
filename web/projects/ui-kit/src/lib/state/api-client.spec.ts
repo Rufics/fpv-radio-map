@@ -47,16 +47,19 @@ const cases: Case[] = [
   { name: 'weatherPoint', call: (a) => a.weatherPoint(1, 2, '2026-10-18T12:00:00Z'), method: 'GET', url: '/api/x/weather/point?lat=1&lon=2&timeUtc=2026-10-18T12:00:00Z' },
   { name: 'weatherHorizon', call: (a) => a.weatherHorizon(), method: 'GET', url: '/api/x/weather/horizon' },
   { name: 'modules', call: (a) => a.modules(), method: 'GET', url: '/api/x/modules' },
-  { name: 'uploadModule', call: (a) => a.uploadModule(new Blob(['x']), false), method: 'POST', url: '/api/x/admin/modules?install=false', auth: 'Bearer admin' },
   { name: 'setModule', call: (a) => a.setModule('fpv.relay', { enabled: true }), method: 'PUT', url: '/api/x/admin/modules/fpv.relay', auth: 'Bearer admin' },
-  { name: 'removeModule', call: (a) => a.removeModule('fpv.relay'), method: 'DELETE', url: '/api/x/admin/modules/fpv.relay', auth: 'Bearer admin' },
+  { name: 'reloadModules', call: (a) => a.reloadModules(), method: 'POST', url: '/api/x/admin/modules/reload', auth: 'Bearer admin' },
   { name: 'moduleNotices', call: (a) => a.moduleNotices(), method: 'GET', url: '/api/x/admin/modules/notices', auth: 'Bearer admin' },
   { name: 'adminKeys', call: (a) => a.adminKeys(), method: 'GET', url: '/api/x/admin/keys', auth: 'Bearer admin' },
-  { name: 'addKey', call: (a) => a.addKey('ed25519:x', 'Lab'), method: 'POST', url: '/api/x/admin/keys', auth: 'Bearer admin' },
-  { name: 'deleteKey', call: (a) => a.deleteKey('k/1'), method: 'DELETE', url: '/api/x/admin/keys/k%2F1', auth: 'Bearer admin' },
   { name: 'adminCache', call: (a) => a.adminCache(), method: 'GET', url: '/api/x/admin/cache', auth: 'Bearer admin' },
   { name: 'putAdminCache', call: (a) => a.putAdminCache([]), method: 'PUT', url: '/api/x/admin/cache', auth: 'Bearer admin' },
   { name: 'clearCache', call: (a) => a.clearCache(), method: 'DELETE', url: '/api/x/admin/cache?tier=all', auth: 'Bearer admin' },
+  { name: 'decodeFlightLog', call: (a) => a.decodeFlightLog(null, new Blob(['x']), 'a b.bbl'), method: 'POST', url: '/api/x/flightlogs/decode?fileName=a%20b.bbl' },
+  { name: 'decodeFlightLog in a mission', call: (a) => a.decodeFlightLog('m 1', new Blob(['x']), 'a.bbl'), method: 'POST', url: '/api/x/flightlogs/decode?fileName=a.bbl', auth: 'Bearer s1' },
+  { name: 'importFlightLog', call: (a) => a.importFlightLog('m 1', new Blob(['x']), 'a.bbl'), method: 'POST', url: '/api/x/missions/m%201/flightlogs?fileName=a.bbl', auth: 'Bearer s1' },
+  { name: 'listFlightLogs', call: (a) => a.listFlightLogs('m 1'), method: 'GET', url: '/api/x/missions/m%201/flightlogs', auth: 'Bearer s1' },
+  { name: 'getFlightLog', call: (a) => a.getFlightLog('m 1', 'f/1'), method: 'GET', url: '/api/x/missions/m%201/flightlogs/f%2F1', auth: 'Bearer s1' },
+  { name: 'deleteFlightLog', call: (a) => a.deleteFlightLog('m 1', 'f1'), method: 'DELETE', url: '/api/x/missions/m%201/flightlogs/f1', auth: 'Bearer s1' },
   { name: 'mapConfig', call: (a) => a.mapConfig(), method: 'GET', url: '/api/x/config/map' },
 ];
 
@@ -95,6 +98,15 @@ describe('RfmapApiClient', () => {
       await done;
     });
   }
+
+  it('uploads a flight log as raw bytes', async () => {
+    const done = api.importFlightLog('m 1', new Blob(['abc']), 'a.bbl');
+    const req = http.expectOne((r) => r.url === '/api/x/missions/m%201/flightlogs');
+    expect(req.request.headers.get('Content-Type')).toBe('application/octet-stream');
+    expect(req.request.body).toBeInstanceOf(Blob);
+    req.flush({ flights: [] });
+    expect(await done).toEqual({ flights: [] });
+  });
 
   it('saves with If-Match and reads the new revision from the ETag', async () => {
     const saved = api.saveMission('m 1', mission, 3);

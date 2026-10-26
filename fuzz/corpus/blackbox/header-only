@@ -1,0 +1,28 @@
+H Product:Blackbox flight data recorder by Nicholas Sherlock
+H Data version:2
+H I interval:32
+H P interval:1
+H Field I name:loopIteration,time,vbatLatest,amperageLatest,rssi,setpoint[3],debug[0],debug[2]
+H Field I signed:0,0,0,1,0,1,1,1
+H Field I predictor:0,0,9,0,0,0,0,0
+H Field I encoding:1,1,3,0,1,0,0,0
+H Field P predictor:6,2,1,1,1,1,1,1
+H Field P encoding:9,0,6,6,6,6,6,6
+H Field H name:GPS_home[0],GPS_home[1]
+H Field H signed:1,1
+H Field H predictor:0,0
+H Field H encoding:0,0
+H Field G name:time,GPS_numSat,GPS_coord[0],GPS_coord[1],GPS_altitude,GPS_speed,GPS_ground_course
+H Field G signed:0,0,1,1,1,0,0
+H Field G predictor:10,0,7,7,0,0,0
+H Field G encoding:1,1,0,0,0,1,1
+H Field S name:flightModeFlags,stateFlags,failsafePhase,rxSignalReceived,rxFlightChannelsValid
+H Field S signed:0,0,0,0,0
+H Field S predictor:0,0,0,0,0
+H Field S encoding:1,1,7,7,7
+H Firmware type:Cleanflight
+H Firmware revision:Betaflight 4.5.1 (77d01ba3b) STM32F7X2
+H Log start datetime:2024-09-22T19:43:32.234+00:00
+H Craft name:TestQuad
+H vbatref:1680
+H vbatcellvoltage:330,350,420

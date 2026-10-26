@@ -1,6 +1,7 @@
 // fpv.best-launch entry: route.analyze through the host ABI, and its error paths.
 
 #include <fake_host.hpp>
+#include <fpv/search.hpp>
 
 #include <gtest/gtest.h>
 
@@ -66,4 +67,14 @@ TEST_F(BestLaunchModule, TooFineAGridIsABadRequest) {
     const auto r = module_.analyze(req);
     EXPECT_EQ(r.status, RFMOD_ERR_BAD_REQUEST);
     EXPECT_NE(r.body.at("error").at("message").get<std::string>().find("more than 5"), std::string::npos);
+}
+
+TEST_F(BestLaunchModule, DroneBelowTheGroundIsEvaluatedOnTheGround) {
+    // a launch-referenced plan under a ridge gives a negative AGL; link.evaluate takes none
+    host_.linkByDistance(30.0);
+    const rfmod::HostClient client(host_.abi());
+    const HostLinkEvaluator eval(client, json::object());
+    const LatLon pilot{48.53, 35.2};
+    (void)eval.marginDb("video", {pilot, 2.0}, {{48.53, 35.21}, -40.0});
+    EXPECT_EQ(host_.requests().back().at("request").at("drone").at("aglM"), 0.0);
 }

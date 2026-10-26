@@ -1,7 +1,7 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { CoverageGrid, Fix, GetMissionResponse, Job, JobPart, Role, RouteResult } from '../models/api.models';
-import { EvaluateMode, LinkKind, Mission, MissionPoint, linksEvaluated } from '../models/mission.models';
+import { EvaluateMode, FlightMode, LinkKind, Mission, MissionPoint, MissionWaypoint, linksEvaluated } from '../models/mission.models';
 import { ApiError, RfmapApiClient } from './api-client';
 import { CredentialStore } from './credential-store';
 import { applyMergePatch } from './merge-patch';
@@ -138,6 +138,10 @@ export class MissionStore {
     this.update((m) => ({ ...m, evaluate: mode }));
   }
 
+  setFlightMode(mode: FlightMode): void {
+    this.update((m) => ({ ...m, flightMode: mode }));
+  }
+
   setPilot(p: Pick<MissionPoint, 'lat' | 'lon'>): void {
     this.movePoint(-1, p);
   }
@@ -151,7 +155,7 @@ export class MissionStore {
   movePoint(index: number, p: Pick<MissionPoint, 'lat' | 'lon'>): void {
     const before = this.snapshot();
     if (!before || !this.canEdit() || this.busy() || this.preview()) return;
-    const move = <T extends MissionPoint>(point: T): T => ({ ...point, lat: p.lat, lon: p.lon });
+    const move = <T extends Pick<MissionPoint, 'lat' | 'lon'>>(point: T): T => ({ ...point, lat: p.lat, lon: p.lon });
     if (index < 0) this.update((m) => ({ ...m, pilot: move(m.pilot) }));
     else this.update((m) => ({ ...m, waypoints: m.waypoints.map((w, i) => (i === index ? move(w) : w)) }));
     this.lastMove.set(before);
@@ -172,7 +176,7 @@ export class MissionStore {
     this.pilotStale.set(s.pilotStale);
   }
 
-  addWaypoint(p: MissionPoint): void {
+  addWaypoint(p: MissionWaypoint): void {
     this.update((m) => ({ ...m, waypoints: [...m.waypoints, p] }));
   }
 
@@ -246,6 +250,12 @@ export class MissionStore {
       },
     });
 
+    if (linksEvaluated(mission.evaluate).length === 0) {
+      // No radio link is evaluated, so there is no coverage to compute.
+      jobDone = true;
+      finish();
+      return;
+    }
     try {
       const job = await this.api.startCoverage(id, mission);
       if (run !== this.runId) return;

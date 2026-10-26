@@ -17,16 +17,16 @@
 #   docker build --secret id=extra_ca,src=/path/ca.crt ...
 # Without the secret nothing changes.
 
-FROM ubuntu:24.04
+FROM ubuntu:26.04
 
 ARG UBUNTU_SNAPSHOT=20261015T000000Z
-ARG CA_CERTIFICATES_VERSION=20260601~24.04.1
-ARG GDAL_VERSION=3.8.4+dfsg-3ubuntu3
-ARG OPENJDK_VERSION=21.0.12.1+1-1~24.04.4
-ARG CURL_VERSION=8.5.0-2ubuntu10.16
-ARG GIT_VERSION=1:2.43.0-1ubuntu7.3
-ARG PYTHON3_VERSION=3.12.3-0ubuntu2.1
-ARG SQLITE3_VERSION=3.45.1-1ubuntu2.8
+ARG CA_CERTIFICATES_VERSION=20260601~26.04.1
+ARG GDAL_VERSION=3.12.2+dfsg-1build2
+ARG OPENJDK_VERSION=21.0.12.1+1-1~26.04.4
+ARG CURL_VERSION=8.18.0-1ubuntu2.8
+ARG GIT_VERSION=1:2.53.0-1ubuntu1
+ARG PYTHON3_VERSION=3.14.3-0ubuntu2
+ARG SQLITE3_VERSION=3.46.1-9ubuntu0.3
 
 ARG PLANETILER_VERSION=0.10.2
 ARG PLANETILER_SHA256=f310bd0413e2e4512b27f4046d418664e8e1d3bf31603c2a70e23de06c167e4d
@@ -41,25 +41,27 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# 1) CA certificates (needed to reach the https snapshot archive), then
-# 2) everything else at exact versions from the dated snapshot, then
+# 1) CA certificates from the live archive, unpinned, only to reach the https snapshot archive, then
+# 2) everything at exact versions from the dated snapshot, ca-certificates included (this can be a
+#    downgrade of the bootstrap copy, hence --allow-downgrades), then
 # 3) Planetiler (OpenMapTiles profile is built in) and go-pmtiles, verified by sha256, and the
 #    glyph fonts at a pinned commit. One layer, so the optional extra CA is mounted once.
 RUN --mount=type=secret,id=extra_ca,required=false \
     set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends "ca-certificates=${CA_CERTIFICATES_VERSION}"; \
+    apt-get install -y --no-install-recommends ca-certificates; \
     if [ -s /run/secrets/extra_ca ]; then \
       cp /run/secrets/extra_ca /usr/local/share/ca-certificates/build-extra-ca.crt; update-ca-certificates; \
     fi; \
     apt-get update --snapshot "${UBUNTU_SNAPSHOT}"; \
-    apt-get install -y --no-install-recommends --snapshot "${UBUNTU_SNAPSHOT}" \
+    apt-get install -y --no-install-recommends --allow-downgrades --snapshot "${UBUNTU_SNAPSHOT}" \
+      "ca-certificates=${CA_CERTIFICATES_VERSION}" \
       "curl=${CURL_VERSION}" \
       "gdal-bin=${GDAL_VERSION}" \
       "git=${GIT_VERSION}" \
       "openjdk-21-jre-headless=${OPENJDK_VERSION}" \
-      "python3=${PYTHON3_VERSION}" \
       "python3-gdal=${GDAL_VERSION}" \
+      "python3=${PYTHON3_VERSION}" \
       "sqlite3=${SQLITE3_VERSION}"; \
     rm -f /usr/local/share/ca-certificates/build-extra-ca.crt; update-ca-certificates --fresh >/dev/null; \
     rm -rf /var/lib/apt/lists/*; \
@@ -85,7 +87,8 @@ RUN --mount=type=secret,id=extra_ca,required=false \
     git init -q /tmp/fonts; cd /tmp/fonts; \
     git remote add origin https://github.com/protomaps/basemaps-assets.git; \
     git config core.sparseCheckout true; \
-    printf 'fonts/Noto Sans Regular/\nfonts/Noto Sans Medium/\nfonts/Noto Sans Italic/\nfonts/OFL.txt\n' > .git/info/sparse-checkout; \
+    printf 'fonts/Noto Sans Regular/\nfonts/Noto Sans Medium/\nfonts/Noto Sans Italic/\nfonts/OFL.txt\n' \
+      > .git/info/sparse-checkout; \
     git fetch -q --depth 1 --filter=blob:none origin "${FONTS_COMMIT}"; \
     git checkout -q FETCH_HEAD; \
     test "$(git rev-parse HEAD)" = "${FONTS_COMMIT}"; \

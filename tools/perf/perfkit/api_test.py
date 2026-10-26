@@ -16,7 +16,7 @@ class ApiTestCase(unittest.TestCase):
 
 class ApiClientTest(ApiTestCase):
     def test_calls_and_errors(self):
-        self.assertEqual(self.client.call("GET", "/health").body["ok"], True)
+        self.assertTrue(self.client.call("GET", "/health").body["ok"])
         reply = self.client.call("GET", "/nope")
         self.assertEqual((reply.status, reply.body), (404, {"message": "no such route"}))
         with self.assertRaisesRegex(PerfError, "answered 404, expected 200"):

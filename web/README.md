@@ -59,11 +59,11 @@ Demo data:
 |--------|----------|
 | `format/` | `RfFormat` and the one shared `rfNum` pipe / `<rf-num>`. dB and dBm get 2 decimals; km gets 3 in breakdowns and 1 in summaries; heights are whole metres; the minus sign is U+2212; the full value goes in `title` and in exports. |
 | `map/` | `<rf-map-view>`, `MapContext`, `provideMapView()`, the PMTiles protocol and the attribution line. |
-| `layers/` | `LayerRegistry` (one per map, groups base → terrain → weather → results → mission), the standard layers (dark base on the OpenMapTiles schema, satellite, hillshade, contours, weather with a time slider) and `<rf-layer-panel>`. |
+| `layers/` | `LayerRegistry` (one per map, groups base → terrain → weather → results → mission), the standard layers (dark base on the OpenMapTiles schema, satellite, hillshade, contours, weather with a time slider) and `<rf-layer-panel>` with collapsible Map, Coverage, Weather and Mission sections (`<rf-layer-section>`). |
 | `slots/` | `SlotRegistry` and `<rf-slot-host>` for `header.actions`, `side.panels`, `map.layers`, `map.overlays`, `bottom.drawer` and `verdict.reasons`. |
-| `coverage/` | Heatmap with the 4-colour scale (`CoverageLayer`), radio and battery limits, and scenario difference: `subtractGrids`, `CoverageDeltaLayer`, `RouteDeltaLayer` and `DeltaScale` (▲/▼ marks as well as colour). |
+| `coverage/` | Heatmap on the viridis scale under the relief and the labels (`CoverageLayer`, `CoverageReliefLayer`), its strength by activity (`CoverageIntensity`), margin under a point (`CoverageProbe`), the hover line of sight (`LineOfSightLayer`), radio and battery limits, and scenario difference: `subtractGrids`, `CoverageDeltaLayer`, `RouteDeltaLayer` and `DeltaScale` (▲/▼ marks as well as colour). |
 | `charts/` | SVG terrain profile with the Fresnel zone and earth bulge, and the link-budget waterfall. |
-| `tools/` | Geo helpers and `RouteTool` (markers, legs, drag, add point). |
+| `tools/` | Geo helpers and `RouteTool` (markers, legs, drag with an `onDrag` start/end callback, add point). |
 | `weather/` | Weather along the route: `RouteTimeline` (arrival time at each place at the cruise speed), `RouteWeather` (forecast samples read at any distance, head/tail wind per leg), `WeatherScale` (classes and colours), `RouteWeatherLayer` (the route recoloured by the weather in weather mode) and `PolylineHitTest` (hover read-outs). |
 | `state/` | `RfmapApiClient` (one method per contract operation), `MissionStore` (signals; save, calculate, job parts, preview fix with JSON merge patch), `CredentialStore` and `applyMergePatch`. |
 | `modules/` | `ModuleUiLoader`: runtime UI bundles (see below). |
@@ -71,6 +71,29 @@ Demo data:
 | `schemas/` | `SchemaValidator` (ajv draft-07 strict plus formats). |
 | `ui/` | Pill, segmented control, stepper, job progress and heat legend. |
 | `styles/rfmap-ui-kit.css` | Design tokens (`--rf-*`), IBM Plex Sans/Mono with tabular figures, radii 6/8/12/16, and touch targets of 44 px (32 px for dense desktop). |
+
+## Coverage view
+
+The heatmap helps read the route; it should not hide it. It is drawn in the viridis scale at 45 % and sits under the relief shading, roads, water, labels and the route, so the map stays readable through it. Below 0 dB margin the cell is transparent, and a separate line marks the 0 dB edge.
+
+Its strength follows what you are doing (`CoverageIntensity`):
+
+| Activity | Heatmap | Legend note |
+|----------|---------|-------------|
+| Reading a result | 45 % | — |
+| Placing or editing points | 12 % | Faded while you edit the route |
+| Dragging a point | 6 % | Faded while you move a point |
+| Flight replay or plan against fact | off (the 0 dB edge stays) | — |
+| Mini-map on | off on the map | Shown in the mini-map |
+
+**Layers** groups the settings into sections: **Map** (base map and terrain shading), **Coverage** (the heatmap, limits, legend and the two options below), **Weather** (closed while no weather layer is on) and **Mission**. The **View** section (3D and the altitude profile) appears once there is a route. A section keeps the state you left it in.
+
+- **Mini-map instead of the heatmap** moves the coverage to an inset in the corner. It shows the grid, the route, the part of the map in view and the cursor, with the margin under the cursor. A click on the inset recentres the map there. It is hidden in 3D and during a flight replay.
+- **Line of sight on hover** (laptop and desktop, 2D, with a calculated result) draws the line from the pilot to the cursor, coloured by the margin: teal from 10 dB, amber from 0 to 10 dB, red below 0 dB. A tag shows the margin, the distance, and whether the line is clear or blocked by terrain (with the height of the blocking ridge). It shows the grid margin at once, marked as checking, and replaces it with the exact `/calc/path` answer when the cursor rests. Screen readers hear only the final reading.
+
+![Layers panel with the Coverage section open, and the mini-map](screenshots/laptop-coverage-layers.png)
+
+![Line of sight from the pilot to the cursor, blocked by the ridge](screenshots/laptop-line-of-sight.png)
 
 ## How a module UI bundle registers into slots
 

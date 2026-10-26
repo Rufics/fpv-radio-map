@@ -3,10 +3,11 @@
 A module adds something to the radio map without touching the core: an extra loss term
 (rain, foliage, body shadow), an analysis of a route (battery, minimum altitude, relay), a
 library kind, or a UI panel. Modules are shared libraries with a C ABI, packed into a signed
-`.rfmod` file and installed by the server admin.
+`.rfmod` file and installed by the server operator with the `rfmod` CLI on the server machine.
+The HTTP API only lists, enables and configures modules; it cannot add one.
 
 The worked example is [`examples/modules/body-shadow`](../../examples/modules/body-shadow).
-It builds, packs and passes the server's upload checks in CI.
+It builds, packs and passes the install checks in CI.
 
 ## 1. Tools
 
@@ -25,12 +26,12 @@ rfmod keygen --out acme
 ```
 
 This writes `acme.pub` and `acme.secret`. Give `acme.pub` to the admin of each server that
-should run your modules; they add it under **Admin → Keys**. Keep `acme.secret` off servers and
+should run your modules; they trust it on the server machine with `rfmod trust add`. Keep `acme.secret` off servers and
 out of git: whoever has it can sign as you.
 
 The server has one key built in, the owner's. Modules signed with it run inside the server
 process. Modules signed with any other key run in a separate worker process (section 8).
-The admin can remove a key at any time; modules signed with it stop loading at once.
+The operator can remove a key at any time; modules signed with it stop loading at the next reload.
 
 ## 3. Start a project
 
@@ -48,12 +49,12 @@ The fields that matter most:
 | Field | Meaning |
 |---|---|
 | `id` | Namespaced, lower case: `acme.rain`. The `fpv.*`, `rf.*` and `example.*` prefixes belong to the owner. |
-| `version` | SemVer. An upload must be newer than what is installed. |
+| `version` | SemVer. An install must be newer than what is installed. |
 | `lifecycle` | `alpha`, `beta`, `stable` or `deprecated` (section 8). |
 | `abi` | Always `2` for now (the `RFMOD_ABI_VERSION` in `abi.h`). |
 | `host` | Range of host versions you support, for example `>=0.1.0 <1.0.0`. |
 | `requires` / `optional` | Other modules, with version ranges (`^1.2.0`, `>=1.0.0 <2.0.0`, `~1.4.0`, `a || b`). Required ones must be installed first. Optional ones may be missing; check with the host at run time. |
-| `provides` | What you add: `loss.contributor`, `route.analysis`, `coverage.analysis`, `library.kind`, `ui.panel`. |
+| `provides` | What you add: `loss.contributor`, `route.preparation`, `route.analysis`, `coverage.analysis`, `flightlog.decoder`, `library.kind`, `ui.panel`. |
 | `methods` | Methods you answer, for documentation and the admin page. |
 | `entry` | Library per platform: `{"linux-x86_64": "lib/libacme_rain.so"}`. |
 | `optionsSchema` | JSON Schema (draft-07) of the options the admin can set. The server validates against it. |
@@ -84,8 +85,8 @@ RFMOD_DEFINE_MODULE(RainModule)
 - `invoke` answers methods. Throw `rfmod::UnknownMethod`, `rfmod::BadRequest`, or any
   `std::exception`; the SDK turns them into error codes. Nothing crosses the ABI as a C++
   exception.
-- `selftest` runs when the admin uploads the package, in a worker, before anything is
-  installed. Check your maths against cases you know the answer to. Return
+- `selftest` runs when the operator installs the package (`rfmod install`), in a sandboxed
+  worker, before anything is installed. Check your maths against cases you know the answer to. Return
   `{"ok": bool, "checks": [{"name": "...", "ok": bool, "detail": "..."}]}`. Host calls are not
   available during the self-test.
 - `host()` gives the `HostClient` for calls back into the server (section 5).
@@ -150,13 +151,89 @@ dropped term. A failure (an error, a timeout, a malformed response) never fails 
 calculation: the path is evaluated without your terms, and the failure is listed in
 `moduleFailures`.
 
+### route.preparation → `route.prepare`
+
+Called before the core evaluates a route, and only when some waypoint leaves its height to the
+server: it has no height in the mission's reference (`aglM`, or `altM` for `"launch"`), or its
+`heightSource` is `"auto"` (its stored height is only the last automatic one). Request:
+
+```json
+{ "mission": { }, "options": { }, "weather": { }, "time": "2026-10-18T14:00:00Z" }
+```
+
+Response: a height for each waypoint you can set, in the mission's reference, and reasons.
+
+```json
+{
+  "waypoints": [ { "index": 0, "field": "aglM", "heightM": 74, "limitedBy": "control", "blocked": false } ],
+  "reasons": [ { "severity": "warn", "leg": 0, "text": "WP1: automatic height 120 m AGL, but ..." } ]
+}
+```
+
+The server sets only the heights still wanted: a manual height is never changed, and with more
+than one such module the first in dependency order wins. Each one set is listed in
+`RouteResult.autoHeights` and marked `heightSource: "auto"` in the mission the legs and the
+route.analysis modules then see; the stored mission is not changed. Reasons are attached once the
+legs exist, the same way as route.analyze's. A failure or a malformed answer (an unknown
+waypoint, another field, a height that is not a number) sets nothing and is listed in
+`moduleFailures`. A waypoint still without a height after every module makes the calculation a
+422.
+
+`fpv.altitude` gives each automatic waypoint the highest corridor floor on its legs: terrain and
+obstacles plus 30 m, and with `linkFloor` the height that keeps 60 % of every link's first Fresnel
+zone clear, capped by the 120 m AGL ceiling. A leg between two automatic waypoints flies level
+over its highest floor; next to a manual waypoint the line from it has to clear the floor. The legs
+from and back to the pilot are taken as flown level at the waypoint's height, so the highest floor
+along them applies; only the climb from the pilot itself is left out (the take-off ramp and the
+climb-out cover it). A
+waypoint the ceiling cannot make safe (at the waypoint, or anywhere along one of its legs as the
+heights are set), or with no clear Fresnel height up to `maxAglM`, is `blocked`, with a reason that points to `fpv.relay` and `fpv.best-launch`. Its `autoHeight`
+option (default true) turns this off.
+
+Its route.analyze also runs a climb assistant (option `climbAssist`, default true). Climbing costs
+energy and descending gives nothing back, so the energy-optimal profile is the one with the least
+total climb that stays between the corridor's floor and ceiling within the drone's climb rate
+(`climbRateMps`, else the drone's measured rate, else 3 m/s) and descent rate (`descentRateMps`,
+4 m/s) at the ground speed on each stretch; in the take-off zone the drone climbs and lands
+vertically. It is found on a `heightStepM` grid (5 m, coarsened to at most 400 heights a sample) and compared with two simpler strategies:
+climbing over launch to the highest floor and flying level, and a steady climb to it and a steady
+descent back. Each is turned into the fewest waypoints that follow it within `fitToleranceM` (5 m)
+in the mission's reference without crossing the floor or the ceiling (added points are labelled
+C1, C2, …; one whose removal keeps the line in the corridor without more climb is dropped, so the
+fix may skip a dip of the profile by more than the tolerance) and
+offered as a fix that replaces `waypoints`. A stretch takes as long as flying it or as climbing or
+descending its height at the drone's rates, whichever is longer; `overCeilingM` counts only where
+the floor is under the ceiling. `data.climb` holds the plan's and every
+strategy's stats (`riseM`, `timeS`, `minClearanceM`, `overCeilingM`, `steepestClimbMps`, `steepestDescentMps`, and
+`energyWh` when the mission has a drone, fetched with `library.get` and flown in the request's
+`weather` or, when that is null, the forecast from `weather.point` (still air if the call fails);
+only the assistant uses that forecast, the corridor's refraction keeps to the request's `weather`),
+the strategies' heights at every corridor sample (`mslM`) and their fixes.
+A leg the plan climbs faster than the drone can gets a warning, and a plan that climbs at least
+10 m and 10 % more than the energy-optimal profile, or leaves the corridor where that profile does
+not, gets an info reason; both carry the energy-optimal fix. A fitted line that breaks either rate
+(`withinClimbRate` false, for one when no profile through the corridor keeps to them) is still
+shown, but its card offers no fix; for the energy-optimal line the warnings carry no fix, the info
+reason is not given, and a note says so.
+
 ### route.analysis → `route.analyze`
 
 Called after the core has evaluated every leg of a route. The legs are pilot → wp1 → … → last,
 plus last → pilot when `returnToPilot` is true (the default). The core samples each leg at the
-DEM's native step. Along a leg the drone's AGL is interpolated linearly between the two
-waypoints' `aglM`, and its MSL is the DEM ground plus that AGL. The pilot's antenna is at
-`pilot.aglM`. `LegResult.worst` holds the worst sample per link, with `sample` saying where it was.
+DEM's native step. Along a leg the drone's height is interpolated linearly between the two
+waypoints in the mission's `altitudeRef`:
+
+- `"launch"`: waypoint heights are `altM`, above the ground at the pilot (a barometric altitude
+  from take-off). The drone's MSL is the launch ground plus that height, so it does not follow the
+  terrain; its AGL is that MSL minus the DEM ground under it, and a leg where it would be below
+  the ground is blocked.
+- `"agl"` (and missions without the field): waypoint heights are `aglM`. The drone's MSL is the
+  DEM ground plus that height, so it follows the terrain.
+
+The pilot's antenna is at `pilot.aglM` in both. In C++ use `fpv::Route` from `fpv/route.hpp`:
+`RoutePoint::heightM` is the height in the mission's reference, `RoutePoint::aglM` is always above
+the ground, and `Route::altitude()` converts between them (`fpv/altitude.hpp`). A fix that changes
+waypoint heights patches `AltitudeModel::waypointField(mission.altitudeRef)`. `LegResult.worst` holds the worst sample per link, with `sample` saying where it was.
 
 Modules run in dependency order (a module after those it requires or optionally uses), and
 each request carries what the earlier ones returned:
@@ -207,6 +284,29 @@ called once per link grid. Response: `{ "reasons": [...], "layers": [ { "id": "a
 "title": "...", "values": [...] } ], "data": {} }`, with `values` laid out like the grid's
 `marginDb` (row-major from the north-west corner `origin`, `cellLatDeg` × `cellLonDeg` cells).
 The server stores `{layers, data}` under your id in `CoverageGrid.modules`.
+
+### flightlog.decoder → `flightlog.probe`, `flightlog.decode`
+
+A decoder turns one flight log format (Betaflight Blackbox, DJI, ...) into the normalized flight
+log, [`schemas/flightlog.schema.json`](../../schemas/flightlog.schema.json) (`flightlog/v1`).
+It only reads the file: the server's `rf-flightlog` core turns the normalized log into the
+replay, the story and plan against fact, the same way for every format. A decoder always runs
+isolated (section 8), even when it is signed with the owner key, because it parses files that
+users upload.
+
+Both methods take `{ "file": "<base64>", "fileName": "LOG00007.BFL" }`.
+
+- `flightlog.probe` gets only the first 64 KiB of the file and answers
+  `{ "match": true|false, "format": "...", ... }`. Tell the format from those bytes. The server
+  asks each installed decoder in turn and uses the first that matches.
+- `flightlog.decode` gets the whole file and answers the normalized document, one entry in
+  `logs` per flight in the file. A flight with no data (only a header, an unsupported firmware) is still an entry, with
+  its `status` and a `notes` entry that says why and what to do. Read the format as the
+  firmware writes it, per version, and say in `firmware.supported` when a version is outside
+  what you know. Never guess a field you could not read: leave it out, so the UI shows "not
+  logged" rather than a wrong number. A file you cannot read is a `BadRequest` (the user sees
+  422 with your message); the server checks the answer against the schema and refuses a
+  document that does not match.
 
 ## 6. Host calls
 
@@ -271,26 +371,42 @@ through the registry's public-file lookup; `lib/` is never served.
 
 ## 8. Isolation
 
-Modules not signed with the owner key run in `rfmod-worker`, one process per module. The admin
-can also run first-party modules this way (`isolateAll`):
+Modules not signed with the owner key run in `rfmod-worker`, one process per module. The
+operator can also run first-party modules this way (`isolateAll`):
 
-- memory capped at `limits.memoryMb` (address space), no core dumps, no file writes,
-  32 open files at most;
+- memory capped at `limits.memoryMb` (address space) and the call time at `limits.timeoutMs`,
+  both further capped by the server's `modules.maxMemoryMb` and `modules.maxTimeoutMs`; a
+  reply larger than 16 MiB ends the worker, and a log line is cut at 1 MiB;
+- no core dumps, no file writes, 32 open files at most;
 - started with an empty environment, in the module's own directory, with every server
-  descriptor closed;
-- `no_new_privs` set, and a fresh network namespace so the module has no network, where the
-  kernel allows unprivileged namespaces. The upload report says which of these took effect on
-  that server; it is not assumed;
-- a call that runs past `limits.timeoutMs` kills the worker; a crash kills only the worker.
-  The next call starts a fresh one. The time limit applies to isolated modules only: an
-  owner-signed module running in-process cannot be stopped mid-call, so keep its calls short.
+  descriptor closed; the host kills the worker's whole process group;
+- `no_new_privs` set;
+- a Landlock ruleset that leaves the module read access to its own directory and the system
+  library directories only, so it can read neither the server's files nor its configuration;
+- a seccomp filter that refuses sockets, new processes (`fork`, `clone` without
+  `CLONE_THREAD`, `execve`), `ptrace`, the mount and module calls, `setuid` and the like,
+  changes to file modes, owners, times and attributes, truncation, and signals to any process
+  but itself (threads are allowed);
+- a fresh user and network namespace where the kernel allows unprivileged namespaces.
 
-This is a sandbox against mistakes and against greedy code, not a guarantee against a
-determined attacker: the module still runs as the server's user and can read what that user
-can read. That is why only the admin installs modules and only signed packages are accepted.
+The worker confines itself before it loads the module's library, so the library's
+constructors already run inside. It reports which of these took effect; the host assumes none. A module that is not
+signed with the owner key loads only when all of them did (`modules.requireSandbox`, on by
+default), so a kernel without Landlock or seccomp runs first-party modules only. Owner-signed
+modules run in-process and cannot be stopped mid-call, so keep their calls short.
+
+This is a sandbox against mistakes and against greedy code; a module still runs as the
+server's user. That is why only the operator installs modules, only signed packages are
+accepted, and the server's own module ids (`rf.*`, `fpv.*`) need the owner key.
 
 Write to stdout or stderr freely; it goes to the server log under your module id. Use
-`host().log(level, text)` for messages the admin should see.
+`host().log(level, text)` for messages the operator should see.
+
+Host calls are answered only while the server evaluates a request: a module that calls the host
+from `init` or from a thread of its own gets an error. Each request allows 10 000 host calls in
+all, nested at most 4 deep, and `link.evaluate` is refused inside `loss.contribute`, where it
+would run the caller again. Every request field is checked for shape and range before it reaches
+a service, and the error names the field.
 
 ## 9. Versions and deprecation
 
@@ -314,7 +430,7 @@ To retire a module or a major version, Kubernetes style:
 cmake -B build -DRFMOD_SDK=/path/to/fpv-radio-map/platform/rfmod/include && cmake --build build
 mkdir -p stage/lib && cp manifest.json stage/ && cp -r schema stage/ && cp build/libacme_rain.so stage/lib/
 rfmod pack stage --key acme.secret                  # → acme.rain-0.1.0.rfmod
-rfmod check acme.rain-0.1.0.rfmod --trust acme.pub  # every upload check except the self-test
+rfmod check acme.rain-0.1.0.rfmod --trust acme.pub  # every install check except the self-test
 rfmod test  acme.rain-0.1.0.rfmod --trust acme.pub  # also runs the self-test in a worker
 # add --with dep-1.0.0.rfmod for each required module
 ```
@@ -326,9 +442,14 @@ current directory and removes it when it finishes.
 
 Packing is reproducible: the same files and key give the same bytes.
 
-Send the `.rfmod` to the admin. They upload it under **Admin → Modules**; the server repeats
-every check, runs the self-test, and installs only if everything passed. The report lists each
-check with its result, so a refusal always says why.
+Send the `.rfmod` to the operator. They copy it to the server machine and run
+`rfmod trust add acme.pub --label "Acme" --trust-store /var/lib/rfmap/keys.json` once, then
+`rfmod install acme.rain-0.1.0.rfmod --root /var/lib/rfmap/modules --trust-store /var/lib/rfmap/keys.json`;
+the CLI repeats every check,
+runs the self-test in a sandboxed worker and installs only if everything passed, then
+`POST /api/v1/admin/modules/reload` makes the server pick it up. The report lists each check
+with its result, so a refusal always says why. There is no upload through the API or the
+browser: a module reaches a server only through someone who can log in to its machine.
 
 ## Package format
 

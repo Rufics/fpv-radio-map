@@ -9,6 +9,7 @@ import {
   Antenna,
   Battery,
   BudgetTerm,
+  CalcPathRequest,
   CoverageGrid,
   Drone,
   Fix,
@@ -16,6 +17,7 @@ import {
   LinkKind,
   LinkResult,
   Mission,
+  MissionAltitude,
   MissionPoint,
   Profile,
   RadioProfile,
@@ -29,7 +31,7 @@ import {
   ResultForecastTier,
   linksEvaluated,
 } from '@rfmap/ui-kit';
-import { LOCAL, RIDGE_FRACTION, elevation, elevationLocal, toLatLon, toLocal } from './mock-terrain';
+import { LOCAL, RIDGE_FRACTION, aglPoint, elevation, heightForAgl, elevationLocal, toLatLon, toLocal } from './mock-terrain';
 
 const M = '−';
 const pt = (p: { x: number; y: number }, aglM: number, label?: string): MissionPoint => ({ ...toLatLon(p.x, p.y), aglM, ...(label ? { label } : {}) });
@@ -69,6 +71,11 @@ export const LIBRARY: { radios: RadioProfile[]; antennas: Antenna[]; batteries: 
   ],
   drones: [
     { id: 'fpv-10in-recon', name: '10-inch recon quad', version: 1, verified: true, massKg: 1.9, cruiseAirspeedMps: 10, cruisePowerW: 366, powerDensityExponent: 0, climb: { method: 'potential-energy', efficiency: 0.6 }, defaultRadios: { control: 'elrs-433-50hz', video: 'digital-915-20mhz' }, source: { kind: 'measurement', reference: 'Bench and flight log 2026-09' } },
+    {
+      id: 'fw-1800-mapper', name: '1.8 m fixed-wing mapper', version: 1, verified: false, airframe: 'fixed-wing', massKg: 2.4, cruiseAirspeedMps: 15, cruisePowerW: 160, powerDensityExponent: 0, climb: { method: 'potential-energy', efficiency: 0.5 },
+      fixedWing: { stallSpeedMps: 11, maxBankDeg: 45, maxClimbAngleDeg: 8, maxDiveAngleDeg: 10, loiterRadiusM: 75, source: { kind: 'measurement', reference: 'INAV nav_fw_* settings of the airframe' } },
+      defaultRadios: { control: 'elrs-433-50hz', video: 'digital-915-20mhz' }, source: { kind: 'measurement', reference: 'Flight log 2026-10' },
+    },
   ],
 };
 
@@ -364,7 +371,7 @@ function missingLegData(mission: Mission, from: MissionPoint, to: MissionPoint, 
 
 // ---------------- fixes ----------------
 export function fixAltitude(mission: Mission): Fix & { note: string } {
-  const wps = mission.waypoints.map((w, i, arr) => (i === arr.length - 1 ? { ...w, aglM: 345 } : w));
+  const wps = mission.waypoints.map((w, i, arr) => (i === arr.length - 1 ? MissionAltitude.withHeight(mission, w, heightForAgl(mission, w, 345)) : w));
   return {
     id: 'leg3-345m-agl',
     title: 'Fly leg 3 at 345 m AGL',
@@ -384,7 +391,7 @@ export function fixTurnBack(mission: Mission): Fix & { note: string } {
   return {
     id: 'turn-back-t',
     title: 'Turn back at T',
-    patch: { waypoints: [mission.waypoints[0], { ...TURN_BACK }] },
+    patch: { waypoints: [mission.waypoints[0], MissionAltitude.withHeight(mission, TURN_BACK, heightForAgl(mission, TURN_BACK, TURN_BACK.aglM))] },
     preview: [
       { label: 'Out along route', now: '10.8 km', after: '6.0 km', trend: 'neutral' },
       { label: 'Back to pilot', now: '5.3 km', after: '4.2 km', trend: 'neutral' },
@@ -406,7 +413,8 @@ export function routeResult(mission: Mission, scenario: MockScenario): RouteResu
   const evaluated = linksEvaluated(mission.evaluate);
   const last = mission.waypoints.at(-1);
   const turnback = last?.label === 'T';
-  const fixed = !turnback && (last?.aglM ?? 0) >= 345;
+  // the fix puts B 345 m above the ground there, whatever the mission's reference
+  const fixed = !turnback && (last ? aglPoint(mission, last).aglM : 0) >= 344.5;
   const weatherOn = !!mission.modules?.['rf.weather'];
   const timeUtc = plannedUtc(mission);
   const tier: ResultForecastTier = weatherOn ? tierFor(timeUtc) : 'off';
@@ -447,6 +455,7 @@ export function routeResult(mission: Mission, scenario: MockScenario): RouteResu
   } else {
     applyBattery(result, mission, turnback, fixed);
   }
+  applyAirframe(result, mission);
   return result;
 }
 
@@ -476,8 +485,8 @@ function plannedUtc(mission: Mission): string | undefined {
 
 /** Legs pilot → waypoints, plus the return leg to the pilot when the mission returns. */
 function legEndsOf(mission: Mission, returning: boolean): LegEnds[] {
-  const pts = [mission.pilot, ...mission.waypoints];
-  const last = mission.waypoints.at(-1);
+  const pts = [mission.pilot, ...mission.waypoints.map((w) => aglPoint(mission, w))];
+  const last = pts.length > 1 ? pts.at(-1) : undefined;
   const legEnds: LegEnds[] = [];
   const nameOf = (p: MissionPoint, i: number) => p.label ?? (i === 0 ? 'Pilot' : `WP${i}`);
   for (let i = 0; i + 1 < pts.length; i++) legEnds.push({ from: pts[i], to: pts[i + 1], fromName: nameOf(pts[i], i), toName: nameOf(pts[i + 1], i + 1) });
@@ -525,17 +534,37 @@ function legResult(f: RouteFacts, e: LegEnds, i: number): LegResult {
   }
   const worst = pickEvaluated(f.evaluated, ridgeLinks(f.mission, drone, f.fixed, alongLegM, f.tier));
   const videoBlocked = !!worst['video'] && !worst['video'].reachable;
-  return { ...base, worst, status: videoBlocked ? 'blocked' : 'ok', reasons: ridgeReasons(f.mission, videoBlocked, isReturn, f.fixed) };
+  // Like the server: on an autonomous route a lost link is a warning, the autopilot flies on.
+  const lostStatus = f.mission.flightMode === 'autonomous' ? 'warn' : 'blocked';
+  return { ...base, worst, status: videoBlocked ? lostStatus : 'ok', reasons: ridgeReasons(f.mission, videoBlocked, isReturn, f.fixed) };
 }
 
 /** rf-core reasons of a leg that ends (or, for the return, starts) at B behind the ridge. */
 function ridgeReasons(mission: Mission, videoBlocked: boolean, isReturn: boolean, fixed: boolean): Reason[] {
   if (videoBlocked) {
     const where = isReturn ? 'at B, the start of the return' : 'at B';
-    return [{ module: 'rf-core', severity: 'blocked', link: 'video', text: `Ridge 622 m blocks the video link by 100 m ${where}.`, ...(isReturn ? {} : { fix: fixAltitude(mission) }) }];
+    const severity = mission.flightMode === 'autonomous' ? 'warn' : 'blocked';
+    return [{ module: 'rf-core', severity, link: 'video', text: `Ridge 622 m blocks the video link by 100 m ${where}.`, ...(isReturn ? {} : { fix: fixAltitude(mission) }) }];
   }
   if (fixed) return [{ module: 'rf-core', severity: 'info', link: 'video', text: 'At 345 m AGL the line of sight passes 10 m over the ridge: diffraction 0.55 dB, video margin +25.32 dB.' }];
   return [];
+}
+
+/** fpv.airframe for a fixed-wing drone: the 1.8 m mapper cruises too close to its stall in a turn. */
+function applyAirframe(result: RouteResult, mission: Mission): void {
+  const drone = LIBRARY.drones.find((d) => d.id === mission.drone);
+  if (!mission.modules?.['fpv.airframe'] || drone?.airframe !== 'fixed-wing' || !drone.fixedWing) return;
+  const w = drone.fixedWing;
+  const stall = w.stallSpeedMps / Math.sqrt(Math.cos((w.maxBankDeg * Math.PI) / 180));
+  result.reasons = [
+    ...(result.reasons ?? []),
+    {
+      module: 'fpv.airframe',
+      severity: 'warn',
+      text: `Fixed-wing: the cruise airspeed ${drone.cruiseAirspeedMps.toFixed(1)} m/s is less than 1.2 times the stall speed in a turn at ${w.maxBankDeg}° bank (${stall.toFixed(1)} m/s); a gust in a turn can stall it.`,
+    },
+  ];
+  result.modules = { ...result.modules, 'fpv.airframe': { airframe: 'fixed-wing', speeds: { cruiseAirspeedMps: drone.cruiseAirspeedMps, stallSpeedMps: w.stallSpeedMps, turningStallSpeedMps: stall } } };
 }
 
 /** fpv.battery data and reason: the route is too long for the pack; turning back at T fits. */
@@ -681,7 +710,12 @@ export function coverageGrid(mission: Mission, kind: LinkKind): CoverageGrid {
 
 /** Worst knife-edge parameter ν over `samples` points of the straight path between two antennas (local km, MSL m). */
 function worstNuOnPath(a: { x: number; y: number; h: number }, b: { x: number; y: number; h: number }, dM: number, lambda: number, samples: number): number {
-  let worstNu = -10;
+  return worstEdgeOnPath(a, b, dM, lambda, samples).nu;
+}
+
+/** The worst knife edge of a path: ν, where along the path (0..1) and the ground height there. */
+function worstEdgeOnPath(a: { x: number; y: number; h: number }, b: { x: number; y: number; h: number }, dM: number, lambda: number, samples: number): { nu: number; t: number; groundM: number } {
+  let worst = { nu: -10, t: 0.5, groundM: 0 };
   for (let s = 1; s < samples; s++) {
     const t = s / samples;
     const g = elevationLocal(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
@@ -689,9 +723,38 @@ function worstNuOnPath(a: { x: number; y: number; h: number }, b: { x: number; y
     const d1 = dM * t;
     const d2 = dM - d1;
     const nu = (g - ray) * Math.sqrt((2 * dM) / (lambda * d1 * d2));
-    if (nu > worstNu) worstNu = nu;
+    if (nu > worst.nu) worst = { nu, t, groundM: g };
   }
-  return worstNu;
+  return worst;
+}
+
+/**
+ * /calc/path in the mock: one link from the pilot to a point, with the same margin as the mock
+ * coverage grid there and the dominant knife edge when the line is blocked.
+ */
+export function pathResult(req: CalcPathRequest): LinkResult {
+  const mission: Mission = { ...exampleMission(), links: { [req.kind]: req.link } };
+  const link = linkBudgetDelta(mission, req.kind);
+  const lambda = 299792458 / link.frequencyHz;
+  const a = toLocal(req.from.lat, req.from.lon);
+  const b = toLocal(req.to.lat, req.to.lon);
+  const dKm = Math.hypot(b.x - a.x, b.y - a.y);
+  const dM = Math.max(30, dKm * 1000);
+  const edge = worstEdgeOnPath({ ...a, h: elevationLocal(a.x, a.y) + req.from.aglM }, { ...b, h: elevationLocal(b.x, b.y) + req.to.aglM }, dM, lambda, 48);
+  const lossDb = knifeEdgeLossDb(edge.nu);
+  const marginDb = 37 - fspl(dM, link.frequencyHz) - lossDb - 30.7 * (dKm / 6.4) ** 2 + 95 + link.biasDb;
+  const lineOfSight = edge.nu <= 0;
+  const at = toLatLon(a.x + (b.x - a.x) * edge.t, a.y + (b.y - a.y) * edge.t);
+  const dominant = { distanceM: dM * edge.t, groundMslM: edge.groundM, lat: at.lat, lon: at.lon };
+  return {
+    kind: req.kind,
+    frequencyHz: link.frequencyHz,
+    distanceM: dM,
+    marginDb: Math.round(marginDb * 100) / 100,
+    reachable: marginDb >= 0,
+    diffraction: { lineOfSight, nu: edge.nu, lossDb, edgeHeightM: Math.round(edge.groundM), dominant },
+    uncertainty: [],
+  };
 }
 
 export function elevationProfile(from: { lat: number; lon: number }, to: { lat: number; lon: number }): Profile {

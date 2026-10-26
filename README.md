@@ -68,6 +68,14 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 <td><b>Compare two setups.</b> For example a different antenna or frequency: worst margins side by side, and the route coloured by B − A.</td>
 <td><b>Share and export.</b> Read-only links protected by a PIN that the owner can revoke, plus KML and GPX.</td>
 </tr>
+<tr>
+<td><img src="docs/images/laptop-fixed-wing.png" alt="Fixed-wing drone: flight checks card with the stall margin in a 45 degree turn"></td>
+<td><img src="docs/images/laptop-autonomous.png" alt="Autonomous route: lost video link on legs 3 and 4 shown as warnings, with the links lost on the way card"></td>
+</tr>
+<tr>
+<td><b>Plan a fixed-wing.</b> The route is checked against the plane's envelope: climb and dive angles over the terrain, turn radius at each waypoint and the stall margin in a banked turn.</td>
+<td><b>Fly an uploaded route.</b> In autonomous mode the links are optional. A lost link is a warning that shows where the pilot cannot take over or loses the picture, not a block.</td>
+</tr>
 </table>
 
 <p align="center">
@@ -86,15 +94,20 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 |---|---|---|
 | 📡 | Control and video links, each with its own radio, antennas and sensitivity; evaluated separately or together | server, `rf-core` |
 | ⛰️ | Terrain profile, first Fresnel zone, Bullington diffraction, coverage heatmap and maximum range | `rf-core` |
+| 🗺️ | Coverage that keeps the map readable: under the relief and labels, fading while you edit, an optional mini-map, and line of sight to the cursor | web |
 | 🌦️ | Refraction from the forecast (ITU-R P.453) and rain loss (ITU-R P.838-3), including future dates | `rf-ext`, Open-Meteo |
 | 🌲 | Forest and buildings from land-cover classes, with obstacle heights set by the admin | `rf-ext` |
 | ± | Uncertainty band from the DEM's stated error: *reliable*, *marginal*, *blocked*, *blocked, may work* | `rf-ext` |
 | 🔋 | Battery range with wind, temperature and climb, and a turn-back point when the pack won't last | `fpv.battery` |
 | ↕️ | Minimum altitude along the route that keeps the Fresnel zone clear | `fpv.min-altitude` |
+| 🏔️ | 3D view of the route over the terrain, with a linked altitude profile, the safe corridor (terrain clearance, link floor, ceiling) and an optional Fresnel tube | `fpv.altitude`, web |
 | 🏠 | Failsafe check: where the link is lost, and whether return-to-home clears the terrain | `fpv.failsafe` |
+| ✈️ | Fixed-wing planning: the climb angle over the terrain from take-off on, the turn radius at every waypoint, the stall margin in a banked turn, and loiter instead of hover in the failsafe | `fpv.airframe`, `fpv.failsafe` |
+| 🛰️ | Autonomous routes uploaded before take-off: the radio links become optional, and a lost link shows where the pilot cannot take over or loses the picture instead of blocking the route | server, `fpv.failsafe` |
 | 📍 | Best launch point inside an area you draw | `fpv.best-launch` |
 | 🔁 | Relay placement: budget per hop and the best relay spot | `fpv.relay` |
 | ⚖️ | Scenario compare, KML and GPX export | `fpv.core` |
+| 🎞️ | Flight replay from Betaflight Blackbox logs: track, battery, altitude, speed, link, modes and failsafe on the map, the flight's story, a logbook, and plan against fact | `fpv.blackbox`, `rf-flightlog` |
 | 🔗 | Read-only share links with a PIN; only the owner key revokes them | server |
 | 📚 | Equipment library: radios, antennas, batteries, drones, with sources and admin-verified flags | server, web |
 
@@ -133,6 +146,7 @@ flowchart LR
 |---|---|
 | [`core/rf-core`](core/rf-core) | Units, WGS-84 geodesy, exact Fresnel integrals, Bullington diffraction, link budget |
 | [`core/rf-ext`](core/rf-ext) | Refraction, rain, clutter, uncertainty analysis |
+| [`core/rf-flightlog`](core/rf-flightlog) | Normalized flight logs into the replay timeline, the flight's story and plan against fact |
 | [`platform/rfmod`](platform/rfmod) | Module ABI, signed package format, registry, sandboxed worker, `rfmod` CLI |
 | [`modules/fpv`](modules/fpv) | The FPV module pack |
 | [`server`](server) | HTTP API, PostGIS storage, raster access, weather, result cache |

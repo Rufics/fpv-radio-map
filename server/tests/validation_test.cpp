@@ -1,4 +1,5 @@
 #include "config.hpp"
+#include "flight_logs.hpp"
 #include "schemas.hpp"
 #include "test_support.hpp"
 
@@ -64,6 +65,34 @@ TEST_F(ValidationTest, LongFormattedStringIsRefusedNotMatched) {
     m["time"] = {{"mode", "planned"}, {"utc", "2026-10-18T14:00:00." + std::string(200000, '1') + "Z"}};
     const auto p = pointers("mission", m);
     EXPECT_NE(std::find(p.begin(), p.end(), "/time/utc"), p.end());
+}
+
+TEST_F(ValidationTest, LongPatternedStringFromADecoderIsRefusedNotMatched) {
+    // A decoder (third-party code) answers the flightlog document; the "code" pattern's regex
+    // recursed once per character and a megabyte-long code overflowed the stack.
+    json note = {{"code", std::string(1'000'000, 'a')}, {"severity", "info"}, {"message", "m"}};
+    const json doc = {{"logs", json::array({{{"notes", json::array({note})}}})}};
+    const auto p = pointers("flightlog", doc);
+    EXPECT_NE(std::find(p.begin(), p.end(), "/logs/0/notes/0/code"), p.end());
+}
+
+TEST_F(ValidationTest, MissionSizesAndRangesAreBounded) {
+    json many = goodMission();
+    many["waypoints"] = json::array();
+    for (int i = 0; i < 1001; ++i) many["waypoints"].push_back({{"lat", 48.54}, {"lon", 35.21}, {"aglM", 100}});
+    EXPECT_EQ(pointers("mission", many), std::vector<std::string>{"/waypoints"});
+    many["waypoints"].erase(1000);
+    EXPECT_TRUE(schemas.check("mission", many).empty());
+
+    json high = goodMission();
+    high["waypoints"][0]["aglM"] = 1e300;
+    high["pilot"]["label"] = std::string(121, 'x');
+    high["links"]["control"]["radio"] = std::string(65, 'r');
+    high["links"]["control"]["requiredMarginDb"] = 1e9;
+    const auto p = pointers("mission", high);
+    for (const char* field : {"/waypoints/0/aglM", "/pilot/label", "/links/control/radio", "/links/control/requiredMarginDb"}) {
+        EXPECT_NE(std::find(p.begin(), p.end(), field), p.end()) << field;
+    }
 }
 
 TEST_F(ValidationTest, RequireThrows422WithTheReport) {
@@ -155,6 +184,16 @@ TEST(ConfigTest, EnvironmentOverridesTheFile) {
     EXPECT_EQ(c.raw["admin"]["token"], "(set)");  // never echoed
     std::filesystem::remove(file);
     EXPECT_THROW(Config::fromJson({{"server", {{"port", 70000}}}}), std::invalid_argument);
+    // A zero cap would silently become the policy's 1 MB / 1 ms floor and time every call out.
+    EXPECT_THROW(Config::fromJson({{"modules", {{"maxMemoryMb", 0}}}}), std::invalid_argument);
+    EXPECT_THROW(Config::fromJson({{"modules", {{"maxTimeoutMs", 0}}}}), std::invalid_argument);
+    EXPECT_THROW(Config::fromJson({{"calc", {{"maxRouteSamples", 0}}}}), std::invalid_argument);
+}
+
+TEST(ConfigTest, RouteSampleLimit) {
+    EXPECT_EQ(Config::fromJson(json::object()).calc.maxRouteSamples, Config::Calc{}.maxRouteSamples);
+    EXPECT_EQ(Config::fromJson({{"calc", {{"maxRouteSamples", 1e6}}}}).calc.maxRouteSamples, 1e6);
+    EXPECT_EQ(Config::load({}, {{"RFMAP__CALC__MAXROUTESAMPLES", "2000"}}).calc.maxRouteSamples, 2000.0);
 }
 
 TEST(ConfigTest, MetricsAreOffUnlessEnabled) {
@@ -176,27 +215,48 @@ TEST(ConfigTest, ShippedExampleLoads) {
 }
 
 TEST(TimeTest, IsoParsing) {
-    const auto t = parseIsoUtc("2026-10-18T14:00:00Z");
+    const auto t = UtcTime::parse("2026-10-18T14:00:00Z");
     ASSERT_TRUE(t);
-    EXPECT_EQ(isoUtc(*t), "2026-10-18T14:00:00Z");
-    EXPECT_EQ(isoUtc(*parseIsoUtc("2026-10-18T16:30:00+02:30")), "2026-10-18T14:00:00Z");
-    EXPECT_FALSE(parseIsoUtc("2026-02-31T00:00:00Z"));
-    EXPECT_FALSE(parseIsoUtc("yesterday"));
-    EXPECT_EQ(isoUtc(*parseIsoUtc("2026-10-18 14:00z")), "2026-10-18T14:00:00Z");
-    EXPECT_EQ(*parseIsoUtc("2026-10-18T14:00:00.5-0130") - *parseIsoUtc("2026-10-18T15:30:00Z"),
+    EXPECT_EQ(UtcTime::format(*t), "2026-10-18T14:00:00Z");
+    EXPECT_EQ(UtcTime::format(*UtcTime::parse("2026-10-18T16:30:00+02:30")), "2026-10-18T14:00:00Z");
+    EXPECT_FALSE(UtcTime::parse("2026-02-31T00:00:00Z"));
+    EXPECT_FALSE(UtcTime::parse("yesterday"));
+    EXPECT_EQ(UtcTime::format(*UtcTime::parse("2026-10-18 14:00z")), "2026-10-18T14:00:00Z");
+    EXPECT_EQ(*UtcTime::parse("2026-10-18T14:00:00.5-0130") - *UtcTime::parse("2026-10-18T15:30:00Z"),
               std::chrono::milliseconds(500));
     for (const char* bad : {"2026-10-18T14:00:00", "2026-10-18T14:00:00.Z", "2026-1-18T14:00Z", "2026-10-18T24:00Z",
                             "2026-10-18T14:00:00Z ", "2026-10-18T14:00+0", "２026-10-18T14:00Z",
                             // Years the clock cannot hold, also when an offset moves the time there.
                             "0999-01-01T00:00Z", "2602-10-18T14:00Z", "1900-01-01T00:00+02:00",
                             "2200-12-31T23:00-02:00"}) {
-        EXPECT_FALSE(parseIsoUtc(bad)) << bad;
+        EXPECT_FALSE(UtcTime::parse(bad)) << bad;
     }
 }
 
 TEST(TimeTest, LongFractionDoesNotOverflowTheStack) {
     // A regex matched this one frame per character and crashed the server (found by fuzzing).
-    const auto t = parseIsoUtc("2026-10-18T14:00:00." + std::string(200000, '1') + "Z");
+    const auto t = UtcTime::parse("2026-10-18T14:00:00." + std::string(200000, '1') + "Z");
     ASSERT_TRUE(t);
-    EXPECT_EQ(isoUtc(*t), "2026-10-18T14:00:00Z");
+    EXPECT_EQ(UtcTime::format(*t), "2026-10-18T14:00:00Z");
+}
+
+TEST(FlightLogFileName, KeepsWholeUtf8CharactersWithinTheLimit) {
+    EXPECT_EQ(FlightLogService::cleanFileName("C:\\logs/LOG00007.BFL"), "LOG00007.BFL");
+    EXPECT_EQ(FlightLogService::cleanFileName("a\tb\x7f.bbl"), "ab.bbl");
+    EXPECT_EQ(FlightLogService::cleanFileName(""), "flight.log");
+    // Invalid bytes are dropped, so the name is always valid JSON text.
+    EXPECT_EQ(FlightLogService::cleanFileName("bad\xff\xc3.bbl"), "bad.bbl");
+    EXPECT_NO_THROW(static_cast<void>(json(FlightLogService::cleanFileName("\xe2\x82")).dump()));
+    // Overlong forms, surrogates and code points past U+10FFFF are not UTF-8 either.
+    for (const char* bad : {"\xe0\x80\xaf", "\xed\xa0\x80", "\xf0\x80\x80\xaf", "\xf4\x90\x80\x80", "\xc0\xaf"}) {
+        const std::string name = FlightLogService::cleanFileName(std::string("a") + bad + ".bbl");
+        EXPECT_NO_THROW(static_cast<void>(json(name).dump())) << name;
+    }
+    EXPECT_EQ(FlightLogService::cleanFileName("\xf0\x9f\x9b\xb8.bbl"), "\xf0\x9f\x9b\xb8.bbl");
+    // 70 Cyrillic letters are 140 bytes: the cut lands between characters, never inside one.
+    std::string cyrillic;
+    for (int i = 0; i < 70; ++i) cyrillic += "\xd0\xbb";
+    const std::string cut = FlightLogService::cleanFileName("x" + cyrillic);
+    EXPECT_EQ(cut.size(), 119u);
+    EXPECT_NO_THROW(static_cast<void>(json(cut).dump()));
 }

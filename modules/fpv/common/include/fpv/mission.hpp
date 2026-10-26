@@ -1,51 +1,67 @@
 #pragma once
 
+#include "fpv/altitude.hpp"
 #include "fpv/world.hpp"
 
 #include <format>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace fpv {
 
 struct Waypoint {
     LatLon position{};
-    double aglM{};
+    /// Height in the mission's altitude reference (altM or aglM). For the pilot it is the antenna
+    /// height above the ground, which is the same in both references.
+    double heightM{};
     std::string label;
+    /// The height is the server's to set (route.prepare): the waypoint has none, or says
+    /// heightSource "auto". A manual height is never changed.
+    bool autoHeight = false;
 };
 
 /// The parts of mission/v1 the FPV modules read. The server has already validated the document
 /// against schemas/mission.schema.json.
 struct Mission {
     std::string name;
+    AltitudeReference altitudeRef = AltitudeReference::Agl;
     Waypoint pilot;
     std::vector<Waypoint> waypoints;
     bool returnToPilot = true;
-    std::string evaluate;  ///< both | control | video
+    /// The route is uploaded to the flight controller and flown by the autopilot, so the radio
+    /// links are optional (mission flightMode "autonomous").
+    bool autonomous = false;
+    std::string evaluate;  ///< both | control | video | none
     std::string droneId;
     std::string batteryId;
     json raw;
 
     static Mission fromJson(const json& m) {
-        auto wp = [](const json& p, const std::string& fallback) {
-            return Waypoint{{p.at("lat").get<double>(), p.at("lon").get<double>()}, p.at("aglM").get<double>(),
-                            p.value("label", fallback)};
+        auto wp = [](const json& p, std::string_view field, const std::string& fallback) {
+            const bool automatic = !p.contains(field) || p.value("heightSource", "manual") == "auto";
+            return Waypoint{{p.at("lat").get<double>(), p.at("lon").get<double>()}, p.value(field, 0.0),
+                            p.value("label", fallback), automatic};
         };
         Mission out;
         out.raw = m;
         out.name = m.value("name", "");
-        out.pilot = wp(m.at("pilot"), "Pilot");
+        out.altitudeRef = AltitudeModel::parseReference(m);
+        out.pilot = wp(m.at("pilot"), "aglM", "Pilot");
+        const std::string_view field = AltitudeModel::waypointField(out.altitudeRef);
         int i = 1;
-        for (const json& p : m.at("waypoints")) out.waypoints.push_back(wp(p, std::format("WP{}", i++)));
+        for (const json& p : m.at("waypoints")) out.waypoints.push_back(wp(p, field, std::format("WP{}", i++)));
         out.returnToPilot = m.value("returnToPilot", true);
+        out.autonomous = m.value("flightMode", "manual") == "autonomous";
         out.evaluate = m.value("evaluate", "both");
         out.droneId = m.value("drone", "");
         out.batteryId = m.value("battery", "");
         return out;
     }
 
-    /// Links this mission evaluates, in a fixed order.
+    /// Links this mission evaluates, in a fixed order; none for evaluate "none".
     [[nodiscard]] std::vector<std::string> links() const {
+        if (evaluate == "none") return {};
         if (evaluate == "control") return {"control"};
         if (evaluate == "video") return {"video"};
         return {"control", "video"};

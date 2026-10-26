@@ -6,6 +6,7 @@ import {
   LinkKind,
   LinkResult,
   Mission,
+  MissionAltitude,
   MissionPoint,
   MissionStore,
   Reason,
@@ -38,7 +39,22 @@ export interface LegRowVm {
   failing: LinkKind[];
   isReturn: boolean;
   lengthM: number;
-  aglM: number;
+  /** Height of the leg's end point in the mission's altitude reference: the server's when it set it. */
+  heightM: number;
+  /** The end point's height is left to the server (heightSource auto). */
+  auto: boolean;
+  /** heightM is the one the server set (an autoHeights entry for this point). */
+  autoSet: boolean;
+}
+
+/** A waypoint's height as shown: the server's automatic one from a fresh result, else the stored one. */
+interface HeightVm {
+  heightM: number;
+  auto: boolean;
+  autoSet: boolean;
+  /** "auto 74 m", or "74 m" */
+  text: string;
+  title: string;
 }
 
 export interface VerdictVm {
@@ -50,6 +66,30 @@ export interface VerdictVm {
   link: LinkKind;
   diffractionDb?: number;
   marginDb?: number;
+}
+
+/** A warning or block from a flight check module, such as fpv.airframe or fpv.failsafe. */
+export interface FlightCheckVm {
+  tone: 'warn' | 'blocked';
+  /** The module's title in the registry. */
+  module: string;
+  /** "Leg 3 · WP2 → B", or "Whole route" for a reason without a leg. */
+  where: string;
+  text: string;
+  /** 1-based leg, or null for a route-wide reason. */
+  legIndex: number | null;
+}
+
+/** Modules whose reasons have their own card: the radio core (verdict) and the battery. */
+const OWN_CARD_MODULES = new Set(['rf-core', 'fpv.battery']);
+
+/** The module id of a reason, without the version the server may add. */
+function moduleIdOf(r: Reason): string {
+  return (r.module ?? '').split(' ')[0];
+}
+
+function isFlightCheck(r: Reason): boolean {
+  return (r.severity === 'warn' || r.severity === 'blocked') && !OWN_CARD_MODULES.has(moduleIdOf(r));
 }
 
 export const LINK_LETTER: Record<LinkKind, string> = { control: 'C', video: 'V' };
@@ -67,13 +107,14 @@ export function endsAtTurnBack(m: Mission): boolean {
   return m.waypoints.at(-1)?.label === 'T';
 }
 
-function linkPillTone(ok: boolean, missing: boolean): Tone {
-  if (!ok) return 'blocked';
+/** On an autonomous route a lost link is a warning: the autopilot flies on without it. */
+function linkPillTone(ok: boolean, missing: boolean, autonomous: boolean): Tone {
+  if (!ok) return autonomous ? 'warn' : 'blocked';
   return missing ? 'warn' : 'ok';
 }
 
-function linkPillMark(ok: boolean, missing: boolean): string {
-  if (!ok) return '✕';
+function linkPillMark(ok: boolean, missing: boolean, autonomous: boolean): string {
+  if (!ok) return autonomous ? '!' : '✕';
   return missing ? '?' : '✓';
 }
 
@@ -114,6 +155,10 @@ export class FpvWorkspace {
   readonly radioSetup = signal<LinkKind | null>(null);
   /** Link shown in the coverage heatmap */
   readonly coverageLink = signal<LinkKind>('control');
+  /** The coverage shown in a mini-map in the corner instead of over the map (Layers › Coverage) */
+  readonly coverageMiniMap = signal(false);
+  /** Line of sight from the pilot to the point under the mouse while the result is read (Layers › Coverage) */
+  readonly lineOfSight = signal(false);
   readonly forecastOffsetH = signal(0);
 
   readonly mission = this.store.mission;
@@ -121,11 +166,13 @@ export class FpvWorkspace {
   readonly result = this.store.result;
   readonly calculated = computed(() => !!this.store.result());
   readonly evaluated = computed(() => linksEvaluated(this.mission()?.evaluate ?? 'both'));
+  /** The route is uploaded and flown by the autopilot, so a lost link does not block it. */
+  readonly autonomous = computed(() => this.mission()?.flightMode === 'autonomous');
 
   /** Coverage link actually shown (only evaluated links have a grid). */
   readonly heatLink = computed<LinkKind>(() => {
     const ev = this.evaluated();
-    return ev.includes(this.coverageLink()) ? this.coverageLink() : ev[0];
+    return ev.includes(this.coverageLink()) || ev.length === 0 ? this.coverageLink() : ev[0];
   });
 
   readonly batteryFailure = computed(() => this.store.result()?.moduleFailures?.find((f) => (f.module ?? '').startsWith('fpv.battery')) ?? null);
@@ -135,6 +182,45 @@ export class FpvWorkspace {
   readonly moduleReasons = computed<Reason[]>(() => this.store.result()?.reasons ?? []);
 
   readonly batteryReason = computed(() => this.moduleReasons().find((r) => (r.module ?? '').startsWith('fpv.battery')) ?? null);
+
+  /** The result of the route on screen: none while a fix is previewed or after an edit. */
+  private readonly shownResult = computed(() => (this.store.preview() || this.store.resultStale() ? null : this.store.result()));
+
+  /** Warnings and blocks of the flight checks, blocks first; the legs they name come first. */
+  readonly flightChecks = computed<FlightCheckVm[]>(() => {
+    const r = this.shownResult();
+    if (!r) return [];
+    const rows = this.legRows();
+    const onLegs = (r.legs ?? []).flatMap((l, i) => (l.reasons ?? []).map((reason) => ({ reason, legIndex: i + 1 as number | null })));
+    const routeWide = (r.reasons ?? []).map((reason) => ({ reason, legIndex: null as number | null }));
+    const checks = [...onLegs, ...routeWide]
+      .filter(({ reason }) => isFlightCheck(reason))
+      .map(({ reason, legIndex }): FlightCheckVm => ({
+        tone: reason.severity === 'blocked' ? 'blocked' : 'warn',
+        module: this.data.moduleTitles().get(moduleIdOf(reason)) || moduleIdOf(reason),
+        where: legIndex === null ? 'Whole route' : `Leg ${rows[legIndex - 1]?.name ?? legIndex}`,
+        text: reason.text ?? '',
+        legIndex,
+      }));
+    return [...checks.filter((c) => c.tone === 'blocked'), ...checks.filter((c) => c.tone === 'warn')];
+  });
+
+  /** On an autonomous route: where the pilot cannot take over (control lost) or loses the picture (video lost). */
+  readonly linkGapText = computed(() => {
+    const r = this.shownResult();
+    if (!r || !this.autonomous()) return null;
+    const rows = this.legRows();
+    const legs = r.legs ?? [];
+    const where = (kind: LinkKind) => legs.flatMap((leg, i) => (this.unreachable(leg, [kind]).length ? [`leg ${rows[i]?.name ?? String(i + 1)}`] : []));
+    const control = where('control');
+    const video = where('video');
+    const parts = [
+      ...(control.length ? [`the pilot cannot take over on ${control.join('; ')}`] : []),
+      ...(video.length ? [`the picture is lost on ${video.join('; ')}`] : []),
+    ];
+    if (parts.length === 0) return null;
+    return `The autopilot flies the whole route, but ${parts.join(', and ')}.`;
+  });
 
   // ---------- pills ----------
   readonly pills = computed<PillVm[]>(() => {
@@ -160,8 +246,8 @@ export class FpvWorkspace {
     const ok = worst >= 0;
     return {
       key: kind,
-      tone: linkPillTone(ok, missing),
-      text: `${letter} ${linkPillMark(ok, missing)} ${RfFormat.format(worst, 'db+')}${missing && ok ? ' · part missing' : ''}`,
+      tone: linkPillTone(ok, missing, this.autonomous()),
+      text: `${letter} ${linkPillMark(ok, missing, this.autonomous())} ${RfFormat.format(worst, 'db+')}${missing && ok ? ' · part missing' : ''}`,
       title: `Worst ${kind} margin along the route: ${RfFormat.full(worst, 'db+')}`,
     };
   }
@@ -188,7 +274,9 @@ export class FpvWorkspace {
     if (!m) return [];
     const previewing = !!this.store.preview();
     const r = previewing || this.store.resultStale() ? null : this.store.result();
-    const pts: MissionPoint[] = [m.pilot, ...m.waypoints];
+    // An automatic height stays the last one the server set until the next calculation.
+    const latest = previewing ? null : this.store.result();
+    const pts: Pick<MissionPoint, 'lat' | 'lon'>[] = [m.pilot, ...m.waypoints];
     const rows: LegRowVm[] = m.waypoints.map((w, i) => {
       const index = i + 1;
       const leg = this.legResult(r, index);
@@ -196,20 +284,23 @@ export class FpvWorkspace {
       const { mark, markLabel, tone, failing } = this.legMark(leg);
       const from = pointName(m, i - 1);
       const to = pointName(m, i);
+      const h = this.heightView(m, i, latest);
       return {
         index,
         name: `${index} · ${from} → ${to}`,
         from,
         to,
-        info: `${RfFormat.format(len, 'km1')} · ${RfFormat.format(w.aglM, 'm')}`,
-        infoTitle: `${RfFormat.full(len, 'km3')}, ${RfFormat.full(w.aglM, 'm')} above ground`,
+        info: `${RfFormat.format(len, 'km1')} · ${h.text}`,
+        infoTitle: `${RfFormat.full(len, 'km3')}, ${h.title}`,
         mark,
         markLabel,
         tone,
         failing,
         isReturn: false,
         lengthM: len,
-        aglM: w.aglM,
+        heightM: h.heightM,
+        auto: h.auto,
+        autoSet: h.autoSet,
       };
     });
     const last = m.waypoints.at(-1);
@@ -221,29 +312,80 @@ export class FpvWorkspace {
       const from = pointName(m, m.waypoints.length - 1);
       const to = pointName(m, -1);
       const v = this.legMark(leg);
+      const h = this.heightView(m, m.waypoints.length - 1, latest);
       rows.push({
         index,
         name: `${index} · ${from} → ${to}, return`,
         from,
         to,
-        info: `${RfFormat.format(back, 'km1')} · ${RfFormat.format(last.aglM, 'm')} → ${RfFormat.format(m.pilot.aglM, 'm')}`,
+        info: `${RfFormat.format(back, 'km1')} · ${h.text} → ${RfFormat.format(m.pilot.aglM, 'm')}`,
         infoTitle: `${RfFormat.full(back, 'km3')} back to the pilot`,
         ...v,
         isReturn: true,
         lengthM: back,
-        aglM: last.aglM,
+        heightM: h.heightM,
+        auto: false,
+        autoSet: false,
       });
     }
     return rows;
   });
 
+  /** Waypoint `i`'s height for the route list: what the server last set for it in `r` when it did. */
+  private heightView(m: Mission, i: number, r: RouteResult | null): HeightVm {
+    const w = m.waypoints[i];
+    const auto = MissionAltitude.isAuto(m, w);
+    const field = MissionAltitude.field(m);
+    // Only for the same point and reference: after a deletion, a move or a switch between AGL and
+    // above launch the entry at this index no longer fits it.
+    const set = auto ? r?.autoHeights?.find((a) => a.index === i && a.field === field && (a.lat === undefined || (a.lat === w.lat && a.lon === w.lon))) : undefined;
+    // A waypoint without a stored height shows the height new points get until the server sets one.
+    const heightM = set?.heightM ?? w[field] ?? MissionAltitude.defaultHeightM;
+    if (!auto) return { heightM, auto, autoSet: false, text: RfFormat.format(heightM, 'm'), title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}` };
+    if (!set) return { heightM, auto, autoSet: false, text: 'auto', title: 'Height set automatically when the route is calculated' };
+    let by = `${set.limitedBy} link clearance`;
+    if (set.limitedBy === 'ceiling') by = 'the ceiling';
+    else if (set.limitedBy === 'terrain' || !set.limitedBy) by = 'terrain clearance';
+    return {
+      heightM,
+      auto,
+      autoSet: true,
+      text: `auto ${RfFormat.format(heightM, 'm')}${set.blocked ? ' !' : ''}`,
+      title: `${RfFormat.full(heightM, 'm')} ${MissionAltitude.basis(m)}, set automatically by ${by}${set.blocked ? '; not safe even at that height' : ''}`,
+    };
+  }
+
+  /** Links below their margin on a leg. */
+  private unreachable(leg: LegResult | undefined, order: LinkKind[] = ['control', 'video']): LinkKind[] {
+    return order.filter((k) => leg?.worst?.[k]?.reachable === false);
+  }
+
+  /** Links whose loss blocks a leg: none on an autonomous route, which the autopilot flies without them. */
+  private blocking(leg: LegResult | undefined, order?: LinkKind[]): LinkKind[] {
+    return this.autonomous() ? [] : this.unreachable(leg, order);
+  }
+
   private legMark(leg: LegResult | undefined): Pick<LegRowVm, 'mark' | 'markLabel' | 'tone' | 'failing'> {
-    const failing = (['control', 'video'] as LinkKind[]).filter((k) => leg?.worst?.[k]?.reachable === false);
+    const failing = this.blocking(leg);
     if (!leg) return { mark: '', markLabel: '', tone: 'none', failing };
     if (leg.status === 'missing-data') return { mark: '? no data', markLabel: 'No elevation data, not calculated', tone: 'warn', failing };
     if (failing.length) return { mark: `${failing.map((k) => LINK_LETTER[k]).join(' ')} ✕`, markLabel: `${failing.join(' and ')} link blocked`, tone: 'blocked', failing };
-    if (leg.status === 'warn') return { mark: '!', markLabel: 'Warning', tone: 'warn', failing };
+    // a blocking flight check outranks a link the autopilot flies on without
+    const check = this.worstCheck(leg);
+    if (check === 'blocked') return { mark: '✕', markLabel: 'A flight check blocks this leg', tone: 'blocked', failing };
+    const lost = this.unreachable(leg);
+    if (lost.length) {
+      return { mark: `${lost.map((k) => LINK_LETTER[k]).join(' ')} !`, markLabel: `${lost.join(' and ')} link lost; the autopilot flies on`, tone: 'warn', failing };
+    }
+    if (leg.status === 'warn' || check === 'warn') return { mark: '!', markLabel: 'Warning', tone: 'warn', failing };
     return { mark: '✓', markLabel: 'Reachable', tone: 'ok', failing };
+  }
+
+  /** The worst severity among the flight check reasons on a leg. */
+  private worstCheck(leg: LegResult): 'warn' | 'blocked' | null {
+    const checks = (leg.reasons ?? []).filter(isFlightCheck);
+    if (checks.some((c) => c.severity === 'blocked')) return 'blocked';
+    return checks.length ? 'warn' : null;
   }
 
   readonly routeLengthText = computed(() => {
@@ -264,7 +406,7 @@ export class FpvWorkspace {
     const legs = r.legs ?? [];
     for (let i = 0; i < legs.length; i++) {
       const leg = legs[i];
-      const failing = (['video', 'control'] as LinkKind[]).filter((k) => leg.worst?.[k]?.reachable === false);
+      const failing = this.blocking(leg, ['video', 'control']);
       if (leg.status !== 'blocked' && failing.length === 0) continue;
       const link = failing[0] ?? 'video';
       const reasons = leg.reasons ?? [];
@@ -304,19 +446,23 @@ export class FpvWorkspace {
   );
 
   readonly allClearText = computed(() => {
-    const r = this.store.result();
+    const r = this.shownResult();
     const m = this.mission();
-    if (!r || !m || this.verdict() || this.missingLeg()) return null;
+    if (!r || !m || this.verdict() || this.missingLeg() || this.linkGapText()) return null;
+    if (this.flightChecks().some((c) => c.tone === 'blocked')) return null;
+    const ev = this.evaluated();
+    if (ev.length === 0) return 'No radio link is checked in this mode; the route stays clear of the ground.';
     // a module's info line says more than the core's per-link margin lines
     const info = [...(r.legs ?? []).flatMap((l) => l.reasons ?? []), ...(r.reasons ?? [])].find((x) => x.severity === 'info' && x.text && x.module !== 'rf-core');
     if (info?.text) return info.text;
-    const ev = this.evaluated();
     if (ev.length === 1) {
       const other = ev[0] === 'control' ? 'Video' : 'Control';
       return `${other} is not checked in this mode; the ${ev[0]} link reaches every leg.`;
     }
     return 'Control and video reach every leg of the route.';
   });
+
+  readonly allClearTitle = computed(() => (this.evaluated().length ? 'All flown legs reachable by radio' : 'Route clear of the ground'));
 
   // ---------- battery ----------
   readonly batteryPlanText = computed(() => {

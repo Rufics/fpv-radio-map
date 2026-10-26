@@ -1,13 +1,14 @@
 /**
- * Signal scale: strong → at threshold. #F9E46B · #F28D3C · #C9417A · #6A2C8F.
- * Steps differ in lightness so the scale reads without colour vision.
+ * Signal scale (viridis): strong → at threshold. #FDE725 · #35B779 · #31688E · #440154.
+ * Perceptually uniform, its lightness rises with the margin, so it reads without colour vision,
+ * and none of its hues is a route status colour (teal ok, amber warn, red blocked).
  * Below threshold (margin < 0 dB) or no data: transparent, the map shows through.
  */
 export const HEAT_STOPS: readonly { db: number; rgb: [number, number, number] }[] = [
-  { db: 0, rgb: [0x6a, 0x2c, 0x8f] },
-  { db: 10, rgb: [0xc9, 0x41, 0x7a] },
-  { db: 20, rgb: [0xf2, 0x8d, 0x3c] },
-  { db: 30, rgb: [0xf9, 0xe4, 0x6b] },
+  { db: 0, rgb: [0x44, 0x01, 0x54] },
+  { db: 10, rgb: [0x31, 0x68, 0x8e] },
+  { db: 20, rgb: [0x35, 0xb7, 0x79] },
+  { db: 30, rgb: [0xfd, 0xe7, 0x25] },
 ];
 
 export type Rgba = [number, number, number, number];

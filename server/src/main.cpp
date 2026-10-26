@@ -2,14 +2,21 @@
 //
 //   rfmap-server [--config /etc/rfmap/server.json] [--sql /usr/share/rfmap/sql]
 //   rfmap-server --health [http://127.0.0.1:9090/readyz]   exit 0 if the readiness probe answers 200
+//   rfmap-server --backup  > rfmap.backup.zst        the data and module files, zstd, to standard output
+//   rfmap-server --restore < rfmap.backup.zst        into a new, empty database (backup.hpp)
+//   rfmap-server --migrate [--plan]                  applies breaking migrations too (migrations.hpp)
 //
 // The config file is optional (RFMAP_CONFIG names it too); environment variables override it.
 
 #include "app.hpp"
+#include "backup.hpp"
 #include "command_line.hpp"
+
+#include <sys/resource.h>
 
 #include <atomic>
 #include <csignal>
+#include <format>
 #include <iostream>
 #include <string_view>
 #include <vector>
@@ -25,6 +32,18 @@ std::atomic<rfmap::Application*>& runningApplication() {
 void onSignal(int) {
     if (rfmap::Application* app = runningApplication().load()) app->requestShutdown();
 }
+
+/// What the process does to itself before it holds secrets: no core dumps, since memory holds
+/// the admin token and session hashes. (Not PR_SET_DUMPABLE: that hands /proc/self to root,
+/// and the metrics read the process's own fd table there.)
+class ProcessHardening {
+public:
+    /// False when the limit could not be set; the server still starts.
+    [[nodiscard]] static bool apply() {
+        const rlimit none{0, 0};
+        return setrlimit(RLIMIT_CORE, &none) == 0;
+    }
+};
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -32,10 +51,13 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) args.emplace_back(argv[i]);
     const auto env = rfmap::Config::processEnvironment();
     const auto cmd = rfmap::CommandLine::parse(args, env, RFMAP_DEFAULT_SQL_DIR);
+    if (cmd.isServiceAction()) return rfmap::ServiceCommand::run(cmd, env, std::cin, std::cout, std::cerr);
     if (cmd.action() != rfmap::CommandLine::Action::Serve) return cmd.answerWithoutServing(std::cout, std::cerr);
     try {
+        const bool hardened = ProcessHardening::apply();
         rfmap::Application app(rfmap::Config::load(cmd.configFile(), env),
                                RFMAP_OWNER_PUBKEY_TEXT, RFMAP_OWNER_KEY_IS_DEV != 0, cmd.sqlDir());
+        if (!hardened) app.log().warn("process", "could not disable core dumps (setrlimit RLIMIT_CORE failed)");
         runningApplication() = &app;
         (void)std::signal(SIGTERM, onSignal);
         (void)std::signal(SIGINT, onSignal);

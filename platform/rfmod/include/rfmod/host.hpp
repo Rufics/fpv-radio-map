@@ -6,9 +6,11 @@
 #include <nlohmann/json.hpp>
 
 #include <condition_variable>
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -37,7 +39,8 @@ public:
     virtual void log(const std::string& moduleId, int level, const std::string& message) = 0;
 };
 
-/// A loaded module, in process or in a worker.
+/// A loaded module, in process or in a worker. Instances are shared: whoever holds one may call
+/// it after the registry shut it down, and gets a ModuleError "unavailable" instead of a crash.
 class IModuleInstance {
 public:
     virtual ~IModuleInstance() = default;
@@ -46,6 +49,33 @@ public:
     /// Throws ModuleError.
     virtual json invoke(const std::string& method, const json& request) = 0;
     virtual void shutdown() = 0;
+};
+
+/// The host's ceiling on what a module may ask for in its manifest `limits`, and on what a
+/// worker may send back. The effective limit is the smaller of the manifest's and the policy's.
+struct ModulePolicy {
+    unsigned maxMemoryMb = 2048;
+    unsigned maxTimeoutMs = 60000;
+    std::size_t maxReplyBytes = 16u << 20;  ///< one protocol reply from a worker
+    std::size_t maxLogBytes = 1u << 20;     ///< unfinished stderr line buffered for the log
+    /// A module that is not first-party loads only when its worker confined itself: file
+    /// system (Landlock), system calls (seccomp) and network (seccomp or a namespace).
+    bool requireSandbox = true;
+
+    [[nodiscard]] Limits effective(const Limits& requested) const;
+};
+
+/// What the worker sandbox actually achieved; reported, never assumed.
+struct SandboxInfo {
+    bool noNewPrivileges = false;
+    bool networkIsolated = false;
+    bool filesystemIsolated = false;  ///< Landlock: the module reads its own directory and the system libraries, nothing else
+    bool syscallFilter = false;       ///< seccomp: no sockets, processes, signals, ptrace, mounts
+    unsigned memoryLimitMb = 0;
+
+    /// Every confinement a third-party module needs under ModulePolicy::requireSandbox.
+    [[nodiscard]] bool complete() const { return noNewPrivileges && networkIsolated && filesystemIsolated && syscallFilter; }
+    [[nodiscard]] std::string describe() const;
 };
 
 /// Loads the shared library into this process. Only for packages signed with the owner key.
@@ -72,19 +102,14 @@ private:
     bool down_ = false;
 };
 
-/// What the worker sandbox actually achieved; reported, never assumed.
-struct SandboxInfo {
-    bool noNewPrivileges = false;
-    bool networkIsolated = false;
-    unsigned memoryLimitMb = 0;
-};
-
 /// Runs the module in a separate rfmod-worker process with resource limits, talking
-/// newline-delimited JSON over pipes. A crash or timeout kills only the worker.
+/// newline-delimited JSON over a socket. A crash or timeout kills only the worker.
 class IsolatedModule final : public IModuleInstance {
 public:
-    IsolatedModule(Manifest manifest, std::filesystem::path library, std::filesystem::path workerExecutable,
-                   IHostServices& services, json options);
+    /// `library` lies under `moduleDir`, the only directory the worker keeps read access to.
+    IsolatedModule(Manifest manifest, std::filesystem::path moduleDir, std::filesystem::path library,
+                   std::filesystem::path workerExecutable, IHostServices& services, json options,
+                   const ModulePolicy& policy);
     ~IsolatedModule() override;
 
     [[nodiscard]] const Manifest& manifest() const override { return manifest_; }
@@ -93,12 +118,19 @@ public:
     void shutdown() override;
 
     [[nodiscard]] const SandboxInfo& sandbox() const { return sandbox_; }
+    /// The limits the worker runs under: the manifest's, capped by the policy.
+    [[nodiscard]] const Limits& limits() const { return limits_; }
 
 private:
     class Turn;
     void start();
     void stop(bool kill);
+    /// SIGKILL to the worker's process group and to the worker itself.
+    void killWorker() const;
     void send(const json& message) const;
+    /// The worker's "ready" message, checked: the library matches the manifest and the sandbox
+    /// is as complete as the policy asks.
+    void acceptReady(const json& ready);
     /// Reads worker messages until one of `type` (and `id`, except for "ready") arrives,
     /// answering callbacks on the way.
     json waitFor(const std::string& type, long long id, long long deadlineMs);
@@ -110,18 +142,24 @@ private:
     void logBufferedStderr();
     /// Waits up to a second (and never past the deadline) for worker output and buffers it.
     void readWorkerOutput(long long deadlineMs);
+    /// Appends what the worker wrote on `fd` to the matching buffer, within the policy's limits.
+    void bufferOutput(std::size_t stream, const char* data, std::size_t size);
 
     Manifest manifest_;
+    std::filesystem::path moduleDir_;
     std::filesystem::path library_;
     std::filesystem::path worker_;
     IHostServices& services_;
     json options_;
+    ModulePolicy policy_;
+    Limits limits_;
     SandboxInfo sandbox_;
     /// One exchange with the worker at a time: mutex_ guards only busy_, so the pipe I/O never
     /// runs with a lock held and the next caller sleeps on idle_ until the worker is free.
     std::mutex mutex_;
     std::condition_variable idle_;
     bool busy_ = false;
+    bool down_ = false;
     int pid_ = -1;
     int toWorker_ = -1;
     int fromWorker_ = -1;

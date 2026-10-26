@@ -9,12 +9,13 @@ AddressSanitizer and UndefinedBehaviorSanitizer over the whole tree.
 
 | Target | Code | Where its input comes from |
 |---|---|---|
-| `package` | `PackageVerifier::verify` on raw bytes: gzip and tar parsing, path checks, limits, `META/signature` | Module uploads by an admin, registry files |
+| `package` | `PackageVerifier::verify` on raw bytes: gzip and tar parsing, path checks, limits, `META/signature` | Packages the operator installs with `rfmod install`, registry files |
 | `signed_package` | The same check past the signature: file list, hashes, manifest, referenced files | Packages from any trusted signer, including third-party keys |
 | `manifest` | `ManifestParser::parse`: JSON schema and the rules it cannot express | `manifest.json` inside a package |
 | `semver` | `Version` and `VersionRange` parsing and comparison | Manifest versions and dependency ranges |
 | `crypto_text` | Base64 and key text (`fromBase64`, `PublicKey::fromText`, `SecretKey::fromText`) | Package signatures, keys pasted into the trust store |
 | `mission_schema` | `SchemaRegistry::check` against the mission and library schemas | Every mission and library item a client sends |
+| `blackbox` | The `fpv.blackbox` decoder (`probe`, `decode`: headers, frame encodings, predictors, resync after corrupt frames), then `rf-flightlog` processing of its answer | Flight logs any user uploads |
 | `iso_time` | `parseIsoUtc` | Times in requests and module host calls |
 | `weather` | `WeatherService::at` and `horizon` over a forecast response | The Open-Meteo service |
 | `link_budget` | rf-core link budget and Bullington diffraction, rf-ext clutter, over generated terrain | DEM and land cover data |

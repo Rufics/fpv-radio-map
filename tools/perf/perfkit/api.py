@@ -35,7 +35,7 @@ class ApiClient:
                 return Reply(response.status, self._parse(response.read()))
         except urllib.error.HTTPError as error:
             return Reply(error.code, self._parse(error.read()))
-        except (urllib.error.URLError, OSError) as error:
+        except OSError as error:  # urllib.error.URLError is an OSError
             raise PerfError(f"{method} {path}: {error}") from error
 
     def expect(self, status: int, method: str, path: str, body: Any = None,

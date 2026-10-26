@@ -15,7 +15,13 @@ info:
     Errors are JSON `{message, ...}`. 429 and 503 carry `Retry-After` and `retryAfterS`.
     Request bodies are checked against schemas/ (draft-07); a failure is 422
     `{message, issues: [{path, message}]}`, path being a JSON pointer into the body. Calculations answer 503 when the server has no DEM.
-    Every limit (body size, rate classes, coverage cells) is server configuration.
+    Every limit (body size, rate classes, coverage cells, route samples) is server configuration.
+
+    Input limits: a JSON body larger than server.maxBodyBytes is refused with 413, from its
+    Content-Length before it is read (only the flight log uploads take up to server.maxUploadBytes);
+    a JSON body sent chunked, without a Content-Length, is refused with 411. A compressed body
+    (any Content-Encoding but identity) is refused with 415: its size limit could not hold.
+    A JSON body that nests arrays and objects more than 64 levels deep is refused with 400.
 servers:
   - url: /api/v1
 tags:
@@ -25,6 +31,7 @@ tags:
   - name: library
   - name: weather
   - name: modules
+  - name: flightlogs
   - name: admin
 
 paths:
@@ -70,7 +77,10 @@ paths:
                   satellite: { type: object, properties: { pmtiles: { type: string } } }
                   hillshade: { type: object, properties: { pmtiles: { type: string } } }
                   contours: { type: object, properties: { pmtiles: { type: string }, sourceLayer: { type: string } } }
-                  dem: { type: object, description: 'Optional raster-dem source, only when configured' }
+                  dem:
+                    type: object
+                    description: 'Terrarium heights for the 3D view (tiles-builder terrain.pmtiles); left out when the manifest lists no terrain.pmtiles'
+                    properties: { pmtiles: { type: string }, encoding: { type: string, enum: [terrarium, mapbox] } }
                   weather: { type: object, description: 'Optional weather tile templates, only when configured' }
                   glyphs: { type: string }
                   attribution: { type: array, items: { type: string }, description: 'From the tiles-builder manifest.json next to the DEM' }
@@ -99,6 +109,8 @@ paths:
                   ownerKey: { type: string, description: 'Shown once. Needed to create or revoke links.' }
                   session: { type: string, description: 'Edit session for the creator.' }
                   revision: { type: integer, description: 'Always 1; also sent as ETag.' }
+        '400': { description: The body is not JSON, or nests deeper than 64 levels }
+        '413': { description: The body is larger than server.maxBodyBytes }
         '422': { description: Schema validation report }
 
   /missions/{missionId}:
@@ -331,12 +343,24 @@ paths:
       tags: [calc]
       summary: >-
         Every leg of the mission route, both links as requested, plus the modules the mission opts into.
-        Legs are pilot → wp1 → … → last, plus last → pilot when returnToPilot. Each leg is sampled at
-        the DEM native step; the drone AGL is interpolated linearly between the waypoints' aglM. The
-        worst sample per link per leg is reported. When the body equals the stored mission and the
+        Legs are pilot → wp1 → … → last, plus last → pilot when returnToPilot. Waypoints without a
+        height (or with heightSource auto) first get one from the route.preparation modules
+        (RouteResult.autoHeights); one still without a height is a 422. Each leg is sampled at
+        the DEM native step. The drone height is interpolated linearly between the waypoints in the
+        mission's altitudeRef: with launch (altM, above the ground at the pilot) the drone flies a
+        straight line in altitude, and a leg that would put it below the ground is blocked; with agl
+        (aglM, the default for missions without the field) it follows the terrain. The worst sample
+        per link per leg is reported. When the body equals the stored mission and the
         session can edit, the result is saved as the mission's lastResult. Modules, rf.weather and
         rf.clutter included, run only when listed in mission.modules: leave out rf.weather for a run
-        without weather (standard atmosphere, forecastTier off).
+        without weather (standard atmosphere, forecastTier off). With evaluate none no radio link is
+        evaluated and the mission needs no links: each leg reports only its terrain (samples counts,
+        belowGround, missing-data) and the modules run as usual. With flightMode autonomous the
+        autopilot flies the route on its own, so a link below its margin is a warn reason (the pilot
+        cannot take over there) rather than blocked. Before anything runs, the server bounds the
+        work: every sampled position builds a terrain profile from the pilot, and a route whose
+        positions times profile samples could exceed calc.maxRouteSamples is refused with 422
+        {samples, positions, maxSamples}.
       security: [{ session: [] }]
       requestBody:
         required: true
@@ -349,13 +373,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RouteResult' }
-        '422': { description: Schema validation report, or a library item / link setup that cannot be resolved }
+        '422': { description: 'Schema validation report, a library item / link setup that cannot be resolved, or a route larger than calc.maxRouteSamples ({samples, positions, maxSamples})' }
 
   /calc/coverage:
     post:
       tags: [calc]
       summary: >-
         Start a coverage job around the pilot (one part per evaluated link, run on the server thread pool).
+        A mission with evaluate none has no link to cover and is refused with 422.
         Poll the job; finished parts are usable at once. Needs coverage.radiusM, coverage.cellM and
         coverage.droneAglM; the grid may not exceed the server's coverage.maxCells.
       security: [{ session: [] }]
@@ -370,7 +395,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Job' }
-        '422': { description: Coverage settings missing, or the grid has too many cells }
+        '422': { description: Coverage settings missing, the grid has too many cells, or the mission evaluates no link (evaluate none) }
         '503': { description: Too many jobs queued; Retry-After }
 
   /jobs/{jobId}:
@@ -413,6 +438,11 @@ paths:
   /elevation/profile:
     get:
       tags: [calc]
+      summary: >-
+        The DEM profile between two points, sampled at the DEM's native step (at half the path
+        length when the path is shorter than two steps; stepM says which). No authentication,
+        so it has the bounds of every calculated path: both ends the same point, or a path longer
+        than 100 000 DEM samples, is a 422.
       parameters:
         - { name: from, in: query, required: true, schema: { type: string, example: '48.53,35.20' } }
         - { name: to, in: query, required: true, schema: { type: string } }
@@ -422,11 +452,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Profile' }
+        '400': { description: from or to missing, or not a lat,lon within the world }
         '422':
-          description: Missing elevation data on part of the path
+          description: >-
+            Missing elevation data on part of the path (MissingData), or a path out of bounds: both
+            ends the same point, or too long for the DEM (only `message`).
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MissingData' }
+              schema:
+                anyOf:
+                  - { $ref: '#/components/schemas/MissingData' }
+                  - { type: object, required: [message], properties: { message: { type: string } } }
 
   /library/{kind}:
     parameters:
@@ -566,16 +602,22 @@ paths:
         - { name: path, in: path, required: true, schema: { type: string }, description: 'e.g. ui/bundle.js' }
         - { name: grant, in: query, schema: { type: string } }
       responses:
-        '200': { description: The file, with X-Content-Type-Options nosniff }
+        '200': { description: 'The file, as a resource only: X-Content-Type-Options nosniff, Content-Security-Policy "default-src ''none''; sandbox", Cross-Origin-Resource-Policy same-origin' }
         '404': { description: No such public file (also for alpha files without a grant) }
 
-  /admin/modules:
+  /flightlogs/decode:
     post:
-      tags: [admin]
-      security: [{ admin: [] }]
-      summary: Upload a .rfmod package. The server validates schema, signature, ABI, dependencies and runs its self-test.
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: Replay of every flight in a log file, nothing stored.
+      description: |
+        The server asks each installed module that provides `flightlog.decoder` whether it reads the
+        file (`flightlog.probe`), lets the first that does decode it into schemas/flightlog.schema.json,
+        checks that answer, and builds the replay with rf-flightlog. Decoders always run in a worker
+        process. A file with only a header, or from firmware the decoder does not know, answers a
+        flight with `status` header-only or unsupported and notes saying why.
       parameters:
-        - { name: install, in: query, schema: { type: boolean, default: true }, description: 'false = check only' }
+        - { name: fileName, in: query, schema: { type: string }, description: 'Shown and kept without directories' }
       requestBody:
         required: true
         content:
@@ -583,10 +625,108 @@ paths:
             schema: { type: string, format: binary }
       responses:
         '200':
-          description: Validation report; installs only if every check passed and install=true.
+          description: The replay of every flight
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/ValidationReport' }
+              schema:
+                type: object
+                properties:
+                  decoder: { type: string }
+                  source: { type: object, description: 'source of the flightlog/v1 document' }
+                  flights: { type: array, items: { $ref: '#/components/schemas/FlightView' } }
+        '400': { description: Empty body }
+        '403': { description: Flight log replay (rf.flightlog) is switched off on this server }
+        '413': { description: The file is larger than the server takes }
+        '422': { description: No decoder is installed, none recognises the file, or the decoder could not read it }
+        '502': { description: The decoder failed or answered a document that does not match the schema }
+
+  /missions/{missionId}/flightlogs:
+    parameters:
+      - { name: missionId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: The mission's logbook, newest first
+      responses:
+        '200':
+          description: One row per flight
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/FlightLogRow' } }
+        '403': { description: The session belongs to another mission }
+    post:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: Decode a log file and keep its flights in the mission (edit session)
+      description: The same file imported again keeps its flights and answers their ids.
+      parameters:
+        - { name: fileName, in: query, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '201':
+          description: The flights kept
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  decoder: { type: string }
+                  fileName: { type: string }
+                  flights: { type: array, items: { $ref: '#/components/schemas/FlightLogRow' } }
+        '403': { description: Read-only (view) session, a session of another mission, or replay switched off }
+        '409': { description: The mission already keeps as many flights as the server allows }
+        '413': { description: The file is larger than the server takes }
+        '422': { description: No decoder recognises the file, or it could not be read }
+
+  /missions/{missionId}/flightlogs/{logId}:
+    parameters:
+      - { name: missionId, in: path, required: true, schema: { type: string } }
+      - { name: logId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: The replay of one kept flight, with plan against fact for the mission's route
+      responses:
+        '200':
+          description: The replay
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FlightView' }
+        '404': { description: No such flight in this mission }
+    delete:
+      tags: [flightlogs]
+      security: [{ session: [] }]
+      summary: Remove a flight from the logbook (edit session)
+      responses:
+        '204': { description: Removed }
+        '403': { description: Read-only (view) session }
+        '404': { description: No such flight in this mission }
+
+  /admin/modules/reload:
+    post:
+      tags: [admin]
+      security: [{ admin: [] }]
+      summary: Pick up what the rfmod CLI installed, removed or trusted on the server machine.
+      description: |
+        Modules are never uploaded through the API. The operator installs a `.rfmod` package on
+        the machine with `rfmod install FILE --root DIR` (which verifies the signature, checks the
+        dependencies and runs the self-test in a sandboxed worker) and trusts authors' keys with
+        `rfmod trust add`. This call re-reads the trust store and the module root, re-verifies
+        every package and reloads the modules in dependency order.
+      responses:
+        '200':
+          description: The admin module listing and the load-time notices
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  modules: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
+                  notices: { type: array, items: { type: string } }
 
   /admin/modules/{moduleId}:
     parameters:
@@ -611,12 +751,6 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
         '422': { description: Options do not match the schema, or unknown module }
-    delete:
-      tags: [admin]
-      security: [{ admin: [] }]
-      responses:
-        '204': { description: Removed }
-        '422': { description: Built-in modules can be disabled, not removed; or other modules require this one }
 
   /admin/modules/notices:
     get:
@@ -635,40 +769,12 @@ paths:
       security: [{ admin: [] }]
       responses:
         '200':
-          description: Trusted signing keys; the built-in owner key cannot be removed
+          description: |
+            Trusted signing keys: the built-in owner key and those the operator added with
+            `rfmod trust add` on the machine. The API only lists them.
           content:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/TrustedKey' } }
-    post:
-      tags: [admin]
-      security: [{ admin: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [key]
-              properties:
-                key: { type: string, description: 'Public key in rfmod text form' }
-                label: { type: string }
-      responses:
-        '201':
-          description: Key added; modules are reloaded. Returns the key list.
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/TrustedKey' } }
-        '422': { description: Not a valid key }
-
-  /admin/keys/{keyId}:
-    delete:
-      tags: [admin]
-      security: [{ admin: [] }]
-      parameters:
-        - { name: keyId, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]+$' } }
-      responses:
-        '204': { description: Removed; modules signed with it stop loading at once }
-        '409': { description: The built-in owner key cannot be removed, or no such key }
 
   /admin/cache:
     get:
@@ -928,6 +1034,7 @@ components:
             evaluated: { type: integer }
             missingData: { type: integer }
             overPilot: { type: integer, description: 'Samples at the pilot position, skipped' }
+            belowGround: { type: integer, description: 'Samples where a launch-referenced height is below the ground; evaluated with the drone on the ground' }
 
     Reason:
       type: object
@@ -974,6 +1081,24 @@ components:
         library: { type: array, items: { $ref: '#/components/schemas/LibraryRef' } }
         modules: { type: object, description: "Per-module output keyed by module id: the module's route.analyze `data` as returned. A module's reasons go to the leg they name (Reason.leg) or, without a leg, to RouteResult.reasons, not into modules[id]." }
         moduleFailures: { type: array, items: { $ref: '#/components/schemas/ModuleFailure' } }
+        autoHeights:
+          type: array
+          description: >-
+            Heights the route.preparation modules (fpv.altitude) set before the calculation, one per
+            waypoint that left its height to the server (none in the mission's reference, or
+            heightSource auto). The legs and the route.analysis modules use them; the stored mission
+            is not changed. Absent when no waypoint asked for one.
+          items:
+            type: object
+            properties:
+              index: { type: integer, description: 'Index into mission.waypoints' }
+              lat: { type: number, description: "The waypoint's position, so the entry can be matched to it after the route is edited" }
+              lon: { type: number }
+              field: { enum: [aglM, altM], description: "The mission's height field" }
+              heightM: { type: number }
+              module: { type: string }
+              limitedBy: { type: string, description: 'What set it: terrain, a link kind (control, video), or ceiling' }
+              blocked: { type: boolean, description: 'Even the ceiling does not keep the waypoint safe; the reasons say what may help' }
 
     Job:
       type: object
@@ -1102,6 +1227,96 @@ components:
         misses: { type: integer }
         evictions: { type: integer }
         hitRate: { type: number }
+
+    FlightLogRow:
+      type: object
+      description: A logbook row, built by rf-flightlog from the decoder's flightlog/v1 entry.
+      required: [index, status, durationS, firmware, summary, bands, warnings]
+      properties:
+        id: { type: string, description: 'Only for a flight kept in a mission' }
+        index: { type: integer, minimum: 1, description: 'Flight number in the file, from 1' }
+        status: { enum: [ok, partial, header-only, unsupported] }
+        durationS: { type: number }
+        firmware: { type: object, properties: { name: { type: string }, version: { type: string }, revision: { type: string }, target: { type: string }, supported: { type: boolean } } }
+        craft: { type: string }
+        startedAt: { type: string, description: 'Wall time the log started, when the flight controller had a clock' }
+        summary:
+          type: object
+          description: Only what the log could tell; energy needs a current sensor, distances a GPS.
+          properties:
+            durationS: { type: number }
+            armedS: { type: number }
+            cells: { type: integer }
+            distanceM: { type: number }
+            maxHomeDistM: { type: number }
+            maxAltM: { type: number }
+            maxSpeedMps: { type: number }
+            maxCurrentA: { type: number }
+            usedMah: { type: number }
+            usedWh: { type: number }
+            startVoltageV: { type: number }
+            minVoltageV: { type: number }
+            minCellV: { type: number }
+            minLinkPct: { type: number }
+            linkChannel: { enum: [linkQualityPct, rssiPct] }
+            disarmReason: { type: string }
+        bands:
+          type: array
+          items:
+            type: object
+            properties:
+              from: { type: number }
+              to: { type: number }
+              band: { enum: [DISARMED, ACRO, ANGLE, HORIZON, ALTHOLD, POSHOLD, GPS_RESCUE, FAILSAFE] }
+        warnings: { type: array, items: { type: string }, description: 'Titles of the story events that need attention' }
+        fileName: { type: string }
+        decoder: { type: string }
+        importedAt: { type: string }
+
+    FlightView:
+      description: The replay of one flight (flightview/v1).
+      allOf:
+        - { $ref: '#/components/schemas/FlightLogRow' }
+        - type: object
+          properties:
+            schema: { const: flightview/v1 }
+            channels: { type: object, additionalProperties: { type: boolean }, description: 'What the log recorded' }
+            notes: { type: array, items: { type: object, properties: { code: { type: string }, severity: { enum: [info, warn, blocked] }, message: { type: string }, fix: { type: string } } } }
+            radio: { type: object, properties: { protocol: { type: string } } }
+            homes: { type: array, items: { type: object, properties: { t: { type: number }, lat: { type: number }, lon: { type: number } } } }
+            story:
+              type: array
+              items:
+                type: object
+                required: [t, type, severity, title]
+                properties:
+                  t: { type: number, description: 'Seconds from the start of the log' }
+                  type: { type: string }
+                  severity: { enum: [info, warn, blocked] }
+                  title: { type: string }
+                  detail: { type: string }
+                  lat: { type: number }
+                  lon: { type: number }
+            timeline:
+              type: object
+              description: Every channel on one even time base; null where the log has no value (a gap stays a gap).
+              properties:
+                hz: { type: number }
+                t: { type: array, items: { type: number } }
+                channels:
+                  type: object
+                  description: 'lat, lon, altM, altMslM, homeDistM, distanceM, speedMps, climbMps, voltageV, cellV, currentA, usedMah, usedWh, rssiPct, linkQualityPct, rssiDbm, throttlePct, baroAltM, sats, gpsFix, armed: each only when the log has it'
+                  additionalProperties: { type: array, items: { type: [number, 'null'] } }
+            plan:
+              type: object
+              description: Plan against fact, for a flight kept in a mission
+              properties:
+                evaluated: { type: boolean, description: 'The mission had a route result to compare with' }
+                rows: { type: array, items: { type: object, properties: { metric: { type: string }, label: { type: string }, unit: { type: string }, plan: { type: [number, 'null'] }, fact: { type: [number, 'null'] }, deltaPct: { type: number } } } }
+                legs: { type: array, items: { type: object } }
+                findings: { type: array, items: { type: object, properties: { severity: { enum: [info, warn, blocked] }, text: { type: string } } } }
+                offRouteM: { type: array, items: { type: [number, 'null'] } }
+                furthest: { type: object }
 
     ValidationReport:
       type: object

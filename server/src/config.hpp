@@ -37,8 +37,8 @@ public:
         int port = 8080;
         int threads = 16;
         bool trustProxy = false;  ///< use the last X-Forwarded-For hop as the client address
-        std::size_t maxBodyBytes = 1u << 20;
-        std::size_t maxUploadBytes = 64u << 20;
+        std::size_t maxBodyBytes = 1u << 20;    ///< JSON bodies
+        std::size_t maxUploadBytes = 64u << 20;  ///< files the API takes: flight logs
     };
     Server server;
 
@@ -49,6 +49,8 @@ public:
     Database database;
 
     std::string adminToken;  ///< empty = admin API disabled
+    /// A shorter token is a configuration error: the admin API changes what the server runs.
+    static constexpr std::size_t kMinAdminTokenLength = 24;
 
     /// The operations listener (ops_server.hpp): GET /healthz, /readyz and /metrics on a port of
     /// its own, never behind the rate limiter or the request threads.
@@ -93,6 +95,12 @@ public:
         std::filesystem::path worker = "/usr/lib/rfmap/rfmod-worker";
         std::filesystem::path trustStore = "/var/lib/rfmap/keys.json";
         bool isolateAll = false;
+        /// A build with the public development owner key refuses to start unless this is set.
+        bool allowDevOwnerKey = false;
+        /// Third-party modules load only when their worker confined itself (Landlock, seccomp).
+        bool requireSandbox = true;
+        unsigned maxMemoryMb = 2048;     ///< cap on a module's declared memory limit
+        unsigned maxTimeoutMs = 60000;  ///< cap on a module's declared call timeout
     };
     Modules modules;
 
@@ -137,7 +145,7 @@ public:
         double perMinute;
         double burst;
     };
-    /// Per client address and class: default, open (PIN attempts), create, calc, admin, upload.
+    /// Per client address and class: default, open (PIN attempts), create, calc, admin, coverage.
     std::map<std::string, RateLimit, std::less<>> rateLimits{{"default", {600, 120}}, {"open", {10, 5}},
                                                              {"create", {20, 10}},     {"calc", {120, 30}},
                                                              {"admin", {60, 20}},      {"coverage", {6, 3}}};
@@ -149,6 +157,14 @@ public:
         int keepMinutes = 120;
     };
     Coverage coverage;
+
+    struct Calc {
+        /// Terrain samples one POST /calc/route may read (RouteWorkload), so a route of
+        /// thousands of legs or of continental length cannot hold a request thread for hours.
+        /// A sample costs about 1 µs of one core with both links, so the default is ~20 s.
+        double maxRouteSamples = 20'000'000.0;
+    };
+    Calc calc;
 
     json raw;  ///< the merged document, for the admin page (secrets removed)
 };

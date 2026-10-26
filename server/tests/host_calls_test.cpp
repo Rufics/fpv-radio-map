@@ -4,14 +4,18 @@
 
 #include "host_services.hpp"
 #include "logger.hpp"
+#include "module_runner.hpp"
 #include "test_support.hpp"
 
+#include <rfcore/link_budget.hpp>
 #include <rfmod/abi.h>
 
+#include <GeographicLib/Geodesic.hpp>
 #include <gtest/gtest.h>
 
 #include <cmath>
 #include <memory>
+#include <thread>
 
 using namespace rfmap;
 namespace fs = std::filesystem;
@@ -58,7 +62,35 @@ json antenna(const std::string& id, double feederLossDb) {
     return a;
 }
 
-/// The services a running server binds to its host calls, built on a fresh database.
+/// The contexts a request runs with: now, no modules, no forecast.
+class NowContexts final : public IContextFactory {
+public:
+    [[nodiscard]] CalcContext contextFor(const json&) const override {
+        CalcContext ctx;
+        ctx.time = Clock::now();
+        return ctx;
+    }
+};
+
+/// A module that answers loss.contribute with whatever `handler` does inside the call.
+class ProbeModule final : public rfmod::IModuleInstance {
+public:
+    explicit ProbeModule(std::function<json()> handler) : handler_(std::move(handler)) {
+        manifest_.id = "acme.loop";
+        manifest_.version = rfmod::Version(1, 0, 0);
+        manifest_.provides = {"loss.contributor"};
+    }
+    [[nodiscard]] const rfmod::Manifest& manifest() const override { return manifest_; }
+    [[nodiscard]] bool isolated() const override { return false; }
+    json invoke(const std::string&, const json&) override { return handler_(); }
+    void shutdown() override {}
+
+private:
+    rfmod::Manifest manifest_;
+    std::function<json()> handler_;
+};
+
+/// The services a request hands its modules' host calls, built on a fresh database.
 class HostRig {
 public:
     explicit HostRig(const std::string& url)
@@ -66,7 +98,7 @@ public:
           library_(db_, schemas_),
           blocks_(16u << 20, [](const RasterBlock& b) { return b.values.size() * sizeof(float) + sizeof(RasterBlock); }),
           weather_(weatherConfig_, &forecast_, clock_) {
-        (void)db_.migrate(RFMAP_SQL_DIR);
+        rfmap::test::migrate(db_, RFMAP_SQL_DIR);
         builtins_ = std::make_unique<BuiltinModules>(&db_, schemas_, "test");
         (void)library_.seed(RFMAP_SEED_DIR);
         (void)library_.add("antennas", antenna("hc-ground", 0.5), "test");
@@ -76,15 +108,14 @@ public:
                                            "synthetic, stated LE90");
         links_ = std::make_unique<LinkService>(dem_, nullptr, library_, *builtins_, nullptr, "test");
         log_.setQuiet(true);
-        host_ = std::make_unique<ServerHostServices>(nullptr, nullptr, nullptr, nullptr, log_);
-        host_->bind(links_.get(), &library_, &weather_, [](const json&) {
-            CalcContext ctx;
-            ctx.time = Clock::now();
-            return ctx;
-        }, &schemas_);
+        host_ = std::make_unique<ServerHostServices>(log_);
+        environment_ = std::make_unique<HostEnvironment>(HostEnvironment{*links_, library_, weather_, schemas_, contexts_});
     }
 
     [[nodiscard]] ServerHostServices& host() { return *host_; }
+    /// What a request gives its modules: the scope the host answers in.
+    [[nodiscard]] const HostEnvironment& environment() const { return *environment_; }
+    [[nodiscard]] LinkService& links() { return *links_; }
     [[nodiscard]] int forecastFetches() const { return forecast_.fetches; }
     [[nodiscard]] TimePoint forecastHour() const { return forecast_.hour; }
 
@@ -112,6 +143,8 @@ private:
     WeatherService weather_;
     Logger log_;
     std::unique_ptr<ServerHostServices> host_;
+    NowContexts contexts_;
+    std::unique_ptr<HostEnvironment> environment_;
 };
 
 class HostServices : public ::testing::Test {
@@ -125,7 +158,13 @@ protected:
         if (!rig_) GTEST_SKIP() << "RFMAP_TEST_DATABASE_URL not set (run through ctest)";
     }
 
-    static json call(const std::string& method, const json& request) { return rig_->host().call("fpv.test", method, request); }
+    /// A host call as a module makes it while a request is evaluated.
+    static json call(const std::string& method, const json& request) {
+        CalcContext ctx;
+        ctx.time = Clock::now();
+        const InvocationScope scope(rig_->environment(), ctx);
+        return rig_->host().call("fpv.test", method, request);
+    }
 
     /// A mission the server's own schema accepts, with a control link from the seeded library.
     static json mission() {
@@ -196,7 +235,7 @@ TEST_F(HostServices, WeatherPointReadsTheForecast) {
     // Without a time the hour nearest to now is read, which may be either side of the middle one.
     const json now = call("weather.point", point(48.55, 35.18));
     EXPECT_TRUE(now.at("temperatureC").is_number());
-    const json middle = call("weather.point", {{"lat", 48.55}, {"lon", 35.18}, {"time", isoUtc(rig_->forecastHour())}});
+    const json middle = call("weather.point", {{"lat", 48.55}, {"lon", 35.18}, {"time", UtcTime::format(rig_->forecastHour())}});
     EXPECT_DOUBLE_EQ(middle.at("temperatureC").get<double>(), 10.0);
     EXPECT_GE(rig_->forecastFetches(), 1);
     EXPECT_THROW(call("weather.point", {{"lat", 48.55}, {"lon", 35.18}, {"time", "yesterday"}}), HostCallError);
@@ -257,4 +296,102 @@ TEST_F(HostServices, ModuleLogLinesGoToTheServerLog) {
     for (const int level : {RFMOD_LOG_DEBUG, RFMOD_LOG_INFO, RFMOD_LOG_WARN, RFMOD_LOG_ERROR}) {
         EXPECT_NO_THROW(rig_->host().log("fpv.test", level, "line"));
     }
+}
+
+TEST_F(HostServices, GeodesyIsAnsweredOnWgs84) {
+    const json inv = call("geodesy.inverse", {{"from", {{"lat", 50.0}, {"lon", 30.0}}}, {"to", {{"lat", 50.0}, {"lon", 31.0}}}});
+    // Same answer as GeographicLib's Karney solution on WGS84, to the last bit.
+    double s12 = 0, a1 = 0, a2 = 0;
+    GeographicLib::Geodesic::WGS84().Inverse(50.0, 30.0, 50.0, 31.0, s12, a1, a2);
+    EXPECT_DOUBLE_EQ(inv.at("distanceM").get<double>(), s12);
+    EXPECT_DOUBLE_EQ(inv.at("azimuth1Deg").get<double>(), a1);
+    const json dir = call("geodesy.direct", {{"from", {{"lat", 50.0}, {"lon", 30.0}}},
+                                             {"azimuthDeg", inv.at("azimuth1Deg")},
+                                             {"distanceM", inv.at("distanceM")}});
+    EXPECT_NEAR(dir.at("lon").get<double>(), 31.0, 1e-9);
+    EXPECT_NEAR(dir.at("azimuthDeg").get<double>(), inv.at("azimuth2Deg").get<double>(), 1e-9);
+    EXPECT_THROW(call("fs.read", json::object()), HostCallError);
+    EXPECT_THROW(call("geodesy.direct", {{"from", {{"lat", 50.0}, {"lon", 30.0}}}, {"azimuthDeg", 0}, {"distanceM", 1e9}}),
+                 HostCallError);
+}
+
+TEST_F(HostServices, OutsideARequestTheHostAnswersNothing) {
+    EXPECT_THROW((void)rig_->host().call("fpv.test", "geodesy.inverse",
+                                         {{"from", {{"lat", 50.0}, {"lon", 30.0}}}, {"to", {{"lat", 50.0}, {"lon", 31.0}}}}),
+                 HostCallError);
+    EXPECT_EQ(InvocationScope::current(), nullptr);
+}
+
+TEST_F(HostServices, LinkEvaluateIsRefusedInsideLossContribute) {
+    // A module that, while contributing loss, asks the host to evaluate a link: the host would
+    // run this very contributor again. Refused by name, and the scope ends with the call.
+    std::string refusal;
+    auto module = std::make_shared<ProbeModule>([&refusal]() -> json {
+        try {
+            (void)rig_->host().call("acme.loop", "link.evaluate", {{"frequencyHz", 2.4e9}});
+        } catch (const std::exception& e) {
+            refusal = e.what();
+        }
+        return {{"terms", json::array()}};
+    });
+    std::vector<ModuleFailure> failures;
+    const PathEnds ends{{{48.55, 35.18}, 2.0}, {{48.56, 35.19}, 80.0}};
+    CalcContext ctx;
+    ctx.time = Clock::now();
+    {
+        const InvocationScope scope(rig_->environment(), ctx);
+        const PreparedPath path = rig_->links().prepare(Terminal{{48.55, 35.18}, 2.0}, Terminal{{48.56, 35.19}, 80.0}, ctx);
+        ASSERT_TRUE(path.complete());
+        rfcore::LinkEvaluator ev(rfcore::EarthModel(4.0 / 3.0), rfcore::BullingtonDiffraction());
+        ev.addContributor(std::make_shared<const ModuleLossContributor>(module, json::object(), ends, ctx.time, nullptr, failures));
+        rfcore::TransmitterEnd tx{};
+        tx.antennaAgl = rfcore::Metres(2.0);
+        tx.power = rfcore::DecibelMilliwatt(20.0);
+        rfcore::ReceiverEnd rx{};
+        rx.antennaAgl = rfcore::Metres(80.0);
+        rx.sensitivity = rfcore::DecibelMilliwatt(-100.0);
+        (void)ev.evaluate(*path.profile, rfcore::Hertz(2.4e9), tx, rx);
+        EXPECT_EQ(InvocationScope::current(), &scope) << "the contributor's scope ends with the call";
+    }
+    EXPECT_TRUE(failures.empty());
+    EXPECT_NE(refusal.find("refused inside loss.contribute"), std::string::npos) << refusal;
+    EXPECT_NE(refusal.find("acme.loop"), std::string::npos);
+}
+
+TEST_F(HostServices, HostCallsAreBudgeted) {
+    // Nested scopes share the request's budget: a module that keeps asking runs out.
+    CalcContext ctx;
+    ctx.time = Clock::now();
+    const InvocationScope scope(rig_->environment(), ctx);
+    const json req = {{"from", point(50.0, 30.0)}, {"to", point(50.0, 31.0)}};
+    for (int i = 0; i < InvocationScope::kMaxHostCalls; ++i) (void)rig_->host().call("fpv.test", "geodesy.inverse", req);
+    EXPECT_THROW((void)rig_->host().call("fpv.test", "geodesy.inverse", req), HostCallBudgetError);
+}
+
+TEST_F(HostServices, ThreadsJoiningARequestShareItsBudget) {
+    // A coverage worker joins the request on its own thread: the budget is the request's, not a
+    // fresh one per thread.
+    CalcContext ctx;
+    ctx.time = Clock::now();
+    const InvocationScope scope(rig_->environment(), ctx);
+    const json req = {{"from", point(50.0, 30.0)}, {"to", point(50.0, 31.0)}};
+    for (int i = 0; i < InvocationScope::kMaxHostCalls - 1; ++i) (void)rig_->host().call("fpv.test", "geodesy.inverse", req);
+    int answered = 0;
+    int refused = 0;
+    std::thread worker([&] {
+        EXPECT_EQ(InvocationScope::current(), nullptr) << "a new thread starts outside every request";
+        const InvocationScope joined(InvocationScope::FromThread{}, scope);
+        for (int i = 0; i < 3; ++i) {
+            try {
+                (void)rig_->host().call("fpv.test", "geodesy.inverse", req);
+                ++answered;
+            } catch (const HostCallBudgetError&) {
+                ++refused;
+            }
+        }
+    });
+    worker.join();
+    EXPECT_EQ(answered, 1);
+    EXPECT_EQ(refused, 2);
+    EXPECT_THROW((void)rig_->host().call("fpv.test", "geodesy.inverse", req), HostCallBudgetError);
 }

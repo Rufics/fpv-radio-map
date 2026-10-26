@@ -63,6 +63,7 @@ class CoverageTest(unittest.TestCase):
     def test_paths_are_grouped_into_areas(self):
         self.assertEqual(component_of(A_CPP), ("Core", "rf-core"))
         self.assertEqual(component_of("core/rf-ext/src/a.cpp"), ("Core", "rf-ext"))
+        self.assertEqual(component_of("core/rf-flightlog/src/a.cpp"), ("Core", "rf-flightlog"))
         self.assertEqual(component_of("modules/fpv/relay/src/relay.cpp"), ("FPV modules", "fpv.relay"))
         self.assertEqual(component_of("modules/fpv/common/include/fpv/world.hpp"), ("FPV modules", "fpv common"))
         self.assertEqual(component_of("platform/rfmod/src/registry.cpp"), ("Platform", "rfmod"))
@@ -162,7 +163,7 @@ class ReportTest(unittest.TestCase):
         )
         self.assertTrue(out.startswith(f"{MARKER}\n### ✅ CI passed for 0123456"))
         self.assertIn("**5** tests passed · C++ line coverage **66.7%** · changed lines **50.0%** covered", out)
-        self.assertIn("| Core: rf-core, rf-ext | 🟡 75.0% <sub>3/4</sub>", out)
+        self.assertIn("| Core: rf-core, rf-ext, rf-flightlog | 🟡 75.0% <sub>3/4</sub>", out)
         self.assertIn("| FPV modules | 🔴 50.0% <sub>1/2</sub>", out)
         self.assertIn("`core/rf-core/src/a.cpp`: [4](https://github.com/o/r/blob/fedcba9876543210/core/rf-core/src/a.cpp#L4)", out)
         self.assertIn("| Web build and tests | ⏭️ skipped | not affected by this change |", out)

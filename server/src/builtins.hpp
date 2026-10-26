@@ -19,12 +19,14 @@ namespace rfmap {
 ///  rf.clutter        land cover obstacles (ESA WorldCover classes, heights set by the admin)
 ///  rf.uncertainty    margin band from the DEM's stated error
 ///  rf.radio-profiles the radio profile library kind and its seed
+///  rf.flightlog      flight log replay (rf-flightlog): timeline rate and story thresholds
 class BuiltinModules {
 public:
     static constexpr const char* kWeather = "rf.weather";
     static constexpr const char* kClutter = "rf.clutter";
     static constexpr const char* kUncertainty = "rf.uncertainty";
     static constexpr const char* kRadioProfiles = "rf.radio-profiles";
+    static constexpr const char* kFlightLog = "rf.flightlog";
 
     BuiltinModules(Database* db, SchemaRegistry& schemas, std::string version);
 

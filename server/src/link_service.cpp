@@ -28,6 +28,15 @@ using rfcore::DecibelMilliwatt;
 using rfcore::Hertz;
 using rfcore::Metres;
 
+void ModuleFailure::appendTo(json& list) const {
+    const bool seen = std::ranges::any_of(list, [this](const json& j) { return j.value("module", "") == moduleId; });
+    if (!seen) list.push_back(toJson());
+}
+
+void ModuleFailure::appendAll(json& list, const std::vector<ModuleFailure>& failures) {
+    for (const auto& f : failures) f.appendTo(list);
+}
+
 std::string toString(LinkKind k) { return k == LinkKind::Control ? "control" : "video"; }
 
 LinkKind linkKindFromString(std::string_view s) {
@@ -305,17 +314,26 @@ ResolvedLink LinkService::resolve(const json& setup, LinkKind kind) const {
     return r;
 }
 
-PreparedPath LinkService::prepare(const Terminal& ground, const Terminal& air, const CalcContext& ctx) const {
+rfcore::ProfileResult LinkService::terrain(const rfcore::GeoPoint& from, const rfcore::GeoPoint& to) const {
     const DemSource& dem = requireDem();
-    PreparedPath p{ground, air, 0.0, std::nullopt, {}, {}};
-    const rfcore::Geodesy geo;
-    p.distanceM = geo.inverse(ground.position, air.position).distance.value();
-    if (!(p.distanceM > 0.0)) throw HttpError(422, "the two ends of the path are the same point");
+    const double distanceM = rfcore::Geodesy().inverse(from, to).distance.value();
+    if (!(distanceM > 0.0)) throw HttpError(422, "the two ends of the path are the same point");
+    const double stepM = dem.nativeResolution().value();
+    if (distanceM / stepM > kMaxProfileSamples) {
+        throw HttpError(422, std::format("the path is too long for this DEM: more than {} samples at {} m",
+                                         kMaxProfileSamples, stepM));
+    }
     // Diffraction needs at least one point between the ends; on a path shorter than two DEM
     // steps the middle sample still takes the DEM's own value, nothing is interpolated.
     std::optional<Metres> step;
-    if (p.distanceM < 2.0 * dem.nativeResolution().value()) step = Metres(p.distanceM / 2.0);
-    rfcore::ProfileResult built = rfcore::ProfileBuilder(dem).build(ground.position, air.position, step);
+    if (distanceM < 2.0 * stepM) step = Metres(distanceM / 2.0);
+    return rfcore::ProfileBuilder(dem).build(from, to, step);
+}
+
+PreparedPath LinkService::prepare(const Terminal& ground, const Terminal& air, const CalcContext& ctx) const {
+    PreparedPath p{ground, air, 0.0, std::nullopt, {}, {}};
+    rfcore::ProfileResult built = terrain(ground.position, air.position);
+    p.distanceM = rfcore::Geodesy().inverse(ground.position, air.position).distance.value();
     p.missing = std::move(built.missing);
     if (!built.profile.has_value()) return p;
     rfcore::TerrainProfile& profile = p.profile.emplace(std::move(*built.profile));

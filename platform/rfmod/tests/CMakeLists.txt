@@ -12,10 +12,13 @@ rfmod_test_module(rfmod_test_broken test.broken 1.0.0 1)
 
 add_executable(rfmod_tests
   semver_test.cpp
+  bounded_json_test.cpp
   confined_root_test.cpp
   package_test.cpp
   manifest_test.cpp
-  registry_test.cpp)
+  dependency_resolver_test.cpp
+  registry_test.cpp
+  cli_test.cpp)
 target_link_libraries(rfmod_tests PRIVATE rfmod_platform GTest::gtest_main)
 add_dependencies(rfmod_tests rfmod-worker rfmod_test_alpha rfmod_test_alpha2 rfmod_test_beta rfmod_test_broken)
 target_compile_definitions(rfmod_tests PRIVATE

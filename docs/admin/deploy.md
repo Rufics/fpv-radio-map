@@ -7,7 +7,7 @@ The stack has four parts, described in [`deploy/docker-compose.yml`](../../deplo
 
 | Service | What it does |
 |---|---|
-| `postgis` | PostgreSQL 16 + PostGIS 3.4. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
+| `postgis` | PostgreSQL 18 + PostGIS 3.6. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
 | `open-meteo`, `open-meteo-init`, `open-meteo-sync` | Your own Open-Meteo. `open-meteo-init` downloads a first copy of the model data and exits, `open-meteo-sync` then keeps it fresh, and the API answers rfmap-server. No request leaves your network for a forecast. |
 | `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly. |
 | `web` | nginx with the built client, `/tiles` (PMTiles over HTTP Range) and a reverse proxy for `/api`. The only service with a published port. |
@@ -56,9 +56,12 @@ docker compose up -d --build
 docker compose logs -f rfmap-server
 ```
 
-At start the server applies the SQL migrations in `/usr/share/rfmap/sql` (once, under an
-advisory lock) and seeds the reference library from `data/library/<kind>/seed*.json` (radio
-profiles, antennas, batteries and drones; see the README next to each file:
+At start the server applies the migrations in `/usr/share/rfmap/sql` that the database does
+not have yet (once, under an advisory lock). It refuses to start on a database that a newer
+version migrated, and it leaves a breaking migration to `rfmap-server --migrate`
+([Updates](production-setup.md#11-updates)). It also seeds the reference library from
+`data/library/<kind>/seed*.json` (radio profiles, antennas, batteries and drones; see the README
+next to each file:
 [radio profiles](../../data/library/radio-profiles/README.md),
 [antennas](../../data/library/antennas/README.md),
 [batteries](../../data/library/batteries/README.md),
@@ -181,6 +184,8 @@ Settings you will most likely touch:
 | `auth.pinConcurrency`, `auth.pinQueue`, `auth.pinWaitMs` | automatic, automatic, 2000 | PIN checks run on the request threads, so they are bounded: that many run at once, that many more wait up to `pinWaitMs` for a slot, and the rest get 503 with `Retry-After` at once. A refused check does not count as a wrong PIN. Automatic is half the CPU cores, at most a quarter of `server.threads`, with a queue of the same size but never more than the spare request threads, so it can be smaller or even zero and one request thread always stays free; each running check at `moderate` cost also takes 256 MiB. Raise them only with cores and `server.threads` to match. |
 | `rateLimits.<class>` | see example | Token buckets per client address. Classes: `default`, `open` (PIN attempts and the public link lookup), `create`, `calc`, `coverage`, `admin`. |
 | `coverage.maxCells`, `coverage.threads` | 250000, 4 | Larger grids are refused with 422. |
+| `calc.maxRouteSamples` | 20000000 | The most terrain samples one `POST /calc/route` may read. Each leg is sampled at the DEM step and every position builds a profile from the pilot, so the work is positions times profile samples; the server works out an upper bound before it starts and refuses a larger route with 422. A sample costs about 1 µs of one core with both links, so the default holds a request thread for at most about 20 s. A 100 km route with a 30 m DEM is around 10 million. |
+| `server.maxBodyBytes`, `server.maxUploadBytes` | 1 MiB, 64 MiB | JSON bodies, and flight log files (the only uploads). A JSON body whose `Content-Length` is over `maxBodyBytes` is answered with 413 before it is read, and one sent chunked (without a length) with 411. Compressed request bodies (`Content-Encoding`) are refused with 415 on every route, since the limits count the bytes on the wire, not what they inflate to. The bundled nginx applies the same two limits (`client_max_body_size`); change both together. |
 | `cache.*` | 256 MB DEM blocks, 64 MB results in memory, 20000 rows / 1 GB results table | Also changeable at run time under **Admin → Cache** (`PUT /api/v1/admin/cache`). Changes made there are stored and survive a restart. |
 | `weather.metaUrl` | empty | The synced model's `meta.json`. With it, results give the forecast run time (`runUtc`). |
 | `ops.listen`, `ops.port`, `ops.drainSeconds` | `127.0.0.1`, 9090, 5 | The operations listener: `GET /healthz`, `/readyz` and `/metrics` on a port of its own, see [Health, readiness and metrics](#health-readiness-and-metrics). |
@@ -267,16 +272,31 @@ cover the requested time, the result says so (`forecastTier: none`) and uses k =
 All under `/api/v1/admin` with `Authorization: Bearer <RFMAP_ADMIN_TOKEN>`, or in the client
 under **Admin**.
 
-- **Keys** (`/admin/keys`): add a module author's `.pub`; remove it again. The built-in owner
-  key cannot be removed. Removing a key unloads the modules signed with it at once.
-- **Modules** (`POST /admin/modules?install=true|false`, body `application/octet-stream`):
-  the server checks the archive, signature, manifest, ABI, host range, dependencies and
-  sandbox, runs the self-test in a worker, and installs only if every check passed.
-  `?install=false` only checks. `PUT /admin/modules/<id>` with `{enabled, options}` disables
-  or configures a module, including the built-in `rf.weather`, `rf.clutter`, `rf.uncertainty`
-  and `rf.radio-profiles`. The module pack under `modules/fpv` is signed with the development
-  owner key in the source tree; re-sign it with your `owner.secret` (`rfmod pack`) before you
-  upload it to a production server.
+- **Keys** (`GET /admin/keys`): the trusted signing keys. Adding or removing one is done on
+  the server machine: `rfmod trust add author.pub --label "Author" --trust-store
+  /var/lib/rfmap/keys.json`, `rfmod trust remove <keyId> ...`, then
+  `POST /admin/modules/reload`. A change waits for a running backup, like `rfmod install`.
+  The built-in owner key cannot be removed. Removing a key unloads the modules signed with it
+  at the next reload.
+- **Modules**: installing and removing is a local operation on the server machine, never an
+  upload. `rfmod install FILE.rfmod --root /var/lib/rfmap/modules --trust-store
+  /var/lib/rfmap/keys.json` checks the archive, signature, manifest, ABI, host range,
+  dependencies and lifecycle, runs the self-test in a sandboxed worker and installs only if every
+  check passed; `rfmod check FILE.rfmod --trust KEY.pub` only checks; `rfmod remove ID --root ...
+  --trust-store ...` takes a module out; `rfmod list --root ... --trust-store ...` shows what is
+  installed. The trust store is the server's `modules.trustStore` file, so the CLI sees
+  third-party modules as the server does. In the compose deployment: `docker compose exec
+  rfmap-server rfmod install /var/lib/rfmap/incoming/FILE.rfmod --root /var/lib/rfmap/modules
+  --trust-store /var/lib/rfmap/keys.json` after copying the file into the `rfmap-state` volume. Then
+  `POST /admin/modules/reload` (or **Admin → Modules → Reload**) makes the running server pick
+  the change up. `PUT /admin/modules/<id>` with `{enabled, options}` disables or configures a
+  module, including the built-in `rf.weather`, `rf.clutter`, `rf.uncertainty` and
+  `rf.radio-profiles`. The module pack under `modules/fpv` is signed with the development owner
+  key in the source tree; re-sign it with your `owner.secret` (`rfmod pack`) before you install
+  it on a production server.
+- **Dev owner key**: a build without `RFMAP_OWNER_PUBKEY` carries the public development key
+  and refuses to start unless `modules.allowDevOwnerKey` is set. Never set it on a server that
+  anyone else can reach.
 - **Library** (`POST/PUT /library/<kind>`): only the admin edits. Every edit needs the version
   it was made from, saves a new version and keeps the old one in `/history`. Results list the
   item versions they used.
@@ -285,36 +305,53 @@ under **Admin**.
 
 ### Module sandbox in containers
 
-Modules not signed with the owner key run in `rfmod-worker` with a memory cap, no file writes
-and `no_new_privs`. A separate network namespace needs unprivileged user namespaces, which
-Docker's default seccomp profile blocks. The upload report then says
-`network NOT isolated on this host`; this was seen in a test of this image. In this compose
-file, `rfmap-server` and its workers have no route to the internet anyway, because both of its
-networks are internal. They can still reach `postgis` and `open-meteo`. A call that runs past
+Modules not signed with the owner key run in `rfmod-worker` with a memory cap, no file writes,
+`no_new_privs`, a Landlock ruleset (read access to the module's own directory and the system
+libraries only) and a
+seccomp filter that refuses sockets, new processes and signals to other processes. The worker
+reports what took effect; a third-party module loads only when everything did
+(`modules.requireSandbox`). A separate network namespace needs unprivileged user namespaces,
+which Docker's default seccomp profile blocks; the seccomp filter closes the network anyway. In
+this compose file, `rfmap-server` and its workers have no route to the internet either, because
+both of its networks are internal. They can still reach `postgis` and `open-meteo`. A call that runs past
 the module's `limits.timeoutMs` kills its worker. Owner-signed modules run in-process and are
 not time-limited.
 
 ## 6. Backups and upgrades
 
-- Back up the `pgdata` volume (or `pg_dump rfmap`) and the `rfmap-state` volume (installed
-  modules and `keys.json`). Everything else can be rebuilt.
-- Upgrade: `git pull`, then `docker compose up -d --build`. Migrations run at start. Results
+- Back up with `docker compose exec -T rfmap-server rfmap-server --backup > rfmap.backup`: one
+  file with the database rows, the installed modules and `keys.json`. Everything else can be
+  rebuilt. Restoring it is in [Restore on a new server](production-setup.md#101-restore-on-a-new-server).
+- Upgrade: `git pull`, then `docker compose up -d --build` from `deploy/` (a pull that moves
+  PostgreSQL to a new major needs [a backup and restore](#postgresql-major-upgrades) instead).
+  Migrations run at start. Results
   cached under the old version are keyed by input hash, which includes the server version,
   so they are not reused.
 - Mission owner keys, share-link tokens and session tokens are stored only as hashes, and
   PINs only as argon2id hashes. A lost owner key cannot be recovered.
 
+### PostgreSQL major upgrades
+
+A new PostgreSQL major version cannot open the data folder of the previous one, so a `git pull`
+that moves `postgis` to a new major (16 to 18 is one) moves the data with the server's own
+backup and restore (`rfmap-server --backup` and `--restore`) into the new version's empty volume
+(`rfmap_pgdata18`). The backup holds data only; the restore builds the schema with the server's
+migrations, which also adapt the data to a newer version. The commands are in
+[Move to a new PostgreSQL major version](production-setup.md#102-move-to-a-new-postgresql-major-version).
+A fresh install needs none of this: it starts on PostgreSQL 18 directly.
+
 ## 7. Updating base images
 
 Each `FROM` in the Dockerfiles is pinned by its version tag. Each `image:` in the compose file is
-pinned by tag and by the digest of its multi-arch index, read from the registry on 2026-10-17:
+pinned by tag and by the digest of its multi-arch index, read from the registry on 2026-10-17
+(`postgis/postgis` on 2026-10-22):
 
 | Image | Tag |
 |---|---|
 | `ubuntu` | `26.04` (build and runtime of rfmap-server; it matches the GDAL 3.12, libpqxx 7.10 and cpp-httplib 0.26 the code is tested with in CI) |
-| `node` | `24-bookworm-slim` (client build) |
+| `node` | `24-trixie-slim` (client build, Debian 13) |
 | `nginx` | `1.28-alpine` |
-| `postgis/postgis` | `16-3.5` |
+| `postgis/postgis` | `18-3.6` |
 | `ghcr.io/open-meteo/open-meteo` | `1.7.0` |
 
 Dependabot (`.github/dependabot.yml`) opens pull requests for new minor and patch tags of the
@@ -324,9 +361,12 @@ hand. A tag can be republished with security fixes, so a rebuild picks up the cu
 that tag; rebuild, and run the test suite (`ctest` in a build tree) before you deploy.
 
 To update a compose image by hand, resolve the tag's current digest yourself, for example with
-`docker buildx imagetools inspect postgis/postgis:16-3.5`, replace the digest, and restart.
+`docker buildx imagetools inspect postgis/postgis:18-3.6`, and replace the digest. Then pull and
+recreate the containers from `deploy/` with `docker compose pull && docker compose up -d`;
+`docker compose restart` keeps the old image.
 
 The server image and an API smoke test (missions, share link and PIN, `/calc/route`, module
-upload) were run against these pins on 2026-10-17. The web image could not be built then
-because Docker Hub rate-limited the pull, and the Open-Meteo image could not be pulled through
-the test network. Build and check both once in your environment.
+upload) were run against the pins of 2026-10-17. The `postgis/postgis:18-3.6` pin came later, on
+2026-10-22, and was not part of that test; run the smoke test once on it. The web image was built on
+`node:24-trixie-slim` and served the client on 2026-10-21. The Open-Meteo image could not be
+pulled through the test network; build and check it once in your environment.

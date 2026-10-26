@@ -3,6 +3,7 @@ import {
   BudgetChartComponent,
   BudgetTerm,
   LinkKind,
+  MissionAltitude,
   ProfileChartComponent,
   RfFormat,
   RfNumComponent,
@@ -152,9 +153,10 @@ export class WhyDrawerComponent {
       link,
       terms,
       gains,
-      // heights from LinkResult.ends; the mission only when an older result has no ends
+      // heights from LinkResult.ends; the mission only when an older result has no ends (older results are
+      // all AGL missions, so a launch height there is only a stand-in)
       fromAgl: view.ground?.aglM ?? m.pilot.aglM,
-      toAgl: view.air?.aglM ?? link.sample?.aglM ?? toPoint.aglM,
+      toAgl: view.air?.aglM ?? link.sample?.aglM ?? toPoint.aglM ?? MissionAltitude.height(m, toPoint),
       k: link.earth?.effectiveEarthFactor ?? this.ws.store.result()?.weather?.effectiveEarthFactor,
       fix,
       fixTitle: fix?.title ? fix.title.replace(/^Fly /, '').replace(/^./, (c) => c.toLowerCase()) : '',

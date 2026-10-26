@@ -108,9 +108,11 @@ bool ManifestParser::checkDeprecation(const json& d, Manifest& m, ValidationRepo
                         Version::parse(d.at("removedIn").get<std::string>()), d.value("replacement", ""),
                         d.at("message").get<std::string>()};
         // Kubernetes-style window: removal at least 3 minor releases after deprecation, or a later major.
+        // Subtracting (not adding) keeps the comparison inside unsigned range for any version.
         const bool windowOk = dep.removedIn.major() > dep.since.major() ||
                               (dep.removedIn.major() == dep.since.major() &&
-                               dep.removedIn.minor() >= dep.since.minor() + kMinDeprecationMinors);
+                               dep.removedIn.minor() >= kMinDeprecationMinors &&
+                               dep.removedIn.minor() - kMinDeprecationMinors >= dep.since.minor());
         report.add("deprecation.window", windowOk,
                    std::format("deprecated in {}, removed in {} (needs at least {} minor releases)", dep.since.str(),
                                dep.removedIn.str(), kMinDeprecationMinors));
@@ -126,8 +128,48 @@ bool ManifestParser::checkDeprecation(const json& d, Manifest& m, ValidationRepo
     return false;
 }
 
-std::optional<Manifest> ManifestParser::parse(const json& document, const Version& hostVersion,
-                                              ValidationReport& report) {
+bool ManifestParser::readVersions(const json& document, Manifest& m, ValidationReport& report) {
+    // Versions and ranges: the schema checks shape, the parser checks meaning.
+    try {
+        m.version = Version::parse(document.at("version").get<std::string>());
+        if (document.contains("host")) m.hostRange = VersionRange::parse(document.at("host").get<std::string>());
+        auto deps = [](const json& list) {
+            std::vector<Dependency> out;
+            for (const json& d : list) {
+                out.emplace_back(d.at("id").get<std::string>(), VersionRange::parse(d.at("version").get<std::string>()));
+            }
+            return out;
+        };
+        m.dependencies = deps(document.at("requires"));
+        m.optionalDependencies = deps(document.value("optional", json::array()));
+        report.pass("manifest.versions", "version " + m.version.str() + " and all ranges parse");
+        return true;
+    } catch (const std::invalid_argument& e) {
+        report.fail("manifest.versions", e.what());
+    } catch (const json::exception& e) {
+        report.fail("manifest.versions", e.what());
+    }
+    return false;
+}
+
+bool ManifestParser::readExtensions(const json& document, Manifest& m, ValidationReport& report) {
+    bool ok = true;
+    if (document.contains("ui")) {
+        m.ui = UiExtension{document.at("ui").at("bundle").get<std::string>(),
+                           document.at("ui").at("slots").get<std::vector<std::string>>()};
+        ok = m.hasCapability("ui.panel");
+        report.add("ui.capability", ok, "a ui block requires provides: ui.panel");
+    }
+    if (document.contains("optionsSchema")) m.optionsSchema = document.at("optionsSchema").get<std::string>();
+    if (document.contains("limits")) {
+        const json& l = document.at("limits");
+        m.limits.memoryMb = l.value("memoryMb", m.limits.memoryMb);
+        m.limits.timeoutMs = l.value("timeoutMs", m.limits.timeoutMs);
+    }
+    return ok;
+}
+
+std::optional<Manifest> ManifestParser::parse(const json& document, ValidationReport& report) const {
     CollectingErrors errors;
     schemaValidator().validate(document, errors);
     if (errors) {
@@ -148,63 +190,26 @@ std::optional<Manifest> ManifestParser::parse(const json& document, const Versio
     m.provides = document.at("provides").get<std::vector<std::string>>();
     m.methods = document.value("methods", std::vector<std::string>{});
     m.entry = document.at("entry").get<std::map<std::string, std::string, std::less<>>>();
+    if (!readVersions(document, m, report)) return std::nullopt;
 
     bool ok = true;
     auto check = [&report, &ok](const std::string& name, bool passed, const std::string& detail) {
         report.add(name, passed, detail);
         ok = ok && passed;
     };
-
-    // Versions and ranges: the schema checks shape, the parser checks meaning.
-    try {
-        m.version = Version::parse(document.at("version").get<std::string>());
-        if (document.contains("host")) m.hostRange = VersionRange::parse(document.at("host").get<std::string>());
-        auto deps = [](const json& list) {
-            std::vector<Dependency> out;
-            for (const json& d : list) {
-                out.emplace_back(d.at("id").get<std::string>(), VersionRange::parse(d.at("version").get<std::string>()));
-            }
-            return out;
-        };
-        m.dependencies = deps(document.at("requires"));
-        m.optionalDependencies = deps(document.value("optional", json::array()));
-        report.pass("manifest.versions", "version " + m.version.str() + " and all ranges parse");
-    } catch (const std::invalid_argument& e) {
-        check("manifest.versions", false, e.what());
-        return std::nullopt;
-    } catch (const json::exception& e) {
-        check("manifest.versions", false, e.what());
-        return std::nullopt;
-    }
-
     check("abi", m.abi == RFMOD_ABI_VERSION,
           std::format("module ABI {}, host supports {}", m.abi, RFMOD_ABI_VERSION));
-
     if (m.hostRange) {
-        check("host.version", m.hostRange->contains(hostVersion),
-              "module needs host " + m.hostRange->str() + ", this host is " + hostVersion.str());
+        check("host.version", m.hostRange->contains(hostVersion_),
+              "module needs host " + m.hostRange->str() + ", this host is " + hostVersion_.str());
     }
-
     const std::string platform = currentPlatform();
     check("entry.platform", m.entry.contains(platform),
           m.entry.contains(platform) ? "library for " + platform + ": " + m.entry.at(platform)
-                                  : "no library for " + platform + " in entry");
-
+                                     : "no library for " + platform + " in entry");
     ok = checkDependencies(m, report) && ok;
-
     if (document.contains("deprecation")) ok = checkDeprecation(document.at("deprecation"), m, report) && ok;
-
-    if (document.contains("ui")) {
-        m.ui = UiExtension{document.at("ui").at("bundle").get<std::string>(),
-                           document.at("ui").at("slots").get<std::vector<std::string>>()};
-        check("ui.capability", m.hasCapability("ui.panel"), "a ui block requires provides: ui.panel");
-    }
-    if (document.contains("optionsSchema")) m.optionsSchema = document.at("optionsSchema").get<std::string>();
-    if (document.contains("limits")) {
-        const json& l = document.at("limits");
-        m.limits.memoryMb = l.value("memoryMb", m.limits.memoryMb);
-        m.limits.timeoutMs = l.value("timeoutMs", m.limits.timeoutMs);
-    }
+    ok = readExtensions(document, m, report) && ok;
 
     if (!ok) return std::nullopt;
     return m;

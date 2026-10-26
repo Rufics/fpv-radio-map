@@ -24,9 +24,10 @@ import {
   RouteResult,
   ShareLink,
   TrustedKey,
-  ValidationReport,
+  ModuleReload,
   WeatherPoint,
 } from '../models/api.models';
+import { FlightLogImport, FlightLogPreview, FlightLogRow, FlightView } from '../models/flightlog.models';
 import { LibraryKind } from '../models/library.models';
 import { LinkKind, Mission } from '../models/mission.models';
 import { CredentialStore } from './credential-store';
@@ -224,20 +225,17 @@ export class RfmapApiClient {
     return this.run(this.http.get<ModuleInfo[]>(this.url('/modules')));
   }
 
-  /** `install=false` only checks the package. */
-  uploadModule(pkg: Blob, install: boolean): Promise<ValidationReport> {
-    const params = new HttpParams().set('install', String(install));
-    const headers = this.adminHeaders().set('Content-Type', 'application/octet-stream');
-    return this.run(this.http.post<ValidationReport>(this.url('/admin/modules'), pkg, { headers, params }));
-  }
-
   /** Enable or disable a module (built-ins included) and set its server-wide options. */
   setModule(moduleId: string, body: { enabled?: boolean; options?: Record<string, unknown> }): Promise<ModuleInfo[]> {
     return this.run(this.http.put<ModuleInfo[]>(this.url(`/admin/modules/${encodeURIComponent(moduleId)}`), body, { headers: this.adminHeaders() }));
   }
 
-  removeModule(moduleId: string): Promise<void> {
-    return this.run(this.http.delete(this.url(`/admin/modules/${encodeURIComponent(moduleId)}`), { headers: this.adminHeaders() }).pipe(map(() => undefined)));
+  /**
+   * Makes the server re-read what the operator installed, removed or trusted on its machine with
+   * the rfmod CLI. The API itself never takes a package.
+   */
+  reloadModules(): Promise<ModuleReload> {
+    return this.run(this.http.post<ModuleReload>(this.url('/admin/modules/reload'), null, { headers: this.adminHeaders() }));
   }
 
   moduleNotices(): Promise<Record<string, unknown>[]> {
@@ -246,16 +244,6 @@ export class RfmapApiClient {
 
   adminKeys(): Promise<TrustedKey[]> {
     return this.run(this.http.get<TrustedKey[]>(this.url('/admin/keys'), { headers: this.adminHeaders() }));
-  }
-
-  /** Add a trusted signing key; returns the key list. */
-  addKey(key: string, label?: string): Promise<TrustedKey[]> {
-    return this.run(this.http.post<TrustedKey[]>(this.url('/admin/keys'), label ? { key, label } : { key }, { headers: this.adminHeaders() }));
-  }
-
-  /** 409 for the built-in owner key or an unknown key. */
-  deleteKey(keyId: string): Promise<void> {
-    return this.run(this.http.delete(this.url(`/admin/keys/${encodeURIComponent(keyId)}`), { headers: this.adminHeaders() }).pipe(map(() => undefined)));
   }
 
   adminCache(): Promise<CacheTier[]> {
@@ -270,6 +258,40 @@ export class RfmapApiClient {
   clearCache(tier: 'all' | CacheTier['id'] = 'all'): Promise<void> {
     const params = new HttpParams().set('tier', tier);
     return this.run(this.http.delete(this.url('/admin/cache'), { headers: this.adminHeaders(), params }).pipe(map(() => undefined)));
+  }
+
+  // ---- flight logs ----
+  private logHeaders(missionId: string | null): HttpHeaders {
+    return this.sessionHeaders(missionId).set('Content-Type', 'application/octet-stream');
+  }
+
+  /** POST /flightlogs/decode: the replay of every flight in a file, nothing stored. */
+  decodeFlightLog(missionId: string | null, file: Blob, fileName: string): Promise<FlightLogPreview> {
+    const params = new HttpParams().set('fileName', fileName);
+    return this.run(this.http.post<FlightLogPreview>(this.url('/flightlogs/decode'), file, { headers: this.logHeaders(missionId), params }));
+  }
+
+  /** POST /missions/{id}/flightlogs: decodes the file and keeps its flights in the mission. */
+  importFlightLog(missionId: string, file: Blob, fileName: string): Promise<FlightLogImport> {
+    const params = new HttpParams().set('fileName', fileName);
+    return this.run(
+      this.http.post<FlightLogImport>(this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs`), file, { headers: this.logHeaders(missionId), params }),
+    );
+  }
+
+  listFlightLogs(missionId: string): Promise<FlightLogRow[]> {
+    return this.run(this.http.get<FlightLogRow[]>(this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs`), { headers: this.sessionHeaders(missionId) }));
+  }
+
+  /** One stored flight, with plan against fact for the mission's route. */
+  getFlightLog(missionId: string, logId: string): Promise<FlightView> {
+    const url = this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs/${encodeURIComponent(logId)}`);
+    return this.run(this.http.get<FlightView>(url, { headers: this.sessionHeaders(missionId) }));
+  }
+
+  deleteFlightLog(missionId: string, logId: string): Promise<void> {
+    const url = this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs/${encodeURIComponent(logId)}`);
+    return this.run(this.http.delete(url, { headers: this.sessionHeaders(missionId) }).pipe(map(() => undefined)));
   }
 
   /** GET /config/map. Falls back to the app environment when the server cannot be reached. */

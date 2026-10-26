@@ -32,7 +32,7 @@
     "provides": {
       "type": "array",
       "minItems": 1,
-      "items": { "enum": ["loss.contributor", "route.analysis", "coverage.analysis", "library.kind", "ui.panel"] }
+      "items": { "enum": ["loss.contributor", "route.preparation", "route.analysis", "coverage.analysis", "library.kind", "ui.panel", "flightlog.decoder"] }
     },
     "methods": { "type": "array", "items": { "type": "string" } },
     "entry": {

@@ -35,7 +35,7 @@ public:
     explicit SeedRig(const std::string& url)
         : dir_(rfmap::test::scratchDir("library-seed")), db_(prepare(url), 1), schemas_(RFMAP_SCHEMAS_DIR),
           library_(db_, schemas_) {
-        (void)db_.migrate(RFMAP_SQL_DIR);
+        rfmap::test::migrate(db_, RFMAP_SQL_DIR);
         fs::remove_all(dir_ / "antennas");
         fs::create_directories(dir_ / "antennas");
     }

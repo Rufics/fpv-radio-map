@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Type } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MissionStore, provideMapView } from '@rfmap/ui-kit';
+import { Mission, MissionStore, provideMapView } from '@rfmap/ui-kit';
 import { FPV_CORE } from '../core/fpv-core';
 import { FpvDataService } from '../core/fpv-data.service';
 import { exampleMission, routeResult } from '../mock/reference-case';
@@ -87,11 +87,52 @@ describe('side panels', () => {
     ]);
   });
 
+  it('plan panel: an autonomous route may check no radio link at all', () => {
+    const plan = vmOf<{
+      radios: () => unknown[];
+      setMode: (m: string) => void;
+      setFlight: (m: string) => void;
+      flightHint: (m: unknown) => string;
+    }>(PlanPanelComponent);
+    expect(plan.flightHint(store.mission())).toContain('control link');
+    plan.setFlight('autonomous');
+    plan.setMode('none');
+    expect(store.mission()?.flightMode).toBe('autonomous');
+    expect(plan.radios()).toEqual([]);
+    expect(plan.flightHint(store.mission())).toContain('autopilot');
+  });
+
+  it('plan panel: a fixed-wing drone opts the mission into the envelope check', () => {
+    const plan = vmOf<{ setDrone: (id: string) => void; droneHint: (m: unknown) => string | null }>(PlanPanelComponent);
+    expect(plan.droneHint(store.mission())).toBeNull();
+    plan.setDrone('fw-1800-mapper');
+    expect(store.mission()?.drone).toBe('fw-1800-mapper');
+    expect(store.mission()?.modules?.['fpv.airframe']).toEqual({});
+    expect(plan.droneHint(store.mission())).toContain('checked against these limits');
+    expect(plan.droneHint({ ...store.mission()!, modules: {} })).toContain('check is off');
+    plan.setDrone('fpv-10in-recon');
+    expect(store.mission()?.modules?.['fpv.airframe']).toBeUndefined();
+  });
+
   it('plan panel: "Move on map" puts the map into pilot placing mode', () => {
     const plan = vmOf<{ movePilot: () => void; ws: { placing: () => string | null; why: () => unknown } }>(PlanPanelComponent);
     plan.movePilot();
     expect(plan.ws.placing()).toBe('pilot');
     expect(plan.ws.why()).toBeNull();
+  });
+
+  it('plan panel: Auto hands a height to the server and back, and an edit makes it manual', () => {
+    const plan = vmOf<{ autoOn: (m: Mission) => boolean; setAuto: (i: number, auto: boolean) => void; setHeight: (i: number, h: number) => void }>(PlanPanelComponent);
+    expect(plan.autoOn(store.mission()!)).toBe(false);
+    store.update((m) => ({ ...m, modules: { ...m.modules, 'fpv.altitude': {} } }));
+    expect(plan.autoOn(store.mission()!)).toBe(true);
+    plan.setAuto(0, true);
+    expect(store.mission()!.waypoints[0].heightSource).toBe('auto');
+    plan.setAuto(0, false);
+    expect(store.mission()!.waypoints[0]).toMatchObject({ heightSource: 'manual', aglM: 120 });
+    plan.setAuto(0, true);
+    plan.setHeight(0, 75);
+    expect(store.mission()!.waypoints[0]).toMatchObject({ heightSource: 'manual', aglM: 75 });
   });
 
   describe('state cards', () => {

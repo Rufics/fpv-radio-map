@@ -27,12 +27,14 @@ function vectorSource(ref: TileSourceRef): SourceSpecification {
   return { type: 'geojson', data: ref.geojson ?? { type: 'FeatureCollection', features: [] } };
 }
 
-function rasterSource(ref: TileSourceRef): SourceSpecification {
+/** A raster tile source (pre-rendered hillshade, satellite) from a PMTiles archive or XYZ templates. */
+export function rasterSource(ref: TileSourceRef): SourceSpecification {
   if (ref.pmtiles) return { type: 'raster', url: `pmtiles://${ref.pmtiles}`, tileSize: ref.tileSize ?? 256 };
   return { type: 'raster', tiles: ref.tiles ?? [], tileSize: ref.tileSize ?? 256, maxzoom: ref.maxzoom ?? 16 };
 }
 
-function demSource(ref: TileSourceRef): SourceSpecification {
+/** A raster-dem source (Terrarium or Mapbox encoding) from a PMTiles archive or XYZ templates. */
+export function demSource(ref: TileSourceRef): SourceSpecification {
   const encoding = ref.encoding ?? 'terrarium';
   if (ref.pmtiles) return { type: 'raster-dem', url: `pmtiles://${ref.pmtiles}`, encoding, tileSize: ref.tileSize ?? 256 };
   return { type: 'raster-dem', tiles: ref.tiles ?? [], encoding, tileSize: ref.tileSize ?? 256, maxzoom: ref.maxzoom ?? 12 };
@@ -186,6 +188,87 @@ export class ContoursLayer extends StyleLayerSet {
   }
 }
 
+/**
+ * Topographic base map from the elevation raster-dem: hypsometric tints (stops dense at low
+ * heights, so plains still show their rises), hill shading over them and, when the server has
+ * them, contour lines every 20 m with darker index lines every 100 m.
+ */
+export class TopoBaseLayer extends StyleLayerSet {
+  readonly id = 'base-topo';
+  readonly title = 'Topo';
+  readonly group = 'base' as const;
+  override readonly lazy = true;
+  override readonly exclusive = true;
+  override readonly order = 2;
+  override readonly defaultVisible = false;
+  override readonly attribution = 'Copernicus DEM';
+  constructor(
+    private readonly dem: TileSourceRef,
+    private readonly contours?: TileSourceRef,
+  ) {
+    super();
+  }
+  protected sources(): Record<string, SourceSpecification> {
+    const out: Record<string, SourceSpecification> = { 'rf-topo-dem': demSource(this.dem) };
+    if (this.contours) out['rf-topo-contours'] = vectorSource(this.contours);
+    return out;
+  }
+  protected layers(): LayerSpecification[] {
+    const stops = TOPO_TINTS.flatMap(([m, c]) => [m, c]);
+    const layers: LayerSpecification[] = [
+      { id: 'topo-bg', type: 'background', paint: { 'background-color': MAP_COLORS.land } },
+      {
+        id: 'topo-tint',
+        type: 'color-relief',
+        source: 'rf-topo-dem',
+        paint: { 'color-relief-color': ['interpolate', ['linear'], ['elevation'], ...stops], 'color-relief-opacity': 0.9 },
+      } as unknown as LayerSpecification,
+      {
+        id: 'topo-shade',
+        type: 'hillshade',
+        source: 'rf-topo-dem',
+        paint: {
+          'hillshade-shadow-color': 'rgba(4, 7, 11, 0.7)',
+          'hillshade-highlight-color': 'rgba(255, 255, 255, 0.22)',
+          'hillshade-accent-color': 'rgba(4, 7, 11, 0.3)',
+          'hillshade-exaggeration': 0.55,
+        },
+      },
+    ];
+    if (!this.contours) return layers;
+    const vector = !this.contours.geojson;
+    const index: ExpressionSpecification = ['==', ['%', ['to-number', ['get', 'ele']], 100], 0];
+    const minorLayer = this.contours.sourceLayer ?? 'contours';
+    const line = (id: string, sourceLayer: string, filter: ExpressionSpecification, color: string, opacity: number, width: number, minzoom: number) =>
+      ({
+        id,
+        type: 'line',
+        source: 'rf-topo-contours',
+        ...(vector ? { 'source-layer': sourceLayer, minzoom } : {}),
+        filter,
+        paint: { 'line-color': color, 'line-opacity': opacity, 'line-width': width },
+      }) as LayerSpecification;
+    return [
+      ...layers,
+      line('topo-contours-minor', minorLayer, ['!', index], '#0B0F14', 0.3, 0.7, 12),
+      line('topo-contours-index', vector ? `${minorLayer}_index` : minorLayer, index, '#0B0F14', 0.5, 1.2, 10),
+    ];
+  }
+}
+
+/** Hypsometric tints for a dark UI, metres above sea level → colour. */
+export const TOPO_TINTS: [number, string][] = [
+  [0, '#1D3B33'],
+  [100, '#2B4A35'],
+  [200, '#3D5A37'],
+  [300, '#56673B'],
+  [500, '#6F7142'],
+  [800, '#86784C'],
+  [1200, '#8E7158'],
+  [2000, '#9A8A7C'],
+  [3000, '#C9C4BC'],
+];
+
 export type WeatherKind = 'wind' | 'precipitation' | 'temperature';
 
 const WEATHER_TITLES: Record<WeatherKind, string> = {
@@ -243,6 +326,7 @@ export function createStandardLayers(config: MapSourcesConfig, forecastTimeIso: 
   const out: LayerDefinition[] = [];
   if (config.basemap) out.push(new DarkBaseLayer(config.basemap));
   if (config.satellite) out.push(new SatelliteLayer(config.satellite));
+  if (config.dem) out.push(new TopoBaseLayer(config.dem, config.contours));
   if (config.hillshade) out.push(new HillshadeLayer(config.hillshade, 'raster'));
   else if (config.dem) out.push(new HillshadeLayer(config.dem, 'dem'));
   if (config.contours) out.push(new ContoursLayer(config.contours));

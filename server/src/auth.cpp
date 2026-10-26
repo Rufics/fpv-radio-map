@@ -48,18 +48,19 @@ std::optional<LinkRecord> MemoryAuthStore::linkByToken(const Digest& tokenHash) 
     return std::nullopt;
 }
 
-FailureOutcome MemoryAuthStore::recordFailure(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
-                                              TimePoint now) {
+AttemptOutcome MemoryAuthStore::beginAttempt(const std::string& linkId, int maxAttempts, std::chrono::seconds lockout,
+                                             TimePoint now) {
     std::lock_guard lock(mutex_);
     LinkRecord& l = links_.at(linkId);
+    if (l.lockedUntil && *l.lockedUntil > now) return {true, 0, l.lockedUntil};
     l.failedAttempts += 1;
     if (l.failedAttempts >= maxAttempts) {
         l.lockedUntil = now + lockout * (1 << std::min(l.lockouts, 10));
         l.lockouts += 1;
         l.failedAttempts = 0;
-        return {0, l.lockedUntil};
+        return {false, 0, l.lockedUntil};
     }
-    return {maxAttempts - l.failedAttempts, std::nullopt};
+    return {false, maxAttempts - l.failedAttempts, std::nullopt};
 }
 
 void MemoryAuthStore::recordSuccess(const std::string& linkId, TimePoint now) {
@@ -67,6 +68,7 @@ void MemoryAuthStore::recordSuccess(const std::string& linkId, TimePoint now) {
     LinkRecord& l = links_.at(linkId);
     l.failedAttempts = 0;
     l.lockouts = 0;
+    l.lockedUntil.reset();  // the pause this attempt started, if any
     l.lastOpenedAt = now;
     l.openCount += 1;
 }
@@ -173,23 +175,27 @@ LinkRecord AuthService::peekLink(const std::string& token) {
 }
 
 AuthService::Opened AuthService::openLink(const std::string& token, const std::string& pin) {
-    const std::optional<LinkRecord> link = peekLink(token);
+    const LinkRecord link = peekLink(token);
     const TimePoint now = clock_.now();
-    if (link->lockedUntil && *link->lockedUntil > now) {
-        const auto s = secondsUntil(*link->lockedUntil, now);
-        throw HttpError(429, "too many wrong PINs; the link is paused", {{"retryAfterS", s}});
+    // A link known to be paused costs no hashing slot. The authoritative check is the atomic
+    // one below; this one only spares the gate.
+    if (link.lockedUntil && *link.lockedUntil > now) throw paused(*link.lockedUntil, now);
+    // Inside the slot, so a 503 from a busy gate counts nothing. The attempt is counted before
+    // the PIN is checked: a burst of parallel guesses gets at most maxAttempts hashings, and
+    // none slips past the pause another guess just started.
+    const PinGate::Permit permit = gate_.enter();
+    const AttemptOutcome attempt = store_.beginAttempt(link.linkId, settings_.maxAttempts, settings_.lockout, now);
+    if (attempt.refused) throw paused(attempt.lockedUntil.value_or(now), now);
+    if (!pins_.verify(link.pinHash, pin)) {
+        if (attempt.lockedUntil) throw paused(*attempt.lockedUntil, now);
+        throw HttpError(401, "wrong PIN", {{"triesLeft", attempt.remaining}});
     }
-    // After the pause check, so a paused link costs no hashing slot.
-    if (!gate_.run([this, &link, &pin] { return pins_.verify(link->pinHash, pin); })) {
-        const FailureOutcome f = store_.recordFailure(link->linkId, settings_.maxAttempts, settings_.lockout, now);
-        if (f.lockedUntil) {
-            const auto s = secondsUntil(*f.lockedUntil, now);
-            throw HttpError(429, "too many wrong PINs; the link is paused", {{"retryAfterS", s}});
-        }
-        throw HttpError(401, "wrong PIN", {{"triesLeft", f.remaining}});
-    }
-    store_.recordSuccess(link->linkId, now);
-    return {createSession(link->missionId, link->role, link->linkId, link->expiresAt), link->missionId, link->role};
+    store_.recordSuccess(link.linkId, now);
+    return {createSession(link.missionId, link.role, link.linkId, link.expiresAt), link.missionId, link.role};
+}
+
+HttpError AuthService::paused(TimePoint until, TimePoint now) {
+    return HttpError(429, "too many wrong PINs; the link is paused", {{"retryAfterS", secondsUntil(until, now)}});
 }
 
 std::string AuthService::createSession(const std::string& missionId, Role role, std::optional<std::string> linkId,
@@ -210,11 +216,11 @@ Principal AuthService::authenticate(const std::string& bearer) {
 
 json AuthService::linkJson(const LinkRecord& l) {
     json j = {{"linkId", l.linkId}, {"role", toString(l.role)}, {"label", l.label},
-              {"createdAt", isoUtc(l.createdAt)}, {"revoked", l.revoked}};
-    if (l.lastOpenedAt) j["lastOpenedAt"] = isoUtc(*l.lastOpenedAt);
-    if (l.lockedUntil) j["pausedUntil"] = isoUtc(*l.lockedUntil);
+              {"createdAt", UtcTime::format(l.createdAt)}, {"revoked", l.revoked}};
+    if (l.lastOpenedAt) j["lastOpenedAt"] = UtcTime::format(*l.lastOpenedAt);
+    if (l.lockedUntil) j["pausedUntil"] = UtcTime::format(*l.lockedUntil);
     j["openCount"] = l.openCount;
-    if (l.expiresAt) j["expiresAt"] = isoUtc(*l.expiresAt);
+    if (l.expiresAt) j["expiresAt"] = UtcTime::format(*l.expiresAt);
     return j;
 }
 

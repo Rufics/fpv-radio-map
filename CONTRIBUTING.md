@@ -42,6 +42,15 @@ the page named after its first heading, `docs/README.md` becomes Home and `docs/
 sidebar. Edit `docs/`, not the wiki; wiki edits are overwritten. Link to other docs with relative
 paths, and the publisher turns them into wiki links.
 
+Keep the documentation in the same pull request as the change. When a change adds or alters a
+feature, a module, an option, an API field or how the app looks, update every place that describes
+it: the feature table in `README.md`, the guides in `docs/`, `docs/api/openapi.yaml`, the module's
+manifest and the setup steps in `docs/admin/production-setup.md`.
+
+When a change alters the interface, regenerate the screenshots: `npm run build:mock`, then
+`npm run screenshots` in `web/`. Add a step to `web/scripts/screenshots.mjs` for a new screen,
+check the images, then copy the ones the README shows from `web/screenshots/` to `docs/images/`.
+
 ## Commit messages: Conventional Commits
 
 Releases are made by [semantic-release](https://semantic-release.gitbook.io) from the commit
@@ -63,7 +72,7 @@ history, so commit messages follow [Conventional Commits 1.0](https://www.conven
 | `feat!`, `fix!` or a `BREAKING CHANGE:` footer | an incompatible change: API, mission or library schema, module ABI or host contract | major |
 | `docs`, `test`, `refactor`, `build`, `ci`, `chore`, `style`, `revert` | everything else | none |
 
-Scopes: `rf-core`, `rf-ext`, `rfmod`, `fpv`, `server`, `web`, `tiles`, `deploy`, `data`,
+Scopes: `rf-core`, `rf-ext`, `rf-flightlog`, `rfmod`, `fpv`, `server`, `web`, `tiles`, `deploy`, `data`,
 `schemas`, `docs`, `ci`, `perf`, `deps`. The scope is optional.
 
 Examples:

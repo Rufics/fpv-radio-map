@@ -24,13 +24,16 @@ std::optional<WorstMargin> worstFrom(const IWorld& world, const ILinkEvaluator& 
 json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eval) {
     const Mission mission = Mission::fromJson(request.at("mission"));
     const json options = request.value("options", json::object());
+    if (mission.links().empty()) {
+        return {{"reasons", {reason(kId, "info", "The best launch point is scored by link margin; evaluate at least one link to search for it.")}}, {"data", json::object()}};
+    }
     if (!options.contains("area")) {
         return {{"reasons", {reason(kId, "info", "Draw an area to search it for the best launch point.")}}, {"data", json::object()}};
     }
     const double cellM = options.value("cellM", 100.0);
     const double stepM = options.value("stepM", 250.0);
     const auto maxPoints = options.value("maxCandidates", std::size_t{200});
-    const double agl = options.value("antennaAglM", mission.pilot.aglM);
+    const double agl = options.value("antennaAglM", mission.pilot.heightM);
     json reasons = json::array();
     json data = {{"cellM", cellM}, {"stepM", stepM}, {"antennaAglM", agl}};
     try {
@@ -40,7 +43,7 @@ json analyze(const json& request, const IWorld& world, const ILinkEvaluator& eva
         const std::vector<RoutePoint> samples = routeSamples(route, stepM);
         const std::vector<std::string> links = mission.links();
 
-        const WorstMargin now = worstAlongRoute(eval, links, {mission.pilot.position, mission.pilot.aglM}, samples);
+        const WorstMargin now = worstAlongRoute(eval, links, {mission.pilot.position, mission.pilot.heightM}, samples);
         struct Scored {
             LatLon p;
             WorstMargin w;

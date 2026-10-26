@@ -74,6 +74,7 @@ browser shows.
 | `basemap.pmtiles` | **Converted.** Planetiler turns OSM data into vector tiles in the OpenMapTiles schema. | Yes, by design: features are generalised for each zoom level. |
 | `satellite.pmtiles` from a raster file | **Converted.** Reprojected to Web Mercator with cubic resampling and cut into JPEG tiles. | Yes: resampled and JPEG-compressed. Display only. |
 | `hillshade.pmtiles` | **Derived** from `dem.cog.tif`. | Display only; not used in calculations. |
+| `terrain.pmtiles` | **Derived** from `dem.cog.tif`: reprojected to Web Mercator (bilinear) and encoded as Terrarium RGB. | Display only, for the 3D view; not used in calculations. |
 | `contours.pmtiles` | **Derived** from `dem.cog.tif`. | Display only; not used in calculations. |
 | `style-dark.json`, `fonts/` | **Written** from the template in `styles/` and the fonts in the image. | — |
 | `manifest.json` | **Written** from the record each step keeps. | — |
@@ -100,6 +101,7 @@ browser shows.
 | File | Format | Details |
 |---|---|---|
 | `basemap.pmtiles` | PMTiles v3, vector tiles (MVT) | OpenMapTiles schema, z0–16 (or `--basemap-maxzoom`), cut to the bbox unless `--basemap-full-extract`. |
+| `terrain.pmtiles` | PMTiles v3, raster-dem, 256 px PNG | z6–12 by default. Terrarium encoding: height = R × 256 + G + B / 256 − 32768 m; no-data is 0 m. Overviews pick the nearest cell, because averaging encoded bytes gives wrong heights. |
 | `hillshade.pmtiles` | PMTiles v3, raster, 256 px PNG | z6–12 by default. `alpha` style: RGBA, black shadows and faint white highlights on transparent; `gray`: classic grey. |
 | `contours.pmtiles` | PMTiles v3, vector tiles (MVT) | Layer `contours` (every line, from z12) and `contours_index` (every 5th line, from z10), attribute `ele` in metres. |
 | `satellite.pmtiles` | PMTiles v3, raster | The provider's own tiles for XYZ sources; JPEG (quality 85 by default) for raster files. z6–14 by default. |
@@ -124,7 +126,7 @@ flowchart LR
 Planetiler reads the whole extract, keeps the features inside the bbox, builds vector tiles for
 each zoom and writes the PMTiles archive directly. Its temporary files are in `work/planetiler`.
 
-### dem, hillshade and contours
+### dem, hillshade, terrain and contours
 
 ```mermaid
 flowchart TB
@@ -143,6 +145,10 @@ flowchart TB
     r --> hm["MBTiles PNG + overviews"]
     hm --> hp["hillshade.pmtiles"]
 
+    m --> tr["Terrarium RGB<br/>(heights in PNG colours)"]
+    tr --> tm["MBTiles PNG +<br/>nearest overviews"]
+    tm --> tp["terrain.pmtiles"]
+
     dem --> c["gdal_contour<br/>on the original grid"]
     c --> l["two layers:<br/>contours, contours_index"]
     l --> cm["MBTiles (MVT)"]
@@ -153,7 +159,7 @@ flowchart TB
   recorded as missing and stay NoData.
 - The hillshade's vertical scale is corrected by cos(latitude) at the bbox centre, because one
   Web Mercator unit is shorter than a metre away from the equator.
-- Hillshade and contours are rebuilt only when the DEM's sha256 or their own options change.
+- Hillshade, terrain and contours are rebuilt only when the DEM's sha256 or their own options change.
 
 ### landcover
 
@@ -236,7 +242,7 @@ flowchart TB
 | Tool | Used for |
 |---|---|
 | Planetiler 0.10.2 (Java 21) | basemap |
-| GDAL 3.8 (`gdalbuildvrt`, `gdal_translate`, `gdalwarp`, `gdaldem`, `gdal_contour`, `ogr2ogr`, `gdaladdo`, Python bindings) | DEM, land cover, hillshade, contours, satellite rasters, COG validation |
+| GDAL 3.12 (`gdalbuildvrt`, `gdal_translate`, `gdalwarp`, `gdaldem`, `gdal_contour`, `ogr2ogr`, `gdaladdo`, Python bindings) | DEM, land cover, hillshade, contours, satellite rasters, COG validation |
 | go-pmtiles 1.31.0 | MBTiles to PMTiles, `verify` |
 | curl | downloads with resume and retries |
 | Python 3 (`rfmap_tiles`) | the steps, XYZ tile downloads, input checks, records and manifest |

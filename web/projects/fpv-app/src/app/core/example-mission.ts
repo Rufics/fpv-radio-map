@@ -22,18 +22,20 @@ export function exampleMissionFor(data: FpvDataService): Mission {
     schema: 'mission/v1',
     name: 'North ridge recon',
     time: { mode: 'now' },
+    altitudeRef: 'launch',
     pilot: { lat: 48.53, lon: 35.2, aglM: 2, label: 'A' },
     waypoints: [
-      { lat: 48.5573394, lon: 35.1717531, aglM: 120 },
-      { lat: 48.5717285, lon: 35.2108642, aglM: 120 },
-      { lat: 48.5572773, lon: 35.2586965, aglM: 120, label: 'B' },
+      { lat: 48.5573394, lon: 35.1717531, altM: 120 },
+      { lat: 48.5717285, lon: 35.2108642, altM: 120 },
+      { lat: 48.5572773, lon: 35.2586965, altM: 120, label: 'B' },
     ],
     returnToPilot: true,
     links: { control: setup(control), video: setup(video) },
     evaluate: 'both',
     drone: drone?.id,
     battery: data.batteries()[0]?.id,
-    modules: { 'fpv.battery': {}, 'rf.weather': {}, 'fpv.example': {} },
+    // A fixed-wing drone also gets its flight envelope checked.
+    modules: { 'fpv.battery': {}, 'rf.weather': {}, 'fpv.example': {}, ...(drone?.airframe === 'fixed-wing' ? { 'fpv.airframe': {} } : {}) },
     coverage: { radiusM: 8000, cellM: 100, droneAglM: 120 },
   };
 }

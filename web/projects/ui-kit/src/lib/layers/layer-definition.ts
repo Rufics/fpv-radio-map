@@ -24,7 +24,13 @@ export interface LayerDefinition {
   readonly id: string;
   readonly title: string;
   readonly group: LayerGroup;
-  /** Order inside the group, lower is drawn first. */
+  /**
+   * The group whose place in the stack the layer takes, when it is drawn somewhere else than the
+   * group it is listed under (the coverage heatmap is listed with the results but drawn on the
+   * ground, under the terrain shading). Default: `group`.
+   */
+  readonly drawGroup?: LayerGroup;
+  /** Order inside the group it is drawn in, lower is drawn first. */
   readonly order?: number;
   /** Only one visible layer per exclusive group (base maps). */
   readonly exclusive?: boolean;
@@ -56,6 +62,7 @@ export abstract class StyleLayerSet implements LayerDefinition {
   abstract readonly id: string;
   abstract readonly title: string;
   abstract readonly group: LayerGroup;
+  readonly drawGroup?: LayerGroup;
   readonly order: number = 0;
   readonly exclusive: boolean = false;
   readonly defaultVisible: boolean = true;

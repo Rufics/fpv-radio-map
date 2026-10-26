@@ -1,6 +1,6 @@
 # Building map data (rfmap/tiles-builder)
 
-This guide is for the person who runs the FPV Radio Map server. It produces the map files the site serves from our own server: basemap, hillshade, contours, satellite, the calculation DEM and the landcover (clutter) raster. Tool details are in [`tools/tiles-builder/README.md`](../../tools/tiles-builder/README.md). To set up a whole server, follow [Production server, step by step](production-setup.md); its step 2 walks through every map layer, including satellite imagery, with an example for a whole country. What each step does with its sources, and which formats it reads and writes, is in [How the tiles builder generates map data](map-generation.md).
+This guide is for the person who runs the FPV Radio Map server. It produces the map files the site serves from our own server: basemap, hillshade, contours, satellite, the 3D terrain tiles, the calculation DEM and the landcover (clutter) raster. Tool details are in [`tools/tiles-builder/README.md`](../../tools/tiles-builder/README.md). To set up a whole server, follow [Production server, step by step](production-setup.md); its step 2 walks through every map layer, including satellite imagery, with an example for a whole country. What each step does with its sources, and which formats it reads and writes, is in [How the tiles builder generates map data](map-generation.md).
 
 > Estimates in this guide are marked **(estimate)**. They come from small test runs and the tools' general behaviour, not from measuring a full country.
 
@@ -77,13 +77,14 @@ Running the same command again is safe. Finished outputs with unchanged inputs a
 docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder verify
 ```
 
-Expect `OK` for each of the six builder outputs that exists (`dem.cog.tif`, `landcover.cog.tif`
-and the four `.pmtiles` files). `verify` does not notice a missing
-file and does not check `style-dark.json`, `manifest.json` or `fonts/`, so compare the listing of
-`data/out` with this one (`satellite.pmtiles` only if you built it):
+Expect `OK` for each builder output that exists: `dem.cog.tif`, `landcover.cog.tif` and four
+`.pmtiles` files by default (three with `--no-terrain`), plus `satellite.pmtiles` when you built it.
+`verify` does not notice a missing file and does not check `style-dark.json`, `manifest.json` or
+`fonts/`, so compare the listing of `data/out` with this one (`terrain.pmtiles` only without
+`--no-terrain`, `satellite.pmtiles` only if you built it):
 
 ```
-basemap.pmtiles  hillshade.pmtiles  contours.pmtiles  satellite.pmtiles
+basemap.pmtiles  hillshade.pmtiles  terrain.pmtiles  contours.pmtiles  satellite.pmtiles
 dem.cog.tif      landcover.cog.tif  style-dark.json   manifest.json   fonts/
 ```
 
@@ -112,6 +113,7 @@ rsync -av --delete data/out/ server:/srv/rfmap/data/tiles/
 | DEM COG | ~25–45 MB per 1°×1° | a 0.5°×0.3° test area was 6.4 MB; mountains compress less |
 | Copernicus download cache | ~20–40 MB per 1°×1° tile | kept in `data/cache` |
 | hillshade z6–12 | ~10–20 MB per 1°×1° | test area: 2.1 MB for 0.5°×0.3° |
+| terrain z6–12 | ~25–50 MB per 1°×1° | lossless PNG of heights (Terrarium RGB), which compresses poorly; skip it with `--no-terrain` |
 | contours (20 m) | ~1–20 MB per 1°×1° | flat land is small, mountains are large |
 | landcover COG | ~10–40 MB per 1°×1° | the downloaded windows stay in `data/cache` and take about as much again |
 | satellite z6–14 | ~100–200 MB per 1°×1° | depends on the provider's JPEG quality |

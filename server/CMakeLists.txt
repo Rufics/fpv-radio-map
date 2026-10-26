@@ -13,6 +13,7 @@ target_link_libraries(rfmap_pqxx INTERFACE ${PQXX_ARCHIVE} PkgConfig::PQ)
 # inline, but its pkg-config file lists them for static linking only: link them here.
 pkg_check_modules(HTTPLIB REQUIRED IMPORTED_TARGET cpp-httplib>=0.26)
 find_package(OpenSSL 3 REQUIRED)
+find_package(LibArchive REQUIRED)
 pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
 find_package(GDAL CONFIG REQUIRED)
 find_package(Threads REQUIRED)
@@ -30,27 +31,52 @@ add_library(rfmap_server_lib STATIC
   src/schemas.cpp
   src/library.cpp
   src/missions.cpp
+  src/flight_logs.cpp
   src/builtins.cpp
   src/raster.cpp
   src/result_cache.cpp
   src/weather.cpp
+  src/tiles_manifest.cpp
   src/link_service.cpp
   src/module_runner.cpp
+  src/invocation_scope.cpp
+  src/host_methods.cpp
   src/host_services.cpp
+  src/grid_outline.cpp
+  src/result_key.cpp
+  src/route_altitude.cpp
+  src/route_evaluator.cpp
+  src/route_preparation.cpp
+  src/route_workload.cpp
+  src/coverage_engine.cpp
   src/calculator.cpp
   src/rate_limiter.cpp
   src/jobs.cpp
   src/metrics.cpp
   src/logger.cpp
+  src/request.cpp
+  src/cache_admin.cpp
+  src/map_config.cpp
+  src/module_catalog.cpp
+  src/services.cpp
+  src/mission_api.cpp
+  src/flight_log_api.cpp
+  src/data_api.cpp
+  src/admin_api.cpp
+  src/migrations.cpp
+  src/staged_files.cpp
+  src/backup.cpp
+  src/backup_stream.cpp
+  src/file_lock.cpp
   src/readiness.cpp
   src/ops_server.cpp
   src/lifecycle.cpp
   src/app.cpp)
 target_include_directories(rfmap_server_lib PUBLIC src)
 target_link_libraries(rfmap_server_lib
-  PUBLIC rf_ext rfmod_platform nlohmann_json::nlohmann_json rfmap_pqxx PkgConfig::SODIUM
+  PUBLIC rf_ext rf_flightlog rfmod_platform nlohmann_json::nlohmann_json rfmap_pqxx PkgConfig::SODIUM
          PkgConfig::HTTPLIB OpenSSL::SSL OpenSSL::Crypto GDAL::GDAL Threads::Threads
-  PRIVATE nlohmann_json_schema_validator)
+  PRIVATE nlohmann_json_schema_validator LibArchive::LibArchive)
 # GDAL, libpqxx and httplib headers are third-party: include them as system headers so our
 # warning flags apply to our code only.
 get_target_property(_gdal_inc GDAL::GDAL INTERFACE_INCLUDE_DIRECTORIES)

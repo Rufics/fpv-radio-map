@@ -53,6 +53,8 @@ endif()
 
 add_library(rfmod_platform
   src/semver.cpp
+  src/bounded_json.cpp
+  src/file_lock.cpp
   src/crypto.cpp
   src/manifest.cpp
   src/trust.cpp
@@ -61,7 +63,14 @@ add_library(rfmod_platform
   src/isolated_module.cpp
   src/worker_exec.cpp
   src/confined_root.cpp
+  src/module_store.cpp
+  src/options_schema.cpp
+  src/installed.cpp
+  src/dependency_resolver.cpp
+  src/loader.cpp
+  src/installer.cpp
   src/registry.cpp
+  src/cli.cpp
   "${_schema_header}")
 target_include_directories(rfmod_platform PUBLIC include PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(rfmod_platform
@@ -72,7 +81,7 @@ target_compile_definitions(rfmod_platform PUBLIC
   RFMAP_OWNER_KEY_IS_DEV=${RFMAP_OWNER_KEY_IS_DEV}
   RFMAP_HOST_VERSION="${PROJECT_VERSION}")
 
-add_executable(rfmod-worker tools/rfmod-worker.cpp)
+add_executable(rfmod-worker tools/rfmod-worker.cpp tools/worker_sandbox.cpp)
 target_link_libraries(rfmod-worker PRIVATE rfmod_sdk ${CMAKE_DL_LIBS})
 
 add_executable(rfmod tools/rfmod-cli.cpp)

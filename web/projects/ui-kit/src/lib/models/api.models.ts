@@ -309,6 +309,24 @@ export interface RouteResult {
   /** Per-module output keyed by module id: the module's route.analyze `data` as returned */
   modules?: Record<string, unknown>;
   moduleFailures?: ModuleFailure[];
+  /** Heights the route.preparation modules set before the calculation; absent when no waypoint asked for one */
+  autoHeights?: AutoHeight[];
+}
+
+/** RouteResult.autoHeights[]: one waypoint's automatic height. */
+export interface AutoHeight {
+  /** Index into mission.waypoints */
+  index: number;
+  /** The waypoint's position, so the entry can be matched to it after the route is edited */
+  lat?: number;
+  lon?: number;
+  field: 'aglM' | 'altM';
+  heightM: number;
+  module: string;
+  /** What set it: terrain, a link kind (control, video), or ceiling */
+  limitedBy?: string;
+  /** Even the ceiling does not keep the waypoint safe */
+  blocked?: boolean;
 }
 
 export type JobState = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
@@ -399,15 +417,10 @@ export interface ModuleInfo {
   stateDetail?: string;
 }
 
-export interface ValidationCheck {
-  name?: string;
-  ok?: boolean;
-  detail?: string;
-}
-
-export interface ValidationReport {
-  ok?: boolean;
-  checks?: ValidationCheck[];
+/** POST /admin/modules/reload: the listing after the server re-read its module root. */
+export interface ModuleReload {
+  modules?: ModuleInfo[];
+  notices?: string[];
 }
 
 export interface CalcPathRequest {

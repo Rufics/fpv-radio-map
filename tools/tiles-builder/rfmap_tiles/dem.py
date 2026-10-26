@@ -1,11 +1,12 @@
-"""dem: elevation tiles -> calculation COG, plus display-only hillshade and contours.
+"""dem: elevation tiles -> calculation COG, plus display-only hillshade, terrain and contours.
 
 The calculation DEM (out/dem.cog.tif) keeps the source grid and the source
 values bit-for-bit: tiles are mosaicked with a VRT and cut with an integer
 pixel window, never warped or resampled. Only with --allow-dem-resample are
 tiles of a coarser grid first duplicated nearest-neighbour onto the finest
-tile's grid. The server's radio calculations read this COG directly. hillshade.pmtiles and contours.pmtiles are derived from the
-same COG and are for display only.
+tile's grid. The server's radio calculations read this COG directly. hillshade.pmtiles,
+terrain.pmtiles (Terrarium-encoded heights for the 3D view) and contours.pmtiles are derived from
+the same COG and are for display only.
 """
 from __future__ import annotations
 
@@ -22,6 +23,7 @@ from .common import (BBox, BuildError, Dirs, download, existing_file, fresh_dir,
 
 DEM_OUT = "dem.cog.tif"
 HILLSHADE_OUT = "hillshade.pmtiles"
+TERRAIN_OUT = "terrain.pmtiles"
 CONTOURS_OUT = "contours.pmtiles"
 NODATA = -32768.0
 
@@ -49,6 +51,10 @@ def add_arguments(p) -> None:
                         "gray = classic grey hillshade")
     g.add_argument("--hillshade-exaggeration", type=float, default=1.0, help="vertical exaggeration (-z)")
     g.add_argument("--no-hillshade", action="store_true")
+    g.add_argument("--terrain-minzoom", type=int, default=6)
+    g.add_argument("--terrain-maxzoom", type=int, default=12,
+                   help="default 12, like the hillshade; MapLibre over-zooms the last level")
+    g.add_argument("--no-terrain", action="store_true", help="skip terrain.pmtiles (the 3D view then has no relief)")
     g.add_argument("--no-contours", action="store_true")
 
 
@@ -128,7 +134,7 @@ def build(args, dirs: Dirs) -> None:
     if not is_up_to_date(dirs, DEM_OUT, params, args.force):
         _build_cog(dirs, bbox, source, files, bool(args.allow_dem_resample), params)
     dem = dirs.out / DEM_OUT
-    if args.no_hillshade and args.no_contours:
+    if args.no_hillshade and args.no_terrain and args.no_contours:
         return
     # The derived layers take their source and licence from the table and their checksum from the
     # COG itself, never from the .meta file written earlier.
@@ -136,6 +142,8 @@ def build(args, dirs: Dirs) -> None:
 
     if not args.no_hillshade:
         _build_hillshade(args, dirs, bbox, dem, derived)
+    if not args.no_terrain:
+        _build_terrain(args, dirs, bbox, dem, derived)
     if not args.no_contours:
         _build_contours(args, dirs, bbox, dem, derived)
 
@@ -215,6 +223,18 @@ def _derived_params(derived: dict, extra: dict) -> dict:
     return {"dem_sha256": derived["sha256"], **extra}
 
 
+def _mercator_copy(dem: Path, work: Path, bbox: BBox, zmax: int) -> Path:
+    """Display copy only: the DEM reprojected to Web Mercator at the tile resolution of zmax."""
+    res = zoom_resolution(zmax)
+    te = tile_aligned_extent(bbox, zmax)
+    merc = work / "dem3857.tif"
+    run(["gdalwarp", "-t_srs", "EPSG:3857", "-r", "bilinear", "-tr", repr(res), repr(res),
+         "-te", *map(repr, te), "-srcnodata", repr(NODATA), "-dstnodata", repr(NODATA),
+         "-multi", "-wo", "NUM_THREADS=ALL_CPUS",
+         *raster.tiff_option_args(), str(dem), str(merc)])
+    return merc
+
+
 def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, derived: dict) -> None:
     zmin = safe_int(args.hillshade_minzoom, "--hillshade-minzoom")
     zmax = safe_int(args.hillshade_maxzoom, "--hillshade-maxzoom")
@@ -225,13 +245,7 @@ def _build_hillshade(args, dirs: Dirs, bbox: BBox, dem: Path, derived: dict) -> 
         return
     work = fresh_dir(dirs.work / "hillshade")
     res = zoom_resolution(zmax)
-    te = tile_aligned_extent(bbox, zmax)
-    merc = work / "dem3857.tif"
-    # Display copy only: reprojected to Web Mercator at the tile resolution.
-    run(["gdalwarp", "-t_srs", "EPSG:3857", "-r", "bilinear", "-tr", repr(res), repr(res),
-         "-te", *map(repr, te), "-srcnodata", repr(NODATA), "-dstnodata", repr(NODATA),
-         "-multi", "-wo", "NUM_THREADS=ALL_CPUS",
-         *raster.tiff_option_args(), str(dem), str(merc)])
+    merc = _mercator_copy(dem, work, bbox, zmax)
     hs = work / "hillshade.tif"
     # 1 EPSG:3857 unit is cos(lat) metres on the ground at the bbox centre.
     scale = math.cos(math.radians(bbox.center_lat))
@@ -288,6 +302,76 @@ def _shade_to_rgba(src: Path, dst: Path) -> None:
         for b in (1, 2, 3):
             d_ds.GetRasterBand(b).WriteArray(rgb, 0, r)
         d_ds.GetRasterBand(4).WriteArray(np.clip(alpha, 0, 255).astype("uint8"), 0, r)
+    d_ds.FlushCache()
+    d_ds = None
+
+
+def terrarium_rgb(heights, nodata: float = NODATA):
+    """Heights in metres -> Terrarium R, G, B bytes: height = R * 256 + G + B / 256 - 32768.
+
+    No-data cells become 0 m. The range is clamped to what the encoding holds, and B keeps 1/256 m.
+    """
+    import numpy as np
+    h = np.where(heights == nodata, 0.0, heights.astype("float64"))
+    v = np.clip(h + 32768.0, 0.0, 65535.0 + 255.0 / 256.0)
+    whole = np.floor(v)
+    r = (whole // 256).astype("uint8")
+    g = (whole % 256).astype("uint8")
+    b = np.floor((v - whole) * 256.0).astype("uint8")
+    return r, g, b
+
+
+def _build_terrain(args, dirs: Dirs, bbox: BBox, dem: Path, derived: dict) -> None:
+    zmin = safe_int(args.terrain_minzoom, "--terrain-minzoom")
+    zmax = safe_int(args.terrain_maxzoom, "--terrain-maxzoom")
+    params = _derived_params(derived, {"zoom": [zmin, zmax], "encoding": "terrarium"})
+    if is_up_to_date(dirs, TERRAIN_OUT, params, args.force):
+        return
+    work = fresh_dir(dirs.work / "terrain")
+    res = zoom_resolution(zmax)
+    merc = _mercator_copy(dem, work, bbox, zmax)
+    rgb = work / "terrain-rgb.tif"
+    _heights_to_terrarium(merc, rgb)
+    mb = work / "terrain.mbtiles"
+    run(["gdal_translate", "-of", "MBTiles", "-co", "TILE_FORMAT=PNG", "-co", "NAME=terrain",
+         "-co", "DESCRIPTION=Terrarium heights (display only) derived from dem.cog.tif",
+         str(rgb), str(mb)])
+    if zmax > zmin:
+        # Averaging the encoded bytes would mix the high and low parts of a height, so the
+        # overviews pick one cell instead.
+        run(["gdaladdo", "-r", "nearest", str(mb), *overview_factors(zmin, zmax)])
+    mbtiles_set_metadata(mb, {"attribution": derived["attribution"]})
+    tmp = dirs.out / f".tmp-{TERRAIN_OUT}"
+    mbtiles_to_pmtiles(mb, tmp)
+    install(tmp, dirs, TERRAIN_OUT)
+    h = pmtiles_header(dirs.out / TERRAIN_OUT)
+    write_meta(dirs, TERRAIN_OUT, params, {
+        "kind": "raster-dem", "role": "display only, the 3D view (calculations read dem.cog.tif)",
+        "derived_from": DEM_OUT,
+        "source": f"Terrarium heights of {DEM_OUT} ({derived['source']})",
+        "licence": derived["licence"], "attribution": derived["attribution"],
+        "bbox": bbox.as_list(), "zoom": [h.get("minzoom", zmin), h.get("maxzoom", zmax)],
+        "resolution": f"z{zmax} = {res:.1f} m/px (EPSG:3857 units), 256 px PNG tiles",
+        "encoding": "terrarium",
+    })
+    shutil.rmtree(work, ignore_errors=True)
+
+
+def _heights_to_terrarium(src: Path, dst: Path) -> None:
+    """Float heights -> 3-band Terrarium GeoTIFF on the same grid."""
+    g = raster.gdal()
+    s_ds = g.Open(str(src))
+    drv = g.GetDriverByName("GTiff")
+    d_ds = drv.Create(str(dst), s_ds.RasterXSize, s_ds.RasterYSize, 3, g.GDT_Byte,
+                      [*raster.TIFF_OPTIONS, "PHOTOMETRIC=RGB"])
+    d_ds.SetGeoTransform(s_ds.GetGeoTransform())
+    d_ds.SetProjection(s_ds.GetProjection())
+    band = s_ds.GetRasterBand(1)
+    step = 1024
+    for r in range(0, s_ds.RasterYSize, step):
+        h = min(step, s_ds.RasterYSize - r)
+        for b, bytes_ in enumerate(terrarium_rgb(band.ReadAsArray(0, r, s_ds.RasterXSize, h)), start=1):
+            d_ds.GetRasterBand(b).WriteArray(bytes_, 0, r)
     d_ds.FlushCache()
     d_ds = None
 
