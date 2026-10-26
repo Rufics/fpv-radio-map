@@ -13,11 +13,26 @@ Database::Database(std::string url, Settings settings) : url_(std::move(url)), s
 
 std::unique_ptr<pqxx::connection> Database::connect() const {
     auto c = std::make_unique<pqxx::connection>(url_);
+    applySettings(*c);
+    return c;
+}
+
+void Database::applySettings(pqxx::connection& c) const {
     if (settings_.statementTimeout.count() > 0) {
         // A number the configuration checked, not text from a request.
-        pqxx::nontransaction(*c).exec("SET statement_timeout = " + std::to_string(settings_.statementTimeout.count()));
+        pqxx::nontransaction(c).exec("SET statement_timeout = " + std::to_string(settings_.statementTimeout.count()));
     }
-    return c;
+}
+
+void Database::Lease::restore() {
+    try {
+        pqxx::nontransaction(*conn).exec("RESET statement_timeout");
+        db.applySettings(*conn);
+    } catch (const pqxx::failure& e) {
+        // Never back into the pool without its limits: the next lease finds it closed and reconnects.
+        db.log_.warn("database", std::string("cannot restore the session settings: ") + e.what());
+        conn->close();
+    }
 }
 
 Database::Lease::Lease(Database& d) : db(d) {
@@ -52,6 +67,7 @@ Database::Lease::~Lease() {
         } catch (const pqxx::failure& e) {
             // Keep the old one: the next lease fails fast with a clear error instead of hanging.
             db.log_.warn("database", std::string("reconnect failed: ") + e.what());
+            if (retire && conn->is_open()) restore();
         }
     }
     try {

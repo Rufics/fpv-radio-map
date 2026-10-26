@@ -85,6 +85,8 @@ private:
         std::unique_ptr<pqxx::connection> conn;
         bool broken = false;  ///< the connection dropped: replace it and count a reconnect
         bool retire = false;  ///< the session was changed for one caller: replace it
+        /// Puts the pool's settings back on a retired session that could not be replaced.
+        void restore();
     };
 
     template <class F>
@@ -99,6 +101,7 @@ private:
 
     /// A new session with the pool's settings applied.
     [[nodiscard]] std::unique_ptr<pqxx::connection> connect() const;
+    void applySettings(pqxx::connection& c) const;
     [[noreturn]] void busy();
 
     std::string url_;
