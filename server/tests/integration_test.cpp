@@ -777,8 +777,8 @@ namespace {
 /// A second server process on the same database and module root, as a second pod would be.
 class Peer {
 public:
-    Peer()
-        : app_(Config::fromJson(env->config), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true, RFMAP_SQL_DIR),
+    explicit Peer(const json& config = env->config)
+        : app_(Config::fromJson(config), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true, RFMAP_SQL_DIR),
           port_(app_.bindAny()),
           thread_([this] { app_.serveBound(); }) {}
     ~Peer() {
@@ -793,6 +793,13 @@ public:
         const auto r = c.Get("/api/v1" + path, {{"Authorization", "Bearer integration-admin-token-0123456789"}});
         if (!r || r->status != 200) throw std::runtime_error("peer refused " + path);
         return json::parse(r->body);
+    }
+    /// POST `path` as the admin; the status code.
+    [[nodiscard]] int post(const std::string& path) const {
+        httplib::Client c("127.0.0.1", port_);
+        const auto r = c.Post("/api/v1" + path, {{"Authorization", "Bearer integration-admin-token-0123456789"}}, "",
+                              "application/json");
+        return r ? r->status : 0;
     }
     /// Whether `seen` holds for the peer's answer to GET `path` within a few seconds.
     template <class Pred>
@@ -983,6 +990,36 @@ TEST_F(Integration, SettingsSyncStartsWithoutItsListenerAndIgnoresStrangeMessage
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
     EXPECT_EQ(sync.status()["notices"].get<int>(), before + 1);  // the stray text is not counted
+}
+
+TEST_F(Integration, AdminSettingsResetAnswers503WhenTheDatabaseIsGone) {
+    // A peer that signs in as its own role, so its database can be taken away without touching the others.
+    const std::string url = databaseUrl();
+    const auto at = url.find('@');
+    const auto scheme = url.find("://");
+    ASSERT_NE(at, std::string::npos);
+    const std::string cutUrl = url.substr(0, scheme + 3) + "rfmap_cut" + url.substr(at);
+    pqxx::connection admin(url);
+    const auto run = [&admin](const std::string& sql) {
+        pqxx::nontransaction w(admin);
+        w.exec(sql);
+    };
+    run("drop role if exists rfmap_cut");
+    run("create role rfmap_cut login superuser");
+    json cfg = env->config;
+    cfg["database"]["url"] = cutUrl;
+    cfg["database"]["poolSize"] = 1;
+    {
+        Peer peer(cfg);
+        ASSERT_EQ(peer.post("/admin/settings/reload"), 200);
+        run("alter role rfmap_cut nologin");
+        run("select pg_terminate_backend(pid) from pg_stat_activity where usename = 'rfmap_cut'");
+        EXPECT_EQ(peer.post("/admin/settings/reload"), 503);
+        EXPECT_EQ(peer.post("/admin/settings/reload?scope=local"), 503);
+        run("alter role rfmap_cut login");
+        EXPECT_EQ(peer.post("/admin/settings/reload"), 200);  // back once the database answers
+    }
+    run("drop role rfmap_cut");
 }
 
 TEST_F(Integration, StartupRefusesWhatTheConfigurationDoesNotAllow) {
