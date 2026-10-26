@@ -69,6 +69,10 @@ void BuiltinModules::reload() {
     // can never overwrite what a request on this process has just stored.
     std::lock_guard lock(mutex_);
     db_->tx([this](pqxx::work& w) {
+        // A row deleted by hand comes back with the defaults, as at start.
+        for (const auto& [id, e] : entries_) {
+            w.exec("insert into builtin_modules(id) values ($1) on conflict do nothing", pqxx::params{id});
+        }
         for (const auto& r : w.exec("select id, enabled, options::text from builtin_modules")) {
             const auto it = entries_.find(r[0].as<std::string>());
             if (it == entries_.end()) continue;  // a module a newer server version builds in

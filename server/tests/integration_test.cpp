@@ -858,6 +858,17 @@ TEST_F(Integration, AdminSettingsReachEveryServerProcess) {
     EXPECT_TRUE(peer.sees("/modules", [](const json& m) { return moduleState(m, "rf.uncertainty") == "active"; }));
     EXPECT_TRUE(peer.sees("/admin/settings/sync", [](const json& s) { return s["notices"].get<int>() >= 3; }));
 
+    // A row deleted by hand comes back with its defaults on the next reload.
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.uncertainty", {{"enabled", false}}, admin()).status, 200);
+    {
+        pqxx::connection c(databaseUrl());
+        pqxx::work w(c);
+        w.exec("delete from builtin_modules where id = 'rf.uncertainty'");
+        w.commit();
+    }
+    ASSERT_EQ(call("POST", "/admin/settings/reload?scope=local", nullptr, admin()).status, 200);
+    EXPECT_EQ(moduleState(call("GET", "/modules").body, "rf.uncertainty"), "active");
+
     ASSERT_EQ(call("PUT", "/admin/cache", json::array({{{"id", "results-memory"}, {"limitBytes", before[1]["limitBytes"]}}}),
                    admin())
                   .status,
