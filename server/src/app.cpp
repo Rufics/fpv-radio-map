@@ -143,15 +143,16 @@ void Application::configureServer() {
     // A JSON body sent chunked (no length to judge) is refused too: httplib would bound it only
     // by maxUploadBytes.
     s.set_pre_routing_handler([limit = BodyLimit(config_.server)](const Req& req, Res& res) {
+        using enum httplib::Server::HandlerResponse;
         if (limit.lengthRequired(req.path, req.get_header_value("Transfer-Encoding"))) {
             sendJson(res, 411, {{"message", "send JSON bodies with a Content-Length"}});
-            return httplib::Server::HandlerResponse::Handled;
+            return Handled;
         }
         if (!req.has_header("Content-Length") || !limit.exceeded(req.path, req.get_header_value("Content-Length"))) {
-            return httplib::Server::HandlerResponse::Unhandled;
+            return Unhandled;
         }
         sendJson(res, 413, {{"message", "request body too large"}});
-        return httplib::Server::HandlerResponse::Handled;
+        return Handled;
     });
     s.set_read_timeout(30, 0);
     s.set_write_timeout(120, 0);
