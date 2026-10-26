@@ -145,8 +145,9 @@ std::size_t BodyLimit::forPath(std::string_view path) const {
 
 bool BodyLimit::exceeded(std::string_view path, std::string_view contentLength) const {
     std::size_t declared = 0;
-    const char* end = contentLength.data() + contentLength.size();
-    const auto [ptr, ec] = std::from_chars(contentLength.data(), end, declared);
+    const std::string text(contentLength);
+    const char* end = text.c_str() + text.size();
+    const auto [ptr, ec] = std::from_chars(text.c_str(), end, declared);
     if (ec == std::errc::result_out_of_range) return true;
     return ec == std::errc{} && ptr == end && declared > forPath(path);
 }
