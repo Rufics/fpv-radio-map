@@ -958,6 +958,47 @@ TEST_F(Integration, SettingsNoticeThatCannotBeSentIsReported) {
     EXPECT_TRUE(failed.announced);
 }
 
+TEST_F(Integration, SettingsSyncStartsWithoutItsListenerAndIgnoresStrangeMessages) {
+    Database db(databaseUrl(), 1);
+    Logger log;
+    log.setQuiet(true);
+    // Nothing listens on port 1: the start goes on, and the status says why it is not listening.
+    SettingsSync offline(db, {"postgresql://127.0.0.1:1/rfmap?connect_timeout=2", true, std::chrono::seconds(3600)}, log);
+    offline.start();
+    const json down = offline.status();
+    EXPECT_FALSE(down["listen"]["connected"].get<bool>());
+    EXPECT_TRUE(down["listen"]["error"].is_string());
+    offline.stop();
+
+    SettingsSync sync(db, {databaseUrl(), true, std::chrono::seconds(3600)}, log);
+    sync.start();
+    ASSERT_TRUE(sync.status()["listen"]["connected"].get<bool>());
+    const auto before = sync.status()["notices"].get<int>();
+    db.tx([](pqxx::work& w) { w.exec("select pg_notify('rfmap_changes', 'not a notice')"); });
+    db.tx([](pqxx::work& w) {
+        w.exec("select pg_notify('rfmap_changes', $1)",
+               pqxx::params{ChangeNotice(SettingsTopic::kBuiltins, "another-process").payload()});
+    });
+    for (int i = 0; i < 100 && sync.status()["notices"].get<int>() == before; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    EXPECT_EQ(sync.status()["notices"].get<int>(), before + 1);  // the stray text is not counted
+}
+
+TEST_F(Integration, StartupRefusesWhatTheConfigurationDoesNotAllow) {
+    const std::string devKey = readFile(RFMOD_TEST_KEYS "/dev-owner.pub");
+    json noDevKey = env->config;
+    noDevKey["modules"]["allowDevOwnerKey"] = false;
+    EXPECT_THROW(Application(Config::fromJson(noDevKey), devKey, true, RFMAP_SQL_DIR), ConfigError);
+    json shortToken = env->config;
+    shortToken["admin"]["token"] = "short";
+    EXPECT_THROW(Application(Config::fromJson(shortToken), devKey, true, RFMAP_SQL_DIR), ConfigError);
+}
+
+TEST_F(Integration, AdminModuleChangeForAnUnknownModuleIsRefused) {
+    EXPECT_EQ(call("PUT", "/admin/modules/no.such.module", {{"enabled", true}}, admin()).status, 422);
+}
+
 TEST_F(Integration, SettingsListenerReconnectsAndReloadsWhatItMayHaveMissed) {
     const std::string url = databaseUrl();
     Database db(url, 1);

@@ -177,12 +177,8 @@ SettingsSync::ResetOutcome SettingsSync::reloadAll(bool everywhere) {
 }
 
 bool SettingsSync::Pick::covers(const Topic& t) const {
-    switch (kind) {
-        case Kind::All: return true;
-        case Kind::Database: return t.source == Source::Database;
-        case Kind::One: return t.name == name;
-    }
-    return false;
+    if (kind == Kind::Database) return t.source == Source::Database;
+    return kind == Kind::All || t.name == name;
 }
 
 bool SettingsSync::reloadWhere(const Pick& which, std::string_view reason) {
