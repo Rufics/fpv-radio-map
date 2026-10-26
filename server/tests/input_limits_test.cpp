@@ -46,6 +46,13 @@ TEST(RouteWorkloadTest, BoundsTheProfilesFromThePilot) {
     EXPECT_LE(w.samples(), w.positions() * (1000.0 / 100.0 + 2.0));
 }
 
+TEST(RouteWorkloadTest, CountsThreeReadsForAShortProfile) {
+    // 50 m out with a 100 m step: two positions, each profile reads both ends and the middle.
+    const RouteWorkload w(route(json::array({point(48.50045, 35.20)}), false), 100.0, true);
+    EXPECT_EQ(w.positions(), 2.0);
+    EXPECT_EQ(w.samples(), 6.0);
+}
+
 TEST(RouteWorkloadTest, RefusesARouteOverTheLimitWithTheNumbers) {
     // Two legs across a continent: tens of thousands of positions, each a profile as long.
     const json far = route(json::array({point(40.0, 20.0)}), true);
@@ -86,4 +93,7 @@ TEST(BodyLimitTest, OnlyFlightLogRoutesTakeFiles) {
     EXPECT_TRUE(limit.lengthRequired("/api/v1/missions", "chunked"));
     EXPECT_FALSE(limit.lengthRequired("/api/v1/missions", ""));
     EXPECT_FALSE(limit.lengthRequired("/api/v1/flightlogs/decode", "chunked"));
+    // By route, not by which limit is larger.
+    server.maxBodyBytes = 100000;
+    EXPECT_TRUE(limit.lengthRequired("/api/v1/missions", "chunked"));
 }

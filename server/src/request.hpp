@@ -81,6 +81,8 @@ class BodyLimit {
 public:
     explicit BodyLimit(const Config::Server& server) : server_(server) {}
 
+    /// Whether `path` is one of the routes that take files (flight logs): maxUploadBytes.
+    [[nodiscard]] static bool takesFiles(std::string_view path);
     /// The limit for a request to `path`.
     [[nodiscard]] std::size_t forPath(std::string_view path) const;
     /// Whether a declared Content-Length is over the limit of `path`. A missing or unreadable

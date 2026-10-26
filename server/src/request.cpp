@@ -138,9 +138,12 @@ void HttpReply::header(const char* name, const std::string& value) { response_.s
 
 int HttpReply::status() const { return response_.status; }
 
+bool BodyLimit::takesFiles(std::string_view path) {
+    return path.ends_with("/flightlogs") || path.ends_with("/flightlogs/decode");
+}
+
 std::size_t BodyLimit::forPath(std::string_view path) const {
-    const bool upload = path.ends_with("/flightlogs") || path.ends_with("/flightlogs/decode");
-    return upload ? server_.maxUploadBytes : server_.maxBodyBytes;
+    return takesFiles(path) ? server_.maxUploadBytes : server_.maxBodyBytes;
 }
 
 bool BodyLimit::exceeded(std::string_view path, std::string_view contentLength) const {
@@ -153,7 +156,7 @@ bool BodyLimit::exceeded(std::string_view path, std::string_view contentLength) 
 }
 
 bool BodyLimit::lengthRequired(std::string_view path, std::string_view transferEncoding) const {
-    return !transferEncoding.empty() && forPath(path) < server_.maxUploadBytes;
+    return !transferEncoding.empty() && !takesFiles(path);
 }
 
 bool AdminToken::presentedBy(const HttpRequest& request) const {

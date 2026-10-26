@@ -1,5 +1,6 @@
 #include "route_workload.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <format>
 #include <vector>
@@ -33,7 +34,8 @@ void RouteWorkload::addLeg(const rfcore::GeoPoint& pilot, const rfcore::GeoPoint
     // the triangle inequality, from whichever end is closer along the leg.
     const double farthest =
         (geodesy_.inverse(pilot, a).distance.value() + length + geodesy_.inverse(pilot, b).distance.value()) / 2.0;
-    samples_ += positions * (std::ceil(farthest / stepM_) + 1.0);
+    // A profile shorter than two steps still reads both ends and a middle point (LinkService).
+    samples_ += positions * std::max(3.0, std::ceil(farthest / stepM_) + 1.0);
 }
 
 void RouteWorkload::require(double maxSamples) const {
