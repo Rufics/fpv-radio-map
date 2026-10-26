@@ -28,6 +28,16 @@ TEST(RouteWorkloadTest, CountsThePositionsTheEvaluatorSamples) {
                 out.positions() / 2.0, 0.5);
 }
 
+TEST(RouteWorkloadTest, CountsTheGroundReadsOfLaunchAltitudes) {
+    json m = route(json::array({point(48.509, 35.20)}), false);
+    const RouteWorkload agl(m, 100.0, false);
+    m["altitudeRef"] = "launch";
+    const RouteWorkload launch(m, 100.0, false);
+    // One more read per position for the ground under the drone, one per leg at the pilot.
+    EXPECT_EQ(launch.positions(), agl.positions());
+    EXPECT_EQ(launch.samples(), 2.0 * agl.samples() + 1.0);
+}
+
 TEST(RouteWorkloadTest, BoundsTheProfilesFromThePilot) {
     const json m = route(json::array({point(48.509, 35.20)}), false);
     const RouteWorkload w(m, 100.0, true);

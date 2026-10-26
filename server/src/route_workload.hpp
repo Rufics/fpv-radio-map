@@ -37,6 +37,7 @@ private:
     [[no_unique_address]] rfcore::Geodesy geodesy_;
     double stepM_;
     bool withLinks_;
+    bool launch_;  ///< altitudeRef launch
     double positions_ = 0.0;
     double samples_ = 0.0;
 };

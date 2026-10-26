@@ -6,7 +6,8 @@
 
 namespace rfmap {
 
-RouteWorkload::RouteWorkload(const json& mission, double stepM, bool withLinks) : stepM_(stepM), withLinks_(withLinks) {
+RouteWorkload::RouteWorkload(const json& mission, double stepM, bool withLinks)
+    : stepM_(stepM), withLinks_(withLinks), launch_(mission.value("altitudeRef", "agl") == "launch") {
     // Legs as RouteEvaluator flies them: pilot -> wp1 -> ... -> last, then back when returnToPilot.
     const rfcore::GeoPoint pilot = pointOf(mission.at("pilot"));
     std::vector<rfcore::GeoPoint> points{pilot};
@@ -21,6 +22,9 @@ void RouteWorkload::addLeg(const rfcore::GeoPoint& pilot, const rfcore::GeoPoint
     const double length = geodesy_.inverse(a, b).distance.value();
     const double positions = std::ceil(length / stepM_) + 1.0;
     positions_ += positions;
+    // With heights from the launch point the ground under every position is read once more to
+    // turn the altitude into a height above it (RouteAltitude), and the pilot's once per leg.
+    if (launch_) samples_ += positions + 1.0;
     if (!withLinks_) {
         samples_ += positions;
         return;

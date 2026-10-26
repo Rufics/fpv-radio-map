@@ -14,6 +14,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include <gtest/gtest.h>
@@ -57,6 +58,9 @@ int rawStatus(int port, const std::string& request) {
     addr.sin_family = AF_INET;
     addr.sin_port = htons(static_cast<std::uint16_t>(port));
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    // A server that never answers fails the test in seconds, not at the ctest timeout.
+    const timeval deadline{.tv_sec = 10, .tv_usec = 0};
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &deadline, sizeof deadline);
     std::string reply(256, '\0');
     ssize_t got = 0;
     if (::connect(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof addr) == 0 &&
