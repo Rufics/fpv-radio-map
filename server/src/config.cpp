@@ -210,6 +210,9 @@ Config Config::fromJson(json doc) {
     if (c.ops.port < 0 || c.ops.port > 65535) throw std::invalid_argument("ops.port out of range");
     if (c.ops.enabled && c.ops.port == c.server.port) throw std::invalid_argument("ops.port must differ from server.port");
     if (c.ops.drainSeconds < 0) throw std::invalid_argument("ops.drainSeconds must be >= 0");
+    if (!c.metrics.token.empty() && c.metrics.token.size() < kMinMetricsTokenLength) {
+        throw std::invalid_argument(std::format("metrics.token must be at least {} characters", kMinMetricsTokenLength));
+    }
     if (c.auth.pinMaxAttempts < 1) throw std::invalid_argument("auth.pinMaxAttempts must be >= 1");
     if (c.auth.pinConcurrency < 0 || c.auth.pinQueue < 0 || c.auth.pinWaitMs < 0) {
         throw std::invalid_argument("auth.pinConcurrency, auth.pinQueue and auth.pinWaitMs must be >= 0");

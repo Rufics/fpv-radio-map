@@ -204,6 +204,20 @@ TEST(ConfigTest, MetricsAreOffUnlessEnabled) {
     EXPECT_TRUE(Config::load(file, {{"RFMAP__METRICS__ENABLED", "true"}}).metrics.enabled);
 }
 
+TEST(ConfigTest, OperationsListenerAndMetricsGuards) {
+    const Config c = Config::fromJson({{"ops", {{"port", 9191}, {"drainSeconds", 0}}},
+                                      {"metrics", {{"token", "sixteen-chars-ok"}, {"allowFrom", {"10.0.0.0/8"}}}}});
+    EXPECT_EQ(c.ops.port, 9191);
+    EXPECT_EQ(c.metrics.token, "sixteen-chars-ok");
+    EXPECT_EQ(c.metrics.allowFrom, std::vector<std::string>{"10.0.0.0/8"});
+    EXPECT_EQ(c.raw["metrics"]["token"], "(set)");  // never echoed
+    EXPECT_EQ(Config::load({}, {{"RFMAP_METRICS_TOKEN", "from-the-environment"}}).metrics.token, "from-the-environment");
+    EXPECT_THROW(Config::fromJson({{"ops", {{"port", 8080}}}}), std::invalid_argument);  // the API port
+    EXPECT_THROW(Config::fromJson({{"ops", {{"drainSeconds", -1}}}}), std::invalid_argument);
+    // A short token on a listener outside the rate limiter could be guessed.
+    EXPECT_THROW(Config::fromJson({{"metrics", {{"token", "short"}}}}), std::invalid_argument);
+}
+
 TEST(ConfigTest, ShippedExampleLoads) {
     // deploy/docker-compose.yml mounts this file; it must stay loadable.
     const Config c = Config::load(RFMAP_EXAMPLE_CONFIG, {{"RFMAP_ADMIN_TOKEN", "x"}});

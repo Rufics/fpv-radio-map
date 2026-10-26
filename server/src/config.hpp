@@ -73,6 +73,9 @@ public:
         std::vector<std::string> allowFrom;  ///< networks in CIDR notation or single addresses
     };
     Metrics metrics;
+    /// The operations listener is outside the rate limiter, so a short metrics token could be
+    /// guessed; the perf stand generates 43 characters (secrets.token_urlsafe(32)).
+    static constexpr std::size_t kMinMetricsTokenLength = 16;
 
     struct Data {
         std::filesystem::path dem;
