@@ -52,7 +52,7 @@ public:
     int answerWithoutServing(std::ostream& out, std::ostream& err) const;
 
     /// "http://host:port/path" split into the origin and the path; no path means /readyz.
-    static std::pair<std::string, std::string> splitUrl(const std::string& url);
+    static std::pair<std::string, std::string> splitUrl(std::string_view url);
 
 private:
     /// The service action an argument names, or Invalid.

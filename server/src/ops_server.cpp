@@ -64,7 +64,7 @@ std::optional<CidrList::Bytes> CidrList::toBytes(std::string_view address) {
     if (inet_pton(AF_INET, text.c_str(), v4.data()) != 1) return std::nullopt;
     out[10] = std::byte{0xff};
     out[11] = std::byte{0xff};
-    std::copy(v4.begin(), v4.end(), out.begin() + 12);
+    std::ranges::copy(v4, out.begin() + 12);
     return out;
 }
 

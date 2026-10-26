@@ -69,14 +69,14 @@ int CommandLine::answerWithoutServing(std::ostream& out, std::ostream& err) cons
     return 0;
 }
 
-std::pair<std::string, std::string> CommandLine::splitUrl(const std::string& url) {
+std::pair<std::string, std::string> CommandLine::splitUrl(std::string_view url) {
     const auto scheme = url.find("://");
-    const auto hostStart = scheme == std::string::npos ? 0 : scheme + 3;
+    const auto hostStart = scheme == std::string_view::npos ? 0 : scheme + 3;
     const auto slash = url.find('/', hostStart);
-    if (slash == std::string::npos || slash + 1 == url.size()) {
-        return {url.substr(0, slash), std::string(kDefaultHealthPath)};
+    if (slash == std::string_view::npos || slash + 1 == url.size()) {
+        return {std::string(url.substr(0, slash)), std::string(kDefaultHealthPath)};
     }
-    return {url.substr(0, slash), url.substr(slash)};
+    return {std::string(url.substr(0, slash)), std::string(url.substr(slash))};
 }
 
 int CommandLine::health(const std::string& url, std::ostream& err) {
