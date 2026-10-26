@@ -5,6 +5,7 @@
 #include "raster.hpp"
 #include "result_cache.hpp"
 
+#include <mutex>
 #include <string>
 
 namespace rfmap {
@@ -40,6 +41,9 @@ private:
     Database& db_;
     BlockCache& blocks_;
     ResultCache& results_;
+    /// Serialises setLimits() and loadStoredLimits(): a reload must not apply limits read
+    /// before a concurrent PUT stored newer ones.
+    mutable std::mutex limitsMutex_;
 };
 
 }  // namespace rfmap

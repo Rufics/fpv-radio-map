@@ -65,25 +65,17 @@ BuiltinModules::BuiltinModules(Database* db, SchemaRegistry& schemas, std::strin
 
 void BuiltinModules::reload() {
     if (!db_) return;
-    struct Row {
-        std::string id;
-        bool enabled;
-        json options;
-    };
-    const auto rows = db_->tx([](pqxx::work& w) {
-        std::vector<Row> out;
-        for (const auto& r : w.exec("select id, enabled, options::text from builtin_modules")) {
-            out.push_back({r[0].as<std::string>(), r[1].as<bool>(), json::parse(r[2].as<std::string>())});
-        }
-        return out;
-    });
+    // Held across the read: set() holds it across its write, so an older snapshot read here
+    // can never overwrite what a request on this process has just stored.
     std::lock_guard lock(mutex_);
-    for (const Row& row : rows) {
-        const auto it = entries_.find(row.id);
-        if (it == entries_.end()) continue;  // a module a newer server version builds in
-        it->second.enabled = row.enabled;
-        it->second.options = row.options;
-    }
+    db_->tx([this](pqxx::work& w) {
+        for (const auto& r : w.exec("select id, enabled, options::text from builtin_modules")) {
+            const auto it = entries_.find(r[0].as<std::string>());
+            if (it == entries_.end()) continue;  // a module a newer server version builds in
+            it->second.enabled = r[1].as<bool>();
+            it->second.options = json::parse(r[2].as<std::string>());
+        }
+    });
 }
 
 bool BuiltinModules::isBuiltin(const std::string& id) const { return entries_.contains(id); }
