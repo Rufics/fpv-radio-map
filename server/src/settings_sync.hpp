@@ -105,6 +105,16 @@ private:
         Source source;
         Reload reload;
     };
+    /// Which topics a reload reads: all of them, the database ones, or one by name.
+    struct Pick {
+        enum class Kind { All, Database, One } kind = Kind::All;
+        std::string name;  ///< for One
+
+        [[nodiscard]] static Pick all() { return {}; }
+        [[nodiscard]] static Pick database() { return {Kind::Database, {}}; }
+        [[nodiscard]] static Pick one(std::string topic) { return {Kind::One, std::move(topic)}; }
+        [[nodiscard]] bool covers(const Topic& t) const;
+    };
     /// What the status shows; guarded by stateMutex_.
     struct State {
         bool listening = false;
@@ -125,15 +135,15 @@ private:
     void onPayload(std::string_view payload);
 
     /// Runs the reloads of the topics `which` selects, each on its own, and counts them.
-    void reloadWhere(const std::function<bool(const Topic&)>& which, const std::string& reason);
-    void reloadDatabase(const std::string& reason);
+    void reloadWhere(const Pick& which, std::string_view reason);
     /// Whether `which` selects every database topic: only such a reload may move the fingerprint.
-    [[nodiscard]] bool coversDatabase(const std::function<bool(const Topic&)>& which) const;
+    [[nodiscard]] bool coversDatabase(const Pick& which) const;
     /// Runs the selected reloads; returns how many failed (logged).
-    [[nodiscard]] std::uint64_t runReloads(const std::function<bool(const Topic&)>& which) const;
+    [[nodiscard]] std::uint64_t runReloads(const Pick& which) const;
+    void noteReload(std::uint64_t failed, std::string_view reason);
     /// A digest of the rows the database topics read; nullopt when the database cannot answer.
     [[nodiscard]] std::optional<std::string> fingerprint() const;
-    void noteListener(bool listening, const std::string& error);
+    void noteListener(bool listening, std::string_view error);
 
     Database& db_;
     Options options_;
@@ -147,7 +157,7 @@ private:
     std::unique_ptr<pqxx::connection> listener_;  ///< used by the background thread only
     bool listenedBefore_ = false;
     std::mutex sleepMutex_;
-    std::condition_variable_any sleep_;
+    std::condition_variable_any sleep_;  // NOSONAR(cpp:S8467): only the _any variant waits on a stop_token
     std::jthread thread_;
 };
 

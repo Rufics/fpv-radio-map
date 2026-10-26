@@ -49,7 +49,7 @@ SettingsSync::SettingsSync(Database& db, Options options, Logger& log)
 SettingsSync::~SettingsSync() { stop(); }
 
 void SettingsSync::add(std::string topic, Source source, Reload reload) {
-    topics_.push_back({std::move(topic), source, std::move(reload)});
+    topics_.emplace_back(std::move(topic), source, std::move(reload));
 }
 
 void SettingsSync::start() {
@@ -63,7 +63,7 @@ void SettingsSync::start() {
     }
     // From here on a listener that connects (again) reloads first: it may have missed notices.
     listenedBefore_ = true;
-    reloadDatabase("start");
+    reloadWhere(Pick::database(), "start");
     log_.info("settings", std::format("instance {}: {}, fingerprint poll every {} s", instance_,
                                       options_.listen ? "listening on " + std::string(ChangeNotice::kChannel)
                                                       : "not listening",
@@ -108,7 +108,7 @@ void SettingsSync::openListener() {
     // Notices sent while the listener was down are lost: read everything again.
     if (listenedBefore_) {
         log_.info("settings", "listening again; reloading every topic");
-        reloadWhere([](const Topic&) { return true; }, "listener reconnected");
+        reloadWhere(Pick::all(), "listener reconnected");
     }
 }
 
@@ -142,11 +142,7 @@ void SettingsSync::handle(const ChangeNotice& notice) {
     const std::string reason = std::format("{} changed by {}", notice.topic(), notice.origin());
     const bool known = std::ranges::any_of(topics_, [&notice](const Topic& t) { return t.name == notice.topic(); });
     // A topic a newer server version knows and this one does not: reloading everything is safe.
-    if (notice.topic() == ChangeNotice::kEverything || !known) {
-        reloadWhere([](const Topic&) { return true; }, reason);
-    } else {
-        reloadWhere([&notice](const Topic& t) { return t.name == notice.topic(); }, reason);
-    }
+    reloadWhere(notice.topic() == ChangeNotice::kEverything || !known ? Pick::all() : Pick::one(notice.topic()), reason);
 }
 
 void SettingsSync::pollNow() {
@@ -157,7 +153,7 @@ void SettingsSync::pollNow() {
         if (fingerprint_ == now) return;
     }
     log_.info("settings", "the settings rows changed without a notice; reloading");
-    reloadDatabase("fingerprint changed");
+    reloadWhere(Pick::database(), "fingerprint changed");
 }
 
 bool SettingsSync::publish(std::string_view topic) {
@@ -174,15 +170,20 @@ bool SettingsSync::publish(std::string_view topic) {
 }
 
 bool SettingsSync::reloadAll(bool everywhere) {
-    reloadWhere([](const Topic&) { return true; }, everywhere ? "admin reset everywhere" : "admin reset here");
+    reloadWhere(Pick::all(), everywhere ? "admin reset everywhere" : "admin reset here");
     return !everywhere || publish(ChangeNotice::kEverything);
 }
 
-void SettingsSync::reloadDatabase(const std::string& reason) {
-    reloadWhere([](const Topic& t) { return t.source == Source::Database; }, reason);
+bool SettingsSync::Pick::covers(const Topic& t) const {
+    switch (kind) {
+        case Kind::All: return true;
+        case Kind::Database: return t.source == Source::Database;
+        case Kind::One: return t.name == name;
+    }
+    return false;
 }
 
-void SettingsSync::reloadWhere(const std::function<bool(const Topic&)>& which, const std::string& reason) {
+void SettingsSync::reloadWhere(const Pick& which, std::string_view reason) {
     std::lock_guard lock(reloadMutex_);
     // Taken before the reads, so a change after this point shows at the next poll. Only a reload
     // of every database topic may move it, and only when all of them succeeded: otherwise the
@@ -191,21 +192,25 @@ void SettingsSync::reloadWhere(const std::function<bool(const Topic&)>& which, c
     if (coversDatabase(which)) before = fingerprint();
     const std::uint64_t failed = runReloads(which);
     if (before && failed == 0) fingerprint_ = std::move(before);
-    std::lock_guard state(stateMutex_);
+    noteReload(failed, reason);
+}
+
+void SettingsSync::noteReload(std::uint64_t failed, std::string_view reason) {
+    std::lock_guard lock(stateMutex_);
     ++state_.reloads;
     state_.failures += failed;
     state_.lastReloadAt = Clock::now();
     state_.lastReason = reason;
 }
 
-bool SettingsSync::coversDatabase(const std::function<bool(const Topic&)>& which) const {
-    return std::ranges::all_of(topics_, [&which](const Topic& t) { return t.source != Source::Database || which(t); });
+bool SettingsSync::coversDatabase(const Pick& which) const {
+    return std::ranges::all_of(topics_, [&which](const Topic& t) { return t.source != Source::Database || which.covers(t); });
 }
 
-std::uint64_t SettingsSync::runReloads(const std::function<bool(const Topic&)>& which) const {
+std::uint64_t SettingsSync::runReloads(const Pick& which) const {
     std::uint64_t failed = 0;
     for (const Topic& t : topics_) {
-        if (!which(t)) continue;
+        if (!which.covers(t)) continue;
         try {
             t.reload();
         } catch (const std::exception& e) {  // NOSONAR(cpp:S1181): a reload of any kind failing must not end the thread
@@ -225,7 +230,7 @@ std::optional<std::string> SettingsSync::fingerprint() const {
     }
 }
 
-void SettingsSync::noteListener(bool listening, const std::string& error) {
+void SettingsSync::noteListener(bool listening, std::string_view error) {
     std::lock_guard lock(stateMutex_);
     state_.listening = listening;
     state_.listenError = error;
