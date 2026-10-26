@@ -140,7 +140,13 @@ void Application::configureServer() {
     s.set_payload_max_length(config_.server.maxUploadBytes);
     // Runs before httplib reads the body: a JSON request announcing more than maxBodyBytes is
     // answered at once instead of after up to maxUploadBytes have been buffered for it.
+    // A JSON body sent chunked (no length to judge) is refused too: httplib would bound it only
+    // by maxUploadBytes.
     s.set_pre_routing_handler([limit = BodyLimit(config_.server)](const Req& req, Res& res) {
+        if (limit.lengthRequired(req.path, req.get_header_value("Transfer-Encoding"))) {
+            sendJson(res, 411, {{"message", "send JSON bodies with a Content-Length"}});
+            return httplib::Server::HandlerResponse::Handled;
+        }
         if (!req.has_header("Content-Length") || !limit.exceeded(req.path, req.get_header_value("Content-Length"))) {
             return httplib::Server::HandlerResponse::Unhandled;
         }

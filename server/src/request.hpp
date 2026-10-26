@@ -86,6 +86,9 @@ public:
     /// Whether a declared Content-Length is over the limit of `path`. A missing or unreadable
     /// length is not: httplib reads (and bounds) those bodies itself.
     [[nodiscard]] bool exceeded(std::string_view path, std::string_view contentLength) const;
+    /// Whether a body sent without a length (chunked) must be refused with 411: only the
+    /// upload routes take one, since httplib would bound it by maxUploadBytes alone.
+    [[nodiscard]] bool lengthRequired(std::string_view path, std::string_view transferEncoding) const;
 
 private:
     const Config::Server& server_;

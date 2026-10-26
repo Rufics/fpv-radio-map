@@ -151,6 +151,10 @@ bool BodyLimit::exceeded(std::string_view path, std::string_view contentLength) 
     return ec == std::errc{} && ptr == end && declared > forPath(path);
 }
 
+bool BodyLimit::lengthRequired(std::string_view path, std::string_view transferEncoding) const {
+    return !transferEncoding.empty() && forPath(path) < server_.maxUploadBytes;
+}
+
 bool AdminToken::presentedBy(const HttpRequest& request) const {
     const std::string t = request.bearer();
     return configured() && !t.empty() && Secrets::constantTimeEqual(t, token_);

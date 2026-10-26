@@ -1304,6 +1304,12 @@ TEST_F(Integration, HostileInputsAreRefusedNotFatal) {
     const auto tooLarge = raw.send(announce);
     ASSERT_TRUE(tooLarge);
     EXPECT_EQ(tooLarge->status, 413);
+    httplib::Request chunked = announce;
+    chunked.headers.erase("Content-Length");
+    chunked.set_header("Transfer-Encoding", "chunked");
+    const auto noLength = httplib::Client("127.0.0.1", env->port).send(chunked);
+    ASSERT_TRUE(noLength);
+    EXPECT_EQ(noLength->status, 411);
 
     // The elevation profile needs no session, so it has the bounds of every calculated path.
     EXPECT_EQ(call("GET", "/elevation/profile?from=48.5,35.2&to=48.5,35.2").status, 422);

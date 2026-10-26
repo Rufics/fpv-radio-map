@@ -71,4 +71,9 @@ TEST(BodyLimitTest, OnlyFlightLogRoutesTakeFiles) {
     EXPECT_FALSE(limit.exceeded("/api/v1/missions", ""));
     EXPECT_FALSE(limit.exceeded("/api/v1/missions", "12ab"));
     EXPECT_FALSE(limit.exceeded("/api/v1/missions", "-5"));
+
+    // A chunked JSON body has no length to judge; a chunked flight log is bounded by httplib.
+    EXPECT_TRUE(limit.lengthRequired("/api/v1/missions", "chunked"));
+    EXPECT_FALSE(limit.lengthRequired("/api/v1/missions", ""));
+    EXPECT_FALSE(limit.lengthRequired("/api/v1/flightlogs/decode", "chunked"));
 }
