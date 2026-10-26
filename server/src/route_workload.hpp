@@ -34,7 +34,7 @@ private:
     void addLeg(const rfcore::GeoPoint& pilot, const rfcore::GeoPoint& a, const rfcore::GeoPoint& b);
     [[nodiscard]] static rfcore::GeoPoint pointOf(const json& p);
 
-    rfcore::Geodesy geodesy_;
+    [[no_unique_address]] rfcore::Geodesy geodesy_;
     double stepM_;
     bool withLinks_;
     double positions_ = 0.0;
