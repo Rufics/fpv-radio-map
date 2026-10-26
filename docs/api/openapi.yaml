@@ -447,10 +447,15 @@ paths:
               schema: { $ref: '#/components/schemas/Profile' }
         '400': { description: from or to missing, or not a lat,lon within the world }
         '422':
-          description: Missing elevation data on part of the path (MissingData), both ends the same point, or a path too long for the DEM
+          description: >-
+            Missing elevation data on part of the path (MissingData), or a path out of bounds: both
+            ends the same point, or too long for the DEM (only `message`).
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MissingData' }
+              schema:
+                oneOf:
+                  - { $ref: '#/components/schemas/MissingData' }
+                  - { type: object, required: [message], properties: { message: { type: string } } }
 
   /library/{kind}:
     parameters:
