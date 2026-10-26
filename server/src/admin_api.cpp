@@ -4,10 +4,16 @@ namespace rfmap {
 
 void AdminApi::updateInstalled(const std::string& id, const json& b) const {
     const ModuleGate::Change gate(s_.moduleGate());  // the settings are a file under the module root
+    bool stored = false;
     try {
-        if (b.contains("options")) s_.registry().setOptions(id, b.at("options"));
+        if (b.contains("options")) {
+            s_.registry().setOptions(id, b.at("options"));
+            stored = true;  // setOptions refuses before it writes
+        }
         if (b.contains("enabled")) s_.registry().setEnabled(id, b.at("enabled").get<bool>());
     } catch (const std::invalid_argument& e) {
+        // The options are written although the switch was refused: the others must read them too.
+        if (stored) announceModules();
         throw HttpError(422, e.what());
     }
 }
@@ -33,13 +39,7 @@ void AdminApi::putModule(const HttpRequest& req, HttpReply& res) const {
         // Unannounced, the change still reaches the others by the next fingerprint poll.
         (void)s_.settings().publish(SettingsTopic::kBuiltins);
     } else {
-        try {
-            updateInstalled(id, b);
-        } catch (const HttpError&) {
-            // The options may be written already when `enabled` is refused: let the others read them.
-            (void)s_.settings().publish(SettingsTopic::kModules);
-            throw;
-        }
+        updateInstalled(id, b);
         announceModules();
     }
     res.send(200, s_.catalog().list(true));

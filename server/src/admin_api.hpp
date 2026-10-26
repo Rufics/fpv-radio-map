@@ -31,7 +31,8 @@ public:
     void postSettingsReload(const HttpRequest& req, HttpReply& res) const;
 
 private:
-    /// Applies {enabled?, options?} to an installed module; HttpError 422 when refused.
+    /// Applies {enabled?, options?} to an installed module; HttpError 422 when refused, 503 when
+    /// the options were stored before the switch was refused and the others could not be told.
     void updateInstalled(const std::string& id, const json& body) const;
     [[nodiscard]] json trustedKeys() const;
     /// Tells the other processes that the module files changed; HttpError 503 when it cannot,
