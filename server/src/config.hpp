@@ -45,6 +45,11 @@ public:
     struct Database {
         std::string url = "postgresql://rfmap@localhost/rfmap";
         int poolSize = 8;
+        /// How long a request waits for a pooled connection before it gets 503; 0 turns it away at once.
+        int leaseTimeoutMs = 10000;
+        /// statement_timeout of every pooled session: PostgreSQL cancels a longer statement.
+        /// 0 leaves the role's or the database's own setting.
+        int statementTimeoutMs = 60000;
     };
     Database database;
 
@@ -166,6 +171,12 @@ public:
         /// thousands of legs or of continental length cannot hold a request thread for hours.
         /// A sample costs about 1 µs of one core with both links, so the default is ~20 s.
         double maxRouteSamples = 20'000'000.0;
+        /// POST /calc/path and /calc/route running at once (0 = automatic, see CalcGate::limitsFor).
+        int concurrency = 0;
+        /// Requests that may wait for a calculation slot (0 = automatic).
+        int queue = 0;
+        /// How long a waiting request waits before it gets 503; 0 turns it away at once.
+        int waitMs = 10000;
     };
     Calc calc;
 

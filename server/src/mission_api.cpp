@@ -125,7 +125,7 @@ void MissionApi::postCalcPath(const HttpRequest& req, HttpReply& res) const {
     (void)session(req);
     const json b = req.body();
     s_.schemas().require("calc-path", b);
-    res.send(200, s_.calc().path(b));
+    res.send(200, s_.calcGate().run([this, &b] { return s_.calc().path(b); }));
 }
 
 void MissionApi::postCalcRoute(const HttpRequest& req, HttpReply& res) const {
@@ -137,7 +137,8 @@ void MissionApi::postCalcRoute(const HttpRequest& req, HttpReply& res) const {
     if (const auto stored = s_.missions().get(p.missionId); stored.has_value() && stored->doc == mission) {
         revision = stored->revision;
     }
-    const json result = s_.calc().route(mission, revision);
+    // Checked and sized before the slot is taken, so a refused request never holds one.
+    const json result = s_.calcGate().run([this, &mission, &revision] { return s_.calc().route(mission, revision); });
     if (revision.has_value() && p.role == Role::Edit) s_.missions().storeResultIfCurrent(p.missionId, mission, result);
     res.send(200, result);
 }

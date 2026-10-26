@@ -56,6 +56,7 @@ Services::Services(const Config& config, Logger& log, const std::string& ownerKe
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
+    calcGate_ = makeCalcGate();
 }
 
 Services::~Services() {
@@ -78,10 +79,18 @@ void Services::checkStartup(bool ownerKeyIsDev) const {
 }
 
 void Services::openDatabase(const std::filesystem::path& sqlDir) {
-    store_.db = std::make_unique<Database>(config_.database.url, config_.database.poolSize);
+    const Config::Database& db = config_.database;
+    store_.db = std::make_unique<Database>(
+        db.url, Database::Settings{db.poolSize, std::chrono::milliseconds(db.leaseTimeoutMs),
+                                   std::chrono::milliseconds(db.statementTimeoutMs)});
+    log_.info("startup", std::format("database: {} connections, lease timeout {} ms, statement timeout {}", db.poolSize,
+                                     db.leaseTimeoutMs,
+                                     db.statementTimeoutMs > 0 ? std::to_string(db.statementTimeoutMs) + " ms"
+                                                               : std::string("from the server")));
     // A breaking step, or a database newer than this server, stops the start: see migrations.hpp.
+    // A migration may rewrite a large table, so the statement timeout does not apply to it.
     const MigrationCatalog migrations(sqlDir);
-    store_.db->with([this, &migrations](pqxx::connection& c) {
+    store_.db->withoutStatementTimeout([this, &migrations](pqxx::connection& c) {
         return SchemaMigrator(migrations, {config_.modules.root, config_.modules.trustStore},
                               [this](const std::string& line) { log_.info("startup", line); })
             .migrate(c, {});
@@ -124,6 +133,26 @@ rfmod::RegistryConfig registryConfig(const Config::Modules& modules) {
 }
 
 }  // namespace
+
+std::unique_ptr<CalcGate> Services::makeCalcGate() const {
+    auto gate = std::make_unique<CalcGate>(
+        CalcGate::limitsFor(config_.calc, config_.server.threads, std::thread::hardware_concurrency()));
+    const CalcGate::Limits& l = gate->limits();
+    log_.info("startup",
+              std::format("calculations: {} at once, {} waiting up to {} ms", l.concurrency, l.queue, l.wait.count()));
+    if (l.concurrency + l.queue >= config_.server.threads) {
+        log_.warn("startup", "calc.concurrency + calc.queue leave no server thread free during a burst of routes");
+    }
+    return gate;
+}
+
+std::vector<GateSample> Services::gates() const {
+    const auto sample = [](std::string name, const Bulkhead& gate) {
+        const Bulkhead::Stats s = gate.stats();
+        return GateSample{std::move(name), gate.limits().concurrency, s.active, s.waiting, s.rejected};
+    };
+    return {sample("pin", *store_.pinGate), sample("calc", *calcGate_)};
+}
 
 void Services::buildStores() {
     store_.schemas = std::make_unique<SchemaRegistry>(config_.schemasDir);

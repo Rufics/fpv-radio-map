@@ -7,7 +7,7 @@ set(_defs
   RFMOD_TEST_KEYS="${PROJECT_SOURCE_DIR}/platform/rfmod/keys"
   RFMAP_EXAMPLE_CONFIG="${CMAKE_CURRENT_SOURCE_DIR}/../config/server.example.json")
 
-add_executable(rfmap_server_tests auth_test.cpp pin_gate_test.cpp cache_test.cpp validation_test.cpp
+add_executable(rfmap_server_tests auth_test.cpp pin_gate_test.cpp calc_gate_test.cpp cache_test.cpp validation_test.cpp
   host_services_test.cpp weather_test.cpp raster_test.cpp command_line_test.cpp metrics_test.cpp
   migrations_test.cpp input_limits_test.cpp ops_server_test.cpp lifecycle_test.cpp)
 target_link_libraries(rfmap_server_tests PRIVATE rfmap_server_lib GTest::gtest_main)
@@ -26,7 +26,7 @@ add_custom_command(TARGET test_probe POST_BUILD
 
 # Integration: a throw-away PostGIS cluster around one test process.
 add_executable(rfmap_server_integration integration_test.cpp host_calls_test.cpp library_seed_test.cpp
-  flight_log_store_test.cpp backup_test.cpp)
+  flight_log_store_test.cpp backup_test.cpp database_test.cpp)
 target_link_libraries(rfmap_server_integration PRIVATE rfmap_server_lib GTest::gtest_main)
 target_compile_definitions(rfmap_server_integration PRIVATE ${_defs}
   RFMOD_WORKER="$<TARGET_FILE:rfmod-worker>"

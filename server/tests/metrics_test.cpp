@@ -98,7 +98,8 @@ TEST(ServerMetricsTest, WritesEveryFamily) {
     sample.version = "1.2.3";
     sample.startTimeSeconds = 1700000000;
     sample.pools = {{"http", {16, 2, 3, 40}}, {"job-cells", {4, 0, 0, 7}}};
-    sample.db = {8, 5, 1, 120, 0.25, 2};
+    sample.db = {8, 5, 1, 120, 0.25, 2, 3};
+    sample.gates = {{"pin", 2, 1, 0, 0}, {"calc", 4, 4, 2, 5}};
     sample.jobs.byState = {{"running", 1}, {"done", 3}};
     sample.jobs.started = 4;
     CacheStats dem;
@@ -119,6 +120,9 @@ TEST(ServerMetricsTest, WritesEveryFamily) {
                              "rfmap_pool_queued_tasks{pool=\"http\"} 2\n", "rfmap_pool_busy_threads{pool=\"http\"} 3\n",
                              "rfmap_pool_tasks_completed_total{pool=\"job-cells\"} 7\n", "rfmap_db_pool_waiting 1\n",
                              "rfmap_db_pool_wait_seconds_total 0.25\n", "rfmap_db_pool_reconnects_total 2\n",
+                             "rfmap_db_pool_lease_timeouts_total 3\n", "rfmap_gate_slots{gate=\"calc\"} 4\n",
+                             "rfmap_gate_waiting{gate=\"calc\"} 2\n", "rfmap_gate_rejected_total{gate=\"calc\"} 5\n",
+                             "rfmap_gate_active{gate=\"pin\"} 1\n",
                              "rfmap_jobs{state=\"done\"} 3\n", "rfmap_jobs_started_total 4\n",
                              "rfmap_cache_hits_total{tier=\"results-table\"} 5\n",
                              "rfmap_cache_used_bytes{tier=\"dem-blocks\"} 60\n"}) {

@@ -86,7 +86,7 @@ protected:
     /// A migrated database with a row in every kind of table, and two module files.
     std::string source() const {
         const std::string url = freshDatabase("rfmap_backup_source");
-        Database db(url, 1);
+        Database db(url, Database::Settings{.poolSize = 1});
         rfmap::test::migrate(db, RFMAP_SQL_DIR);
         db.tx([](pqxx::work& w) {
             w.exec(R"(insert into missions (id, owner_key_hash, name, doc, pilot)

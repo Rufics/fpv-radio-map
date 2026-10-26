@@ -15,6 +15,9 @@ info:
     Errors are JSON `{message, ...}`. 429 and 503 carry `Retry-After` and `retryAfterS`.
     Request bodies are checked against schemas/ (draft-07); a failure is 422
     `{message, issues: [{path, message}]}`, path being a JSON pointer into the body. Calculations answer 503 when the server has no DEM.
+    Any request that needs the database answers 503 with `Retry-After` when every pooled
+    connection stays lent for database.leaseTimeoutMs, and a statement running longer than
+    database.statementTimeoutMs is cancelled by PostgreSQL (500).
     Every limit (body size, rate classes, coverage cells, route samples) is server configuration.
 
     Input limits: a JSON body larger than server.maxBodyBytes is refused with 413, from its
@@ -337,6 +340,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MissingData' }
+        '503':
+          description: >-
+            The server runs as many calculations as calc.concurrency allows and calc.queue more wait
+            for a slot; this one waited calc.waitMs (or the queue was full) and was not started. Also
+            returned when the server has no DEM. Try again after Retry-After.
+          content:
+            application/json:
+              schema: { type: object, properties: { message: { type: string }, retryAfterS: { type: integer } } }
 
   /calc/route:
     post:
@@ -374,6 +385,14 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RouteResult' }
         '422': { description: 'Schema validation report, a library item / link setup that cannot be resolved, or a route larger than calc.maxRouteSamples ({samples, positions, maxSamples})' }
+        '503':
+          description: >-
+            The server runs as many calculations as calc.concurrency allows and calc.queue more wait
+            for a slot; this one waited calc.waitMs (or the queue was full) and was not started. Also
+            returned when the server has no DEM. Try again after Retry-After.
+          content:
+            application/json:
+              schema: { type: object, properties: { message: { type: string }, retryAfterS: { type: integer } } }
 
   /calc/coverage:
     post:

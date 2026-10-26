@@ -19,7 +19,12 @@
   "database": {
     // Prefer RFMAP_DATABASE_URL so the password stays out of the file.
     "url": "postgresql://rfmap@postgis:5432/rfmap",
-    "poolSize": 8
+    "poolSize": 8,
+    // How long a request waits for a free pooled connection before it gets 503 with Retry-After.
+    "leaseTimeoutMs": 10000,
+    // statement_timeout of every pooled session: PostgreSQL cancels a longer statement. Schema
+    // migrations at start run without it. 0 keeps the role's or the database's own setting.
+    "statementTimeoutMs": 60000
   },
   "admin": {
     // At least 24 random characters, compared in constant time. Prefer RFMAP_ADMIN_TOKEN.
@@ -118,7 +123,14 @@
   "calc": {
     // Terrain samples one route calculation may read: sampled positions times the profile from
     // the pilot to each. About 1 µs each with both links; larger routes are refused with 422.
-    "maxRouteSamples": 20000000
+    "maxRouteSamples": 20000000,
+    // POST /calc/path and /calc/route running at once, waiting for a slot, and how long they wait
+    // (0 = automatic for the first two: one per CPU core, at most half of server.threads, and a
+    // queue of the same size, at most a quarter of them). Past that a calculation answers 503
+    // with Retry-After and the rest of the server keeps its request threads.
+    "concurrency": 0,
+    "queue": 0,
+    "waitMs": 10000
   },
   // Merged over the defaults GET /api/v1/config/map returns (tiles-builder names under /tiles).
   "map": {
