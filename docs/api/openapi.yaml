@@ -453,7 +453,7 @@ paths:
           content:
             application/json:
               schema:
-                oneOf:
+                anyOf:
                   - { $ref: '#/components/schemas/MissingData' }
                   - { type: object, required: [message], properties: { message: { type: string } } }
 
