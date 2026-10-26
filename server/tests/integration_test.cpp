@@ -11,6 +11,12 @@
 
 #include <httplib.h>
 
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <unistd.h>
+
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -41,6 +47,28 @@ double terrain(int c, int r) {
 double landcover(int c, int) {
     const double lon = kWest + (c + 0.5) * kPx;
     return lon > 35.21 && lon < 35.23 ? 10.0 : 0.0;
+}
+
+/// Status of a request written byte for byte to the server, for framing httplib's client would
+/// correct (it adds Content-Length to every POST). 0 when no status line came back.
+int rawStatus(int port, const std::string& request) {
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return 0;
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(static_cast<std::uint16_t>(port));
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    // A server that never answers fails the test in seconds, not at the ctest timeout.
+    const timeval deadline{.tv_sec = 10, .tv_usec = 0};
+    ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &deadline, sizeof deadline);
+    std::string reply(256, '\0');
+    ssize_t got = 0;
+    if (::connect(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof addr) == 0 &&
+        ::send(fd, request.data(), request.size(), 0) == static_cast<ssize_t>(request.size()))
+        got = ::recv(fd, reply.data(), reply.size(), 0);
+    ::close(fd);
+    // "HTTP/1.1 411 ..."
+    return got >= 12 ? std::stoi(reply.substr(9, 3)) : 0;
 }
 
 std::string readFile(const fs::path& p) {
@@ -1278,4 +1306,51 @@ TEST_F(Integration, FlightLogsDecodeImportReplayAndCompareWithThePlan) {
     ASSERT_EQ(call("PUT", "/admin/modules/rf.flightlog", {{"enabled", true}, {"options", {{"timelineHz", 5}}}}, admin()).status, 200);
     op.remove("fpv.blackbox");
     EXPECT_FALSE(has(call("GET", "/modules").body, "id", "fpv.blackbox"));
+}
+
+TEST_F(Integration, HostileInputsAreRefusedNotFatal) {
+    // Nested 400 000 levels deep (within maxBodyBytes): a recursive copy or dump of it
+    // overflowed the stack and took the whole server down, before any session was asked for.
+    json deep = mission();
+    const std::string nested = std::string(400'000, '[') + std::string(400'000, ']');
+    std::string body = deep.dump();
+    body.insert(body.size() - 1, R"(,"modules":{"x":{"y":)" + nested + "}}");
+    httplib::Client c("127.0.0.1", env->port);
+    const auto refused = c.Post("/api/v1/missions", body, "application/json");
+    ASSERT_TRUE(refused);
+    EXPECT_EQ(refused->status, 400) << refused->body;
+    EXPECT_EQ(call("GET", "/health").status, 200);
+
+    // A JSON body announced larger than server.maxBodyBytes is answered before it is read.
+    httplib::Client raw("127.0.0.1", env->port);
+    httplib::Request announce;
+    announce.method = "POST";
+    announce.path = "/api/v1/missions";
+    announce.set_header("Content-Length", "5000000");
+    announce.set_header("Content-Type", "application/json");
+    announce.set_header("Connection", "close");
+    const auto tooLarge = raw.send(announce);
+    ASSERT_TRUE(tooLarge);
+    EXPECT_EQ(tooLarge->status, 413);
+    // Chunked, with no Content-Length at all: the size is unknown until it has been read.
+    EXPECT_EQ(rawStatus(env->port, "POST /api/v1/missions HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                                   "Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n"
+                                   "Connection: close\r\n\r\n2\r\n{}\r\n0\r\n\r\n"),
+              411);
+
+    // A compressed body is refused before it is inflated, on the upload routes too.
+    EXPECT_EQ(rawStatus(env->port, "POST /api/v1/flightlogs/decode HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                                   "Content-Type: application/octet-stream\r\nContent-Encoding: gzip\r\n"
+                                   "Content-Length: 0\r\nConnection: close\r\n\r\n"),
+              415);
+
+    // The elevation profile needs no session, so it has the bounds of every calculated path.
+    EXPECT_EQ(call("GET", "/elevation/profile?from=48.5,35.2&to=48.5,35.2").status, 422);
+    EXPECT_EQ(call("GET", "/elevation/profile?from=-60,-170&to=70,170").status, 422);
+
+    // A route whose legs cross a continent is refused before a single profile is built.
+    json far = shortMission(point(10.0, 5.0, 100));
+    const auto huge = call("POST", "/calc/route", far, bearer(sessionFor(shortMission(point(48.52, 35.22, 100)))));
+    EXPECT_EQ(huge.status, 422) << huge.body;
+    EXPECT_GT(huge.body["samples"].get<double>(), huge.body["maxSamples"].get<double>()) << huge.body;
 }

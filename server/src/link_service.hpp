@@ -95,8 +95,11 @@ public:
 
     [[nodiscard]] ResolvedLink resolve(const json& linkSetup, LinkKind kind) const;
 
-    /// Builds the profile (missing spans reported, never filled) and applies clutter.
-    /// HttpError 422 for a path that would need more than kMaxProfileSamples DEM samples.
+    /// The DEM profile from `from` to `to`, missing spans reported, never filled. HttpError 503
+    /// without a DEM, 422 when both ends are the same point or the path would need more than
+    /// kMaxProfileSamples DEM samples.
+    [[nodiscard]] rfcore::ProfileResult terrain(const rfcore::GeoPoint& from, const rfcore::GeoPoint& to) const;
+    /// Builds the profile with terrain() and applies clutter.
     [[nodiscard]] PreparedPath prepare(const Terminal& ground, const Terminal& air, const CalcContext& ctx) const;
     /// 3000 km at 30 m: far beyond any link the model is for, and a bound on the profile's size.
     static constexpr double kMaxProfileSamples = 100'000.0;

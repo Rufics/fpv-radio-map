@@ -3,7 +3,11 @@
 #include "security.hpp"
 
 #include <httplib.h>
+#include <rfmod/bounded_json.hpp>
 
+#include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <cmath>
 #include <regex>
 
@@ -81,9 +85,11 @@ int HttpRequest::ifMatchRevision() const {
 json HttpRequest::body() const {
     if (request_.body.size() > server_.maxBodyBytes) throw HttpError(413, "request body too large");
     try {
-        return json::parse(request_.body);
+        return rfmod::BoundedJson::parse(request_.body);
     } catch (const json::exception& e) {
         throw HttpError(400, std::string("body is not valid JSON: ") + e.what());
+    } catch (const rfmod::JsonTooDeepError& e) {
+        throw HttpError(400, std::string("body is not accepted: ") + e.what());
     }
 }
 
@@ -133,6 +139,33 @@ void HttpReply::text(int status, const std::string& body, const char* contentTyp
 void HttpReply::header(const char* name, const std::string& value) { response_.set_header(name, value); }
 
 int HttpReply::status() const { return response_.status; }
+
+bool BodyLimit::takesFiles(std::string_view path) {
+    return path.ends_with("/flightlogs") || path.ends_with("/flightlogs/decode");
+}
+
+std::size_t BodyLimit::forPath(std::string_view path) const {
+    return takesFiles(path) ? server_.maxUploadBytes : server_.maxBodyBytes;
+}
+
+bool BodyLimit::exceeded(std::string_view path, std::string_view contentLength) const {
+    std::size_t declared = 0;
+    const std::string text(contentLength);
+    const char* end = text.c_str() + text.size();
+    const auto [ptr, ec] = std::from_chars(text.c_str(), end, declared);
+    if (ec == std::errc::result_out_of_range) return true;
+    return ec == std::errc{} && ptr == end && declared > forPath(path);
+}
+
+bool BodyLimit::encodingRefused(std::string_view contentEncoding) {
+    std::string lower(contentEncoding);
+    std::ranges::transform(lower, lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return !lower.empty() && lower != "identity";
+}
+
+bool BodyLimit::lengthRequired(std::string_view path, std::string_view transferEncoding) const {
+    return !transferEncoding.empty() && !takesFiles(path);
+}
 
 bool AdminToken::presentedBy(const HttpRequest& request) const {
     const std::string t = request.bearer();

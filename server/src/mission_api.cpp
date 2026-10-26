@@ -1,5 +1,7 @@
 #include "mission_api.hpp"
 
+#include "route_workload.hpp"
+
 #include <format>
 
 namespace rfmap {
@@ -130,6 +132,7 @@ void MissionApi::postCalcRoute(const HttpRequest& req, HttpReply& res) const {
     const Principal p = session(req);
     const json mission = req.body();
     s_.schemas().require("mission", mission);
+    checkRouteSize(mission);
     std::optional<int> revision;
     if (const auto stored = s_.missions().get(p.missionId); stored.has_value() && stored->doc == mission) {
         revision = stored->revision;
@@ -137,6 +140,12 @@ void MissionApi::postCalcRoute(const HttpRequest& req, HttpReply& res) const {
     const json result = s_.calc().route(mission, revision);
     if (revision.has_value() && p.role == Role::Edit) s_.missions().storeResultIfCurrent(p.missionId, mission, result);
     res.send(200, result);
+}
+
+void MissionApi::checkRouteSize(const json& mission) const {
+    const double stepM = s_.links().requireDem().nativeResolution().value();
+    const RouteWorkload workload(mission, stepM, !Calculator::kindsFor(mission).empty());
+    workload.require(s_.config().calc.maxRouteSamples);
 }
 
 void MissionApi::checkCoverageSize(const json& mission) const {
@@ -177,8 +186,8 @@ void MissionApi::getJobGrid(const HttpRequest& req, HttpReply& res) const {
 void MissionApi::getElevationProfile(const HttpRequest& req, HttpReply& res) const {
     const auto from = req.latLon("from");
     const auto to = req.latLon("to");
-    const DemSource& dem = s_.links().requireDem();
-    const auto built = rfcore::ProfileBuilder(dem).build(from, to);
+    // The same bounds as every calculated path: this endpoint needs no session.
+    const auto built = s_.links().terrain(from, to);
     if (!built.profile.has_value()) {
         throw HttpError(422, "missing elevation data on part of the path; nothing is guessed",
                         s_.links().missingData(built.missing, from, to));

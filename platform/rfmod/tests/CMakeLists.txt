@@ -12,6 +12,7 @@ rfmod_test_module(rfmod_test_broken test.broken 1.0.0 1)
 
 add_executable(rfmod_tests
   semver_test.cpp
+  bounded_json_test.cpp
   confined_root_test.cpp
   package_test.cpp
   manifest_test.cpp

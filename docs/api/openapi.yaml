@@ -15,7 +15,13 @@ info:
     Errors are JSON `{message, ...}`. 429 and 503 carry `Retry-After` and `retryAfterS`.
     Request bodies are checked against schemas/ (draft-07); a failure is 422
     `{message, issues: [{path, message}]}`, path being a JSON pointer into the body. Calculations answer 503 when the server has no DEM.
-    Every limit (body size, rate classes, coverage cells) is server configuration.
+    Every limit (body size, rate classes, coverage cells, route samples) is server configuration.
+
+    Input limits: a JSON body larger than server.maxBodyBytes is refused with 413, from its
+    Content-Length before it is read (only the flight log uploads take up to server.maxUploadBytes);
+    a JSON body sent chunked, without a Content-Length, is refused with 411. A compressed body
+    (any Content-Encoding but identity) is refused with 415: its size limit could not hold.
+    A JSON body that nests arrays and objects more than 64 levels deep is refused with 400.
 servers:
   - url: /api/v1
 tags:
@@ -97,6 +103,8 @@ paths:
                   ownerKey: { type: string, description: 'Shown once. Needed to create or revoke links.' }
                   session: { type: string, description: 'Edit session for the creator.' }
                   revision: { type: integer, description: 'Always 1; also sent as ETag.' }
+        '400': { description: The body is not JSON, or nests deeper than 64 levels }
+        '413': { description: The body is larger than server.maxBodyBytes }
         '422': { description: Schema validation report }
 
   /missions/{missionId}:
@@ -343,7 +351,10 @@ paths:
         evaluated and the mission needs no links: each leg reports only its terrain (samples counts,
         belowGround, missing-data) and the modules run as usual. With flightMode autonomous the
         autopilot flies the route on its own, so a link below its margin is a warn reason (the pilot
-        cannot take over there) rather than blocked.
+        cannot take over there) rather than blocked. Before anything runs, the server bounds the
+        work: every sampled position builds a terrain profile from the pilot, and a route whose
+        positions times profile samples could exceed calc.maxRouteSamples is refused with 422
+        {samples, positions, maxSamples}.
       security: [{ session: [] }]
       requestBody:
         required: true
@@ -356,7 +367,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/RouteResult' }
-        '422': { description: Schema validation report, or a library item / link setup that cannot be resolved }
+        '422': { description: 'Schema validation report, a library item / link setup that cannot be resolved, or a route larger than calc.maxRouteSamples ({samples, positions, maxSamples})' }
 
   /calc/coverage:
     post:
@@ -421,6 +432,11 @@ paths:
   /elevation/profile:
     get:
       tags: [calc]
+      summary: >-
+        The DEM profile between two points, sampled at the DEM's native step (at half the path
+        length when the path is shorter than two steps; stepM says which). No authentication,
+        so it has the bounds of every calculated path: both ends the same point, or a path longer
+        than 100 000 DEM samples, is a 422.
       parameters:
         - { name: from, in: query, required: true, schema: { type: string, example: '48.53,35.20' } }
         - { name: to, in: query, required: true, schema: { type: string } }
@@ -430,11 +446,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Profile' }
+        '400': { description: from or to missing, or not a lat,lon within the world }
         '422':
-          description: Missing elevation data on part of the path
+          description: >-
+            Missing elevation data on part of the path (MissingData), or a path out of bounds: both
+            ends the same point, or too long for the DEM (only `message`).
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/MissingData' }
+              schema:
+                anyOf:
+                  - { $ref: '#/components/schemas/MissingData' }
+                  - { type: object, required: [message], properties: { message: { type: string } } }
 
   /library/{kind}:
     parameters:

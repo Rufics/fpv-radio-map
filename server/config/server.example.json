@@ -10,7 +10,9 @@
     // true only behind a reverse proxy you run: the last X-Forwarded-For hop becomes the
     // client address for rate limits and logs.
     "trustProxy": true,
-    // JSON bodies, and the largest file the API takes (a flight log).
+    // JSON bodies, and the largest file the API takes (a flight log). A JSON body announced
+    // larger than maxBodyBytes is refused (413) before it is read; keep the proxy's limit in step
+    // (deploy/nginx.conf).
     "maxBodyBytes": 1048576,
     "maxUploadBytes": 67108864
   },
@@ -97,6 +99,11 @@
     "maxCells": 250000,
     "maxJobs": 4,
     "keepMinutes": 120
+  },
+  "calc": {
+    // Terrain samples one route calculation may read: sampled positions times the profile from
+    // the pilot to each. About 1 µs each with both links; larger routes are refused with 422.
+    "maxRouteSamples": 20000000
   },
   // Merged over the defaults GET /api/v1/config/map returns (tiles-builder names under /tiles).
   "map": {

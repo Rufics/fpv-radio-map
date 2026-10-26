@@ -143,6 +143,14 @@ public:
     };
     Coverage coverage;
 
+    struct Calc {
+        /// Terrain samples one POST /calc/route may read (RouteWorkload), so a route of
+        /// thousands of legs or of continental length cannot hold a request thread for hours.
+        /// A sample costs about 1 µs of one core with both links, so the default is ~20 s.
+        double maxRouteSamples = 20'000'000.0;
+    };
+    Calc calc;
+
     json raw;  ///< the merged document, for the admin page (secrets removed)
 };
 

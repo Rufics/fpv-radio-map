@@ -40,7 +40,8 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
-        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "map", "metrics", "enabled"});
+        "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "map", "metrics",
+        "enabled"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -192,6 +193,7 @@ Config Config::fromJson(json doc) {
     read(cv, "maxCells", c.coverage.maxCells);
     read(cv, "maxJobs", c.coverage.maxJobs);
     read(cv, "keepMinutes", c.coverage.keepMinutes);
+    read(doc.value("calc", json::object()), "maxRouteSamples", c.calc.maxRouteSamples);
 
     if (c.server.port <= 0 || c.server.port > 65535) throw std::invalid_argument("server.port out of range");
     if (c.auth.pinMaxAttempts < 1) throw std::invalid_argument("auth.pinMaxAttempts must be >= 1");
@@ -201,6 +203,7 @@ Config Config::fromJson(json doc) {
     if (c.data.demStatedErrorM.has_value() && !(*c.data.demStatedErrorM >= 0.0)) {
         throw std::invalid_argument("data.demStatedErrorM must be >= 0");
     }
+    if (!(c.calc.maxRouteSamples >= 1.0)) throw std::invalid_argument("calc.maxRouteSamples must be >= 1");
     if (c.modules.maxMemoryMb == 0 || c.modules.maxTimeoutMs == 0) {
         throw std::invalid_argument("modules.maxMemoryMb and modules.maxTimeoutMs must be >= 1");
     }
