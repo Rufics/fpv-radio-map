@@ -1,7 +1,7 @@
 #pragma once
 
-// Internal counters of the server in the Prometheus text format, for GET /api/v1/admin/metrics
-// (off unless metrics.enabled). Only plain counters and gauges that are cheap to read: a scrape
+// Internal counters of the server in the Prometheus text format, for GET /metrics on the
+// operations listener (off unless metrics.enabled). Only plain counters and gauges that are cheap to read: a scrape
 // must not slow the server it observes, so nothing here queries the database.
 
 #include "lru.hpp"

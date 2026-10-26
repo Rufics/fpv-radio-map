@@ -73,10 +73,4 @@ void AdminApi::deleteCache(const HttpRequest& req, HttpReply& res) const {
     res.noContent();
 }
 
-void AdminApi::getMetrics(const HttpRequest& req, HttpReply& res) const {
-    admin_.require(req);
-    if (!s_.config().metrics.enabled) throw HttpError(404, "metrics are off; set metrics.enabled in the server config");
-    res.text(200, metrics_(), "text/plain; version=0.0.4; charset=utf-8");
-}
-
 }  // namespace rfmap

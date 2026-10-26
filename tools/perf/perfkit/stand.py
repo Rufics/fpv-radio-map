@@ -85,9 +85,12 @@ class StandLimits:
 
 
 class Stand:
-    def __init__(self, settings: StandSettings, runner: CommandRunner, admin_token: str = "", sleep=time.sleep):
+    def __init__(self, settings: StandSettings, runner: CommandRunner, admin_token: str = "", sleep=time.sleep,
+                 metrics_token: str = ""):
         self.settings = settings
         self.admin_token = admin_token or secrets.token_urlsafe(32)
+        # Prometheus reads the server's /metrics with a token of its own, never the admin token.
+        self.metrics_token = metrics_token or secrets.token_urlsafe(32)
         self.run_dir: Path | None = None  # set by the suite once the run has its folder
         self._runner = runner
         self._sleep = sleep
@@ -130,9 +133,9 @@ class Stand:
             self._work_dir = Path(tempfile.mkdtemp(prefix="rfmap-perf-"))
             # Readable by the containers that run as the caller; the token itself is 0600.
             self._work_dir.chmod(0o755)
-            token = self._work_dir / "admin-token"
+            token = self._work_dir / "metrics-token"
             token.touch(mode=0o600)
-            token.write_text(self.admin_token, encoding="utf-8")
+            token.write_text(self.metrics_token, encoding="utf-8")
             (self._work_dir / "dashboards").mkdir()
         return self._work_dir
 
@@ -159,6 +162,7 @@ class Stand:
             raise PerfError("the stand has no run folder yet")
         return {**os.environ, "RFMAP_PERF_DATA": str(s.dataset_dir), "RFMAP_PERF_RUN_DIR": str(self.run_dir),
                 "RFMAP_PERF_PORT": str(s.port), "RFMAP_PERF_ADMIN_TOKEN": self.admin_token,
+                "RFMAP_PERF_METRICS_TOKEN": self.metrics_token,
                 "RFMAP_PERF_SERVER_IMAGE": s.image, "RFMAP_PERF_USER": user,
                 "RFMAP_PERF_WORK_DIR": str(self.work_dir), "RFMAP_PERF_PROMETHEUS_PORT": str(s.prometheus_port),
                 "RFMAP_PERF_GRAFANA_PORT": str(s.grafana_port),

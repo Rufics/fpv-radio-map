@@ -108,6 +108,9 @@ services:
       - ${RFMAP_TILES_DIR:?set RFMAP_TILES_DIR in .env}:/data:ro
       - rfmap-state:/var/lib/rfmap
     networks: [backend, frontend]
+    # SIGTERM starts a drain (ops.drainSeconds, 5 s by default) and then lets the requests in
+    # flight finish; a long route calculation needs the time before the kill.
+    stop_grace_period: 60s
     restart: unless-stopped
 
   web:

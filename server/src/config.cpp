@@ -41,7 +41,7 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
         "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "map", "metrics",
-        "enabled"});
+        "enabled", "allowFrom", "ops", "drainSeconds"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -91,8 +91,9 @@ Config Config::load(const std::filesystem::path& file, const Environment& env) {
     }
     static const std::map<std::string, std::vector<std::string>, std::less<>> aliases = {
         {"RFMAP_DATABASE_URL", {"database", "url"}},  {"RFMAP_ADMIN_TOKEN", {"admin", "token"}},
-        {"RFMAP_PORT", {"server", "port"}},          {"RFMAP_OPEN_METEO_URL", {"weather", "baseUrl"}},
-        {"RFMAP_DEM", {"data", "dem"}},              {"RFMAP_LANDCOVER", {"data", "landcover"}}};
+        {"RFMAP_METRICS_TOKEN", {"metrics", "token"}}, {"RFMAP_PORT", {"server", "port"}},
+        {"RFMAP_OPEN_METEO_URL", {"weather", "baseUrl"}}, {"RFMAP_DEM", {"data", "dem"}},
+        {"RFMAP_LANDCOVER", {"data", "landcover"}}};
     for (const auto& [name, value] : env) {
         if (const auto a = aliases.find(name); a != aliases.end()) {
             // Port and similar numbers parse as JSON; tokens and URLs stay strings.
@@ -113,6 +114,33 @@ Config Config::load(const std::filesystem::path& file, const Environment& env) {
     return fromJson(std::move(doc));
 }
 
+namespace {
+
+/// The operations listener and the metrics behind it, with their checks (ops.port against
+/// server.port, which is read before this runs).
+void readOperations(const json& doc, Config& c) {
+    const json& ops = doc.value("ops", json::object());
+    read(ops, "enabled", c.ops.enabled);
+    read(ops, "listen", c.ops.listen);
+    read(ops, "port", c.ops.port);
+    read(ops, "drainSeconds", c.ops.drainSeconds);
+
+    const json& me = doc.value("metrics", json::object());
+    read(me, "enabled", c.metrics.enabled);
+    read(me, "token", c.metrics.token);
+    read(me, "allowFrom", c.metrics.allowFrom);
+
+    if (c.ops.port < 0 || c.ops.port > 65535) throw std::invalid_argument("ops.port out of range");
+    if (c.ops.enabled && c.ops.port == c.server.port) throw std::invalid_argument("ops.port must differ from server.port");
+    if (c.ops.drainSeconds < 0) throw std::invalid_argument("ops.drainSeconds must be >= 0");
+    if (!c.metrics.token.empty() && c.metrics.token.size() < Config::kMinMetricsTokenLength) {
+        throw std::invalid_argument(
+            std::format("metrics.token must be at least {} characters", Config::kMinMetricsTokenLength));
+    }
+}
+
+}  // namespace
+
 Config Config::fromJson(json doc) {
     Config c;
     const json& s = doc.value("server", json::object());
@@ -128,7 +156,7 @@ Config Config::fromJson(json doc) {
     read(db, "poolSize", c.database.poolSize);
 
     read(doc.value("admin", json::object()), "token", c.adminToken);
-    read(doc.value("metrics", json::object()), "enabled", c.metrics.enabled);
+    readOperations(doc, c);
 
     const json& d = doc.value("data", json::object());
     readPath(d, "dem", c.data.dem);
@@ -210,6 +238,7 @@ Config Config::fromJson(json doc) {
 
     c.raw = doc;
     if (c.raw.contains("admin")) c.raw["admin"]["token"] = "(set)";
+    if (c.raw.contains("metrics") && c.raw["metrics"].contains("token")) c.raw["metrics"]["token"] = "(set)";
     if (c.raw.contains("database") && c.raw["database"].contains("url")) c.raw["database"]["url"] = "(set)";
     return c;
 }

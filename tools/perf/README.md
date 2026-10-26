@@ -157,8 +157,8 @@ limits.
 
 **Monitoring.** Unless `--no-monitoring` is given, the stand also runs Prometheus
 (`127.0.0.1:19090`, `--prometheus-port`), cAdvisor and postgres_exporter. Prometheus scrapes every
-5 s the server's `/api/v1/admin/metrics` (with the run's admin token), the containers and
-PostgreSQL, and k6 writes its own series in with remote write. After the load, the `prometheus`
+5 s the server's `/metrics` on its operations port (with the run's metrics token), the containers
+and PostgreSQL, and k6 writes its own series in with remote write. After the load, the `prometheus`
 collector reads its queries over the load phase and gives one measurement per statistic:
 
 | query | from |
