@@ -160,21 +160,22 @@ void SettingsSync::pollNow() {
     reloadDatabase("fingerprint changed");
 }
 
-void SettingsSync::publish(std::string_view topic) {
+bool SettingsSync::publish(std::string_view topic) {
     const std::string payload = ChangeNotice(std::string(topic), instance_).payload();
     try {
         db_.tx([&payload](pqxx::work& w) {
             w.exec("select pg_notify($1, $2)", pqxx::params{ChangeNotice::kChannel, payload});
         });
+        return true;
     } catch (const pqxx::failure& e) {
-        log_.warn("settings", std::format("could not announce the change of {}: {}; other processes catch up within {} s",
-                                          topic, e.what(), options_.poll.count()));
+        log_.warn("settings", std::format("could not announce the change of {}: {}", topic, e.what()));
+        return false;
     }
 }
 
-void SettingsSync::reloadAll(bool everywhere) {
+bool SettingsSync::reloadAll(bool everywhere) {
     reloadWhere([](const Topic&) { return true; }, everywhere ? "admin reset everywhere" : "admin reset here");
-    if (everywhere) publish(ChangeNotice::kEverything);
+    return !everywhere || publish(ChangeNotice::kEverything);
 }
 
 void SettingsSync::reloadDatabase(const std::string& reason) {

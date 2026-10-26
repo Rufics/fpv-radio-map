@@ -34,6 +34,9 @@ private:
     /// Applies {enabled?, options?} to an installed module; HttpError 422 when refused.
     void updateInstalled(const std::string& id, const json& body) const;
     [[nodiscard]] json trustedKeys() const;
+    /// Tells the other processes that the module files changed; HttpError 503 when it cannot,
+    /// since no poll covers files and they would keep the old modules until a reset.
+    void announceModules() const;
 
     const Services& s_;
     const AdminToken& admin_;

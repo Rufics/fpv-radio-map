@@ -281,7 +281,10 @@ under **Admin**.
   admin API, such as an `update builtin_modules ...` in psql, `POST /admin/settings/reload`
   drops the cached settings and reads them again in every process at once; `?scope=local`
   reloads only the one that serves the request. Without it the poll picks a database change up
-  within `settingsSync.pollSeconds`.
+  within `settingsSync.pollSeconds`. When the change is applied but its notice cannot be sent,
+  a change to the built-in switches or cache limits still answers 200 (the poll carries it), while
+  a change to installed modules, a module reload or a reset everywhere answers 503: no poll covers
+  the module files, so retry once the database answers.
 
 ### Module sandbox in containers
 

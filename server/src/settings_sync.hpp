@@ -82,12 +82,13 @@ public:
     /// Stops the background thread; called by the destructor too.
     void stop();
 
-    /// Tells the other processes that this one has changed `topic`. A notice that cannot be
-    /// sent is logged: the poll brings the others up to date.
-    void publish(std::string_view topic);
+    /// Tells the other processes that this one has changed `topic`; false (and logged) when the
+    /// notice could not be sent. The poll then brings the others up to date on a database
+    /// topic, but not on a files topic: the caller has to say so.
+    bool publish(std::string_view topic);
     /// The admin's reset: reloads every topic here and, when `everywhere`, asks every other
-    /// process to do the same.
-    void reloadAll(bool everywhere);
+    /// process to do the same; false when that notice could not be sent.
+    bool reloadAll(bool everywhere);
     /// GET /admin/settings/sync: this process, its listener, its last reload.
     [[nodiscard]] json status() const;
 

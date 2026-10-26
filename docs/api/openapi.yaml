@@ -721,6 +721,7 @@ paths:
                 properties:
                   modules: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
                   notices: { type: array, items: { type: string } }
+        '503': { description: 'Reloaded here, but the other server processes could not be told to reload too' }
 
   /admin/modules/{moduleId}:
     parameters:
@@ -745,6 +746,7 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
         '422': { description: Options do not match the schema, or unknown module }
+        '503': { description: 'An installed module changed here, but the other server processes could not be told' }
 
   /admin/modules/notices:
     get:
@@ -877,6 +879,7 @@ paths:
         '401': { description: Admin token missing or wrong }
         '403': { description: The admin API is off (no admin token in the configuration) }
         '422': { description: Unknown scope }
+        '503': { description: 'Reloaded here, but the notice to the other processes could not be sent (scope all)' }
 
 components:
   securitySchemes:

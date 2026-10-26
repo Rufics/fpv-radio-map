@@ -935,6 +935,20 @@ TEST_F(Integration, SettingsPollRetriesAReloadThatFailed) {
     db.tx([](pqxx::work& w) { w.exec("delete from settings where key = 'test.retry'"); });
 }
 
+TEST_F(Integration, SettingsNoticeThatCannotBeSentIsReported) {
+    Database db(databaseUrl(), 1);
+    Database other(databaseUrl(), 1);
+    Logger log;
+    log.setQuiet(true);
+    SettingsSync sync(db, {databaseUrl(), false, std::chrono::seconds(3600)}, log);
+    sync.start();
+    const auto pid = db.tx([](pqxx::work& w) { return w.query_value<int>("select pg_backend_pid()"); });
+    other.tx([pid](pqxx::work& w) { w.exec("select pg_terminate_backend($1)", pqxx::params{pid}); });
+    EXPECT_FALSE(sync.publish(SettingsTopic::kModules));  // the caller hears it, not only the log
+    EXPECT_TRUE(sync.publish(SettingsTopic::kModules));   // the pool has connected again
+    EXPECT_TRUE(sync.reloadAll(true));
+}
+
 TEST_F(Integration, SettingsListenerReconnectsAndReloadsWhatItMayHaveMissed) {
     const std::string url = databaseUrl();
     Database db(url, 1);
