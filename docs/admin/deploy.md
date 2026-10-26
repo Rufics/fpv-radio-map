@@ -221,7 +221,9 @@ token of its own in `metrics.token` (`RFMAP_METRICS_TOKEN`, from a secret), or l
 the scraper connects from in `metrics.allowFrom` (`["10.42.0.0/16", "fd00::/8"]`), or both:
 every configured guard must hold. With neither, only loopback may read the metrics. The
 operations port is not published by compose; on Kubernetes, scrape each pod on it through a
-`ServiceMonitor` or pod annotations, and keep it off the Ingress.
+`ServiceMonitor` or pod annotations, and keep it off the Ingress. The listener speaks plain HTTP,
+so a remote scrape sends `metrics.token` unencrypted: scrape only over a network or mesh that
+encrypts pod traffic, or from a sidecar on the pod's loopback.
 
 ## 4. Open-Meteo
 

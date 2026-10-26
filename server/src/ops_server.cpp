@@ -152,11 +152,13 @@ void OpsServer::getHealthz(const httplib::Request&, httplib::Response& res) cons
 }
 
 void OpsServer::getReadyz(const httplib::Request&, httplib::Response& res) const {
+    ReadinessChecks::Report report;
+    if (!draining()) report = readiness_.run();
+    // Checked again after the probes: a shutdown that began while they ran must not get a 200.
     if (draining()) {
         sendJson(res, 503, {{"ready", false}, {"draining", true}});
         return;
     }
-    const ReadinessChecks::Report report = readiness_.run();
     sendJson(res, report.ready ? 200 : 503, report.body);
 }
 
