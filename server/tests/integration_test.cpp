@@ -998,14 +998,14 @@ TEST_F(Integration, AdminSettingsResetAnswers503WhenTheDatabaseIsGone) {
     const auto at = url.find('@');
     const auto scheme = url.find("://");
     ASSERT_NE(at, std::string::npos);
-    const std::string cutUrl = url.substr(0, scheme + 3) + "rfmap_cut" + url.substr(at);
+    const std::string cutUrl = url.substr(0, scheme + 3) + "rfmap_cut:cut-0123456789" + url.substr(at);
     pqxx::connection admin(url);
     const auto run = [&admin](const std::string& sql) {
         pqxx::nontransaction w(admin);
         w.exec(sql);
     };
     run("drop role if exists rfmap_cut");
-    run("create role rfmap_cut login superuser");
+    run("create role rfmap_cut login superuser password 'cut-0123456789'");  // works with trust or password auth
     json cfg = env->config;
     cfg["database"]["url"] = cutUrl;
     cfg["database"]["poolSize"] = 1;
