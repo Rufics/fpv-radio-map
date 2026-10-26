@@ -26,8 +26,8 @@ std::string bearerOf(const httplib::Request& req) {
     if (!req.has_header("Authorization")) return {};
     const std::string h = req.get_header_value("Authorization");
     constexpr std::string_view scheme = "Bearer ";
-    const auto sameLetter = [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); };
-    if (h.size() <= scheme.size() ||
+    if (const auto sameLetter = [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); };
+        h.size() <= scheme.size() ||
         !std::ranges::equal(scheme, std::string_view(h).substr(0, scheme.size()), sameLetter)) {
         return {};
     }
