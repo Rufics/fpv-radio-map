@@ -879,7 +879,7 @@ paths:
         '401': { description: Admin token missing or wrong }
         '403': { description: The admin API is off (no admin token in the configuration) }
         '422': { description: Unknown scope }
-        '503': { description: 'Reloaded here, but the notice to the other processes could not be sent (scope all)' }
+        '503': { description: 'A topic failed to reload on this process (see its log; `announced` says whether the others were still told), or with scope all the notice to the other processes could not be sent' }
 
 components:
   securitySchemes:

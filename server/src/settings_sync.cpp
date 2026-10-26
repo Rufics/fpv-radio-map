@@ -169,9 +169,11 @@ bool SettingsSync::publish(std::string_view topic) {
     }
 }
 
-bool SettingsSync::reloadAll(bool everywhere) {
-    reloadWhere(Pick::all(), everywhere ? "admin reset everywhere" : "admin reset here");
-    return !everywhere || publish(ChangeNotice::kEverything);
+SettingsSync::ResetOutcome SettingsSync::reloadAll(bool everywhere) {
+    ResetOutcome outcome;
+    outcome.reloaded = reloadWhere(Pick::all(), everywhere ? "admin reset everywhere" : "admin reset here");
+    if (everywhere) outcome.announced = publish(ChangeNotice::kEverything);
+    return outcome;
 }
 
 bool SettingsSync::Pick::covers(const Topic& t) const {
@@ -183,7 +185,7 @@ bool SettingsSync::Pick::covers(const Topic& t) const {
     return false;
 }
 
-void SettingsSync::reloadWhere(const Pick& which, std::string_view reason) {
+bool SettingsSync::reloadWhere(const Pick& which, std::string_view reason) {
     std::lock_guard lock(reloadMutex_);
     // Taken before the reads, so a change after this point shows at the next poll. Only a reload
     // of every database topic may move it, and only when all of them succeeded: otherwise the
@@ -193,6 +195,7 @@ void SettingsSync::reloadWhere(const Pick& which, std::string_view reason) {
     const std::uint64_t failed = runReloads(which);
     if (before && failed == 0) fingerprint_ = std::move(before);
     noteReload(failed, reason);
+    return failed == 0;
 }
 
 void SettingsSync::noteReload(std::uint64_t failed, std::string_view reason) {

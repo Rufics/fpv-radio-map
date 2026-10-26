@@ -284,7 +284,8 @@ under **Admin**.
   within `settingsSync.pollSeconds`. When the change is applied but its notice cannot be sent,
   a change to the built-in switches or cache limits still answers 200 (the poll carries it), while
   a change to installed modules, a module reload or a reset everywhere answers 503: no poll covers
-  the module files, so retry once the database answers.
+  the module files, so retry once the database answers. The reset also answers 503 when a topic
+  fails to reload on the process that serves it (the log says which; it still tells the others).
 
 ### Module sandbox in containers
 

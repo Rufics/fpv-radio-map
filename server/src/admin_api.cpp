@@ -99,7 +99,12 @@ void AdminApi::postSettingsReload(const HttpRequest& req, HttpReply& res) const 
     admin_.require(req);
     const std::string scope = req.hasParam("scope") ? req.param("scope") : "all";
     if (scope != "all" && scope != "local") throw HttpError(422, "scope is all or local");
-    if (!s_.settings().reloadAll(scope == "all")) {
+    const auto outcome = s_.settings().reloadAll(scope == "all");
+    if (!outcome.reloaded) {
+        throw HttpError(503, "some settings could not be reloaded on this server process (see its log); retry",
+                        {{"announced", outcome.announced}});
+    }
+    if (!outcome.announced) {
         throw HttpError(503, "reloaded this server process, but the others could not be told; retry");
     }
     s_.log().info("settings", "reloaded the settings on request, scope " + scope);

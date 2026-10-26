@@ -941,12 +941,21 @@ TEST_F(Integration, SettingsNoticeThatCannotBeSentIsReported) {
     Logger log;
     log.setQuiet(true);
     SettingsSync sync(db, {databaseUrl(), false, std::chrono::seconds(3600)}, log);
+    bool broken = false;
+    sync.add(SettingsTopic::kModules, SettingsSync::Source::Files, [&broken] {
+        if (broken) throw std::runtime_error("a module file cannot be read");
+    });
     sync.start();
     const auto pid = db.tx([](pqxx::work& w) { return w.query_value<int>("select pg_backend_pid()"); });
     other.tx([pid](pqxx::work& w) { w.exec("select pg_terminate_backend($1)", pqxx::params{pid}); });
     EXPECT_FALSE(sync.publish(SettingsTopic::kModules));  // the caller hears it, not only the log
     EXPECT_TRUE(sync.publish(SettingsTopic::kModules));   // the pool has connected again
-    EXPECT_TRUE(sync.reloadAll(true));
+    const auto fine = sync.reloadAll(true);
+    EXPECT_TRUE(fine.reloaded && fine.announced);
+    broken = true;
+    const auto failed = sync.reloadAll(true);  // a local failure is reported, and the others are still told
+    EXPECT_FALSE(failed.reloaded);
+    EXPECT_TRUE(failed.announced);
 }
 
 TEST_F(Integration, SettingsListenerReconnectsAndReloadsWhatItMayHaveMissed) {

@@ -86,9 +86,14 @@ public:
     /// notice could not be sent. The poll then brings the others up to date on a database
     /// topic, but not on a files topic: the caller has to say so.
     bool publish(std::string_view topic);
+    /// What the admin's reset achieved.
+    struct ResetOutcome {
+        bool reloaded = true;   ///< every topic reloaded here (a failure is logged and counted)
+        bool announced = true;  ///< the notice to the other processes went out, when asked for
+    };
     /// The admin's reset: reloads every topic here and, when `everywhere`, asks every other
-    /// process to do the same; false when that notice could not be sent.
-    bool reloadAll(bool everywhere);
+    /// process to do the same, also after a local failure.
+    ResetOutcome reloadAll(bool everywhere);
     /// GET /admin/settings/sync: this process, its listener, its last reload.
     [[nodiscard]] json status() const;
 
@@ -134,8 +139,9 @@ private:
     void sleepFor(const std::stop_token& stop, std::chrono::milliseconds wait);
     void onPayload(std::string_view payload);
 
-    /// Runs the reloads of the topics `which` selects, each on its own, and counts them.
-    void reloadWhere(const Pick& which, std::string_view reason);
+    /// Runs the reloads of the topics `which` selects, each on its own, and counts them; false
+    /// when any failed.
+    bool reloadWhere(const Pick& which, std::string_view reason);
     /// Whether `which` selects every database topic: only such a reload may move the fingerprint.
     [[nodiscard]] bool coversDatabase(const Pick& which) const;
     /// Runs the selected reloads; returns how many failed (logged).
