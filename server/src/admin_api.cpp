@@ -1,21 +1,29 @@
 #include "admin_api.hpp"
 
+#include <optional>
+
 namespace rfmap {
 
 void AdminApi::updateInstalled(const std::string& id, const json& b) const {
-    const ModuleGate::Change gate(s_.moduleGate());  // the settings are a file under the module root
     bool stored = false;
-    try {
-        if (b.contains("options")) {
-            s_.registry().setOptions(id, b.at("options"));
-            stored = true;  // setOptions refuses before it writes
+    std::optional<std::string> refused;
+    {
+        const ModuleGate::Change gate(s_.moduleGate());  // the settings are a file under the module root
+        try {
+            if (b.contains("options")) {
+                s_.registry().setOptions(id, b.at("options"));
+                stored = true;  // setOptions refuses before it writes
+            }
+            if (b.contains("enabled")) s_.registry().setEnabled(id, b.at("enabled").get<bool>());
+        } catch (const std::invalid_argument& e) {
+            refused = e.what();
         }
-        if (b.contains("enabled")) s_.registry().setEnabled(id, b.at("enabled").get<bool>());
-    } catch (const std::invalid_argument& e) {
-        // The options are written although the switch was refused: the others must read them too.
-        if (stored) announceModules();
-        throw HttpError(422, e.what());
     }
+    if (!refused) return;
+    // The options are written although the switch was refused: the others must read them too.
+    // Announced after the gate is released, so a slow database holds no module write back.
+    if (stored) announceModules();
+    throw HttpError(422, *refused);
 }
 
 void AdminApi::announceModules() const {
