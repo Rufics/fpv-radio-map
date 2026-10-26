@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <format>
 #include <system_error>
 
 namespace rfmap {
@@ -20,8 +19,8 @@ std::unique_ptr<pqxx::connection> Database::connect() const {
 
 void Database::applySettings(pqxx::connection& c) const {
     if (settings_.statementTimeout.count() > 0) {
-        // A number the configuration checked, not text from a request.
-        pqxx::nontransaction(c).exec(std::format("SET statement_timeout = {}", settings_.statementTimeout.count()));
+        pqxx::nontransaction(c).exec("select set_config('statement_timeout', $1, false)",
+                                     pqxx::params{std::to_string(settings_.statementTimeout.count())});
     }
 }
 
