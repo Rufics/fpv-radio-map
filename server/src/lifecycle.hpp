@@ -29,8 +29,11 @@ public:
     GracefulStop(GracefulStop&&) = delete;
     GracefulStop& operator=(GracefulStop&&) = delete;
 
-    /// Asks for a stop. Safe from a signal handler; a second call changes nothing.
-    void request() noexcept { requested_.store(true, std::memory_order_relaxed); }
+    /// Asks for a stop. Safe from a signal handler: it only sets atomic flags. A second call
+    /// (a second Ctrl-C) cuts the drain short, so the stop phase runs at the next poll.
+    void request() noexcept {
+        if (requested_.exchange(true, std::memory_order_relaxed)) hurried_.store(true, std::memory_order_relaxed);
+    }
     [[nodiscard]] bool requested() const noexcept { return requested_.load(std::memory_order_relaxed); }
     /// True from the moment the drain phase began.
     [[nodiscard]] bool draining() const noexcept { return draining_.load(); }
@@ -42,11 +45,15 @@ private:
     void run(const std::stop_token& stop);
     /// Sleeps `duration` or less, returning early on a stop request of the thread.
     [[nodiscard]] bool sleepUnlessStopped(const std::stop_token& stop, std::chrono::milliseconds duration);
+    /// Waits out the drain window in polls, ending early on a second request. False if the
+    /// thread was asked to stop.
+    [[nodiscard]] bool drain(const std::stop_token& stop);
 
     std::chrono::milliseconds drain_;
     Phase onDrain_;
     Phase onStop_;
     std::atomic<bool> requested_{false};
+    std::atomic<bool> hurried_{false};
     std::atomic<bool> draining_{false};
     std::atomic<bool> stopped_{false};
     std::mutex mutex_;

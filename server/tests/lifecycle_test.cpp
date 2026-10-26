@@ -58,7 +58,20 @@ TEST(GracefulStopTest, DestroyedDuringTheDrainNeverStops) {
     EXPECT_FALSE(stopped.load());
 }
 
-TEST(GracefulStopTest, SecondRequestChangesNothing) {
+TEST(GracefulStopTest, SecondRequestCutsTheDrainShort) {
+    std::atomic<bool> stopped{false};
+    GracefulStop stop(
+        10s, [] {}, [&stopped] { stopped = true; });
+    const auto asked = std::chrono::steady_clock::now();
+    stop.request();
+    for (int i = 0; i < 200 && !stop.draining(); ++i) std::this_thread::sleep_for(10ms);
+    ASSERT_TRUE(stop.draining());
+    stop.request();
+    EXPECT_TRUE(eventually(stopped));
+    EXPECT_LT(std::chrono::steady_clock::now() - asked, 5s);
+}
+
+TEST(GracefulStopTest, SecondRequestRunsTheStopPhaseOnce) {
     std::atomic<int> stops{0};
     GracefulStop stop(
         0ms, [] {}, [&stops] { ++stops; });

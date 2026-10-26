@@ -56,12 +56,9 @@ public:
     /// Stops at once: the listening sockets close and the requests in flight finish.
     void stop();
     /// Begins the graceful stop: /readyz answers 503, the server keeps serving for
-    /// ops.drainSeconds, then stop(). A second request (a second Ctrl-C) stops at once. Safe
-    /// from a signal handler, as the previous immediate stop was.
-    void requestShutdown() noexcept {
-        if (stopper_->requested()) stop();
-        else stopper_->request();
-    }
+    /// ops.drainSeconds, then stop(). A second request (a second Ctrl-C) cuts the drain short.
+    /// Safe from a signal handler: it only sets a flag that the stop thread polls.
+    void requestShutdown() noexcept { stopper_->request(); }
 
     [[nodiscard]] Logger& log() { return log_; }
     [[nodiscard]] const Config& config() const { return config_; }
