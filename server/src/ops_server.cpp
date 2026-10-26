@@ -20,8 +20,8 @@ namespace {
 
 constexpr int kOpsThreads = 2;
 
-/// The token of an `Authorization: Bearer <token>` header; the scheme name is case-insensitive
-/// (RFC 9110), so `bearer` and `BEARER` count too.
+/// The token of an `Authorization: Bearer <token>` header. Per RFC 9110 the scheme name is
+/// case-insensitive and one or more spaces may separate it from the token.
 std::string bearerOf(const httplib::Request& req) {
     if (!req.has_header("Authorization")) return {};
     const std::string h = req.get_header_value("Authorization");
@@ -29,7 +29,9 @@ std::string bearerOf(const httplib::Request& req) {
     const bool bearer = h.size() > scheme.size() &&
                         std::ranges::equal(scheme, std::string_view(h).substr(0, scheme.size()),
                                            [](unsigned char a, unsigned char b) { return std::tolower(a) == std::tolower(b); });
-    return bearer ? h.substr(scheme.size()) : std::string{};
+    if (!bearer) return {};
+    const auto start = h.find_first_not_of(' ', scheme.size());
+    return start == std::string::npos ? std::string{} : h.substr(start);
 }
 
 void sendJson(httplib::Response& res, int status, const json& body) {

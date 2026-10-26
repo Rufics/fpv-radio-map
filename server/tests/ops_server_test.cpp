@@ -236,6 +236,8 @@ TEST(OpsServerTest, MetricsBehindTheirOwnToken) {
     EXPECT_EQ(res->status, 200);
     EXPECT_EQ(res->body, "rfmap_up 1\n");
     EXPECT_EQ(f.get("/metrics", "metrics-token", "bearer ")->status, 200);  // the scheme is case-insensitive
+    EXPECT_EQ(f.get("/metrics", "metrics-token", "Bearer    ")->status, 200);  // several separator spaces
+    EXPECT_EQ(f.get("/metrics", " ", "Bearer")->status, 401);  // a scheme without a token
     EXPECT_EQ(f.get("/metrics", "metrics-token", "Basic ")->status, 401);
 }
 
