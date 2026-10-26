@@ -33,7 +33,13 @@ void AdminApi::putModule(const HttpRequest& req, HttpReply& res) const {
         // Unannounced, the change still reaches the others by the next fingerprint poll.
         (void)s_.settings().publish(SettingsTopic::kBuiltins);
     } else {
-        updateInstalled(id, b);
+        try {
+            updateInstalled(id, b);
+        } catch (const HttpError&) {
+            // The options may be written already when `enabled` is refused: let the others read them.
+            (void)s_.settings().publish(SettingsTopic::kModules);
+            throw;
+        }
         announceModules();
     }
     res.send(200, s_.catalog().list(true));
