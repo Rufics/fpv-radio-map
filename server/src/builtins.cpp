@@ -63,6 +63,25 @@ BuiltinModules::BuiltinModules(Database* db, SchemaRegistry& schemas, std::strin
     });
 }
 
+void BuiltinModules::reload() {
+    if (!db_) return;
+    // Held across the read: set() holds it across its write, so an older snapshot read here
+    // can never overwrite what a request on this process has just stored.
+    std::lock_guard lock(mutex_);
+    db_->tx([this](pqxx::work& w) {
+        // A row deleted by hand comes back with the defaults, as at start.
+        for (const auto& [id, e] : entries_) {
+            w.exec("insert into builtin_modules(id) values ($1) on conflict do nothing", pqxx::params{id});
+        }
+        for (const auto& r : w.exec("select id, enabled, options::text from builtin_modules")) {
+            const auto it = entries_.find(r[0].as<std::string>());
+            if (it == entries_.end()) continue;  // a module a newer server version builds in
+            it->second.enabled = r[1].as<bool>();
+            it->second.options = json::parse(r[2].as<std::string>());
+        }
+    });
+}
+
 bool BuiltinModules::isBuiltin(const std::string& id) const { return entries_.contains(id); }
 
 bool BuiltinModules::enabled(const std::string& id) const {

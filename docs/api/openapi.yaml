@@ -746,6 +746,7 @@ paths:
                 properties:
                   modules: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
                   notices: { type: array, items: { type: string } }
+        '503': { description: 'Reloaded here, but the other server processes could not be told to reload too' }
 
   /admin/modules/{moduleId}:
     parameters:
@@ -770,6 +771,7 @@ paths:
             application/json:
               schema: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
         '422': { description: Options do not match the schema, or unknown module }
+        '503': { description: 'An installed module changed here, but the other server processes could not be told' }
 
   /admin/modules/notices:
     get:
@@ -835,6 +837,48 @@ paths:
         - { name: tier, in: query, schema: { enum: [all, dem-blocks, results-memory, results-table], default: all } }
       responses:
         '204': { description: Cleared }
+
+  /admin/settings/sync:
+    get:
+      tags: [admin]
+      security: [{ admin: [] }]
+      summary: How this server process keeps the admin settings in step with the others.
+      description: >-
+        Each process reads the built-in module switches and options, the cache limits and the
+        installed modules once and keeps them in memory. A change made through the admin API is
+        announced on the PostgreSQL channel `rfmap_changes` and the other processes reload it at
+        once; a fingerprint of the settings rows is compared every `settingsSync.pollSeconds` as
+        a backstop. The answer describes the process that served the request.
+      responses:
+        '200':
+          description: The sync state of this process
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SettingsSync' }
+        '401': { description: Admin token missing or wrong }
+        '403': { description: The admin API is off (no admin token in the configuration) }
+
+  /admin/settings/reload:
+    post:
+      tags: [admin]
+      security: [{ admin: [] }]
+      summary: Drop the cached settings and read them again, here or in every process.
+      description: >-
+        For a row changed by hand in the database, or a restore, without waiting for the poll.
+        `all` (the default) reloads this process and sends a notice that makes every other
+        process reload too; `local` reloads only the process that serves the request.
+      parameters:
+        - { name: scope, in: query, schema: { enum: [all, local], default: all } }
+      responses:
+        '200':
+          description: Reloaded; the sync state after it
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SettingsSync' }
+        '401': { description: Admin token missing or wrong }
+        '403': { description: The admin API is off (no admin token in the configuration) }
+        '422': { description: Unknown scope }
+        '503': { description: 'A topic failed to reload on this process (see its log; with scope all, `announced` says whether the others were still told), or with scope all the notice to the other processes could not be sent' }
 
 components:
   securitySchemes:
@@ -1246,6 +1290,32 @@ components:
         misses: { type: integer }
         evictions: { type: integer }
         hitRate: { type: number }
+
+    SettingsSync:
+      type: object
+      required: [instance, channel, listen, pollSeconds, topics, notices, reloads, failedReloads]
+      properties:
+        instance: { type: string, description: 'This process: host name and a random part' }
+        channel: { type: string, example: rfmap_changes }
+        listen:
+          type: object
+          properties:
+            enabled: { type: boolean, description: '`settingsSync.listen`' }
+            connected: { type: boolean }
+            error: { type: [string, 'null'], description: 'Why the listener is down, if it is' }
+        pollSeconds: { type: integer }
+        topics:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { enum: [builtins, cache.limits, modules] }
+              source: { enum: [database, files], description: 'The poll covers database topics only' }
+        notices: { type: integer, description: 'Change notices received from other processes' }
+        reloads: { type: integer }
+        failedReloads: { type: integer, description: 'Topic reloads that failed; the error is in the log' }
+        lastReloadAt: { type: [string, 'null'], format: date-time }
+        lastReason: { type: string, example: 'builtins changed by rfmap-server-7d9c/Qk3x' }
 
     FlightLogRow:
       type: object

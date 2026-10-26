@@ -41,7 +41,7 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
         "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "concurrency",
-        "queue", "waitMs", "map", "metrics", "enabled", "allowFrom", "ops", "drainSeconds"});
+        "queue", "waitMs", "map", "metrics", "enabled", "allowFrom", "ops", "drainSeconds", "listenUrl", "settingsSync", "pollSeconds"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -75,6 +75,7 @@ void readDatabase(const json& db, Config::Database& out) {
     read(db, "poolSize", out.poolSize);
     read(db, "leaseTimeoutMs", out.leaseTimeoutMs);
     read(db, "statementTimeoutMs", out.statementTimeoutMs);
+    read(db, "listenUrl", out.listenUrl);
     if (out.leaseTimeoutMs < 0 || out.statementTimeoutMs < 0) {
         throw std::invalid_argument("database.leaseTimeoutMs and database.statementTimeoutMs must be >= 0");
     }
@@ -88,6 +89,24 @@ void readCalc(const json& calc, Config::Calc& out) {
     if (!(out.maxRouteSamples >= 1.0)) throw std::invalid_argument("calc.maxRouteSamples must be >= 1");
     if (out.concurrency < 0 || out.queue < 0 || out.waitMs < 0) {
         throw std::invalid_argument("calc.concurrency, calc.queue and calc.waitMs must be >= 0");
+    }
+}
+
+Config::SettingsSync readSettingsSync(const json& sync) {
+    Config::SettingsSync out;
+    read(sync, "listen", out.listen);
+    read(sync, "pollSeconds", out.pollSeconds);
+    if (out.pollSeconds < 1 || out.pollSeconds > 3600) {
+        throw std::invalid_argument("settingsSync.pollSeconds must be between 1 and 3600");
+    }
+    return out;
+}
+
+/// Connection URLs carry the password: the admin page shows that they are set, not what they are.
+void hideDatabaseUrls(json& raw) {
+    if (!raw.contains("database") || !raw["database"].is_object()) return;
+    for (const char* secret : {"url", "listenUrl"}) {
+        if (raw["database"].contains(secret)) raw["database"][secret] = "(set)";
     }
 }
 
@@ -173,6 +192,7 @@ Config Config::fromJson(json doc) {
     read(s, "maxUploadBytes", c.server.maxUploadBytes);
 
     readDatabase(doc.value("database", json::object()), c.database);
+    c.settingsSync = readSettingsSync(doc.value("settingsSync", json::object()));
 
     read(doc.value("admin", json::object()), "token", c.adminToken);
     readOperations(doc, c);
@@ -257,7 +277,7 @@ Config Config::fromJson(json doc) {
     c.raw = doc;
     if (c.raw.contains("admin")) c.raw["admin"]["token"] = "(set)";
     if (c.raw.contains("metrics") && c.raw["metrics"].contains("token")) c.raw["metrics"]["token"] = "(set)";
-    if (c.raw.contains("database") && c.raw["database"].contains("url")) c.raw["database"]["url"] = "(set)";
+    hideDatabaseUrls(c.raw);
     return c;
 }
 

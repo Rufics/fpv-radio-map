@@ -190,6 +190,8 @@ Settings you will most likely touch:
 | `calc.concurrency`, `calc.queue`, `calc.waitMs` | automatic, automatic, 10000 | `POST /calc/path` and `POST /calc/route` run on the request threads, so they are bounded like PIN checks: that many run at once, that many more wait up to `waitMs` for a slot, and the rest get 503 with `Retry-After` at once. A request is validated and sized before it takes a slot. Automatic is one calculation per CPU core, at most half of `server.threads` but at least one, with a queue of the same size but at most a quarter of `server.threads` and never the last spare thread, so health checks, map viewers and PIN checks always find a request thread. The one exception is `server.threads` set to 1: that single thread also runs calculations, and nothing is left spare. Coverage jobs have their own limit (`coverage.maxJobs`). |
 | `server.maxBodyBytes`, `server.maxUploadBytes` | 1 MiB, 64 MiB | JSON bodies, and flight log files (the only uploads). A JSON body whose `Content-Length` is over `maxBodyBytes` is answered with 413 before it is read, and one sent chunked (without a length) with 411. Compressed request bodies (`Content-Encoding`) are refused with 415 on every route, since the limits count the bytes on the wire, not what they inflate to. The bundled nginx applies the same two limits (`client_max_body_size`); change both together. |
 | `cache.*` | 256 MB DEM blocks, 64 MB results in memory, 20000 rows / 1 GB results table | Also changeable at run time under **Admin → Cache** (`PUT /api/v1/admin/cache`). Changes made there are stored and survive a restart. |
+| `settingsSync.listen`, `settingsSync.pollSeconds` | `true`, 60 | Every server process reads the admin settings (built-in module switches and options, cache limits, installed modules) once and keeps them in memory. An admin change is announced on the PostgreSQL channel `rfmap_changes` (`NOTIFY`) and every other process reloads it within a moment over one `LISTEN` connection of its own; every `pollSeconds` a fingerprint of the settings rows is compared as a backstop for a lost notice or a row changed by hand. With one process this costs one idle connection and one tiny query a minute. `listen: false` leaves only the poll. See **Settings** under [Admin tasks](#5-admin-tasks). |
+| `database.listenUrl` | `database.url` | The listener's connection. `LISTEN` needs a session of its own, so behind a transaction-mode pooler such as PgBouncer point it at PostgreSQL directly. Hidden like `database.url` in what the server shows of its config. |
 | `weather.metaUrl` | empty | The synced model's `meta.json`. With it, results give the forecast run time (`runUtc`). |
 | `ops.listen`, `ops.port`, `ops.drainSeconds` | `127.0.0.1`, 9090, 5 | The operations listener: `GET /healthz`, `/readyz` and `/metrics` on a port of its own, see [Health, readiness and metrics](#health-readiness-and-metrics). |
 | `metrics.enabled`, `metrics.token`, `metrics.allowFrom` | `false`, empty, `[]` | Serves `GET /metrics` on the operations listener in the Prometheus text format: request rates and durations, the request, job and cell thread pools, the database pool and its lease timeouts, the PIN and calculation gates (`rfmap_gate_*`), the caches, and the process's CPU time, memory, threads and open files. Guarded by a token of its own (`RFMAP_METRICS_TOKEN`, at least 16 characters) and/or the scraper's networks; with neither, only loopback may read it. |
@@ -306,7 +308,21 @@ under **Admin**.
   it was made from, saves a new version and keeps the old one in `/history`. Results list the
   item versions they used.
 - **Cache** (`/admin/cache`): see the tiers, change limits, clear one tier with
-  `DELETE /admin/cache?tier=dem-blocks|results-memory|results-table`, or all of them.
+  `DELETE /admin/cache?tier=dem-blocks|results-memory|results-table`, or all of them. New
+  limits reach every server process on the database; clearing a tier clears it in the
+  process that served the request.
+- **Settings** (`/admin/settings`): the admin settings each process keeps in memory, and how
+  they stay in step across processes (`settingsSync.*` above). `GET /admin/settings/sync` shows
+  the process that answered: its instance id, whether its listener is connected, how many
+  notices and reloads it had and the reason of the last one. After a change made outside the
+  admin API, such as an `update builtin_modules ...` in psql, `POST /admin/settings/reload`
+  drops the cached settings and reads them again in every process at once; `?scope=local`
+  reloads only the one that serves the request. Without it the poll picks a database change up
+  within `settingsSync.pollSeconds`. When the change is applied but its notice cannot be sent,
+  a change to the built-in switches or cache limits still answers 200 (the poll carries it), while
+  a change to installed modules, a module reload or a reset everywhere answers 503: no poll covers
+  the module files, so retry once the database answers. The reset also answers 503 when a topic
+  fails to reload on the process that serves it (the log says which; it still tells the others).
 
 ### Module sandbox in containers
 

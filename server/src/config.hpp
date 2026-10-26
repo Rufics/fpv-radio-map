@@ -50,8 +50,18 @@ public:
         /// statement_timeout of every pooled session: PostgreSQL cancels a longer statement.
         /// 0 leaves the role's or the database's own setting.
         int statementTimeoutMs = 60000;
+        /// The settings listener's own connection (LISTEN needs a session, not a transaction-mode
+        /// pooler such as PgBouncer); empty = `url`.
+        std::string listenUrl;
     };
     Database database;
+
+    /// How each process learns that another one changed the admin settings, see SettingsSync.
+    struct SettingsSync {
+        bool listen = true;    ///< LISTEN rfmap_changes for instant reloads
+        int pollSeconds = 60;  ///< the fingerprint backstop for lost notices and changes made by hand
+    };
+    SettingsSync settingsSync;
 
     std::string adminToken;  ///< empty = admin API disabled
     /// A shorter token is a configuration error: the admin API changes what the server runs.

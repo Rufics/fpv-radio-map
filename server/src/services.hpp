@@ -20,6 +20,7 @@
 #include "raster.hpp"
 #include "result_cache.hpp"
 #include "schemas.hpp"
+#include "settings_sync.hpp"
 #include "weather.hpp"
 
 #include <rfmod/registry.hpp>
@@ -67,6 +68,8 @@ public:
     [[nodiscard]] FlightLogService& flightLogs() const { return *flightLogs_; }
     [[nodiscard]] JobManager& jobs() const { return *jobs_; }
     [[nodiscard]] RateLimiter& limiter() const { return *limiter_; }
+    /// Keeps the admin settings of this process in step with the other processes.
+    [[nodiscard]] SettingsSync& settings() const { return *settings_; }
 
     /// Re-reads the trust store and the module root: what the rfmod CLI installed or removed.
     void reloadModules() const;
@@ -76,7 +79,6 @@ public:
 private:
     // Also runs reloads from parallel admin requests in turn.
     std::unique_ptr<ModuleGate> moduleGate_ = std::make_unique<ModuleGate>();
-    void checkStartup(bool ownerKeyIsDev) const;
     void openDatabase(const std::filesystem::path& sqlDir);
     void buildStores();
     void openTerrain();
@@ -138,6 +140,7 @@ private:
     std::unique_ptr<FlightLogService> flightLogs_;
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
+    std::unique_ptr<SettingsSync> settings_;  ///< its reloads use the members above
 };
 
 }  // namespace rfmap
