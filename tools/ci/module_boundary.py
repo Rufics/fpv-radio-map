@@ -47,7 +47,8 @@ class ModuleBoundary:
              r'^\s*#\s*include\s*[<"](pqxx/|libpq-fe\.h|libpq/|postgresql/|sqlite3\.h|mysql/|mysql\.h|'
              r'rfdb/|database\.hpp)', "//"),
         Rule("database client library", CMAKE_FILES,
-             r'(?i)\b(pqxx|libpq|PkgConfig::PQ|rf_db|rf_db_pg|rfmap_pqxx|rfmap_server_lib|sqlite3|mysqlclient)\b', "#"),
+             r'(?i)\b(pqxx|libpq|PkgConfig::PQ|PostgreSQL::\w+|find_package\s*\(\s*PostgreSQL|rf_db|rf_db_pg|'
+             r'rfmap_pqxx|rfmap_server_lib|sqlite3|SQLite::\w+|mysqlclient)\b', "#"),
     )
 
     def __init__(self, root):

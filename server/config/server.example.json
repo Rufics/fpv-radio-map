@@ -19,14 +19,18 @@
   "database": {
     // Prefer RFMAP_DATABASE_URL so the password stays out of the file.
     "url": "postgresql://rfmap@postgis:5432/rfmap",
-    // The most sessions this process opens. They open on demand, not at start; minIdle stay
-    // open while the server is quiet, the rest close after idleTimeoutMs.
+    // The most pooled sessions this process opens; the settings listener and the readiness
+    // probe hold one more each. minIdle of them open at start (the start fails without them)
+    // and stay open while the server is quiet; the rest open on demand and close after
+    // idleTimeoutMs.
     "poolSize": 8,
     "minIdle": 1,
     "idleTimeoutMs": 300000,
     // A session this old is closed instead of lent again (0 = no limit).
     "maxLifetimeMs": 1800000,
-    // How long opening a session may take (libpq connect_timeout, whole seconds, at least 2).
+    // How long opening a session may take (libpq connect_timeout, whole seconds, at least 2,
+    // for each host the URL lists). A connect_timeout in the URL wins; connect_timeout=0 there
+    // waits for ever.
     "connectTimeoutMs": 5000,
     // How long a request waits for a free pooled connection before it gets 503 with Retry-After.
     "leaseTimeoutMs": 10000,

@@ -348,11 +348,13 @@ timeouts and the schema stay under its control, and a module cannot exhaust the 
 locks, or depend on tables that a migration may change. If your module needs data the host
 calls do not offer, ask for a host call rather than reaching around the SDK.
 
-This is enforced twice. In this repository, the `module_database_boundary` test
-(`tools/ci/module_boundary.py`, run by ctest) fails the build when a source or CMake file under
-`modules/` or `examples/modules/` names a database client. At run time a module that is not
-signed with the owner key runs in the worker sandbox, whose seccomp filter refuses sockets, so
-it could not reach the database even if it tried ([Isolation](#8-isolation)).
+This is checked twice. In this repository, the `module_database_boundary` test
+(`tools/ci/module_boundary.py`) fails when a source or CMake file under `modules/` or
+`examples/modules/` names a database client; ctest runs it in every build configured with
+`RFMAP_BUILD_TESTS` where Python 3 is found, as CI's C++ job is. At run time a module that is
+not signed with the owner key runs in a worker; when the worker reports network isolation (its
+seccomp filter or a network namespace, required under `modules.requireSandbox`, on by
+default), it cannot reach the database even if it tried ([Isolation](#8-isolation)).
 
 ## 7. UI bundles
 

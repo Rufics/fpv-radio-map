@@ -40,7 +40,9 @@ class ModuleBoundaryTest(unittest.TestCase):
     def test_finds_database_client_libraries(self):
         self.write("modules/fpv/CMakeLists.txt", "target_link_libraries(core PRIVATE fpv_common rfmap_pqxx)\n")
         self.write("examples/modules/x/CMakeLists.txt", "pkg_check_modules(PQ REQUIRED IMPORTED_TARGET libpq)\n")
-        self.assertEqual(len(self.findings()), 2)
+        self.write("modules/fpv/sub/CMakeLists.txt",
+                   "find_package(PostgreSQL REQUIRED)\ntarget_link_libraries(x PRIVATE PostgreSQL::PostgreSQL)\n")
+        self.assertEqual(len(self.findings()), 4)
 
     def test_ignores_comments_and_code_outside_the_module_folders(self):
         self.write("modules/fpv/CMakeLists.txt", "# Modules never link libpq: see the guide.\n")

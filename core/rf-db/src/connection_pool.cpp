@@ -1,6 +1,7 @@
 #include "rfdb/connection_pool.hpp"
 
 #include <algorithm>
+#include <exception>
 #include <utility>
 
 namespace rfdb {
@@ -94,22 +95,49 @@ bool ConnectionPool::expired(Clock::time_point created, Clock::time_point now) c
     return settings_.maxLifetime.count() > 0 && now - created >= settings_.maxLifetime;
 }
 
-std::unique_ptr<Connection> ConnectionPool::openReserved() {
-    try {
-        auto conn = factory_->open();
-        const std::lock_guard lock(mutex_);
-        ++counters_.opened;
-        return conn;
-    } catch (const ConnectionFailed&) {
+/// Room reserved in open_ for a connection being opened. Unless the connect succeeds, the room
+/// goes back however the factory failed, so no exception can shrink the pool for good.
+class ConnectionPool::Reservation {
+public:
+    explicit Reservation(ConnectionPool& pool) : pool_(pool) {}
+    ~Reservation() {
+        if (kept_) return;
         {
-            const std::lock_guard lock(mutex_);
-            --open_;
-            ++counters_.connectFailures;
+            const std::lock_guard lock(pool_.mutex_);
+            --pool_.open_;
+            ++pool_.counters_.connectFailures;
         }
         // The room is free again: a waiter may try a connect of its own.
-        available_.notify_one();
-        throw;
+        pool_.available_.notify_one();
     }
+    Reservation(const Reservation&) = delete;
+    Reservation& operator=(const Reservation&) = delete;
+    Reservation(Reservation&&) = delete;
+    Reservation& operator=(Reservation&&) = delete;
+
+    void keep() { kept_ = true; }
+
+private:
+    ConnectionPool& pool_;
+    bool kept_ = false;
+};
+
+std::unique_ptr<Connection> ConnectionPool::openReserved() {
+    Reservation room(*this);
+    auto conn = factory_->open();
+    {
+        const std::lock_guard lock(mutex_);
+        ++counters_.opened;
+    }
+    room.keep();
+    return conn;
+}
+
+bool ConnectionPool::reserveForMinIdle() {
+    const std::lock_guard lock(mutex_);
+    if (open_ >= settings_.minIdle) return false;
+    ++open_;
+    return true;
 }
 
 void ConnectionPool::closeUnusable(std::unique_ptr<Connection> conn, bool broken) {
@@ -157,26 +185,21 @@ std::vector<std::unique_ptr<Connection>> ConnectionPool::evictLocked(Clock::time
 }
 
 void ConnectionPool::maintain() {
-    int missing = 0;
     {
         std::vector<std::unique_ptr<Connection>> closing;
         {
             const std::lock_guard lock(mutex_);
             closing = evictLocked(Clock::now());
-            missing = std::max(0, settings_.minIdle - open_);
-            open_ += missing;
         }
         // `closing` goes out of scope here: the sessions close without the lock held.
     }
     available_.notify_all();
-    for (; missing > 0; --missing) {
+    // One reservation at a time, so a failed connect never leaves room reserved behind it.
+    while (reserveForMinIdle()) {
         try {
             giveBack(openReserved(), Clock::now(), Lease::Fate::Return);
         } catch (const ConnectionFailed&) {
-            // Counted in openReserved; give back the rest of the room and try again next round.
-            const std::lock_guard lock(mutex_);
-            open_ -= missing - 1;
-            break;
+            return;  // counted by the reservation; the next round tries again
         }
     }
 }
@@ -186,7 +209,13 @@ void ConnectionPool::housekeep(const std::stop_token& stop) {
     const auto stopped = [&stop] { return stop.stop_requested(); };
     while (!wake_.wait_for(lock, stop, settings_.maintenanceInterval, stopped)) {
         lock.unlock();
-        maintain();
+        try {
+            maintain();
+        } catch (const std::exception&) {  // NOSONAR(cpp:S1181): a thread boundary; the next round tries again
+            // A factory that failed in another way than ConnectionFailed: its room was given back.
+            const std::lock_guard counted(mutex_);
+            ++counters_.housekeepingErrors;
+        }
         lock.lock();
     }
 }

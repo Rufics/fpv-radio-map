@@ -53,6 +53,7 @@ struct PoolStats {
     std::uint64_t closed = 0;           ///< connections closed: idle, too old, retired or broken
     std::uint64_t broken = 0;           ///< of those, closed because they had stopped working
     std::uint64_t connectFailures = 0;  ///< factory calls that failed
+    std::uint64_t housekeepingErrors = 0;  ///< housekeeper rounds ended by an error other than ConnectionFailed
 };
 
 /// A bounded pool of database connections that opens them on demand and reuses them.
@@ -113,8 +114,9 @@ public:
     [[nodiscard]] Lease acquire();
 
     /// Closes idle connections above minIdle that have been idle for idleTimeout and idle ones
-    /// past maxLifetime, then opens connections up to minIdle. Never throws: a failed connect is
-    /// counted and tried again next time.
+    /// past maxLifetime, then opens connections up to minIdle. A ConnectionFailed is counted and
+    /// tried again next time; anything else the factory throws reaches the caller (the
+    /// housekeeper swallows it), with the room it had reserved given back.
     void maintain();
 
     [[nodiscard]] PoolStats stats() const;
@@ -135,8 +137,12 @@ private:
     /// An idle connection is lent only if it is open, young enough and, after a long rest, answers a ping.
     [[nodiscard]] bool usable(Idle& idle, Clock::time_point now) const;
     [[nodiscard]] bool expired(Clock::time_point created, Clock::time_point now) const;
-    /// Opens a connection for room already reserved in open_; gives the room back if it fails.
+    class Reservation;
+    /// Opens a connection for room already reserved in open_; gives the room back if it fails,
+    /// whatever the factory throws.
     [[nodiscard]] std::unique_ptr<Connection> openReserved();
+    /// Reserves room for one more connection while fewer than minIdle are open.
+    [[nodiscard]] bool reserveForMinIdle();
     void giveBack(std::unique_ptr<Connection> conn, Clock::time_point created, Lease::Fate fate);
     /// Takes the idle connections maintain() closes out of idle_; the caller closes them unlocked.
     [[nodiscard]] std::vector<std::unique_ptr<Connection>> evictLocked(Clock::time_point now);

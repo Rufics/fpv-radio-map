@@ -10,6 +10,7 @@
 #include <future>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <thread>
 #include <vector>
 
@@ -25,6 +26,7 @@ struct FakeServer {
     std::atomic<int> pings{0};
     std::atomic<bool> refuse{false};
     std::atomic<bool> dropAll{false};  ///< every session is gone, but the client does not know yet
+    std::atomic<bool> crash{false};    ///< the factory fails with something other than ConnectionFailed
 };
 
 class FakeConnection final : public Connection {
@@ -54,6 +56,7 @@ public:
     explicit FakeFactory(FakeServer& server) : server_(server) {}
     [[nodiscard]] std::unique_ptr<Connection> open() override {
         if (server_.refuse) throw ConnectionFailed("refused");
+        if (server_.crash) throw std::logic_error("driver bug");
         ++server_.opened;
         return std::make_unique<FakeConnection>(server_);
     }
@@ -166,6 +169,15 @@ TEST_F(ConnectionPoolTest, AFailedConnectGivesTheRoomBack) {
     server_.refuse = false;
     const ConnectionPool::Lease lease = pool->acquire();
     EXPECT_EQ(pool->stats().open, 1);
+}
+
+TEST_F(ConnectionPoolTest, AnyFactoryFailureGivesTheRoomBack) {
+    auto pool = make({.maxSize = 1, .minIdle = 0});
+    server_.crash = true;
+    EXPECT_THROW((void)pool->acquire(), std::logic_error);
+    EXPECT_THROW((void)pool->acquire(), std::logic_error);  // the room came back: not PoolExhausted
+    EXPECT_EQ(pool->stats().open, 0);
+    EXPECT_EQ(pool->stats().connectFailures, 2u);
 }
 
 TEST_F(ConnectionPoolTest, AnUnreachableDatabaseFailsTheStart) {
