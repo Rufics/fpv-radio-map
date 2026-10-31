@@ -9,7 +9,6 @@
 #include <chrono>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
 #include <utility>
 
@@ -83,10 +82,10 @@ private:
     class Lease {
     public:
         explicit Lease(Database& db);
-        [[nodiscard]] rfdb::pg::SessionPool::Lease& get() { return *lease_; }
+        [[nodiscard]] rfdb::pg::SessionPool::Lease& get() { return lease_; }
 
     private:
-        std::optional<rfdb::pg::SessionPool::Lease> lease_;
+        rfdb::pg::SessionPool::Lease lease_;
     };
 
     template <class F>

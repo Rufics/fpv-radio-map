@@ -249,6 +249,7 @@ TEST_F(ConnectionPoolTest, ManyCallersShareABoundedPool) {
     std::atomic<int> inside{0};
     std::atomic<int> most{0};
     std::vector<std::jthread> callers;
+    callers.reserve(12);
     for (int i = 0; i < 12; ++i) {
         callers.emplace_back([&] {
             for (int n = 0; n < 50; ++n) {

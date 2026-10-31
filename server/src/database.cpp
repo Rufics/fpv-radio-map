@@ -37,15 +37,13 @@ rfdb::PoolSettings Database::poolSettings(const Settings& s) {
     return p;
 }
 
-Database::Lease::Lease(Database& db) {
-    try {
-        lease_.emplace(*db.pool_);
-    } catch (const rfdb::PoolExhausted&) {
-        unavailable("busy");
-    } catch (const rfdb::ConnectionFailed& e) {
-        db.log_.warn("database", e.what());
-        unavailable("unavailable");
-    }
+// A function-try-block, so the pool's own errors from the member's construction are translated.
+Database::Lease::Lease(Database& db) try : lease_(*db.pool_) {
+} catch (const rfdb::PoolExhausted&) {
+    unavailable("busy");
+} catch (const rfdb::ConnectionFailed& e) {
+    db.log_.warn("database", e.what());
+    unavailable("unavailable");
 }
 
 DbPoolStats Database::stats() const {
