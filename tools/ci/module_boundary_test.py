@@ -86,6 +86,11 @@ class ModuleBoundaryTest(unittest.TestCase):
                                                  "target_link_libraries(y -lmysqlclient)\n")
         self.assertEqual(len(self.findings()), 3)
 
+    def test_finds_libpq_looked_up_by_find_library(self):
+        self.write("modules/fpv/CMakeLists.txt", "find_library(DB_DRIVER NAMES pq)\n"
+                                                 "target_link_libraries(core PRIVATE ${DB_DRIVER})\n")
+        self.assertEqual(len(self.findings()), 1)
+
     def test_finds_a_quoted_postgresql_package(self):
         self.write("modules/fpv/CMakeLists.txt", 'find_package("PostgreSQL" REQUIRED)\nfind_package([[PostgreSQL]])\n')
         self.assertEqual(len(self.findings()), 2)

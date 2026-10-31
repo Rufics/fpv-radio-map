@@ -35,7 +35,7 @@ public:
 
     /// Whether the last value in the text is empty, which libpq lets swallow the next setting.
     bool endsWithEmptyValue() {
-        while (at_ < text_.size()) nextKey();
+        for (skipBlanks(); at_ < text_.size(); skipBlanks()) nextKey();
         return lastValueEmpty_;
     }
 
@@ -118,6 +118,13 @@ public:
         if (KeywordReader(text).endsWithEmptyValue()) text += "''";
     }
 
+    /// The text without the blanks around it, as libpq reads a URI parameter name.
+    static std::string_view trimmed(std::string_view text) {
+        const std::size_t first = text.find_first_not_of(blanks);
+        if (first == std::string_view::npos) return {};
+        return text.substr(first, text.find_last_not_of(blanks) - first + 1);
+    }
+
 private:
     static int hex(char c) {
         if (c >= '0' && c <= '9') return c - '0';
@@ -144,7 +151,7 @@ bool ConnectionString::names(std::string_view key) const {
     for (std::size_t at = 0; at <= params.size();) {
         const std::size_t end = std::min(params.find('&', at), params.size());
         const std::string_view param = params.substr(at, end - at);
-        if (ValueCodec::decoded(param.substr(0, param.find('='))) == key) return true;
+        if (ValueCodec::decoded(ValueCodec::trimmed(param.substr(0, param.find('=')))) == key) return true;
         at = end + 1;
     }
     return false;

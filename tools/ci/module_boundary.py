@@ -70,7 +70,7 @@ class ModuleBoundary:
              r'rfdb/|database\.hpp)', C_LEXEMES),
         Rule("database client library", CMAKE_FILES,
              r'(?i)(?:\b|(?<=-l))(pqxx|libpqxx|libpq|PkgConfig::PQ|PostgreSQL::\w+|find_package\s*\(\s*["\[=]*PostgreSQL|'
-             r'(target_)?link_libraries\s*\([^)]*?(?:(?<![\w$.{/-])|(?<=-l))pq(?![\w.}/-])|'
+             r'((target_)?link_libraries|find_library)\s*\([^)]*?(?:(?<![\w$.{/-])|(?<=-l))pq(?![\w.}/-])|'
              r'rf_db|rf_db_pg|rfmap_pqxx|rfmap_server_lib|(lib)?sqlite3|SQLite::\w+|(lib)?mysqlclient)\b',
              CMAKE_LEXEMES),
     )
