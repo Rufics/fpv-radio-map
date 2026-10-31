@@ -81,6 +81,15 @@ class ModuleBoundaryTest(unittest.TestCase):
         self.write("modules/fpv/CMakeLists.txt", "target_link_libraries(x PRIVATE pq)\n")
         self.assertEqual(len(self.findings()), 1)
 
+    def test_finds_a_quoted_postgresql_package(self):
+        self.write("modules/fpv/CMakeLists.txt", 'find_package("PostgreSQL" REQUIRED)\nfind_package([[PostgreSQL]])\n')
+        self.assertEqual(len(self.findings()), 2)
+
+    def test_a_pq_name_outside_a_link_is_not_a_finding(self):
+        self.write("modules/fpv/CMakeLists.txt", "project(pq LANGUAGES CXX)\nadd_library(pq_maps STATIC a.cpp)\n"
+                                                 "target_link_libraries(pq_maps PRIVATE fpv_common)\n")
+        self.assertEqual(self.findings(), [])
+
     def test_finds_full_client_library_file_names(self):
         self.write("modules/fpv/CMakeLists.txt",
                    "target_link_libraries(x PRIVATE /usr/lib/libmysqlclient.so)\n"

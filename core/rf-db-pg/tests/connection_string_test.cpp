@@ -67,6 +67,18 @@ TEST(ConnectionString, QuotesAndEncodesTheValuesItAdds) {
     EXPECT_EQ(uri.text(), "postgresql://u@h/db?application_name=worker%20pool%26x%3D1");
 }
 
+TEST(ConnectionString, ReadsAnEmptyValueEndingInABackslash) {
+    ConnectionString s(R"(host=h password=\)");
+    s.withDefault("connect_timeout", 2);
+    EXPECT_EQ(s.text(), "host=h password='' connect_timeout=2");
+}
+
+TEST(ConnectionString, SeesPercentEncodedUriParameterNames) {
+    ConnectionString s("postgresql://u@h/db?sslmode=require&connect%5Ftimeout=10");
+    s.withDefault("connect_timeout", 5);
+    EXPECT_EQ(s.text(), "postgresql://u@h/db?sslmode=require&connect%5Ftimeout=10");
+}
+
 TEST(ConnectionString, AddsDefaultsToKeywords) {
     ConnectionString s("host=h dbname=db");
     s.withDefault("connect_timeout", 2);

@@ -1,5 +1,6 @@
 #include "rfdb/pg/connection_string.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <format>
 
@@ -53,41 +54,71 @@ private:
     std::size_t at_ = 0;
 };
 
-/// A keyword value as libpq reads it back: quoted, with quotes and backslashes escaped, when bare
-/// text would not survive.
-std::string keywordValue(std::string_view value) {
-    const bool bare = !value.empty() && value.find_first_of(" \t\n\r\f\v'\\") == std::string_view::npos;
-    if (bare) return std::string(value);
-    std::string quoted = "'";
-    for (const char c : value) {
-        if (c == '\'' || c == '\\') quoted += '\\';
-        quoted += c;
-    }
-    return quoted + "'";
-}
-
-/// A URI query value, percent-encoded except for the unreserved characters.
-std::string uriValue(std::string_view value) {
-    constexpr std::string_view unreserved = "-._~";
-    std::string encoded;
-    for (const char c : value) {
-        const auto byte = static_cast<unsigned char>(c);
-        if (std::isalnum(byte) != 0 || unreserved.find(c) != std::string_view::npos) {
-            encoded += c;
-        } else {
-            encoded += std::format("%{:02X}", byte);
+/// Writes and reads values the way libpq parses them back.
+class ValueCodec {
+public:
+    /// A keyword value: quoted, with quotes and backslashes escaped, when bare text would not survive.
+    static std::string keyword(std::string_view value) {
+        const bool bare = !value.empty() && value.find_first_of(" \t\n\r\f\v'\\") == std::string_view::npos;
+        if (bare) return std::string(value);
+        std::string quoted = "'";
+        for (const char c : value) {
+            if (c == '\'' || c == '\\') quoted += '\\';
+            quoted += c;
         }
+        return quoted + "'";
     }
-    return encoded;
-}
 
-/// True when the text ends in a backslash that escapes nothing; libpq drops it, but a separator
-/// appended after it would be escaped and glue the next setting onto that value.
-bool endsInLoneBackslash(std::string_view text) {
-    const std::size_t kept = text.find_last_not_of('\\');
-    const std::size_t run = kept == std::string_view::npos ? text.size() : text.size() - kept - 1;
-    return run % 2 == 1;
-}
+    /// A URI query value, percent-encoded except for the unreserved characters.
+    static std::string uri(std::string_view value) {
+        constexpr std::string_view unreserved = "-._~";
+        std::string encoded;
+        for (const char c : value) {
+            const auto byte = static_cast<unsigned char>(c);
+            if (std::isalnum(byte) != 0 || unreserved.find(c) != std::string_view::npos) {
+                encoded += c;
+            } else {
+                encoded += std::format("%{:02X}", byte);
+            }
+        }
+        return encoded;
+    }
+
+    /// A URI query component with its %XX escapes decoded; a malformed escape stays as written.
+    static std::string decoded(std::string_view text) {
+        std::string out;
+        for (std::size_t i = 0; i < text.size(); ++i) {
+            const bool escape = text[i] == '%' && i + 2 < text.size() && hex(text[i + 1]) >= 0 && hex(text[i + 2]) >= 0;
+            if (escape) {
+                out += static_cast<char>(hex(text[i + 1]) * 16 + hex(text[i + 2]));
+                i += 2;
+            } else {
+                out += text[i];
+            }
+        }
+        return out;
+    }
+
+    /// Makes a keyword string safe to append to. A trailing backslash that escapes nothing is
+    /// dropped by libpq, but a separator after it would be escaped and glue the next setting onto
+    /// that value; and a value left empty would swallow the next setting, so it is quoted.
+    static void closeLastValue(std::string& text) {
+        const std::size_t kept = text.find_last_not_of('\\');
+        const std::size_t run = kept == std::string::npos ? text.size() : text.size() - kept - 1;
+        if (run % 2 == 0) return;
+        text.pop_back();
+        const std::size_t last = text.find_last_not_of(blanks);
+        if (last != std::string::npos && text[last] == '=') text += "''";
+    }
+
+private:
+    static int hex(char c) {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        return -1;
+    }
+};
 
 }  // namespace
 
@@ -99,11 +130,15 @@ bool ConnectionString::names(std::string_view key) const {
         }
         return false;
     }
-    // A URI parameter starts after '?' or '&' and is followed by '='.
-    for (std::size_t at = text_.find(key); at != std::string::npos; at = text_.find(key, at + 1)) {
-        const std::size_t after = at + key.size();
-        const bool starts = at > 0 && (text_[at - 1] == '?' || text_[at - 1] == '&');
-        if (starts && after < text_.size() && text_[after] == '=') return true;
+    // URI parameters follow the '?', apart by '&'; their names may be percent-encoded.
+    const std::size_t query = text_.find('?');
+    if (query == std::string::npos) return false;
+    const std::string_view params = std::string_view(text_).substr(query + 1);
+    for (std::size_t at = 0; at <= params.size();) {
+        const std::size_t end = std::min(params.find('&', at), params.size());
+        const std::string_view param = params.substr(at, end - at);
+        if (ValueCodec::decoded(param.substr(0, param.find('='))) == key) return true;
+        at = end + 1;
     }
     return false;
 }
@@ -112,12 +147,12 @@ ConnectionString& ConnectionString::withDefault(std::string_view key, std::strin
     if (names(key)) return *this;
     if (uri_) {
         text_ += text_.find('?') == std::string::npos ? '?' : '&';
-        text_ += std::format("{}={}", key, uriValue(value));
+        text_ += std::format("{}={}", key, ValueCodec::uri(value));
         return *this;
     }
-    if (endsInLoneBackslash(text_)) text_.pop_back();
+    ValueCodec::closeLastValue(text_);
     if (!text_.empty()) text_ += ' ';
-    text_ += std::format("{}={}", key, keywordValue(value));
+    text_ += std::format("{}={}", key, ValueCodec::keyword(value));
     return *this;
 }
 
