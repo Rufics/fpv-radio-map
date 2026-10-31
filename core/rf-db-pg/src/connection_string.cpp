@@ -96,13 +96,15 @@ public:
     /// A URI query component with its %XX escapes decoded; a malformed escape stays as written.
     static std::string decoded(std::string_view text) {
         std::string out;
-        for (std::size_t i = 0; i < text.size(); ++i) {
+        std::size_t i = 0;
+        while (i < text.size()) {
             const bool escape = text[i] == '%' && i + 2 < text.size() && hex(text[i + 1]) >= 0 && hex(text[i + 2]) >= 0;
             if (escape) {
                 out += static_cast<char>(hex(text[i + 1]) * 16 + hex(text[i + 2]));
-                i += 2;
+                i += 3;
             } else {
                 out += text[i];
+                ++i;
             }
         }
         return out;
@@ -113,8 +115,9 @@ public:
     /// that value; and a value left empty would swallow the next setting, so it is quoted.
     static void closeLastValue(std::string& text) {
         const std::size_t kept = text.find_last_not_of('\\');
-        const std::size_t run = kept == std::string::npos ? text.size() : text.size() - kept - 1;
-        if (run % 2 == 1) text.pop_back();
+        if (const std::size_t run = kept == std::string::npos ? text.size() : text.size() - kept - 1; run % 2 == 1) {
+            text.pop_back();
+        }
         if (KeywordReader(text).endsWithEmptyValue()) text += "''";
     }
 
@@ -150,8 +153,10 @@ bool ConnectionString::names(std::string_view key) const {
     const std::string_view params = std::string_view(text_).substr(query + 1);
     for (std::size_t at = 0; at <= params.size();) {
         const std::size_t end = std::min(params.find('&', at), params.size());
-        const std::string_view param = params.substr(at, end - at);
-        if (ValueCodec::decoded(ValueCodec::trimmed(param.substr(0, param.find('=')))) == key) return true;
+        if (const std::string_view param = params.substr(at, end - at);
+            ValueCodec::decoded(ValueCodec::trimmed(param.substr(0, param.find('=')))) == key) {
+            return true;
+        }
         at = end + 1;
     }
     return false;
