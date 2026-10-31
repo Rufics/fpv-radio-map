@@ -1,5 +1,6 @@
 #include "rfdb/pg/connection_string.hpp"
 
+#include <cctype>
 #include <format>
 
 namespace rfdb::pg {
@@ -52,6 +53,42 @@ private:
     std::size_t at_ = 0;
 };
 
+/// A keyword value as libpq reads it back: quoted, with quotes and backslashes escaped, when bare
+/// text would not survive.
+std::string keywordValue(std::string_view value) {
+    const bool bare = !value.empty() && value.find_first_of(" \t\n\r\f\v'\\") == std::string_view::npos;
+    if (bare) return std::string(value);
+    std::string quoted = "'";
+    for (const char c : value) {
+        if (c == '\'' || c == '\\') quoted += '\\';
+        quoted += c;
+    }
+    return quoted + "'";
+}
+
+/// A URI query value, percent-encoded except for the unreserved characters.
+std::string uriValue(std::string_view value) {
+    constexpr std::string_view unreserved = "-._~";
+    std::string encoded;
+    for (const char c : value) {
+        const auto byte = static_cast<unsigned char>(c);
+        if (std::isalnum(byte) != 0 || unreserved.find(c) != std::string_view::npos) {
+            encoded += c;
+        } else {
+            encoded += std::format("%{:02X}", byte);
+        }
+    }
+    return encoded;
+}
+
+/// True when the text ends in a backslash that escapes nothing; libpq drops it, but a separator
+/// appended after it would be escaped and glue the next setting onto that value.
+bool endsInLoneBackslash(std::string_view text) {
+    const std::size_t kept = text.find_last_not_of('\\');
+    const std::size_t run = kept == std::string_view::npos ? text.size() : text.size() - kept - 1;
+    return run % 2 == 1;
+}
+
 }  // namespace
 
 bool ConnectionString::names(std::string_view key) const {
@@ -75,10 +112,12 @@ ConnectionString& ConnectionString::withDefault(std::string_view key, std::strin
     if (names(key)) return *this;
     if (uri_) {
         text_ += text_.find('?') == std::string::npos ? '?' : '&';
-    } else if (!text_.empty()) {
-        text_ += ' ';
+        text_ += std::format("{}={}", key, uriValue(value));
+        return *this;
     }
-    text_ += std::format("{}={}", key, value);
+    if (endsInLoneBackslash(text_)) text_.pop_back();
+    if (!text_.empty()) text_ += ' ';
+    text_ += std::format("{}={}", key, keywordValue(value));
     return *this;
 }
 

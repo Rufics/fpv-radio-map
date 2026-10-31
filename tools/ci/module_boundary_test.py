@@ -65,9 +65,26 @@ class ModuleBoundaryTest(unittest.TestCase):
         self.write("modules/fpv/core/src/module.cpp", "/* the old way:\n#include <pqxx/pqxx>\n*/\nint x = 0;\n")
         self.assertEqual(self.findings(), [])
 
+    def test_a_hash_inside_a_cmake_bracket_argument_starts_no_comment(self):
+        self.write("modules/fpv/CMakeLists.txt",
+                   "target_link_libraries(x PRIVATE [=[/opt/lib#debug.a]=] PostgreSQL::PostgreSQL)\n")
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_a_raw_string_neither_includes_nor_hides_an_include(self):
+        self.write("modules/fpv/core/src/doc.cpp",
+                   'const char* t = R"x(\n#include <pqxx/pqxx>\n" /* )x";\n#include <libpq-fe.h>\n')
+        found = self.findings()
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith("modules/fpv/core/src/doc.cpp:4:"), found)
+
+    def test_finds_the_plain_libpq_link_name(self):
+        self.write("modules/fpv/CMakeLists.txt", "target_link_libraries(x PRIVATE pq)\n")
+        self.assertEqual(len(self.findings()), 1)
+
     def test_finds_full_client_library_file_names(self):
         self.write("modules/fpv/CMakeLists.txt",
-                   "target_link_libraries(x PRIVATE /usr/lib/libmysqlclient.so /usr/lib/libsqlite3.so)\n"
+                   "target_link_libraries(x PRIVATE /usr/lib/libmysqlclient.so)\n"
+                   "target_link_libraries(x PRIVATE /usr/lib/libsqlite3.so)\n"
                    "target_link_libraries(y PRIVATE libpqxx.a)\n")
         self.assertEqual(len(self.findings()), 3)
 

@@ -55,7 +55,16 @@ TEST(ConnectionString, DoesNotReadAKeywordInsideAQuotedValue) {
 TEST(ConnectionString, ReadsAValueEndingInABackslash) {
     ConnectionString s(R"(host=h password=abc\)");
     s.withDefault("connect_timeout", 2);
-    EXPECT_EQ(s.text(), R"(host=h password=abc\ connect_timeout=2)");
+    EXPECT_EQ(s.text(), "host=h password=abc connect_timeout=2");  // libpq drops the lone backslash
+}
+
+TEST(ConnectionString, QuotesAndEncodesTheValuesItAdds) {
+    ConnectionString keywords("host=h");
+    keywords.withDefault("application_name", "worker pool").withDefault("options", R"(it's \x)");
+    EXPECT_EQ(keywords.text(), R"(host=h application_name='worker pool' options='it\'s \\x')");
+    ConnectionString uri("postgresql://u@h/db");
+    uri.withDefault("application_name", "worker pool&x=1");
+    EXPECT_EQ(uri.text(), "postgresql://u@h/db?application_name=worker%20pool%26x%3D1");
 }
 
 TEST(ConnectionString, AddsDefaultsToKeywords) {

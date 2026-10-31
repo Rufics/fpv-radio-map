@@ -28,8 +28,9 @@ class Rule:
     """
 
     def __init__(self, name, suffixes, pattern, lexemes):
-        """`lexemes` finds the file's quoted strings and comments, in the order the language reads
-        them: a string is kept (a '#' or '//' inside it starts no comment), a comment is blanked."""
+        """`lexemes` finds the file's literals and comments, in the order the language reads them:
+        a quoted or bracket argument is kept (a '#' or '//' inside it starts no comment), a comment
+        or raw string literal is blanked."""
         self.name = name
         self.suffixes = tuple(suffixes)
         self.pattern = re.compile(pattern, re.MULTILINE)
@@ -41,15 +42,15 @@ class Rule:
     @staticmethod
     def blank(match):
         text = match.group()
-        if text[0] in "\"'":
+        if text[0] in "\"'[":
             return text
         return re.sub(r"[^\n]", " ", text)
 
     def line_numbers(self, text):
-        """The 1-based line of each match; blanking keeps every offset and line break in place."""
+        """The 1-based lines with a match, each once; blanking keeps every offset and line break."""
         code = self.lexemes.sub(self.blank, text)
-        for match in self.pattern.finditer(code):
-            yield code.count("\n", 0, match.start()) + 1
+        lines = {code.count("\n", 0, match.start()) + 1 for match in self.pattern.finditer(code)}
+        yield from sorted(lines)
 
 
 class ModuleBoundary:
@@ -58,16 +59,19 @@ class ModuleBoundary:
     MODULE_FOLDERS = ("modules", "examples/modules")
     SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl")
     CMAKE_FILES = ("CMakeLists.txt", ".cmake")
-    # Strings, then block and line comments.
-    C_LEXEMES = r'"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|/\*.*?\*/|//[^\n]*'
-    CMAKE_LEXEMES = r'"(?:\\.|[^"\\])*"|#\[(=*)\[.*?\]\1\]|#[^\n]*'
+    # Raw strings (blanked: they may hold any text), strings and characters, block and line comments.
+    C_LEXEMES = (r'\b(?:u8|[uUL])?R"([^ ()\\\t\v\f\n]{0,16})\(.*?\)\1"'
+                 r'|"(?:\\.|[^"\\\n])*"|\'(?:\\.|[^\'\\\n])*\'|/\*.*?\*/|//[^\n]*')
+    # Quoted and bracket arguments, then bracket and line comments.
+    CMAKE_LEXEMES = r'"(?:\\.|[^"\\])*"|\[(=*)\[.*?\]\1\]|#\[(=*)\[.*?\]\2\]|#[^\n]*'
     RULES = (
         Rule("database client header", SOURCE_SUFFIXES,
              r'^[ \t]*#[ \t]*include[ \t]*[<"](pqxx/|libpq-fe\.h|libpq/|postgresql/|sqlite3\.h|mysql/|mysql\.h|'
              r'rfdb/|database\.hpp)', C_LEXEMES),
         Rule("database client library", CMAKE_FILES,
-             r'(?i)\b(pqxx|libpqxx|libpq|PkgConfig::PQ|PostgreSQL::\w+|find_package\s*\(\s*PostgreSQL|rf_db|rf_db_pg|'
-             r'rfmap_pqxx|rfmap_server_lib|(lib)?sqlite3|SQLite::\w+|(lib)?mysqlclient)\b', CMAKE_LEXEMES),
+             r'(?i)\b(pq|pqxx|libpqxx|libpq|PkgConfig::PQ|PostgreSQL::\w+|find_package\s*\(\s*PostgreSQL|'
+             r'rf_db|rf_db_pg|rfmap_pqxx|rfmap_server_lib|(lib)?sqlite3|SQLite::\w+|(lib)?mysqlclient)\b',
+             CMAKE_LEXEMES),
     )
 
     def __init__(self, root):
