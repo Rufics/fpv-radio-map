@@ -1,14 +1,6 @@
 # rfmap-server: HTTP API over rf-core, rf-ext and the rfmod module platform.
 
 find_package(PkgConfig REQUIRED)
-# The shared libpqxx 7.10 of Ubuntu 26.04 and the program using it both destroy the same
-# pqxx::type_name strings at exit, a double free that aborts every run: link the static archive.
-pkg_check_modules(PQXX REQUIRED libpqxx>=7.10)
-pkg_check_modules(PQ REQUIRED IMPORTED_TARGET libpq)
-find_library(PQXX_ARCHIVE NAMES libpqxx.a HINTS ${PQXX_LIBRARY_DIRS} REQUIRED)
-add_library(rfmap_pqxx INTERFACE)
-target_include_directories(rfmap_pqxx SYSTEM INTERFACE ${PQXX_INCLUDE_DIRS})
-target_link_libraries(rfmap_pqxx INTERFACE ${PQXX_ARCHIVE} PkgConfig::PQ)
 # httplib 0.26 is built with TLS, zlib and Brotli support and its header calls those libraries
 # inline, but its pkg-config file lists them for static linking only: link them here.
 pkg_check_modules(HTTPLIB REQUIRED IMPORTED_TARGET cpp-httplib>=0.26)
@@ -77,7 +69,7 @@ add_library(rfmap_server_lib STATIC
   src/app.cpp)
 target_include_directories(rfmap_server_lib PUBLIC src)
 target_link_libraries(rfmap_server_lib
-  PUBLIC rf_ext rf_flightlog rfmod_platform nlohmann_json::nlohmann_json rfmap_pqxx PkgConfig::SODIUM
+  PUBLIC rf_ext rf_flightlog rf_db_pg rfmod_platform nlohmann_json::nlohmann_json PkgConfig::SODIUM
          PkgConfig::HTTPLIB OpenSSL::SSL OpenSSL::Crypto GDAL::GDAL Threads::Threads
   PRIVATE nlohmann_json_schema_validator LibArchive::LibArchive)
 # GDAL, libpqxx and httplib headers are third-party: include them as system headers so our

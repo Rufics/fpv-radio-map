@@ -1,5 +1,7 @@
 #include "readiness.hpp"
 
+#include <rfdb/pg/connection_string.hpp>
+
 #include <algorithm>
 #include <exception>
 #include <format>
@@ -37,20 +39,10 @@ std::chrono::seconds connectTimeoutFor(std::chrono::milliseconds statementTimeou
 }  // namespace
 
 std::string DatabaseProbe::probeUrl(const std::string& url, std::chrono::milliseconds statementTimeout) {
-    const bool uri = url.starts_with("postgresql://") || url.starts_with("postgres://");
-    std::string out = url;
-    const auto add = [&](std::string_view key, long long value) {
-        if (url.find(key) != std::string::npos) return;  // the operator's setting wins
-        if (uri) {
-            out += out.find('?') == std::string::npos ? '?' : '&';
-        } else if (!out.empty()) {
-            out += ' ';
-        }
-        out += std::format("{}={}", key, value);
-    };
-    add("connect_timeout", connectTimeoutFor(statementTimeout).count());
-    add("tcp_user_timeout", statementTimeout.count());
-    return out;
+    rfdb::pg::ConnectionString s(url);
+    s.withDefault("connect_timeout", connectTimeoutFor(statementTimeout).count())
+        .withDefault("tcp_user_timeout", statementTimeout.count());
+    return s.text();
 }
 
 DatabaseProbe::DatabaseProbe(const std::string& url, std::chrono::milliseconds statementTimeout, Logger& log)

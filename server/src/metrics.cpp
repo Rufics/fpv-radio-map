@@ -105,14 +105,21 @@ void writeDatabase(PrometheusText& out, const DbPoolStats& db) {
         out.family(name, type, help);
         out.sample(name, value);
     };
-    one("rfmap_db_pool_connections", "gauge", "Connections in the PostgreSQL pool.", db.size);
+    one("rfmap_db_pool_connections", "gauge", "Sessions the PostgreSQL pool has open (lent or idle) or is opening.", db.size);
+    one("rfmap_db_pool_max_connections", "gauge", "The most sessions the pool opens (database.poolSize).", db.maxSize);
     one("rfmap_db_pool_idle_connections", "gauge", "Connections not lent out.", db.idle);
     one("rfmap_db_pool_waiting", "gauge", "Callers waiting for a connection.", db.waiting);
     one("rfmap_db_pool_leases_total", "counter", "Connections lent since start.", static_cast<double>(db.leases));
     one("rfmap_db_pool_wait_seconds_total", "counter", "Time callers waited for a connection.", db.waitSeconds);
-    one("rfmap_db_pool_reconnects_total", "counter", "Broken connections replaced.", static_cast<double>(db.reconnects));
+    one("rfmap_db_pool_reconnects_total", "counter", "Broken sessions closed; replacements open on demand or during upkeep.",
+        static_cast<double>(db.reconnects));
     one("rfmap_db_pool_lease_timeouts_total", "counter", "Callers turned away after waiting the lease timeout.",
         static_cast<double>(db.leaseTimeouts));
+    one("rfmap_db_pool_opened_total", "counter", "Sessions the pool opened.", static_cast<double>(db.opened));
+    one("rfmap_db_pool_closed_total", "counter", "Sessions the pool closed: idle, too old, retired or broken.",
+        static_cast<double>(db.closed));
+    one("rfmap_db_pool_connect_failures_total", "counter", "Sessions the pool failed to open.",
+        static_cast<double>(db.connectFailures));
 }
 
 void writeGates(PrometheusText& out, const std::vector<GateSample>& gates) {

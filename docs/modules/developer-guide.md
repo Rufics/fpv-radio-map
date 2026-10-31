@@ -338,6 +338,24 @@ form uses that calculation's time and opted-in modules unless you pass `time`.
 `link.evaluate` from inside `loss.contribute` would recurse and is refused, and host calls
 nest at most four deep.
 
+### No database access of your own
+
+Host calls are the only way a module reaches stored data (the library, missions, results). A
+module never opens a database connection: it does not include a database client (libpqxx,
+libpq, SQLite, MySQL, the server's `rfdb` layer) and does not link one. The server alone holds
+PostgreSQL sessions, in one bounded pool per process, so the number of connections, their
+timeouts and the schema stay under its control, and a module cannot exhaust the database, hold
+locks, or depend on tables that a migration may change. If your module needs data the host
+calls do not offer, ask for a host call rather than reaching around the SDK.
+
+This is checked twice. In this repository, the `module_database_boundary` test
+(`tools/ci/module_boundary.py`) fails when a source or CMake file under `modules/` or
+`examples/modules/` names a database client; ctest runs it in every build configured with
+`RFMAP_BUILD_TESTS` where Python 3 is found, as CI's C++ job is. At run time a module that is
+not signed with the owner key runs in a worker; when the worker reports network isolation (its
+seccomp filter or a network namespace, required under `modules.requireSandbox`, on by
+default), it cannot reach the database even if it tried ([Isolation](#8-isolation)).
+
 ## 7. UI bundles
 
 A module with `"provides": [..., "ui.panel"]` can ship `ui/<name>.js`, an ES module the web

@@ -16,8 +16,10 @@ info:
     Request bodies are checked against schemas/ (draft-07); a failure is 422
     `{message, issues: [{path, message}]}`, path being a JSON pointer into the body. Calculations answer 503 when the server has no DEM.
     Any request that needs the database answers 503 with `Retry-After` when every pooled
-    connection stays lent for database.leaseTimeoutMs, and a statement running longer than
-    database.statementTimeoutMs is cancelled by PostgreSQL (500).
+    connection stays lent for database.leaseTimeoutMs or a new session cannot be opened within
+    database.connectTimeoutMs. A statement running longer than database.statementTimeoutMs, or
+    waiting longer than database.lockTimeoutMs for a lock another session holds, is cancelled by
+    PostgreSQL (500).
     Every limit (body size, rate classes, coverage cells, route samples) is server configuration.
 
     Input limits: a JSON body larger than server.maxBodyBytes is refused with 413, from its
