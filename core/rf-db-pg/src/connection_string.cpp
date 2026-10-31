@@ -41,7 +41,7 @@ private:
         while (at_ < text_.size()) {
             const char c = text_[at_++];
             if (c == '\\') {
-                ++at_;
+                if (at_ < text_.size()) ++at_;  // a trailing backslash escapes nothing
             } else if (quoted ? c == '\'' : blank(c)) {
                 return;
             }

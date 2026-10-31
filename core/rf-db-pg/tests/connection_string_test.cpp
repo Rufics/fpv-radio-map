@@ -52,6 +52,12 @@ TEST(ConnectionString, DoesNotReadAKeywordInsideAQuotedValue) {
     EXPECT_EQ(s.text(), R"(host=h application_name='api connect_timeout=5 it\'s' password=a\ b connect_timeout=2)");
 }
 
+TEST(ConnectionString, ReadsAValueEndingInABackslash) {
+    ConnectionString s(R"(host=h password=abc\)");
+    s.withDefault("connect_timeout", 2);
+    EXPECT_EQ(s.text(), R"(host=h password=abc\ connect_timeout=2)");
+}
+
 TEST(ConnectionString, AddsDefaultsToKeywords) {
     ConnectionString s("host=h dbname=db");
     s.withDefault("connect_timeout", 2);
