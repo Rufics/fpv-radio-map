@@ -111,7 +111,7 @@ void writeDatabase(PrometheusText& out, const DbPoolStats& db) {
     one("rfmap_db_pool_waiting", "gauge", "Callers waiting for a connection.", db.waiting);
     one("rfmap_db_pool_leases_total", "counter", "Connections lent since start.", static_cast<double>(db.leases));
     one("rfmap_db_pool_wait_seconds_total", "counter", "Time callers waited for a connection.", db.waitSeconds);
-    one("rfmap_db_pool_reconnects_total", "counter", "Broken sessions closed; the next caller opens a fresh one.",
+    one("rfmap_db_pool_reconnects_total", "counter", "Broken sessions closed; replacements open on demand or during upkeep.",
         static_cast<double>(db.reconnects));
     one("rfmap_db_pool_lease_timeouts_total", "counter", "Callers turned away after waiting the lease timeout.",
         static_cast<double>(db.leaseTimeouts));

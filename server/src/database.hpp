@@ -20,7 +20,7 @@ namespace rfmap {
 /// A bounded rfdb::pg::SessionPool underneath: it opens sessions on demand up to `poolSize`,
 /// keeps `minIdle` warm, closes the rest after `idleTimeout` and recycles sessions after
 /// `maxLifetime`. `with` lends one for the duration of a callback; a session that broke is closed
-/// and the next caller opens a fresh one, so one dropped connection does not poison the pool. A
+/// and a fresh one is opened on demand or by upkeep, so one dropped connection does not poison the pool. A
 /// caller that finds every connection lent waits at most `leaseTimeout` and then gets 503, and
 /// every session carries a statement, lock and idle-in-transaction timeout, so a slow database or
 /// a session holding locks turns into quick errors, not hung threads.
