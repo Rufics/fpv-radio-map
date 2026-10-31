@@ -57,7 +57,7 @@ class ModuleBoundary:
     """Finds database access in the module sources below a repository root."""
 
     MODULE_FOLDERS = ("modules", "examples/modules")
-    SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl")
+    SOURCE_SUFFIXES = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inc", ".inl")
     CMAKE_FILES = ("CMakeLists.txt", ".cmake")
     # Raw strings (blanked: they may hold any text), strings and characters, block and line comments.
     C_LEXEMES = (r'\b(?:u8|[uUL])?R"([^ ()\\\t\v\f\n]{0,16})\(.*?\)\1"'

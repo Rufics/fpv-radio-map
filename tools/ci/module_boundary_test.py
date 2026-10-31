@@ -37,6 +37,10 @@ class ModuleBoundaryTest(unittest.TestCase):
         self.assertTrue(any(f.startswith("modules/fpv/core/src/module.cpp:2: database client header") for f in found),
                         found)
 
+    def test_finds_a_header_in_an_included_fragment(self):
+        self.write("modules/fpv/core/src/tables.inc", "#include <pqxx/pqxx>\n")
+        self.assertEqual(len(self.findings()), 1)
+
     def test_finds_database_client_libraries(self):
         self.write("modules/fpv/CMakeLists.txt", "target_link_libraries(core PRIVATE fpv_common rfmap_pqxx)\n")
         self.write("examples/modules/x/CMakeLists.txt", "pkg_check_modules(PQ REQUIRED IMPORTED_TARGET libpq)\n")
