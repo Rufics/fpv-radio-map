@@ -105,7 +105,7 @@ void writeDatabase(PrometheusText& out, const DbPoolStats& db) {
         out.family(name, type, help);
         out.sample(name, value);
     };
-    one("rfmap_db_pool_connections", "gauge", "Sessions the PostgreSQL pool has open, lent or idle.", db.size);
+    one("rfmap_db_pool_connections", "gauge", "Sessions the PostgreSQL pool has open (lent or idle) or is opening.", db.size);
     one("rfmap_db_pool_max_connections", "gauge", "The most sessions the pool opens (database.poolSize).", db.maxSize);
     one("rfmap_db_pool_idle_connections", "gauge", "Connections not lent out.", db.idle);
     one("rfmap_db_pool_waiting", "gauge", "Callers waiting for a connection.", db.waiting);

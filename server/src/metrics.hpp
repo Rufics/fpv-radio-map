@@ -30,7 +30,7 @@ struct PoolStats {
 
 /// The PostgreSQL connection pool.
 struct DbPoolStats {
-    int size = 0;     ///< sessions open now, lent or idle
+    int size = 0;     ///< sessions open now (lent or idle) or being opened
     int maxSize = 0;  ///< the most the pool opens (database.poolSize)
     int idle = 0;
     int waiting = 0;                    ///< callers waiting for a connection
