@@ -23,7 +23,9 @@ add_library(rfmap_server_lib STATIC
   src/command_line.cpp
   src/common.cpp
   src/security.cpp
+  src/bulkhead.cpp
   src/pin_gate.cpp
+  src/calc_gate.cpp
   src/config.cpp
   src/database.cpp
   src/auth.cpp
@@ -68,6 +70,10 @@ add_library(rfmap_server_lib STATIC
   src/backup.cpp
   src/backup_stream.cpp
   src/file_lock.cpp
+  src/settings_sync.cpp
+  src/readiness.cpp
+  src/ops_server.cpp
+  src/lifecycle.cpp
   src/app.cpp)
 target_include_directories(rfmap_server_lib PUBLIC src)
 target_link_libraries(rfmap_server_lib

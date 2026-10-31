@@ -36,6 +36,9 @@ public:
     /// Validates options against the entry's schema (422 otherwise).
     void set(const std::string& id, std::optional<bool> enabled, std::optional<json> options);
     [[nodiscard]] json list() const;  ///< ModuleInfo[] entries
+    /// Reads the switches and options from the table again: another server process, or the
+    /// admin by hand, may have changed them (SettingsSync).
+    void reload();
 
 private:
     struct Entry {

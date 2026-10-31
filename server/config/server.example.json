@@ -1,7 +1,7 @@
 {
   // rfmap-server configuration. Comments are allowed. Every key can be overridden from the
   // environment: RFMAP__<SECTION>__<KEY>=value (for example RFMAP__CACHE__DEMBLOCKSMB=512),
-  // plus the short forms RFMAP_DATABASE_URL, RFMAP_ADMIN_TOKEN, RFMAP_PORT,
+  // plus the short forms RFMAP_DATABASE_URL, RFMAP_ADMIN_TOKEN, RFMAP_METRICS_TOKEN, RFMAP_PORT,
   // RFMAP_OPEN_METEO_URL, RFMAP_DEM and RFMAP_LANDCOVER.
   "server": {
     "listen": "0.0.0.0",
@@ -19,16 +19,46 @@
   "database": {
     // Prefer RFMAP_DATABASE_URL so the password stays out of the file.
     "url": "postgresql://rfmap@postgis:5432/rfmap",
-    "poolSize": 8
+    "poolSize": 8,
+    // How long a request waits for a free pooled connection before it gets 503 with Retry-After.
+    "leaseTimeoutMs": 10000,
+    // statement_timeout of every pooled session: PostgreSQL cancels a longer statement. Schema
+    // migrations at start run without it. 0 keeps the role's or the database's own setting.
+    "statementTimeoutMs": 60000,
+    // The settings listener's own connection; empty = url. Behind a transaction-mode pooler
+    // (PgBouncer) point it at PostgreSQL directly: LISTEN needs a session of its own.
+    "listenUrl": ""
+  },
+  "settingsSync": {
+    // Admin settings are kept in memory per process. A change is announced on the
+    // rfmap_changes channel and the other processes reload it at once; the fingerprint poll
+    // catches what no notice announced (a lost one, a row changed by hand).
+    "listen": true,
+    "pollSeconds": 60
   },
   "admin": {
     // At least 24 random characters, compared in constant time. Prefer RFMAP_ADMIN_TOKEN.
     // Empty disables the admin API.
     "token": ""
   },
+  // The operations listener: GET /healthz (alive), /readyz (can take traffic) and /metrics on a
+  // port of its own, outside the rate limiter and the request threads. Containers probe it on
+  // 127.0.0.1; Kubernetes probes and scrapes need "listen": "0.0.0.0".
+  "ops": {
+    "enabled": true,
+    "listen": "127.0.0.1",
+    "port": 9090,
+    // After SIGTERM: seconds /readyz answers 503 while requests are still served, so a load
+    // balancer stops sending new ones before the server stops listening.
+    "drainSeconds": 5
+  },
   "metrics": {
-    // GET /api/v1/admin/metrics for Prometheus, behind the admin token. Off unless needed.
-    "enabled": false
+    // GET /metrics on the operations listener, in the Prometheus text format. Off unless needed.
+    "enabled": false,
+    // Its own bearer token (prefer RFMAP_METRICS_TOKEN), never the admin token, and/or the
+    // networks the scraper connects from. With neither, only loopback may read the metrics.
+    "token": "",
+    "allowFrom": []
   },
   "data": {
     "dem": "/data/dem.cog.tif",
@@ -103,7 +133,14 @@
   "calc": {
     // Terrain samples one route calculation may read: sampled positions times the profile from
     // the pilot to each. About 1 µs each with both links; larger routes are refused with 422.
-    "maxRouteSamples": 20000000
+    "maxRouteSamples": 20000000,
+    // POST /calc/path and /calc/route running at once, waiting for a slot, and how long they wait
+    // (0 = automatic for the first two: one per CPU core, at most half of server.threads, and a
+    // queue of the same size, at most a quarter of them). Past that a calculation answers 503
+    // with Retry-After and the rest of the server keeps its request threads.
+    "concurrency": 0,
+    "queue": 0,
+    "waitMs": 10000
   },
   // Merged over the defaults GET /api/v1/config/map returns (tiles-builder names under /tiles).
   "map": {

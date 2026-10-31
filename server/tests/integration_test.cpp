@@ -128,12 +128,40 @@ private:
 struct Env {
     fs::path dir;
     std::unique_ptr<FakeOpenMeteo> weather;
+    json config;  ///< the server's config, for a second process on the same database
     std::unique_ptr<Application> app;
     std::thread thread;
+    bool listened = false;  ///< what Application::listen returned
     int port = 0;
+    int opsPort = 0;
     std::string missionId, ownerKey, editSession, viewSession, linkId, linkToken;
 };
 Env* env = nullptr;
+
+/// A loopback port nothing listens on right now: bound to port 0, read back, closed.
+int freePort() {
+    const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    socklen_t len = sizeof addr;
+    const bool bound = fd >= 0 && ::bind(fd, reinterpret_cast<const sockaddr*>(&addr), len) == 0 &&  // NOSONAR
+                       ::getsockname(fd, reinterpret_cast<sockaddr*>(&addr), &len) == 0;             // NOSONAR
+    const int port = bound ? ntohs(addr.sin_port) : 0;
+    if (fd >= 0) ::close(fd);
+    return port;
+}
+
+/// Polls the operations listener until it answers, so the tests start against a serving app.
+bool waitUntilServing(int opsPort) {
+    httplib::Client ops("127.0.0.1", opsPort);
+    ops.set_connection_timeout(0, 200000);
+    for (int i = 0; i < 100; ++i) {
+        if (const auto r = ops.Get("/healthz"); r && r->status == 200) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    return false;
+}
 
 /// RFMAP_IT_DUMP_DIR=<dir> keeps chosen responses for inspection.
 void dump(const std::string& name, const json& body) {
@@ -162,10 +190,14 @@ protected:
             w.exec("drop schema public cascade; create schema public;");
             w.commit();
         }
-        json cfg = {{"server", {{"listen", "127.0.0.1"}, {"threads", 8}}},
+        // Real ports, as in production: Application::listen binds both listeners itself.
+        env->port = freePort();
+        env->opsPort = freePort();
+        json cfg = {{"server", {{"listen", "127.0.0.1"}, {"port", env->port}, {"threads", 8}}},
                     {"database", {{"url", url}, {"poolSize", 4}}},
                     {"admin", {{"token", "integration-admin-token-0123456789"}}},
-                    {"metrics", {{"enabled", true}}},
+                    {"ops", {{"listen", "127.0.0.1"}, {"port", env->opsPort}, {"drainSeconds", 0}}},
+                    {"metrics", {{"enabled", true}, {"token", "integration-metrics-token"}}},
                     {"data",
                      {{"dem", (env->dir / "dem.cog.tif").string()},
                       {"demStatedErrorM", 4.0},
@@ -190,16 +222,19 @@ protected:
                                     {"open", {{"perMinute", 6000}, {"burst", 1000}}},
                                     {"create", {{"perMinute", 6000}, {"burst", 1000}}},
                                     {"coverage", {{"perMinute", 6000}, {"burst", 1000}}}}}};
+        env->config = cfg;
         env->app = std::make_unique<Application>(Config::fromJson(cfg), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true,
                                                  RFMAP_SQL_DIR);
-        env->port = env->app->bindAny();
-        env->thread = std::thread([] { env->app->serveBound(); });
+        env->thread = std::thread([] { env->listened = env->app->listen(); });
+        if (!waitUntilServing(env->opsPort)) throw std::runtime_error("the server did not start listening");
     }
 
     static void TearDownTestSuite() {
         if (!env) return;
-        env->app->stop();
+        // The production path: a stop request drains (0 s here), then listen() returns.
+        env->app->requestShutdown();
         env->thread.join();
+        EXPECT_TRUE(env->listened);
         env->app.reset();
         env->weather.reset();
         fs::remove_all(env->dir);
@@ -770,13 +805,320 @@ TEST_F(Integration, AdminCacheLimitsAndClear) {
     EXPECT_EQ(after.body[2]["entries"], 0);
 }
 
-TEST_F(Integration, MetricsForPrometheus) {
-    EXPECT_EQ(call("GET", "/admin/metrics", nullptr, bearer("wrong")).status, 401);
+namespace {
+
+/// A second server process on the same database and module root, as a second pod would be.
+class Peer {
+public:
+    explicit Peer(const json& config = env->config)
+        : app_(Config::fromJson(config), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true, RFMAP_SQL_DIR),
+          port_(app_.bindAny()),
+          thread_([this] { app_.serveBound(); }) {}
+    ~Peer() {
+        app_.stop();
+        thread_.join();
+    }
+    Peer(const Peer&) = delete;
+    Peer& operator=(const Peer&) = delete;
+
+    [[nodiscard]] json get(const std::string& path) const {
+        httplib::Client c("127.0.0.1", port_);
+        const auto r = c.Get("/api/v1" + path, {{"Authorization", "Bearer integration-admin-token-0123456789"}});
+        if (!r || r->status != 200) throw std::runtime_error("peer refused " + path);
+        return json::parse(r->body);
+    }
+    /// POST `path` as the admin; the status code.
+    [[nodiscard]] int post(const std::string& path) const {
+        httplib::Client c("127.0.0.1", port_);
+        const auto r = c.Post("/api/v1" + path, {{"Authorization", "Bearer integration-admin-token-0123456789"}}, "",
+                              "application/json");
+        return r ? r->status : 0;
+    }
+    /// Whether `seen` holds for the peer's answer to GET `path` within a few seconds.
+    template <class Pred>
+    [[nodiscard]] bool sees(const std::string& path, Pred seen) const {
+        for (int i = 0; i < 200; ++i) {
+            if (seen(get(path))) return true;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+        return false;
+    }
+
+private:
+    Application app_;
+    int port_;
+    std::thread thread_;
+};
+
+/// The test database; the suite skips every test without it.
+std::string databaseUrl() {
+    const char* url = std::getenv("RFMAP_TEST_DATABASE_URL");
+    return url ? url : "";
+}
+
+std::string moduleState(const json& modules, const std::string& id) {
+    for (const json& m : modules) {
+        if (m.value("id", "") == id) return m.value("state", "");
+    }
+    return "";
+}
+
+}  // namespace
+
+TEST_F(Integration, AdminSettingsReachEveryServerProcess) {
+    Peer peer;
+    const auto sync = call("GET", "/admin/settings/sync", nullptr, admin());
+    ASSERT_EQ(sync.status, 200) << sync.body;
+    EXPECT_TRUE(sync.body["listen"]["connected"].get<bool>()) << sync.body;
+    EXPECT_EQ(sync.body["topics"].size(), 3u);
+    EXPECT_NE(sync.body["instance"], peer.get("/admin/settings/sync")["instance"]);
+
+    // A switch flipped on one process: the other hears of it at once.
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.uncertainty", {{"enabled", false}}, admin()).status, 200);
+    EXPECT_TRUE(peer.sees("/modules", [](const json& m) { return moduleState(m, "rf.uncertainty") == "disabled"; }));
+
+    // Cache limits too.
+    const auto before = call("GET", "/admin/cache", nullptr, admin()).body;
+    ASSERT_EQ(call("PUT", "/admin/cache", json::array({{{"id", "results-memory"}, {"limitBytes", 3 << 20}}}), admin()).status,
+              200);
+    EXPECT_TRUE(peer.sees("/admin/cache", [](const json& t) { return t[1]["limitBytes"] == 3 << 20; }));
+
+    // A row changed by hand reaches every process on the admin's reset, not before the poll.
+    {
+        pqxx::connection c(databaseUrl());
+        pqxx::work w(c);
+        w.exec("update builtin_modules set enabled = true where id = 'rf.uncertainty'");
+        w.commit();
+    }
+    EXPECT_EQ(call("POST", "/admin/settings/reload?scope=nowhere", nullptr, admin()).status, 422);
+    const auto reset = call("POST", "/admin/settings/reload", nullptr, admin());
+    ASSERT_EQ(reset.status, 200) << reset.body;
+    EXPECT_EQ(reset.body["lastReason"], "admin reset everywhere");
+    EXPECT_EQ(moduleState(call("GET", "/modules").body, "rf.uncertainty"), "active");
+    EXPECT_TRUE(peer.sees("/modules", [](const json& m) { return moduleState(m, "rf.uncertainty") == "active"; }));
+    EXPECT_TRUE(peer.sees("/admin/settings/sync", [](const json& s) { return s["notices"].get<int>() >= 3; }));
+
+    // A row deleted by hand comes back with its defaults on the next reload.
+    ASSERT_EQ(call("PUT", "/admin/modules/rf.uncertainty", {{"enabled", false}}, admin()).status, 200);
+    {
+        pqxx::connection c(databaseUrl());
+        pqxx::work w(c);
+        w.exec("delete from builtin_modules where id = 'rf.uncertainty'");
+        w.commit();
+    }
+    ASSERT_EQ(call("POST", "/admin/settings/reload?scope=local", nullptr, admin()).status, 200);
+    EXPECT_EQ(moduleState(call("GET", "/modules").body, "rf.uncertainty"), "active");
+
+    ASSERT_EQ(call("PUT", "/admin/cache", json::array({{{"id", "results-memory"}, {"limitBytes", before[1]["limitBytes"]}}}),
+                   admin())
+                  .status,
+              200);
+}
+
+TEST_F(Integration, SettingsPollCatchesWhatNoNoticeAnnounced) {
+    Database db(databaseUrl(), Database::Settings{.poolSize = 1});
+    Logger log;
+    log.setQuiet(true);
+    std::atomic<int> reloads{0};
+    std::atomic<int> fileReloads{0};
+    SettingsSync sync(db, {databaseUrl(), false, std::chrono::seconds(1)}, log);
+    sync.add(SettingsTopic::kCacheLimits, SettingsSync::Source::Database, [&reloads] { ++reloads; });
+    sync.add(SettingsTopic::kModules, SettingsSync::Source::Files, [&fileReloads] { ++fileReloads; });
+    sync.start();
+    EXPECT_EQ(reloads, 1);  // the first read after start
+    EXPECT_EQ(fileReloads, 0);
+    sync.pollNow();
+    EXPECT_EQ(reloads, 1) << "nothing changed";
+
+    db.tx([](pqxx::work& w) {
+        w.exec("insert into settings(key, value) values ('test.poll', '1'::jsonb) "
+               "on conflict (key) do update set value = excluded.value");
+    });
+    // A notice for a file topic reloads only that one, and must not hide the row change from the poll.
+    sync.handle(ChangeNotice(SettingsTopic::kModules, "elsewhere"));
+    EXPECT_EQ(fileReloads, 1);
+    for (int i = 0; i < 100 && reloads < 2; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_EQ(reloads, 2);
+    EXPECT_EQ(fileReloads, 1) << "file topics change only by notice";
+
+    // Its own notices are skipped; an unknown topic reloads everything.
+    sync.handle(ChangeNotice(SettingsTopic::kModules, sync.instance()));
+    EXPECT_EQ(fileReloads, 1);
+    sync.handle(ChangeNotice("from.a.newer.server", "elsewhere"));
+    EXPECT_EQ(fileReloads, 2);
+    EXPECT_EQ(reloads, 3);
+    EXPECT_FALSE(sync.status()["listen"]["enabled"].get<bool>());
+    db.tx([](pqxx::work& w) { w.exec("delete from settings where key = 'test.poll'"); });
+}
+
+TEST_F(Integration, SettingsPollRetriesAReloadThatFailed) {
+    Database db(databaseUrl(), Database::Settings{.poolSize = 1});
+    Logger log;
+    log.setQuiet(true);
+    std::atomic<int> attempts{0};
+    SettingsSync sync(db, {databaseUrl(), false, std::chrono::seconds(3600)}, log);
+    sync.add(SettingsTopic::kBuiltins, SettingsSync::Source::Database, [&attempts] {
+        if (++attempts == 2) throw std::runtime_error("the database went away mid-read");
+    });
+    sync.start();
+    db.tx([](pqxx::work& w) {
+        w.exec("insert into settings(key, value) values ('test.retry', '1'::jsonb) "
+               "on conflict (key) do update set value = excluded.value");
+    });
+    sync.pollNow();  // sees the change; the reload fails
+    EXPECT_EQ(attempts, 2);
+    EXPECT_EQ(sync.status()["failedReloads"], 1);
+    sync.pollNow();  // the fingerprint did not move: tries again
+    EXPECT_EQ(attempts, 3);
+    sync.pollNow();  // now it did
+    EXPECT_EQ(attempts, 3);
+    db.tx([](pqxx::work& w) { w.exec("delete from settings where key = 'test.retry'"); });
+}
+
+TEST_F(Integration, SettingsNoticeThatCannotBeSentIsReported) {
+    Database db(databaseUrl(), Database::Settings{.poolSize = 1});
+    Database other(databaseUrl(), Database::Settings{.poolSize = 1});
+    Logger log;
+    log.setQuiet(true);
+    SettingsSync sync(db, {databaseUrl(), false, std::chrono::seconds(3600)}, log);
+    bool broken = false;
+    sync.add(SettingsTopic::kModules, SettingsSync::Source::Files, [&broken] {
+        if (broken) throw std::runtime_error("a module file cannot be read");
+    });
+    sync.start();
+    const auto pid = db.tx([](pqxx::work& w) { return w.query_value<int>("select pg_backend_pid()"); });
+    other.tx([pid](pqxx::work& w) { w.exec("select pg_terminate_backend($1)", pqxx::params{pid}); });
+    EXPECT_FALSE(sync.publish(SettingsTopic::kModules));  // the caller hears it, not only the log
+    EXPECT_TRUE(sync.publish(SettingsTopic::kModules));   // the pool has connected again
+    const auto fine = sync.reloadAll(true);
+    EXPECT_TRUE(fine.reloaded && fine.announced);
+    broken = true;
+    const auto failed = sync.reloadAll(true);  // a local failure is reported, and the others are still told
+    EXPECT_FALSE(failed.reloaded);
+    EXPECT_TRUE(failed.announced);
+}
+
+TEST_F(Integration, SettingsSyncStartsWithoutItsListenerAndIgnoresStrangeMessages) {
+    Database db(databaseUrl(), Database::Settings{.poolSize = 1});
+    Logger log;
+    log.setQuiet(true);
+    // Nothing listens on port 1: the start goes on, and the status says why it is not listening.
+    SettingsSync offline(db, {"postgresql://127.0.0.1:1/rfmap?connect_timeout=2", true, std::chrono::seconds(3600)}, log);
+    offline.start();
+    const json down = offline.status();
+    EXPECT_FALSE(down["listen"]["connected"].get<bool>());
+    EXPECT_TRUE(down["listen"]["error"].is_string());
+    offline.stop();
+
+    SettingsSync sync(db, {databaseUrl(), true, std::chrono::seconds(3600)}, log);
+    sync.start();
+    ASSERT_TRUE(sync.status()["listen"]["connected"].get<bool>());
+    const auto before = sync.status()["notices"].get<int>();
+    db.tx([](pqxx::work& w) { w.exec("select pg_notify('rfmap_changes', 'not a notice')"); });
+    db.tx([](pqxx::work& w) {
+        w.exec("select pg_notify('rfmap_changes', $1)",
+               pqxx::params{ChangeNotice(SettingsTopic::kBuiltins, "another-process").payload()});
+    });
+    for (int i = 0; i < 100 && sync.status()["notices"].get<int>() == before; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    EXPECT_EQ(sync.status()["notices"].get<int>(), before + 1);  // the stray text is not counted
+}
+
+TEST_F(Integration, AdminSettingsResetAnswers503WhenTheDatabaseIsGone) {
+    // A peer that signs in as its own role, so its database can be taken away without touching the others.
+    const std::string url = databaseUrl();
+    const auto at = url.find('@');
+    const auto scheme = url.find("://");
+    ASSERT_NE(at, std::string::npos);
+    const std::string cutUrl = url.substr(0, scheme + 3) + "rfmap_cut:cut-0123456789" + url.substr(at);
+    pqxx::connection admin(url);
+    const auto run = [&admin](const std::string& sql) {
+        pqxx::nontransaction w(admin);
+        w.exec(sql);
+    };
+    run("drop role if exists rfmap_cut");
+    run("create role rfmap_cut login superuser password 'cut-0123456789'");  // works with trust or password auth
+    json cfg = env->config;
+    cfg["database"]["url"] = cutUrl;
+    cfg["database"]["poolSize"] = 1;
+    {
+        Peer peer(cfg);
+        ASSERT_EQ(peer.post("/admin/settings/reload"), 200);
+        run("alter role rfmap_cut nologin");
+        run("select pg_terminate_backend(pid) from pg_stat_activity where usename = 'rfmap_cut'");
+        EXPECT_EQ(peer.post("/admin/settings/reload"), 503);
+        EXPECT_EQ(peer.post("/admin/settings/reload?scope=local"), 503);
+        run("alter role rfmap_cut login");
+        EXPECT_EQ(peer.post("/admin/settings/reload"), 200);  // back once the database answers
+    }
+    run("drop role rfmap_cut");
+}
+
+TEST_F(Integration, StartupRefusesWhatTheConfigurationDoesNotAllow) {
+    const std::string devKey = readFile(RFMOD_TEST_KEYS "/dev-owner.pub");
+    json noDevKey = env->config;
+    noDevKey["modules"]["allowDevOwnerKey"] = false;
+    EXPECT_THROW(Application(Config::fromJson(noDevKey), devKey, true, RFMAP_SQL_DIR), ConfigError);
+    json shortToken = env->config;
+    shortToken["admin"]["token"] = "short";
+    EXPECT_THROW(Application(Config::fromJson(shortToken), devKey, true, RFMAP_SQL_DIR), ConfigError);
+}
+
+TEST_F(Integration, AdminModuleChangeForAnUnknownModuleIsRefused) {
+    EXPECT_EQ(call("PUT", "/admin/modules/no.such.module", {{"enabled", true}}, admin()).status, 422);
+}
+
+TEST_F(Integration, SettingsListenerReconnectsAndReloadsWhatItMayHaveMissed) {
+    const std::string url = databaseUrl();
+    Database db(url, Database::Settings{.poolSize = 1});
+    Logger log;
+    log.setQuiet(true);
+    std::atomic<int> fileReloads{0};
+    SettingsSync sync(db, {url, true, std::chrono::seconds(3600)}, log);
+    sync.add(SettingsTopic::kModules, SettingsSync::Source::Files, [&fileReloads] { ++fileReloads; });
+    sync.start();
+    ASSERT_TRUE(sync.status()["listen"]["connected"].get<bool>());
+
+    // The database drops every listener, as a failover or a restart of PostgreSQL would.
+    db.tx([](pqxx::work& w) {
+        w.exec("select pg_terminate_backend(pid) from pg_stat_activity "
+               "where pid <> pg_backend_pid() and query ilike 'listen%'");
+    });
+    for (int i = 0; i < 200 && fileReloads == 0; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    EXPECT_EQ(fileReloads, 1) << sync.status().dump();
+    const json status = sync.status();
+    EXPECT_TRUE(status["listen"]["connected"].get<bool>()) << status.dump();
+    EXPECT_EQ(status["lastReason"], "listener reconnected");
+}
+
+TEST_F(Integration, OperationsListenerAnswersHealthReadinessAndMetrics) {
+    // Metrics left the admin API: the route is gone there and lives on the operations port.
+    EXPECT_EQ(call("GET", "/admin/metrics", nullptr, admin()).status, 404);
+    EXPECT_EQ(call("GET", "/admin/cache", nullptr, bearer("wrong")).status, 401);
     ASSERT_EQ(call("GET", "/health").status, 200);
-    const auto r = call("GET", "/admin/metrics", nullptr, admin());
-    ASSERT_EQ(r.status, 200);
-    EXPECT_EQ(r.headers.find("Content-Type")->second, "text/plain; version=0.0.4; charset=utf-8");
-    const std::string text = r.body.get<std::string>();
+
+    httplib::Client ops("127.0.0.1", env->opsPort);
+    const auto live = ops.Get("/healthz");
+    ASSERT_TRUE(live);
+    EXPECT_EQ(live->status, 200);
+    const auto ready = ops.Get("/readyz");
+    ASSERT_TRUE(ready);
+    EXPECT_EQ(ready->status, 200) << ready->body;
+    const json readiness = json::parse(ready->body);
+    EXPECT_TRUE(readiness.at("ready").get<bool>());
+    EXPECT_TRUE(readiness.at("checks").at("database").at("ok").get<bool>());
+    EXPECT_TRUE(readiness.at("checks").at("dem").at("ok").get<bool>());
+    EXPECT_TRUE(readiness.at("checks").at("weather").at("ok").get<bool>());
+
+    // The metrics token is its own secret: the admin token does not open the scrape.
+    EXPECT_EQ(ops.Get("/metrics")->status, 401);
+    EXPECT_EQ(ops.Get("/metrics", admin())->status, 403);
+    const auto r = ops.Get("/metrics", bearer("integration-metrics-token"));
+    ASSERT_TRUE(r);
+    ASSERT_EQ(r->status, 200);
+    EXPECT_EQ(r->get_header_value("Content-Type"), "text/plain; version=0.0.4; charset=utf-8");
+    const std::string& text = r->body;
     for (const char* part : {"rfmap_http_requests_total{class=\"default\",method=\"GET\",status=\"200\"}",
                              "rfmap_http_requests_total{class=\"admin\",method=\"GET\",status=\"401\"}",
                              "rfmap_pool_threads{pool=\"http\"} 8\n",
@@ -784,11 +1126,14 @@ TEST_F(Integration, MetricsForPrometheus) {
                              "rfmap_cache_limit_bytes{tier=\"dem-blocks\"}", "rfmap_jobs_started_total"}) {
         EXPECT_NE(text.find(part), std::string::npos) << part << "\n" << text;
     }
-    // The scrape's own thread is busy; the thread of the call before may not have returned yet.
-    const std::string busy = "rfmap_pool_busy_threads{pool=\"http\"} ";
-    const auto at = text.find(busy);
-    ASSERT_NE(at, std::string::npos) << text;
-    EXPECT_GE(std::stoi(text.substr(at + busy.size())), 1) << text;
+    // A scrape runs on the operations threads, so no request thread is busy with it. The thread
+    // of the last API call may still be returning, so give the gauge a moment to reach zero.
+    const auto idle = [&] {
+        const auto again = ops.Get("/metrics", bearer("integration-metrics-token"));
+        return again && again->body.find("rfmap_pool_busy_threads{pool=\"http\"} 0\n") != std::string::npos;
+    };
+    for (int i = 0; i < 50 && !idle(); ++i) std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    EXPECT_TRUE(idle());
 }
 
 TEST_F(Integration, ModuleAnswersAreCheckedAndFailuresReported) {

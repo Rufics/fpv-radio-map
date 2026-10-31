@@ -1,7 +1,7 @@
 // rfmap-server: the FPV Radio Map HTTP API.
 //
 //   rfmap-server [--config /etc/rfmap/server.json] [--sql /usr/share/rfmap/sql]
-//   rfmap-server --health [http://127.0.0.1:8080]   exit 0 if /api/v1/health answers 200
+//   rfmap-server --health [http://127.0.0.1:9090/readyz]   exit 0 if the readiness probe answers 200
 //   rfmap-server --backup  > rfmap.backup.zst        the data and module files, zstd, to standard output
 //   rfmap-server --restore < rfmap.backup.zst        into a new, empty database (backup.hpp)
 //   rfmap-server --migrate [--plan]                  applies breaking migrations too (migrations.hpp)
@@ -28,8 +28,9 @@ std::atomic<rfmap::Application*>& runningApplication() {
     return running;
 }
 
+/// SIGTERM and SIGINT begin the graceful stop; requestShutdown only sets a flag.
 void onSignal(int) {
-    if (rfmap::Application* app = runningApplication().load()) app->stop();
+    if (rfmap::Application* app = runningApplication().load()) app->requestShutdown();
 }
 
 /// What the process does to itself before it holds secrets: no core dumps, since memory holds
@@ -64,8 +65,8 @@ int main(int argc, char** argv) {
         const bool ok = app.listen();
         runningApplication() = nullptr;
         if (!ok) {
-            const auto& server = app.config().server;
-            app.log().error("http", std::format("could not listen on {}:{}", server.listen, server.port));
+            // The listener that failed has already said which address it could not bind.
+            app.log().error("server", "not started: a listener could not bind, see the error above");
             return 1;
         }
         app.log().info("http", "stopped");
