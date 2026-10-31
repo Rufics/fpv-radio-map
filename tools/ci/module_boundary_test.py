@@ -55,6 +55,22 @@ class ModuleBoundaryTest(unittest.TestCase):
                    "target_link_libraries(x PRIVATE fpv_common)  # not PostgreSQL::PostgreSQL\n")
         self.assertEqual(self.findings(), [])
 
+    def test_a_hash_inside_a_quoted_cmake_argument_starts_no_comment(self):
+        self.write("modules/fpv/CMakeLists.txt",
+                   'target_link_libraries(x PRIVATE "/opt/lib#debug.a" PostgreSQL::PostgreSQL)\n')
+        self.assertEqual(len(self.findings()), 1)
+
+    def test_ignores_cmake_bracket_comments_and_cpp_block_comments(self):
+        self.write("modules/fpv/CMakeLists.txt", "project(fpv)\n#[==[\nPostgreSQL::PostgreSQL\n]==]\n")
+        self.write("modules/fpv/core/src/module.cpp", "/* the old way:\n#include <pqxx/pqxx>\n*/\nint x = 0;\n")
+        self.assertEqual(self.findings(), [])
+
+    def test_finds_full_client_library_file_names(self):
+        self.write("modules/fpv/CMakeLists.txt",
+                   "target_link_libraries(x PRIVATE /usr/lib/libmysqlclient.so /usr/lib/libsqlite3.so)\n"
+                   "target_link_libraries(y PRIVATE libpqxx.a)\n")
+        self.assertEqual(len(self.findings()), 3)
+
     def test_ignores_comments_and_code_outside_the_module_folders(self):
         self.write("modules/fpv/CMakeLists.txt", "# Modules never link libpq: see the guide.\n")
         self.write("modules/fpv/core/src/module.cpp", "// #include <pqxx/pqxx> is what we do not do\n")

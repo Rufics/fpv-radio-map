@@ -169,15 +169,15 @@ void ConnectionPool::giveBack(std::unique_ptr<Connection> conn, Clock::time_poin
 std::vector<std::unique_ptr<Connection>> ConnectionPool::evictLocked(Clock::time_point now) {
     std::vector<std::unique_ptr<Connection>> out;
     const bool idleLimit = settings_.idleTimeout.count() > 0;
-    // Oldest returns first: those are the ones the busy end of the deque no longer reaches.
+    // Oldest returns first: those are the ones the busy end of the deque no longer reaches. The
+    // evicted stay counted in open_ until they are closed, so no replacement can exceed maxSize.
     for (auto it = idle_.begin(); it != idle_.end();) {
         const bool tooOld = expired(it->created, now);
-        const bool rested = idleLimit && now - it->since >= settings_.idleTimeout && open_ > settings_.minIdle;
+        const int staying = open_ - static_cast<int>(out.size());
+        const bool rested = idleLimit && now - it->since >= settings_.idleTimeout && staying > settings_.minIdle;
         if (tooOld || rested) {
             out.emplace_back(std::move(it->conn));
             it = idle_.erase(it);
-            --open_;
-            ++counters_.closed;
         } else {
             ++it;
         }
@@ -186,15 +186,21 @@ std::vector<std::unique_ptr<Connection>> ConnectionPool::evictLocked(Clock::time
 }
 
 void ConnectionPool::maintain() {
+    std::vector<std::unique_ptr<Connection>> closing;
     {
-        std::vector<std::unique_ptr<Connection>> closing;
+        const std::lock_guard lock(mutex_);
+        closing = evictLocked(Clock::now());
+    }
+    const auto evicted = closing.size();
+    closing.clear();  // the sessions close without the lock held
+    if (evicted > 0) {
         {
             const std::lock_guard lock(mutex_);
-            closing = evictLocked(Clock::now());
+            open_ -= static_cast<int>(evicted);
+            counters_.closed += evicted;
         }
-        // `closing` goes out of scope here: the sessions close without the lock held.
+        available_.notify_all();
     }
-    available_.notify_all();
     // One reservation at a time, so a failed connect never leaves room reserved behind it. At most
     // the shortfall seen now: a session closed again on its way in (dropped at once, or already past
     // maxLifetime) waits for the next round instead of a tight reconnect loop.

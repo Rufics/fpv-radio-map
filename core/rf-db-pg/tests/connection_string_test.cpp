@@ -45,6 +45,13 @@ TEST(ConnectionString, SeesKeywordsWrittenWithALineBreakBeforeTheEquals) {
     EXPECT_EQ(s.text(), "host=h\nconnect_timeout\n=10");
 }
 
+TEST(ConnectionString, DoesNotReadAKeywordInsideAQuotedValue) {
+    ConnectionString s(R"(host=h application_name='api connect_timeout=5 it\'s' password=a\ b)");
+    s.withDefault("connect_timeout", 2);
+    s.withDefault("password", "x");
+    EXPECT_EQ(s.text(), R"(host=h application_name='api connect_timeout=5 it\'s' password=a\ b connect_timeout=2)");
+}
+
 TEST(ConnectionString, AddsDefaultsToKeywords) {
     ConnectionString s("host=h dbname=db");
     s.withDefault("connect_timeout", 2);

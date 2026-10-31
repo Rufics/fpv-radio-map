@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <future>
 #include <memory>
 #include <optional>
@@ -28,12 +29,16 @@ struct FakeServer {
     std::atomic<bool> dropAll{false};  ///< every session is gone, but the client does not know yet
     std::atomic<bool> crash{false};    ///< the factory fails with something other than ConnectionFailed
     std::atomic<bool> stillborn{false};  ///< new sessions are closed by the server right after connecting
+    std::function<void()> onClose;       ///< runs as a session closes
 };
 
 class FakeConnection final : public Connection {
 public:
     explicit FakeConnection(FakeServer& server) : server_(server), open_(!server.stillborn) { ++server_.alive; }
-    ~FakeConnection() override { --server_.alive; }
+    ~FakeConnection() override {
+        if (server_.onClose) server_.onClose();
+        --server_.alive;
+    }
     FakeConnection(const FakeConnection&) = delete;
     FakeConnection& operator=(const FakeConnection&) = delete;
     FakeConnection(FakeConnection&&) = delete;
@@ -215,6 +220,22 @@ TEST_F(ConnectionPoolTest, MaintainClosesIdleConnectionsDownToMinIdle) {
     pool->maintain();
     EXPECT_EQ(pool->stats().open, 1);
     EXPECT_EQ(server_.alive, 1);
+}
+
+TEST_F(ConnectionPoolTest, AnEvictedSessionCountsAgainstMaxSizeUntilItHasClosed) {
+    auto pool = make({.maxSize = 2, .minIdle = 1, .idleTimeout = 1ms});
+    {
+        const ConnectionPool::Lease a = pool->acquire();
+        const ConnectionPool::Lease b = pool->acquire();
+    }
+    std::this_thread::sleep_for(5ms);
+    int openWhileClosing = -1;
+    server_.onClose = [&] { openWhileClosing = pool->stats().open; };
+    pool->maintain();
+    server_.onClose = nullptr;
+    EXPECT_EQ(openWhileClosing, 2);  // a caller arriving now could not open a third session
+    EXPECT_EQ(pool->stats().open, 1);
+    EXPECT_EQ(pool->stats().closed, 1u);
 }
 
 TEST_F(ConnectionPoolTest, MaintainRecyclesOldConnectionsAndTopsUp) {

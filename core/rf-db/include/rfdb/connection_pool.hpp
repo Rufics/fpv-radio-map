@@ -146,7 +146,8 @@ private:
     /// Runs from ~Lease, so it must not throw: a failure here (a mutex error, no memory for the idle
     /// entry) leaves nothing sane to recover and terminates.
     void giveBack(std::unique_ptr<Connection> conn, Clock::time_point created, Lease::Fate fate) noexcept;
-    /// Takes the idle connections maintain() closes out of idle_; the caller closes them unlocked.
+    /// Takes the idle connections maintain() closes out of idle_; the caller closes them unlocked and
+    /// only then takes them off open_, so the pool never holds more than maxSize sessions.
     [[nodiscard]] std::vector<std::unique_ptr<Connection>> evictLocked(Clock::time_point now);
     void closeUnusable(std::unique_ptr<Connection> conn, bool broken) noexcept;
     void housekeep(const std::stop_token& stop);
