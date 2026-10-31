@@ -56,7 +56,7 @@ SUITES = {"cpp.xml": "C++", "web-ui-kit.xml": "Web: ui-kit", "web-fpv-app.xml": 
           "python-ci.xml": "Python: tools/ci", "python-perf.xml": "Python: tools/perf",
           "python-blackbox.xml": "Python: tools/blackbox"}
 # CTest labels (the module of a C++ test) in the order of the coverage areas.
-TEST_MODULE_ORDER = ("rf-core", "rf-ext", "rf-flightlog", "rfmod", "fpv", "server", "example")
+TEST_MODULE_ORDER = ("rf-core", "rf-ext", "rf-flightlog", "rf-db", "rfmod", "fpv", "server", "example")
 # The failure excerpts of one report, so the comment stays far below GitHub's 65536 characters.
 MAX_REASONS_CHARS = 30000
 # The list of all tests goes to the run summary, which takes at most 1 MiB per step.
@@ -74,13 +74,15 @@ COMPONENTS = [
     ("core/rf-core/", "Core", "rf-core"),
     ("core/rf-ext/", "Core", "rf-ext"),
     ("core/rf-flightlog/", "Core", "rf-flightlog"),
+    ("core/rf-db/", "Core", "rf-db"),
+    ("core/rf-db-pg/", "Core", "rf-db"),
     ("platform/rfmod/", "Platform", "rfmod"),
     ("modules/fpv/common/", FPV, "fpv common"),
     ("modules/fpv/", FPV, None),  # fpv.<module folder>
     ("server/", "Server", "server"),
 ]
 AREAS = [
-    ("Core", "Core: rf-core, rf-ext, rf-flightlog"),
+    ("Core", "Core: rf-core, rf-ext, rf-flightlog, rf-db"),
     (FPV, FPV),
     ("Platform", "Platform: rfmod"),
     ("Server", "Server"),

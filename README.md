@@ -123,6 +123,7 @@ flowchart LR
     CORE["rf-core<br/>geodesy · Fresnel · diffraction · budget"]
     EXT["rf-ext<br/>refraction · rain · clutter · uncertainty"]
     REG["rfmod registry<br/>signature · schema · deps · self-test"]
+    POOL["rf-db · rf-db-pg<br/>bounded session pool"]
   end
   subgraph Modules["Signed modules (.rfmod)"]
     OWN["owner-signed<br/>in process"]
@@ -137,7 +138,7 @@ flowchart LR
   API --> CORE --> EXT
   API --> REG --> OWN
   REG --> THIRD
-  API --> DB
+  API --> POOL --> DB
   CORE --> DEM
   EXT --> OM
 ```
@@ -147,6 +148,8 @@ flowchart LR
 | [`core/rf-core`](core/rf-core) | Units, WGS-84 geodesy, exact Fresnel integrals, Bullington diffraction, link budget |
 | [`core/rf-ext`](core/rf-ext) | Refraction, rain, clutter, uncertainty analysis |
 | [`core/rf-flightlog`](core/rf-flightlog) | Normalized flight logs into the replay timeline, the flight's story and plan against fact |
+| [`core/rf-db`](core/rf-db) | The database layer: a bounded, health-checked connection pool behind abstract connection and factory interfaces |
+| [`core/rf-db-pg`](core/rf-db-pg) | rf-db for PostgreSQL (libpqxx): sessions with connect, statement, lock and idle-in-transaction timeouts |
 | [`platform/rfmod`](platform/rfmod) | Module ABI, signed package format, registry, sandboxed worker, `rfmod` CLI |
 | [`modules/fpv`](modules/fpv) | The FPV module pack |
 | [`server`](server) | HTTP API, PostGIS storage, raster access, weather, result cache |

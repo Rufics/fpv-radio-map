@@ -19,12 +19,25 @@
   "database": {
     // Prefer RFMAP_DATABASE_URL so the password stays out of the file.
     "url": "postgresql://rfmap@postgis:5432/rfmap",
+    // The most sessions this process opens. They open on demand, not at start; minIdle stay
+    // open while the server is quiet, the rest close after idleTimeoutMs.
     "poolSize": 8,
+    "minIdle": 1,
+    "idleTimeoutMs": 300000,
+    // A session this old is closed instead of lent again (0 = no limit).
+    "maxLifetimeMs": 1800000,
+    // How long opening a session may take (libpq connect_timeout, whole seconds, at least 2).
+    "connectTimeoutMs": 5000,
     // How long a request waits for a free pooled connection before it gets 503 with Retry-After.
     "leaseTimeoutMs": 10000,
     // statement_timeout of every pooled session: PostgreSQL cancels a longer statement. Schema
-    // migrations at start run without it. 0 keeps the role's or the database's own setting.
+    // migrations at start run without any of these timeouts. 0 keeps the role's or the
+    // database's own setting (for the next two as well).
     "statementTimeoutMs": 60000,
+    // lock_timeout: a statement waiting this long for a lock another session holds gives up.
+    "lockTimeoutMs": 10000,
+    // idle_in_transaction_session_timeout: PostgreSQL ends a session idle inside a transaction.
+    "idleInTransactionTimeoutMs": 60000,
     // The settings listener's own connection; empty = url. Behind a transaction-mode pooler
     // (PgBouncer) point it at PostgreSQL directly: LISTEN needs a session of its own.
     "listenUrl": ""

@@ -34,7 +34,8 @@ std::string matchKey(const json& obj, const std::string& wanted) {
     // Keys absent from the file still get their proper spelling.
     static constexpr auto known = std::to_array<std::string_view>({
         "server", "listen", "port", "threads", "trustProxy", "maxBodyBytes", "maxUploadBytes", "database", "url",
-        "poolSize", "leaseTimeoutMs", "statementTimeoutMs", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
+        "poolSize", "minIdle", "leaseTimeoutMs", "statementTimeoutMs", "lockTimeoutMs", "idleInTransactionTimeoutMs",
+        "idleTimeoutMs", "maxLifetimeMs", "connectTimeoutMs", "admin", "token", "data", "dem", "landcover", "demStatedErrorM", "demStatedErrorSource", "demName",
         "landcoverName", "schemasDir", "seedDir", "modules", "root", "worker", "trustStore", "isolateAll", "allowDevOwnerKey", "requireSandbox", "maxMemoryMb",
         "maxTimeoutMs", "weather",
         "baseUrl", "tiers", "forecastDays", "timeoutMs", "cacheMinutes", "metaUrl", "staleAfterHours", "cache",
@@ -73,11 +74,23 @@ void readPath(const json& obj, const char* key, std::filesystem::path& out) {
 void readDatabase(const json& db, Config::Database& out) {
     read(db, "url", out.url);
     read(db, "poolSize", out.poolSize);
-    read(db, "leaseTimeoutMs", out.leaseTimeoutMs);
-    read(db, "statementTimeoutMs", out.statementTimeoutMs);
+    read(db, "minIdle", out.minIdle);
     read(db, "listenUrl", out.listenUrl);
-    if (out.leaseTimeoutMs < 0 || out.statementTimeoutMs < 0) {
-        throw std::invalid_argument("database.leaseTimeoutMs and database.statementTimeoutMs must be >= 0");
+    const auto durations = std::to_array<std::pair<const char*, int*>>({
+        {"leaseTimeoutMs", &out.leaseTimeoutMs},
+        {"statementTimeoutMs", &out.statementTimeoutMs},
+        {"lockTimeoutMs", &out.lockTimeoutMs},
+        {"idleInTransactionTimeoutMs", &out.idleInTransactionTimeoutMs},
+        {"idleTimeoutMs", &out.idleTimeoutMs},
+        {"maxLifetimeMs", &out.maxLifetimeMs},
+        {"connectTimeoutMs", &out.connectTimeoutMs}});
+    for (const auto& [key, value] : durations) {
+        read(db, key, *value);
+        if (*value < 0) throw std::invalid_argument(std::string("database.") + key + " must be >= 0");
+    }
+    if (out.poolSize < 1) throw std::invalid_argument("database.poolSize must be >= 1");
+    if (out.minIdle < 0 || out.minIdle > out.poolSize) {
+        throw std::invalid_argument("database.minIdle must be between 0 and database.poolSize");
     }
 }
 

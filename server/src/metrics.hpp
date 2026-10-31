@@ -30,13 +30,17 @@ struct PoolStats {
 
 /// The PostgreSQL connection pool.
 struct DbPoolStats {
-    int size = 0;
+    int size = 0;     ///< sessions open now, lent or idle
+    int maxSize = 0;  ///< the most the pool opens (database.poolSize)
     int idle = 0;
-    int waiting = 0;                  ///< callers waiting for a connection
-    std::uint64_t leases = 0;         ///< connections lent since start
-    double waitSeconds = 0.0;         ///< total time callers waited for one
-    std::uint64_t reconnects = 0;     ///< broken connections replaced
-    std::uint64_t leaseTimeouts = 0;  ///< callers turned away with 503 after the lease timeout
+    int waiting = 0;                    ///< callers waiting for a connection
+    std::uint64_t leases = 0;           ///< connections lent since start
+    double waitSeconds = 0.0;           ///< total time callers waited for one
+    std::uint64_t reconnects = 0;       ///< broken sessions closed; the next caller opens a fresh one
+    std::uint64_t leaseTimeouts = 0;    ///< callers turned away with 503 after the lease timeout
+    std::uint64_t opened = 0;           ///< sessions opened since start
+    std::uint64_t closed = 0;           ///< sessions closed: idle, too old, retired or broken
+    std::uint64_t connectFailures = 0;  ///< sessions the pool tried and failed to open
 };
 
 /// One bulkhead (PIN checks, calculations): its slots, who holds and waits for them, who was turned away.

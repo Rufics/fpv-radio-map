@@ -99,17 +99,27 @@ Services::~Services() {
 
 void Services::openDatabase(const std::filesystem::path& sqlDir) {
     const Config::Database& db = config_.database;
-    store_.db = std::make_unique<Database>(
-        db.url, Database::Settings{db.poolSize, std::chrono::milliseconds(db.leaseTimeoutMs),
-                                   std::chrono::milliseconds(db.statementTimeoutMs)});
-    const std::string statementTimeout =
-        db.statementTimeoutMs > 0 ? std::format("{} ms", db.statementTimeoutMs) : std::string("from the server");
-    log_.info("startup", std::format("database: {} connections, lease timeout {} ms, statement timeout {}", db.poolSize,
-                                     db.leaseTimeoutMs, statementTimeout));
+    using std::chrono::milliseconds;
+    store_.db = std::make_unique<Database>(db.url, Database::Settings{
+                                                       .poolSize = db.poolSize,
+                                                       .leaseTimeout = milliseconds(db.leaseTimeoutMs),
+                                                       .statementTimeout = milliseconds(db.statementTimeoutMs),
+                                                       .lockTimeout = milliseconds(db.lockTimeoutMs),
+                                                       .idleInTransactionTimeout = milliseconds(db.idleInTransactionTimeoutMs),
+                                                       .minIdle = db.minIdle,
+                                                       .idleTimeout = milliseconds(db.idleTimeoutMs),
+                                                       .maxLifetime = milliseconds(db.maxLifetimeMs),
+                                                       .connectTimeout = milliseconds(db.connectTimeoutMs),
+                                                   });
+    const auto timeout = [](int ms) { return ms > 0 ? std::format("{} ms", ms) : std::string("from the server"); };
+    log_.info("startup", std::format("database: up to {} sessions ({} kept idle), lease timeout {} ms, statement "
+                                     "timeout {}, lock timeout {}",
+                                     db.poolSize, db.minIdle, db.leaseTimeoutMs, timeout(db.statementTimeoutMs),
+                                     timeout(db.lockTimeoutMs)));
     // A breaking step, or a database newer than this server, stops the start: see migrations.hpp.
-    // A migration may rewrite a large table, so the statement timeout does not apply to it.
+    // A migration may rewrite a large table or wait for a lock, so no session timeout applies to it.
     const MigrationCatalog migrations(sqlDir);
-    store_.db->withoutStatementTimeout([this, &migrations](pqxx::connection& c) {
+    store_.db->withoutTimeouts([this, &migrations](pqxx::connection& c) {
         return SchemaMigrator(migrations, {config_.modules.root, config_.modules.trustStore},
                               [this](const std::string& line) { log_.info("startup", line); })
             .migrate(c, {});

@@ -98,7 +98,8 @@ TEST(ServerMetricsTest, WritesEveryFamily) {
     sample.version = "1.2.3";
     sample.startTimeSeconds = 1700000000;
     sample.pools = {{"http", {16, 2, 3, 40}}, {"job-cells", {4, 0, 0, 7}}};
-    sample.db = {8, 5, 1, 120, 0.25, 2, 3};
+    sample.db = {.size = 8, .maxSize = 8, .idle = 5, .waiting = 1, .leases = 120, .waitSeconds = 0.25, .reconnects = 2,
+                 .leaseTimeouts = 3};
     sample.gates = {{"pin", 2, 1, 0, 0}, {"calc", 4, 4, 2, 5}};
     sample.jobs.byState = {{"running", 1}, {"done", 3}};
     sample.jobs.started = 4;
