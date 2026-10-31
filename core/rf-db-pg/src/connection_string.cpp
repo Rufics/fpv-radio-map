@@ -59,8 +59,9 @@ class ValueCodec {
 public:
     /// A keyword value: quoted, with quotes and backslashes escaped, when bare text would not survive.
     static std::string keyword(std::string_view value) {
-        const bool bare = !value.empty() && value.find_first_of(" \t\n\r\f\v'\\") == std::string_view::npos;
-        if (bare) return std::string(value);
+        if (const bool bare = !value.empty() && value.find_first_of(" \t\n\r\f\v'\\") == std::string_view::npos; bare) {
+            return std::string(value);
+        }
         std::string quoted = "'";
         for (const char c : value) {
             if (c == '\'' || c == '\\') quoted += '\\';
