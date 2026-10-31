@@ -44,12 +44,25 @@ public:
 
     struct Database {
         std::string url = "postgresql://rfmap@localhost/rfmap";
+        /// The most sessions the pool opens; it opens them on demand, not at start.
         int poolSize = 8;
+        /// Sessions kept open while the server is quiet (0..poolSize).
+        int minIdle = 1;
         /// How long a request waits for a pooled connection before it gets 503; 0 turns it away at once.
         int leaseTimeoutMs = 10000;
         /// statement_timeout of every pooled session: PostgreSQL cancels a longer statement.
-        /// 0 leaves the role's or the database's own setting.
+        /// 0 leaves the role's or the database's own setting (so do the next two).
         int statementTimeoutMs = 60000;
+        /// lock_timeout: a statement waiting this long for another session's lock gives up.
+        int lockTimeoutMs = 10000;
+        /// idle_in_transaction_session_timeout: PostgreSQL ends a session idle inside a transaction.
+        int idleInTransactionTimeoutMs = 60000;
+        /// An idle session above minIdle is closed after this long; 0 keeps it.
+        int idleTimeoutMs = 300000;
+        /// A session this old is closed instead of lent again; 0 = no limit.
+        int maxLifetimeMs = 1800000;
+        /// How long opening a session may take (libpq connect_timeout, whole seconds, at least 2).
+        int connectTimeoutMs = 5000;
         /// The settings listener's own connection (LISTEN needs a session, not a transaction-mode
         /// pooler such as PgBouncer); empty = `url`.
         std::string listenUrl;

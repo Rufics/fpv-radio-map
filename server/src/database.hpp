@@ -1,56 +1,61 @@
 #pragma once
 
-// The distribution's libpqxx 7.8 is built as C++17, so its exception constructors take no
-// std::source_location. Compiled as C++20, its headers would declare ones that take it and
-// the link fails; hide the feature so the headers match the library's ABI.
-#include <version>
-#undef __cpp_lib_source_location  // NOSONAR(cpp:S959): a library feature macro <version> defines; see above
-#include <pqxx/pqxx>
-
 #include "common.hpp"
 #include "logger.hpp"
 #include "metrics.hpp"
 
-#include <atomic>
+#include <rfdb/pg/session_pool.hpp>
+
 #include <chrono>
-#include <condition_variable>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <utility>
-#include <vector>
 
 namespace rfmap {
 
-/// A fixed pool of PostgreSQL connections. `with` lends one for the duration of a callback and
-/// replaces it if it broke, so one dropped connection does not poison the pool. A caller that
-/// finds every connection lent waits at most `leaseTimeout` and then gets 503, and every session
-/// carries a statement_timeout, so a slow database turns into quick errors, not hung threads.
+/// The server's door to PostgreSQL: every component that stores something goes through it, and
+/// modules reach the data only through host calls that end up here.
+///
+/// A bounded rfdb::pg::SessionPool underneath: it opens sessions on demand up to `poolSize`,
+/// keeps `minIdle` warm, closes the rest after `idleTimeout` and recycles sessions after
+/// `maxLifetime`. `with` lends one for the duration of a callback; a session that broke is closed
+/// and a fresh one is opened on demand or by upkeep, so one dropped connection does not poison the pool. A
+/// caller that finds every connection lent waits at most `leaseTimeout` and then gets 503, and
+/// every session carries a statement, lock and idle-in-transaction timeout, so a slow database or
+/// a session holding locks turns into quick errors, not hung threads.
 class Database {
 public:
     struct Settings {
-        int poolSize = 8;
+        int poolSize = 8;  ///< the most sessions open at once
         std::chrono::milliseconds leaseTimeout{10000};
         std::chrono::milliseconds statementTimeout{60000};  ///< 0 = the server's own setting
+        std::chrono::milliseconds lockTimeout{10000};       ///< 0 = the server's own setting
+        std::chrono::milliseconds idleInTransactionTimeout{60000};  ///< 0 = the server's own setting
+        int minIdle = 1;
+        std::chrono::milliseconds idleTimeout{300000};   ///< 0 = keep idle sessions open
+        std::chrono::milliseconds maxLifetime{1800000};  ///< 0 = no limit
+        std::chrono::milliseconds connectTimeout{5000};
     };
 
-    Database(std::string url, Settings settings);
+    /// Throws HttpError 503 when the first sessions cannot be opened.
+    Database(const std::string& url, const Settings& settings);
 
-    /// Throws HttpError 503 {retryAfterS} when no connection frees up within the lease timeout.
+    /// Throws HttpError 503 {retryAfterS} when no connection frees up within the lease timeout,
+    /// or when a new session cannot be opened.
     template <class F>
     auto with(F&& f) -> decltype(f(std::declval<pqxx::connection&>())) {
         Lease lease(*this);
         return lend(lease, std::forward<F>(f));
     }
 
-    /// `with` on a session without a statement_timeout, for work that is long by nature (schema
-    /// migrations at start). The session is replaced afterwards, so the lifted limit leaves with it.
+    /// `with` on a session without any timeout, for work that is long by nature (schema
+    /// migrations at start). The session is closed afterwards, so the lifted limits leave with it.
     template <class F>
-    auto withoutStatementTimeout(F&& f) -> decltype(f(std::declval<pqxx::connection&>())) {
+    auto withoutTimeouts(F&& f) -> decltype(f(std::declval<pqxx::connection&>())) {
         Lease lease(*this);
-        lease.retire = true;
-        pqxx::nontransaction(*lease.conn).exec("SET statement_timeout = 0");
+        lease.get().retire();
+        lease.get().session().liftTimeouts();
         return lend(lease, std::forward<F>(f));
     }
 
@@ -70,52 +75,34 @@ public:
         });
     }
 
-    [[nodiscard]] DbPoolStats stats();
+    [[nodiscard]] DbPoolStats stats() const;
 
 private:
-    /// Returns a leased connection to the pool and wakes one waiting lease.
-    void giveBack(std::unique_ptr<pqxx::connection> c);
-
-    struct Lease {
+    /// A pooled session, with the pool's own errors turned into the HTTP answer callers expect.
+    class Lease {
+    public:
         explicit Lease(Database& db);
-        ~Lease();
-        Lease(const Lease&) = delete;
-        Lease& operator=(const Lease&) = delete;
-        Database& db;
-        std::unique_ptr<pqxx::connection> conn;
-        bool broken = false;  ///< the connection dropped: replace it and count a reconnect
-        bool retire = false;  ///< the session was changed for one caller: replace it
-        /// Puts the pool's settings back on a retired session that could not be replaced.
-        void restore();
+        [[nodiscard]] rfdb::pg::SessionPool::Lease& get() { return lease_; }
+
+    private:
+        rfdb::pg::SessionPool::Lease lease_;
     };
 
     template <class F>
     static auto lend(Lease& lease, F&& f) -> decltype(f(std::declval<pqxx::connection&>())) {
         try {
-            return std::forward<F>(f)(*lease.conn);
+            return std::forward<F>(f)(lease.get().raw());
         } catch (const pqxx::broken_connection&) {
-            lease.broken = true;
+            lease.get().markBroken();
             throw;
         }
     }
 
-    /// A new session with the pool's settings applied.
-    [[nodiscard]] std::unique_ptr<pqxx::connection> connect() const;
-    void applySettings(pqxx::connection& c) const;
-    [[noreturn]] void busy();
+    [[nodiscard]] static rfdb::pg::SessionOptions sessionOptions(const Settings& s);
+    [[nodiscard]] static rfdb::PoolSettings poolSettings(const Settings& s);
 
-    std::string url_;
-    Settings settings_;
-    std::mutex mutex_;
-    // Guarded by mutex_, except reconnects_, which the lease updates outside the lock.
-    int waiting_ = 0;
-    std::uint64_t leases_ = 0;
-    std::uint64_t leaseTimeouts_ = 0;
-    double waitSeconds_ = 0.0;
-    std::atomic<std::uint64_t> reconnects_{0};
-    std::condition_variable available_;
-    std::vector<std::unique_ptr<pqxx::connection>> idle_;
     Logger log_;
+    std::unique_ptr<rfdb::pg::SessionPool> pool_;
 };
 
 }  // namespace rfmap
