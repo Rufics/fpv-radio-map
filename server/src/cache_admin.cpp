@@ -25,6 +25,7 @@ void CacheAdmin::apply(const Limits& limits) const {
 }
 
 void CacheAdmin::loadStoredLimits() const {
+    std::lock_guard lock(limitsMutex_);
     const auto stored = db_.tx([](pqxx::work& w) -> std::optional<json> {
         const auto r = w.exec("select value::text from settings where key = 'cache.limits'");
         if (r.empty()) return std::nullopt;
@@ -92,6 +93,7 @@ std::size_t CacheAdmin::limit(const json& tier, const char* key, std::size_t cur
 }
 
 void CacheAdmin::setLimits(const json& request) const {
+    std::lock_guard lock(limitsMutex_);
     const Limits l = read(current(), request);
     apply(l);
     store(l);

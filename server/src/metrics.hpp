@@ -1,7 +1,7 @@
 #pragma once
 
-// Internal counters of the server in the Prometheus text format, for GET /api/v1/admin/metrics
-// (off unless metrics.enabled). Only plain counters and gauges that are cheap to read: a scrape
+// Internal counters of the server in the Prometheus text format, for GET /metrics on the
+// operations listener (off unless metrics.enabled). Only plain counters and gauges that are cheap to read: a scrape
 // must not slow the server it observes, so nothing here queries the database.
 
 #include "lru.hpp"
@@ -32,10 +32,20 @@ struct PoolStats {
 struct DbPoolStats {
     int size = 0;
     int idle = 0;
-    int waiting = 0;              ///< callers waiting for a connection
-    std::uint64_t leases = 0;     ///< connections lent since start
-    double waitSeconds = 0.0;     ///< total time callers waited for one
-    std::uint64_t reconnects = 0; ///< broken connections replaced
+    int waiting = 0;                  ///< callers waiting for a connection
+    std::uint64_t leases = 0;         ///< connections lent since start
+    double waitSeconds = 0.0;         ///< total time callers waited for one
+    std::uint64_t reconnects = 0;     ///< broken connections replaced
+    std::uint64_t leaseTimeouts = 0;  ///< callers turned away with 503 after the lease timeout
+};
+
+/// One bulkhead (PIN checks, calculations): its slots, who holds and waits for them, who was turned away.
+struct GateSample {
+    std::string gate;
+    int slots = 0;
+    int active = 0;
+    int waiting = 0;
+    std::uint64_t rejected = 0;
 };
 
 /// Coverage jobs the server still keeps, by state, and the pools they run on.
@@ -76,6 +86,7 @@ struct ServerSample {
     ProcessStats process;
     std::vector<std::pair<std::string, PoolStats>> pools;
     DbPoolStats db;
+    std::vector<GateSample> gates;
     JobStats jobs;
     std::vector<CacheSample> caches;
 };

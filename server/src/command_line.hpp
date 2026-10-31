@@ -6,6 +6,7 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace rfmap {
@@ -19,11 +20,13 @@ public:
 
     static constexpr std::string_view kUsage =
         "usage: rfmap-server [--config file.json] [--sql dir]\n"
-        "       rfmap-server --health [http://127.0.0.1:8080]\n"
+        "       rfmap-server --health [http://127.0.0.1:9090/readyz]\n"
         "       rfmap-server [--config file.json] [--sql dir] --backup  > rfmap.backup\n"
         "       rfmap-server [--config file.json] [--sql dir] --restore < rfmap.backup\n"
         "       rfmap-server [--config file.json] [--sql dir] --migrate [--plan]\n";
-    static constexpr std::string_view kDefaultHealthUrl = "http://127.0.0.1:8080";
+    /// The readiness probe on the operations listener (ops.listen:ops.port).
+    static constexpr std::string_view kDefaultHealthUrl = "http://127.0.0.1:9090/readyz";
+    static constexpr std::string_view kDefaultHealthPath = "/readyz";
 
     /// Reads `args` (without the program name). RFMAP_CONFIG and RFMAP_SQL_DIR give the defaults
     /// that --config and --sql override; the first --health, --help or unknown argument decides,
@@ -40,7 +43,7 @@ public:
     [[nodiscard]] bool planOnly() const { return planOnly_; }
     [[nodiscard]] const std::filesystem::path& configFile() const { return configFile_; }
     [[nodiscard]] const std::filesystem::path& sqlDir() const { return sqlDir_; }
-    /// The server --health asks, for Action::Health.
+    /// The URL --health asks, for Action::Health. A URL without a path asks /readyz.
     [[nodiscard]] const std::string& healthUrl() const { return healthUrl_; }
     /// The argument that was not understood, for Action::Invalid.
     [[nodiscard]] const std::string& invalidArgument() const { return invalidArgument_; }
@@ -48,13 +51,16 @@ public:
     /// Answers Health, Help and Invalid, which need no configuration; returns the process exit code.
     int answerWithoutServing(std::ostream& out, std::ostream& err) const;
 
+    /// "http://host:port/path" split into the origin and the path; no path means /readyz.
+    static std::pair<std::string, std::string> splitUrl(std::string_view url);
+
 private:
     /// The service action an argument names, or Invalid.
     static Action serviceAction(std::string_view arg);
     /// --plan only goes with --migrate: anything else with it is Invalid.
     void requirePlanWithMigrate();
-    /// For container health checks (the runtime image has no curl): 0 when /api/v1/health answers 200.
-    static int health(const std::string& base, std::ostream& err);
+    /// For container health checks (the runtime image has no curl): 0 when `url` answers 200.
+    static int health(const std::string& url, std::ostream& err);
 
     Action action_ = Action::Serve;
     std::filesystem::path configFile_;

@@ -41,13 +41,45 @@ json linkCreateSchema() {
               {"expiresAt", {{"type", "string"}, {"format", "date-time"}}}}}};
 }
 
+/// Refuses a start the configuration does not allow; warns about what it allows but should not.
+void checkStartup(const Config& config, Logger& log, bool ownerKeyIsDev) {
+    if (ownerKeyIsDev && !config.modules.allowDevOwnerKey) {
+        throw ConfigError("this build carries the PUBLIC development owner key (RFMAP_OWNER_KEY_IS_DEV=1): anyone could "
+                          "sign modules it runs in-process. Rebuild with -DRFMAP_OWNER_PUBKEY, or set "
+                          "modules.allowDevOwnerKey for a development server");
+    }
+    if (ownerKeyIsDev) log.warn("startup", "built with the PUBLIC development owner key; modules.allowDevOwnerKey is set");
+    if (config.adminToken.empty()) {
+        log.warn("startup", "admin.token is not set: the admin API is disabled");
+    } else if (config.adminToken.size() < Config::kMinAdminTokenLength) {
+        throw ConfigError(std::format("admin.token must be at least {} characters", Config::kMinAdminTokenLength));
+    }
+}
+
+/// The settings sync of `s`, with a topic for each copy of the admin settings it keeps, started.
+std::unique_ptr<SettingsSync> startSettingsSync(const Services& s) {
+    const Config& config = s.config();
+    const Config::Database& db = config.database;
+    auto sync = std::make_unique<SettingsSync>(
+        s.db(),
+        SettingsSync::Options{db.listenUrl.empty() ? db.url : db.listenUrl, config.settingsSync.listen,
+                              std::chrono::seconds(config.settingsSync.pollSeconds)},
+        s.log());
+    using Source = SettingsSync::Source;
+    sync->add(SettingsTopic::kBuiltins, Source::Database, [&s] { s.builtins().reload(); });
+    sync->add(SettingsTopic::kCacheLimits, Source::Database, [&s] { s.caches().loadStoredLimits(); });
+    sync->add(SettingsTopic::kModules, Source::Files, [&s] { s.reloadModules(); });
+    sync->start();
+    return sync;
+}
+
 }  // namespace
 
 Services::Services(const Config& config, Logger& log, const std::string& ownerKeyText, bool ownerKeyIsDev,
                    const std::filesystem::path& sqlDir)
     : config_(config), log_(log), forecast_(config.weather, log, clock_) {
     Secrets::init();
-    checkStartup(ownerKeyIsDev);
+    checkStartup(config_, log_, ownerKeyIsDev);
     openDatabase(sqlDir);
     buildStores();
     openTerrain();
@@ -56,32 +88,28 @@ Services::Services(const Config& config, Logger& log, const std::string& ownerKe
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
+    settings_ = startSettingsSync(*this);
 }
 
 Services::~Services() {
+    settings_.reset();  // its thread reloads the modules: stop it before they go
     jobs_.reset();  // running calculations hold module instances: finish them before the registry goes
     modules_.registry.reset();
 }
 
-void Services::checkStartup(bool ownerKeyIsDev) const {
-    if (ownerKeyIsDev && !config_.modules.allowDevOwnerKey) {
-        throw ConfigError("this build carries the PUBLIC development owner key (RFMAP_OWNER_KEY_IS_DEV=1): anyone could "
-                          "sign modules it runs in-process. Rebuild with -DRFMAP_OWNER_PUBKEY, or set "
-                          "modules.allowDevOwnerKey for a development server");
-    }
-    if (ownerKeyIsDev) log_.warn("startup", "built with the PUBLIC development owner key; modules.allowDevOwnerKey is set");
-    if (config_.adminToken.empty()) {
-        log_.warn("startup", "admin.token is not set: the admin API is disabled");
-    } else if (config_.adminToken.size() < Config::kMinAdminTokenLength) {
-        throw ConfigError(std::format("admin.token must be at least {} characters", Config::kMinAdminTokenLength));
-    }
-}
-
 void Services::openDatabase(const std::filesystem::path& sqlDir) {
-    store_.db = std::make_unique<Database>(config_.database.url, config_.database.poolSize);
+    const Config::Database& db = config_.database;
+    store_.db = std::make_unique<Database>(
+        db.url, Database::Settings{db.poolSize, std::chrono::milliseconds(db.leaseTimeoutMs),
+                                   std::chrono::milliseconds(db.statementTimeoutMs)});
+    const std::string statementTimeout =
+        db.statementTimeoutMs > 0 ? std::format("{} ms", db.statementTimeoutMs) : std::string("from the server");
+    log_.info("startup", std::format("database: {} connections, lease timeout {} ms, statement timeout {}", db.poolSize,
+                                     db.leaseTimeoutMs, statementTimeout));
     // A breaking step, or a database newer than this server, stops the start: see migrations.hpp.
+    // A migration may rewrite a large table, so the statement timeout does not apply to it.
     const MigrationCatalog migrations(sqlDir);
-    store_.db->with([this, &migrations](pqxx::connection& c) {
+    store_.db->withoutStatementTimeout([this, &migrations](pqxx::connection& c) {
         return SchemaMigrator(migrations, {config_.modules.root, config_.modules.trustStore},
                               [this](const std::string& line) { log_.info("startup", line); })
             .migrate(c, {});

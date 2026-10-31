@@ -171,8 +171,8 @@ environment variable:
 - `RFMAP__<SECTION>__<KEY>=value` sets `config[section][key]`. Names are matched without
   regard to case, and values are parsed as JSON when they parse, for example
   `RFMAP__CACHE__DEMBLOCKSMB=512` or `RFMAP__WEATHER__TIERS='[{"name":"hourly","models":"dwd_icon"}]'`.
-- Short forms: `RFMAP_DATABASE_URL`, `RFMAP_ADMIN_TOKEN`, `RFMAP_PORT`, `RFMAP_OPEN_METEO_URL`,
-  `RFMAP_DEM`, `RFMAP_LANDCOVER`.
+- Short forms: `RFMAP_DATABASE_URL`, `RFMAP_ADMIN_TOKEN`, `RFMAP_METRICS_TOKEN`, `RFMAP_PORT`,
+  `RFMAP_OPEN_METEO_URL`, `RFMAP_DEM`, `RFMAP_LANDCOVER`.
 
 Settings you will most likely touch:
 
@@ -182,14 +182,53 @@ Settings you will most likely touch:
 | `auth.pinMaxAttempts`, `auth.pinLockoutMinutes` | 5, 15 | After that many wrong PINs the link pauses (429 with `Retry-After`). Each further lockout of the same link doubles the pause. A correct PIN resets the count. |
 | `auth.argon2Cost` | `moderate` | PIN hashing (argon2id, libsodium). `interactive` is cheaper; `sensitive` costs about 1 GiB per hash. |
 | `auth.pinConcurrency`, `auth.pinQueue`, `auth.pinWaitMs` | automatic, automatic, 2000 | PIN checks run on the request threads, so they are bounded: that many run at once, that many more wait up to `pinWaitMs` for a slot, and the rest get 503 with `Retry-After` at once. A refused check does not count as a wrong PIN. Automatic is half the CPU cores, at most a quarter of `server.threads`, with a queue of the same size but never more than the spare request threads, so it can be smaller or even zero and one request thread always stays free; each running check at `moderate` cost also takes 256 MiB. Raise them only with cores and `server.threads` to match. |
+| `database.leaseTimeoutMs` | 10000 | How long a request waits for one of the `database.poolSize` connections. When every connection stays lent that long, the request gives up and answers 503 with `Retry-After`, so the timeout bounds how long it holds its request thread while it waits; `rfmap_db_pool_lease_timeouts_total` counts them. It trips when the pool is exhausted: every connection stays lent for the whole wait, because PostgreSQL is stuck or slow, or because long-running work holds all of them. If it trips often, look at slow queries before raising `database.poolSize`. |
+| `database.statementTimeoutMs` | 60000 | Set as `statement_timeout` on every pooled session, so PostgreSQL cancels a statement that runs longer and frees the connection (the request answers 500). Schema migrations at start run without it. 0 keeps whatever the role or database sets (`ALTER ROLE rfmap SET statement_timeout = ...`). Normal queries take milliseconds; keep the default unless a result table on slow storage needs more. |
 | `rateLimits.<class>` | see example | Token buckets per client address. Classes: `default`, `open` (PIN attempts and the public link lookup), `create`, `calc`, `coverage`, `admin`. |
 | `coverage.maxCells`, `coverage.threads` | 250000, 4 | Larger grids are refused with 422. |
 | `calc.maxRouteSamples` | 20000000 | The most terrain samples one `POST /calc/route` may read. Each leg is sampled at the DEM step and every position builds a profile from the pilot, so the work is positions times profile samples; the server works out an upper bound before it starts and refuses a larger route with 422. A sample costs about 1 µs of one core with both links, so the default holds a request thread for at most about 20 s. A 100 km route with a 30 m DEM is around 10 million. |
+| `calc.concurrency`, `calc.queue`, `calc.waitMs` | automatic, automatic, 10000 | `POST /calc/path` and `POST /calc/route` run on the request threads, so they are bounded like PIN checks: that many run at once, that many more wait up to `waitMs` for a slot, and the rest get 503 with `Retry-After` at once. A request is validated and sized before it takes a slot. Automatic is one calculation per CPU core, at most half of `server.threads` but at least one, with a queue of the same size but at most a quarter of `server.threads` and never the last spare thread, so health checks, map viewers and PIN checks always find a request thread. The one exception is `server.threads` set to 1: that single thread also runs calculations, and nothing is left spare. Coverage jobs have their own limit (`coverage.maxJobs`). |
 | `server.maxBodyBytes`, `server.maxUploadBytes` | 1 MiB, 64 MiB | JSON bodies, and flight log files (the only uploads). A JSON body whose `Content-Length` is over `maxBodyBytes` is answered with 413 before it is read, and one sent chunked (without a length) with 411. Compressed request bodies (`Content-Encoding`) are refused with 415 on every route, since the limits count the bytes on the wire, not what they inflate to. The bundled nginx applies the same two limits (`client_max_body_size`); change both together. |
 | `cache.*` | 256 MB DEM blocks, 64 MB results in memory, 20000 rows / 1 GB results table | Also changeable at run time under **Admin → Cache** (`PUT /api/v1/admin/cache`). Changes made there are stored and survive a restart. |
+| `settingsSync.listen`, `settingsSync.pollSeconds` | `true`, 60 | Every server process reads the admin settings (built-in module switches and options, cache limits, installed modules) once and keeps them in memory. An admin change is announced on the PostgreSQL channel `rfmap_changes` (`NOTIFY`) and every other process reloads it within a moment over one `LISTEN` connection of its own; every `pollSeconds` a fingerprint of the settings rows is compared as a backstop for a lost notice or a row changed by hand. With one process this costs one idle connection and one tiny query a minute. `listen: false` leaves only the poll. See **Settings** under [Admin tasks](#5-admin-tasks). |
+| `database.listenUrl` | `database.url` | The listener's connection. `LISTEN` needs a session of its own, so behind a transaction-mode pooler such as PgBouncer point it at PostgreSQL directly. Hidden like `database.url` in what the server shows of its config. |
 | `weather.metaUrl` | empty | The synced model's `meta.json`. With it, results give the forecast run time (`runUtc`). |
-| `metrics.enabled` | `false` | Serves `GET /api/v1/admin/metrics` in the Prometheus text format, behind the admin token: request rates and durations, the request, job and cell thread pools, the database pool, the caches, and the process's CPU time, memory, threads and open files. Scrape it with the admin token as bearer credentials. |
+| `ops.listen`, `ops.port`, `ops.drainSeconds` | `127.0.0.1`, 9090, 5 | The operations listener: `GET /healthz`, `/readyz` and `/metrics` on a port of its own, see [Health, readiness and metrics](#health-readiness-and-metrics). |
+| `metrics.enabled`, `metrics.token`, `metrics.allowFrom` | `false`, empty, `[]` | Serves `GET /metrics` on the operations listener in the Prometheus text format: request rates and durations, the request, job and cell thread pools, the database pool and its lease timeouts, the PIN and calculation gates (`rfmap_gate_*`), the caches, and the process's CPU time, memory, threads and open files. Guarded by a token of its own (`RFMAP_METRICS_TOKEN`, at least 16 characters) and/or the scraper's networks; with neither, only loopback may read it. |
 | `map` | — | Merged over the map sources `GET /api/v1/config/map` returns. Attribution comes from `manifest.json` next to the DEM. |
+
+### Health, readiness and metrics
+
+Next to the API port the server opens an operations listener (`ops.listen:ops.port`,
+`127.0.0.1:9090` by default) for whatever watches the process rather than uses it. It has
+threads of its own and is never behind the rate limiter, so a probe is answered while every
+request thread is busy.
+
+| Route | Answers | For |
+|---|---|---|
+| `GET /healthz` | `200 {"status":"ok"}` while the process runs | liveness probes, container health checks |
+| `GET /readyz` | `200` when the server can take traffic, `503` with the failing check otherwise | load balancers, Kubernetes readiness |
+| `GET /metrics` | the Prometheus text format; `404` unless `metrics.enabled` | Prometheus |
+
+`/readyz` runs its checks on every call: `database` (a `select 1` on a connection of its own,
+required), `dem` and `weather` (reported, not required). It also answers `503` from the moment a
+stop is requested. On `SIGTERM` the server first drains: `/readyz` answers `503` while requests
+are still served for `ops.drainSeconds`, so a balancer takes the instance out of rotation before
+it stops listening; then it closes the listening sockets and lets the requests in flight finish.
+Compose gives it `stop_grace_period: 60s` for that; set `terminationGracePeriodSeconds` the same
+way on Kubernetes, where `ops.listen` must be `0.0.0.0` (`RFMAP__OPS__LISTEN=0.0.0.0`) so the
+kubelet reaches the probes. The image's `HEALTHCHECK` and `rfmap-server --health` ask
+`http://127.0.0.1:9090/readyz`; `--health` takes another URL, and one without a path asks
+`/readyz` there.
+
+Metrics describe the deployment, so they never share the admin token. Give Prometheus a bearer
+token of its own in `metrics.token` (`RFMAP_METRICS_TOKEN`, from a secret), or list the networks
+the scraper connects from in `metrics.allowFrom` (`["10.42.0.0/16", "fd00::/8"]`), or both:
+every configured guard must hold. With neither, only loopback may read the metrics. The
+operations port is not published by compose; on Kubernetes, scrape each pod on it through a
+`ServiceMonitor` or pod annotations, and keep it off the Ingress. The listener speaks plain HTTP,
+so a remote scrape sends `metrics.token` unencrypted: scrape only over a network or mesh that
+encrypts pod traffic, or from a sidecar on the pod's loopback.
 
 ## 4. Open-Meteo
 
@@ -269,7 +308,21 @@ under **Admin**.
   it was made from, saves a new version and keeps the old one in `/history`. Results list the
   item versions they used.
 - **Cache** (`/admin/cache`): see the tiers, change limits, clear one tier with
-  `DELETE /admin/cache?tier=dem-blocks|results-memory|results-table`, or all of them.
+  `DELETE /admin/cache?tier=dem-blocks|results-memory|results-table`, or all of them. New
+  limits reach every server process on the database; clearing a tier clears it in the
+  process that served the request.
+- **Settings** (`/admin/settings`): the admin settings each process keeps in memory, and how
+  they stay in step across processes (`settingsSync.*` above). `GET /admin/settings/sync` shows
+  the process that answered: its instance id, whether its listener is connected, how many
+  notices and reloads it had and the reason of the last one. After a change made outside the
+  admin API, such as an `update builtin_modules ...` in psql, `POST /admin/settings/reload`
+  drops the cached settings and reads them again in every process at once; `?scope=local`
+  reloads only the one that serves the request. Without it the poll picks a database change up
+  within `settingsSync.pollSeconds`. When the change is applied but its notice cannot be sent,
+  a change to the built-in switches or cache limits still answers 200 (the poll carries it), while
+  a change to installed modules, a module reload or a reset everywhere answers 503: no poll covers
+  the module files, so retry once the database answers. The reset also answers 503 when a topic
+  fails to reload on the process that serves it (the log says which; it still tells the others).
 
 ### Module sandbox in containers
 
