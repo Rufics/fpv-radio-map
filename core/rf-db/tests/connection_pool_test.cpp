@@ -162,6 +162,7 @@ TEST_F(ConnectionPoolTest, AFailedConnectGivesTheRoomBack) {
     EXPECT_THROW((void)pool->acquire(), ConnectionFailed);
     EXPECT_EQ(pool->stats().open, 0);
     EXPECT_EQ(pool->stats().connectFailures, 1u);
+    EXPECT_EQ(pool->stats().leases, 0u);
     server_.refuse = false;
     const ConnectionPool::Lease lease = pool->acquire();
     EXPECT_EQ(pool->stats().open, 1);
@@ -179,6 +180,7 @@ TEST_F(ConnectionPoolTest, PingsAfterALongRestAndReplacesADroppedSession) {
     EXPECT_EQ(server_.pings, 1);
     EXPECT_EQ(server_.opened, 2);  // the dropped one was replaced, the caller never saw it
     EXPECT_EQ(pool->stats().broken, 1u);
+    EXPECT_EQ(pool->stats().leases, 1u);  // one caller, one lease, however many tries
 }
 
 TEST_F(ConnectionPoolTest, SkipsThePingForARecentlyUsedConnection) {

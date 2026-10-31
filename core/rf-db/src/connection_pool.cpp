@@ -46,9 +46,14 @@ ConnectionPool::Lease ConnectionPool::acquire() {
         std::optional<Idle> idle = waitForGrant(deadline);
         if (!idle) {
             // Room reserved: open a connection of our own, outside the lock.
-            return {*this, openReserved(), Clock::now()};
+            auto conn = openReserved();
+            countLease();
+            return {*this, std::move(conn), Clock::now()};
         }
-        if (usable(*idle, Clock::now())) return {*this, std::move(idle->conn), idle->created};
+        if (usable(*idle, Clock::now())) {
+            countLease();
+            return {*this, std::move(idle->conn), idle->created};
+        }
         const bool broken = !idle->conn->isOpen();
         closeUnusable(std::move(idle->conn), broken);
     }
@@ -65,7 +70,6 @@ std::optional<ConnectionPool::Idle> ConnectionPool::waitForGrant(Clock::time_poi
         ++counters_.leaseTimeouts;
         throw PoolExhausted("no database connection became free within the lease timeout");
     }
-    ++counters_.leases;
     if (idle_.empty()) {
         ++open_;
         return std::nullopt;
@@ -73,6 +77,11 @@ std::optional<ConnectionPool::Idle> ConnectionPool::waitForGrant(Clock::time_poi
     Idle idle = std::move(idle_.back());
     idle_.pop_back();
     return idle;
+}
+
+void ConnectionPool::countLease() {
+    const std::lock_guard lock(mutex_);
+    ++counters_.leases;
 }
 
 bool ConnectionPool::usable(Idle& idle, Clock::time_point now) const {

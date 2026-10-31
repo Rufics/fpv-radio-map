@@ -33,6 +33,12 @@ TEST(ConnectionString, MatchesWholeKeysOnly) {
     EXPECT_EQ(s.text(), "host=h keepalives_idle=5 keepalives=1");
 }
 
+TEST(ConnectionString, SeesKeywordsWrittenWithBlanksAroundTheEquals) {
+    ConnectionString s("host=h\tconnect_timeout = 10");
+    s.withDefault("connect_timeout", 5);
+    EXPECT_EQ(s.text(), "host=h\tconnect_timeout = 10");
+}
+
 TEST(ConnectionString, AddsDefaultsToKeywords) {
     ConnectionString s("host=h dbname=db");
     s.withDefault("connect_timeout", 2);

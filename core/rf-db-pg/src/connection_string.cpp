@@ -8,10 +8,13 @@ ConnectionString::ConnectionString(std::string text)
     : text_(std::move(text)), uri_(text_.starts_with("postgresql://") || text_.starts_with("postgres://")) {}
 
 bool ConnectionString::names(std::string_view key) const {
-    // A key starts the string or follows a separator and is followed by '='.
+    // A key starts the string or follows a separator and is followed by '='; the keyword form
+    // allows blanks around the '='.
+    const std::string_view separators = uri_ ? "?&" : " \t\n";
     for (std::size_t at = text_.find(key); at != std::string::npos; at = text_.find(key, at + 1)) {
-        const bool starts = at == 0 || std::string_view("?& ").find(text_[at - 1]) != std::string_view::npos;
-        const std::size_t after = at + key.size();
+        const bool starts = at == 0 || separators.find(text_[at - 1]) != std::string_view::npos;
+        std::size_t after = at + key.size();
+        while (!uri_ && after < text_.size() && (text_[after] == ' ' || text_[after] == '\t')) ++after;
         if (starts && after < text_.size() && text_[after] == '=') return true;
     }
     return false;

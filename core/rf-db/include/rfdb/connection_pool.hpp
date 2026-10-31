@@ -129,6 +129,8 @@ private:
     /// Waits until a connection is idle or there is room for another, and takes it: the idle
     /// connection, or nullopt with the room reserved in open_. Throws PoolExhausted at the deadline.
     [[nodiscard]] std::optional<Idle> waitForGrant(Clock::time_point deadline);
+    /// Counts a connection actually handed to a caller, not a grant that ended up closed or unopened.
+    void countLease();
     [[nodiscard]] bool grantableLocked() const { return !idle_.empty() || open_ < settings_.maxSize; }
     /// An idle connection is lent only if it is open, young enough and, after a long rest, answers a ping.
     [[nodiscard]] bool usable(Idle& idle, Clock::time_point now) const;
