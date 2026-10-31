@@ -9,12 +9,13 @@ ConnectionString::ConnectionString(std::string text)
 
 bool ConnectionString::names(std::string_view key) const {
     // A key starts the string or follows a separator and is followed by '='; the keyword form
-    // allows blanks around the '='.
-    const std::string_view separators = uri_ ? "?&" : " \t\n";
+    // allows whitespace around the '=' (libpq skips what isspace() accepts).
+    constexpr std::string_view blanks = " \t\n\r\f\v";
+    const std::string_view separators = uri_ ? "?&" : blanks;
     for (std::size_t at = text_.find(key); at != std::string::npos; at = text_.find(key, at + 1)) {
         const bool starts = at == 0 || separators.find(text_[at - 1]) != std::string_view::npos;
         std::size_t after = at + key.size();
-        while (!uri_ && after < text_.size() && (text_[after] == ' ' || text_[after] == '\t')) ++after;
+        while (!uri_ && after < text_.size() && blanks.find(text_[after]) != std::string_view::npos) ++after;
         if (starts && after < text_.size() && text_[after] == '=') return true;
     }
     return false;

@@ -21,19 +21,26 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Rule:
-    """One kind of forbidden reference: the files it applies to and the pattern that finds it."""
+    """One kind of forbidden reference: the files it applies to and the pattern that finds it.
+
+    The pattern runs over the whole file with its comments blanked out, so a reference split over
+    several lines (a CMake command spans lines freely) is found and one in a comment is not.
+    """
 
     def __init__(self, name, suffixes, pattern, comment):
         self.name = name
         self.suffixes = tuple(suffixes)
-        self.pattern = re.compile(pattern)
-        self.comment = comment
+        self.pattern = re.compile(pattern, re.MULTILINE)
+        self.comment = re.compile(comment, re.MULTILINE)
 
     def applies_to(self, path):
         return path.name in self.suffixes or path.suffix in self.suffixes
 
-    def matches(self, line):
-        return not line.lstrip().startswith(self.comment) and self.pattern.search(line) is not None
+    def line_numbers(self, text):
+        """The 1-based line of each match; blanking keeps every offset and line break in place."""
+        code = self.comment.sub(lambda m: " " * len(m.group()), text)
+        for match in self.pattern.finditer(code):
+            yield code.count("\n", 0, match.start()) + 1
 
 
 class ModuleBoundary:
@@ -44,11 +51,11 @@ class ModuleBoundary:
     CMAKE_FILES = ("CMakeLists.txt", ".cmake")
     RULES = (
         Rule("database client header", SOURCE_SUFFIXES,
-             r'^\s*#\s*include\s*[<"](pqxx/|libpq-fe\.h|libpq/|postgresql/|sqlite3\.h|mysql/|mysql\.h|'
-             r'rfdb/|database\.hpp)', "//"),
+             r'^[ \t]*#[ \t]*include[ \t]*[<"](pqxx/|libpq-fe\.h|libpq/|postgresql/|sqlite3\.h|mysql/|mysql\.h|'
+             r'rfdb/|database\.hpp)', r"^[ \t]*//.*$"),
         Rule("database client library", CMAKE_FILES,
              r'(?i)\b(pqxx|libpq|PkgConfig::PQ|PostgreSQL::\w+|find_package\s*\(\s*PostgreSQL|rf_db|rf_db_pg|'
-             r'rfmap_pqxx|rfmap_server_lib|sqlite3|SQLite::\w+|mysqlclient)\b', "#"),
+             r'rfmap_pqxx|rfmap_server_lib|sqlite3|SQLite::\w+|mysqlclient)\b', r"#.*$"),
     )
 
     def __init__(self, root):
@@ -68,10 +75,10 @@ class ModuleBoundary:
 
     def check_file(self, path, rules):
         text = path.read_text(encoding="utf-8", errors="replace")
-        for number, line in enumerate(text.splitlines(), start=1):
-            for rule in rules:
-                if rule.matches(line):
-                    yield f"{path.relative_to(self.root)}:{number}: {rule.name}: {line.strip()}"
+        lines = text.split("\n")
+        for rule in rules:
+            for number in rule.line_numbers(text):
+                yield f"{path.relative_to(self.root)}:{number}: {rule.name}: {lines[number - 1].strip()}"
 
 
 class Command:

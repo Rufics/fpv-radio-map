@@ -44,6 +44,17 @@ class ModuleBoundaryTest(unittest.TestCase):
                    "find_package(PostgreSQL REQUIRED)\ntarget_link_libraries(x PRIVATE PostgreSQL::PostgreSQL)\n")
         self.assertEqual(len(self.findings()), 4)
 
+    def test_finds_a_reference_split_over_several_lines(self):
+        self.write("modules/fpv/CMakeLists.txt", "project(fpv)\nfind_package(\n  PostgreSQL\n  REQUIRED\n)\n")
+        found = self.findings()
+        self.assertEqual(len(found), 1, found)
+        self.assertTrue(found[0].startswith("modules/fpv/CMakeLists.txt:2: database client library"), found)
+
+    def test_ignores_a_trailing_cmake_comment(self):
+        self.write("modules/fpv/CMakeLists.txt",
+                   "target_link_libraries(x PRIVATE fpv_common)  # not PostgreSQL::PostgreSQL\n")
+        self.assertEqual(self.findings(), [])
+
     def test_ignores_comments_and_code_outside_the_module_folders(self):
         self.write("modules/fpv/CMakeLists.txt", "# Modules never link libpq: see the guide.\n")
         self.write("modules/fpv/core/src/module.cpp", "// #include <pqxx/pqxx> is what we do not do\n")

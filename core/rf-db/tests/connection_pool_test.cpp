@@ -27,11 +27,12 @@ struct FakeServer {
     std::atomic<bool> refuse{false};
     std::atomic<bool> dropAll{false};  ///< every session is gone, but the client does not know yet
     std::atomic<bool> crash{false};    ///< the factory fails with something other than ConnectionFailed
+    std::atomic<bool> stillborn{false};  ///< new sessions are closed by the server right after connecting
 };
 
 class FakeConnection final : public Connection {
 public:
-    explicit FakeConnection(FakeServer& server) : server_(server) { ++server_.alive; }
+    explicit FakeConnection(FakeServer& server) : server_(server), open_(!server.stillborn) { ++server_.alive; }
     ~FakeConnection() override { --server_.alive; }
     FakeConnection(const FakeConnection&) = delete;
     FakeConnection& operator=(const FakeConnection&) = delete;
@@ -48,7 +49,7 @@ public:
 
 private:
     FakeServer& server_;
-    bool open_ = true;
+    bool open_;
 };
 
 class FakeFactory final : public ConnectionFactory {
@@ -247,6 +248,21 @@ TEST_F(ConnectionPoolTest, MaintainKeepsTryingAfterAFailedTopUp) {
     server_.refuse = false;
     topped->maintain();
     EXPECT_EQ(topped->stats().open, 2);
+}
+
+TEST_F(ConnectionPoolTest, MaintainDoesNotReconnectInALoopWhenNewSessionsDie) {
+    auto pool = make({.maxSize = 2, .minIdle = 2});
+    {
+        ConnectionPool::Lease a = pool->acquire();
+        ConnectionPool::Lease b = pool->acquire();
+        a.markBroken();
+        b.markBroken();
+    }
+    server_.stillborn = true;
+    pool->maintain();  // returns: two attempts for the two missing, both closed on the way in
+    EXPECT_EQ(server_.opened, 4);
+    EXPECT_EQ(pool->stats().open, 0);
+    EXPECT_EQ(server_.alive, 0);
 }
 
 TEST_F(ConnectionPoolTest, TheHousekeeperRunsOnItsOwn) {

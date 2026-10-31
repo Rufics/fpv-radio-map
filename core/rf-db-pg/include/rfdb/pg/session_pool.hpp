@@ -26,7 +26,7 @@ public:
     };
 
     /// Throws ConnectionFailed when the first minIdle sessions cannot be opened.
-    SessionPool(const std::string& url, SessionOptions options, PoolSettings settings);
+    SessionPool(const std::string& url, SessionOptions options, const PoolSettings& settings);
 
     [[nodiscard]] PoolStats stats() const { return pool_.stats(); }
 

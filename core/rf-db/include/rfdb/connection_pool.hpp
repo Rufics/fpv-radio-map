@@ -102,7 +102,7 @@ public:
 
     /// Opens minIdle connections at once, so a database that is not there fails the start-up
     /// (ConnectionFailed) instead of the first request.
-    ConnectionPool(std::unique_ptr<ConnectionFactory> factory, PoolSettings settings);
+    ConnectionPool(std::unique_ptr<ConnectionFactory> factory, const PoolSettings& settings);
     ~ConnectionPool();
     ConnectionPool(const ConnectionPool&) = delete;
     ConnectionPool& operator=(const ConnectionPool&) = delete;
@@ -143,10 +143,12 @@ private:
     [[nodiscard]] std::unique_ptr<Connection> openReserved();
     /// Reserves room for one more connection while fewer than minIdle are open.
     [[nodiscard]] bool reserveForMinIdle();
-    void giveBack(std::unique_ptr<Connection> conn, Clock::time_point created, Lease::Fate fate);
+    /// Runs from ~Lease, so it must not throw: a failure here (a mutex error, no memory for the idle
+    /// entry) leaves nothing sane to recover and terminates.
+    void giveBack(std::unique_ptr<Connection> conn, Clock::time_point created, Lease::Fate fate) noexcept;
     /// Takes the idle connections maintain() closes out of idle_; the caller closes them unlocked.
     [[nodiscard]] std::vector<std::unique_ptr<Connection>> evictLocked(Clock::time_point now);
-    void closeUnusable(std::unique_ptr<Connection> conn, bool broken);
+    void closeUnusable(std::unique_ptr<Connection> conn, bool broken) noexcept;
     void housekeep(const std::stop_token& stop);
 
     std::unique_ptr<ConnectionFactory> factory_;
@@ -159,7 +161,8 @@ private:
     int waiting_ = 0;
     PoolStats counters_;
     // Last: stops and joins before the members it uses go away.
-    std::condition_variable_any wake_;
+    // The _any variant is required: only it can wait on the housekeeper's std::stop_token.
+    std::condition_variable_any wake_;  // NOSONAR(cpp:S8467)
     std::jthread housekeeper_;
 };
 

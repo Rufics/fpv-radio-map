@@ -5,7 +5,7 @@
 
 namespace rfdb::pg {
 
-SessionPool::SessionPool(const std::string& url, SessionOptions options, PoolSettings settings)
+SessionPool::SessionPool(const std::string& url, SessionOptions options, const PoolSettings& settings)
     : pool_(std::make_unique<SessionFactory>(url, std::move(options)), settings) {}
 
 }  // namespace rfdb::pg

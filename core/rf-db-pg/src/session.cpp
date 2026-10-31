@@ -3,6 +3,7 @@
 #include "rfdb/pg/connection_string.hpp"
 
 #include <algorithm>
+#include <format>
 #include <utility>
 #include <vector>
 
@@ -30,7 +31,7 @@ public:
         pqxx::params params;
         for (std::size_t i = 0; i < settings_.size(); ++i) {
             if (i > 0) sql += ", ";
-            sql += "set_config($" + std::to_string(2 * i + 1) + ", $" + std::to_string(2 * i + 2) + ", false)";
+            sql += std::format("set_config(${}, ${}, false)", 2 * i + 1, 2 * i + 2);
             params.append(settings_[i].first);
             params.append(settings_[i].second);
         }

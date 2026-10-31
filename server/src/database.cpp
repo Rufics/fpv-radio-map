@@ -39,6 +39,7 @@ rfdb::PoolSettings Database::poolSettings(const Settings& s) {
 
 // A function-try-block, so the pool's own errors from the member's construction are translated.
 Database::Lease::Lease(Database& db) try : lease_(*db.pool_) {
+    // Nothing more to do: the member's construction is the whole work.
 } catch (const rfdb::PoolExhausted&) {
     unavailable("busy");
 } catch (const rfdb::ConnectionFailed& e) {

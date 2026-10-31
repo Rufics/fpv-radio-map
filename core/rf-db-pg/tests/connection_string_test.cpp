@@ -39,6 +39,12 @@ TEST(ConnectionString, SeesKeywordsWrittenWithBlanksAroundTheEquals) {
     EXPECT_EQ(s.text(), "host=h\tconnect_timeout = 10");
 }
 
+TEST(ConnectionString, SeesKeywordsWrittenWithALineBreakBeforeTheEquals) {
+    ConnectionString s("host=h\nconnect_timeout\n=10");
+    s.withDefault("connect_timeout", 5);
+    EXPECT_EQ(s.text(), "host=h\nconnect_timeout\n=10");
+}
+
 TEST(ConnectionString, AddsDefaultsToKeywords) {
     ConnectionString s("host=h dbname=db");
     s.withDefault("connect_timeout", 2);

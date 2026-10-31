@@ -8,7 +8,8 @@ namespace rfdb {
 
 namespace {
 
-PoolSettings sane(PoolSettings s) {
+PoolSettings sane(const PoolSettings& given) {
+    PoolSettings s = given;
     s.maxSize = std::max(1, s.maxSize);
     s.minIdle = std::clamp(s.minIdle, 0, s.maxSize);
     return s;
@@ -21,7 +22,7 @@ ConnectionPool::Lease::Lease(ConnectionPool& pool, std::unique_ptr<Connection> c
 
 ConnectionPool::Lease::~Lease() { pool_.giveBack(std::move(conn_), created_, fate_); }
 
-ConnectionPool::ConnectionPool(std::unique_ptr<ConnectionFactory> factory, PoolSettings settings)
+ConnectionPool::ConnectionPool(std::unique_ptr<ConnectionFactory> factory, const PoolSettings& settings)
     : factory_(std::move(factory)), settings_(sane(settings)) {
     for (int i = 0; i < settings_.minIdle; ++i) {
         {
@@ -140,7 +141,7 @@ bool ConnectionPool::reserveForMinIdle() {
     return true;
 }
 
-void ConnectionPool::closeUnusable(std::unique_ptr<Connection> conn, bool broken) {
+void ConnectionPool::closeUnusable(std::unique_ptr<Connection> conn, bool broken) noexcept {
     conn.reset();  // closes the session, outside the lock
     {
         const std::lock_guard lock(mutex_);
@@ -151,16 +152,16 @@ void ConnectionPool::closeUnusable(std::unique_ptr<Connection> conn, bool broken
     available_.notify_one();
 }
 
-void ConnectionPool::giveBack(std::unique_ptr<Connection> conn, Clock::time_point created, Lease::Fate fate) {
+void ConnectionPool::giveBack(std::unique_ptr<Connection> conn, Clock::time_point created,
+                              Lease::Fate fate) noexcept {
     const Clock::time_point now = Clock::now();
-    const bool broken = fate == Lease::Fate::Broken || !conn->isOpen();
-    if (broken || fate == Lease::Fate::Retire || expired(created, now)) {
+    if (const bool broken = fate == Lease::Fate::Broken || !conn->isOpen(); broken || fate == Lease::Fate::Retire || expired(created, now)) {
         closeUnusable(std::move(conn), broken);
         return;
     }
     {
         const std::lock_guard lock(mutex_);
-        idle_.push_back({std::move(conn), created, now});
+        idle_.emplace_back(std::move(conn), created, now);
     }
     available_.notify_one();
 }
@@ -173,7 +174,7 @@ std::vector<std::unique_ptr<Connection>> ConnectionPool::evictLocked(Clock::time
         const bool tooOld = expired(it->created, now);
         const bool rested = idleLimit && now - it->since >= settings_.idleTimeout && open_ > settings_.minIdle;
         if (tooOld || rested) {
-            out.push_back(std::move(it->conn));
+            out.emplace_back(std::move(it->conn));
             it = idle_.erase(it);
             --open_;
             ++counters_.closed;
@@ -194,10 +195,18 @@ void ConnectionPool::maintain() {
         // `closing` goes out of scope here: the sessions close without the lock held.
     }
     available_.notify_all();
-    // One reservation at a time, so a failed connect never leaves room reserved behind it.
-    while (reserveForMinIdle()) {
+    // One reservation at a time, so a failed connect never leaves room reserved behind it. At most
+    // the shortfall seen now: a session closed again on its way in (dropped at once, or already past
+    // maxLifetime) waits for the next round instead of a tight reconnect loop.
+    int attempts = 0;
+    {
+        const std::lock_guard lock(mutex_);
+        attempts = settings_.minIdle - open_;
+    }
+    for (; attempts > 0 && reserveForMinIdle(); --attempts) {
         try {
-            giveBack(openReserved(), Clock::now(), Lease::Fate::Return);
+            auto conn = openReserved();
+            giveBack(std::move(conn), Clock::now(), Lease::Fate::Return);
         } catch (const ConnectionFailed&) {
             return;  // counted by the reservation; the next round tries again
         }
