@@ -28,8 +28,15 @@ public:
         skipBlanks();
         if (at_ < text_.size() && text_[at_] == '=') ++at_;
         skipBlanks();
+        lastValueEmpty_ = at_ == text_.size();
         skipValue();
         return key;
+    }
+
+    /// Whether the last value in the text is empty, which libpq lets swallow the next setting.
+    bool endsWithEmptyValue() {
+        while (at_ < text_.size()) nextKey();
+        return lastValueEmpty_;
     }
 
 private:
@@ -52,6 +59,7 @@ private:
 
     std::string_view text_;
     std::size_t at_ = 0;
+    bool lastValueEmpty_ = false;
 };
 
 /// Writes and reads values the way libpq parses them back.
@@ -106,10 +114,8 @@ public:
     static void closeLastValue(std::string& text) {
         const std::size_t kept = text.find_last_not_of('\\');
         const std::size_t run = kept == std::string::npos ? text.size() : text.size() - kept - 1;
-        if (run % 2 == 0) return;
-        text.pop_back();
-        const std::size_t last = text.find_last_not_of(blanks);
-        if (last != std::string::npos && text[last] == '=') text += "''";
+        if (run % 2 == 1) text.pop_back();
+        if (KeywordReader(text).endsWithEmptyValue()) text += "''";
     }
 
 private:

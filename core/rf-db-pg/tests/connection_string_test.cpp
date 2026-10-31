@@ -73,6 +73,18 @@ TEST(ConnectionString, ReadsAnEmptyValueEndingInABackslash) {
     EXPECT_EQ(s.text(), "host=h password='' connect_timeout=2");
 }
 
+TEST(ConnectionString, QuotesAnEmptyLastValue) {
+    ConnectionString s("host=h password= ");
+    s.withDefault("connect_timeout", 2);
+    EXPECT_EQ(s.text(), "host=h password= '' connect_timeout=2");
+}
+
+TEST(ConnectionString, LeavesABareValueEndingInAnEqualsSign) {
+    ConnectionString s("host=h password=abc=");
+    s.withDefault("connect_timeout", 2);
+    EXPECT_EQ(s.text(), "host=h password=abc= connect_timeout=2");
+}
+
 TEST(ConnectionString, SeesPercentEncodedUriParameterNames) {
     ConnectionString s("postgresql://u@h/db?sslmode=require&connect%5Ftimeout=10");
     s.withDefault("connect_timeout", 5);
