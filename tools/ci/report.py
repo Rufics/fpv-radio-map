@@ -75,7 +75,6 @@ COMPONENTS = [
     ("core/rf-ext/", "Core", "rf-ext"),
     ("core/rf-flightlog/", "Core", "rf-flightlog"),
     ("core/rf-db/", "Core", "rf-db"),
-    ("core/rf-db-pg/", "Core", "rf-db"),
     ("platform/rfmod/", "Platform", "rfmod"),
     ("modules/fpv/common/", FPV, "fpv common"),
     ("modules/fpv/", FPV, None),  # fpv.<module folder>

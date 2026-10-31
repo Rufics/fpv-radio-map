@@ -55,8 +55,6 @@ add_subdirectory(core/rf-db)
 add_subdirectory(platform/rfmod)
 add_subdirectory(examples/modules/body-shadow)
 if(RFMAP_BUILD_SERVER)
-  # Only the server talks to PostgreSQL, so only its build needs libpqxx.
-  add_subdirectory(core/rf-db-pg)
   add_subdirectory(server)
 endif()
 add_subdirectory(modules/fpv)

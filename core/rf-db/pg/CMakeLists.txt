@@ -1,4 +1,4 @@
-# rf-db-pg: rf-db for PostgreSQL over libpqxx. Built with the server, the only program that
+# rf-db/pg: rf-db for PostgreSQL over libpqxx. Built with the server, the only program that
 # talks to the database; modules reach it through host calls, never through this library.
 find_package(PkgConfig REQUIRED)
 # The shared libpqxx 7.10 of Ubuntu 26.04 and the program using it both destroy the same

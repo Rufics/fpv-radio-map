@@ -1,6 +1,7 @@
 # rf-db: the database layer every component of the server goes through. It knows nothing about a
 # particular database: ConnectionPool lends connections a ConnectionFactory opens, bounded and
-# health-checked; rf-db-pg implements the two interfaces for PostgreSQL.
+# health-checked. Each database gets its own subfolder implementing the two interfaces: pg/ for
+# PostgreSQL.
 find_package(Threads REQUIRED)
 
 add_library(rf_db
@@ -10,6 +11,11 @@ target_include_directories(rf_db PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_link_libraries(rf_db PUBLIC Threads::Threads)
+
+if(RFMAP_BUILD_SERVER)
+  # Only the server talks to PostgreSQL, so only its build needs libpqxx.
+  add_subdirectory(pg)
+endif()
 
 if(RFMAP_BUILD_TESTS)
   add_executable(rf_db_tests
