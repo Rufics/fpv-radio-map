@@ -221,9 +221,9 @@ RegionDefinitions::RegionDefinitions(const fs::path& file) {
             if (!taken.insert(definition.id()).second) throw RegionError("the id is used by an earlier region");
             regions_.push_back(std::move(definition));
         } catch (const RegionError& e) {
-            skipped_.push_back({std::move(label), e.what()});
+            skipped_.emplace_back(std::move(label), e.what());
         } catch (const json::exception& e) {
-            skipped_.push_back({std::move(label), e.what()});
+            skipped_.emplace_back(std::move(label), e.what());
         }
     }
     std::ranges::sort(regions_, {}, &RegionDefinition::id);
