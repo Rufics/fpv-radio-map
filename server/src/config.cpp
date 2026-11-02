@@ -42,7 +42,8 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "demBlocksMb", "resultMemoryMb", "resultTableRows", "resultTableMb", "auth", "sessionTtlHours",
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
         "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "concurrency",
-        "queue", "waitMs", "map", "metrics", "enabled", "allowFrom", "ops", "drainSeconds", "listenUrl", "settingsSync", "pollSeconds"});
+        "queue", "waitMs", "map", "metrics", "enabled", "allowFrom", "ops", "drainSeconds", "listenUrl", "settingsSync", "pollSeconds",
+        "regions", "worldDir", "definitions", "packageDir", "pmtiles", "rescanMinutes"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -192,6 +193,17 @@ void readOperations(const json& doc, Config& c) {
     }
 }
 
+Config::Regions readRegions(const json& r) {
+    Config::Regions out;
+    readPath(r, "worldDir", out.worldDir);
+    readPath(r, "definitions", out.definitions);
+    readPath(r, "packageDir", out.packageDir);
+    readPath(r, "pmtiles", out.pmtiles);
+    read(r, "rescanMinutes", out.rescanMinutes);
+    if (out.rescanMinutes < 0) throw std::invalid_argument("regions.rescanMinutes must be >= 0");
+    return out;
+}
+
 }  // namespace
 
 Config Config::fromJson(json doc) {
@@ -219,6 +231,8 @@ Config Config::fromJson(json doc) {
     read(d, "demStatedErrorSource", c.data.demStatedErrorSource);
     read(d, "demName", c.data.demName);
     read(d, "landcoverName", c.data.landcoverName);
+
+    c.regions = readRegions(doc.value("regions", json::object()));
 
     readPath(doc, "schemasDir", c.schemasDir);
     readPath(doc, "seedDir", c.seedDir);

@@ -5,6 +5,7 @@
 
 #include <rfcore/geodesy.hpp>
 
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -39,6 +40,9 @@ public:
     [[nodiscard]] std::optional<TimePoint> time(const char* name) const;
     /// The revision in an If-Match header ("3", W/"3"); HttpError 428 without one.
     [[nodiscard]] int ifMatchRevision() const;
+    /// Whether an If-None-Match header names `etag` (weak or strong) or is "*": the client's
+    /// copy is current and the answer is 304.
+    [[nodiscard]] bool holdsCurrent(std::string_view etag) const;
     /// The body as JSON: 413 above the configured size, 400 when not JSON or nested deeper
     /// than rfmod::BoundedJson::kMaxDepth.
     [[nodiscard]] json body() const;
@@ -68,6 +72,11 @@ public:
     void noContent();
     void text(int status, const std::string& body, const char* contentType);
     void header(const char* name, const std::string& value);
+    /// 304 for a client whose copy has entity tag `etag`.
+    void notModified(const std::string& etag);
+    /// Streams `file` from disk with 200, or with 206 and the part asked for when the request is
+    /// `ranged` (has a Range header). HttpError 404 when the file cannot be opened.
+    void file(const std::filesystem::path& file, const char* contentType, bool ranged);
     [[nodiscard]] int status() const;
 
 private:

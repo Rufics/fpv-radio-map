@@ -199,6 +199,7 @@ Settings you will most likely touch:
 | `weather.metaUrl` | empty | The synced model's `meta.json`. With it, results give the forecast run time (`runUtc`). |
 | `ops.listen`, `ops.port`, `ops.drainSeconds` | `127.0.0.1`, 9090, 5 | The operations listener: `GET /healthz`, `/readyz` and `/metrics` on a port of its own, see [Health, readiness and metrics](#health-readiness-and-metrics). |
 | `metrics.enabled`, `metrics.token`, `metrics.allowFrom` | `false`, empty, `[]` | Serves `GET /metrics` on the operations listener in the Prometheus text format: request rates and durations, the request, job and cell thread pools, the database pool (open and idle sessions, waits, lease timeouts, sessions opened, closed and failed to open), the PIN and calculation gates (`rfmap_gate_*`), the caches, and the process's CPU time, memory, threads and open files. Guarded by a token of its own (`RFMAP_METRICS_TOKEN`, at least 16 characters) and/or the scraper's networks; with neither, only loopback may read it. |
+| `regions.*` | off | Offline region packages cut from the world map data: `worldDir`, `definitions`, `packageDir`, `pmtiles`, `rescanMinutes`. Compose sets `worldDir` to `/data` and mounts `RFMAP_REGIONS_DIR` with `regions.json`. See [Offline regions](offline-regions.md). |
 | `map` | — | Merged over the map sources `GET /api/v1/config/map` returns. Attribution comes from `manifest.json` next to the DEM. |
 
 ### Health, readiness and metrics
@@ -315,6 +316,7 @@ under **Admin**.
   `DELETE /admin/cache?tier=dem-blocks|results-memory|results-table`, or all of them. New
   limits reach every server process on the database; clearing a tier clears it in the
   process that served the request.
+- **Offline regions** (`/admin/regions`): each region's state (`ready`, `building`, `failed`) and last error; `POST /admin/regions/reload` (**Admin → Data sources → Rescan regions**) reads `regions.json` again and rebuilds what changed. See [Offline regions](offline-regions.md).
 - **Settings** (`/admin/settings`): the admin settings each process keeps in memory, and how
   they stay in step across processes (`settingsSync.*` above). `GET /admin/settings/sync` shows
   the process that answered: its instance id, whether its listener is connected, how many

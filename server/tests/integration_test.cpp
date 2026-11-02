@@ -2,6 +2,8 @@
 // COG written with GDAL, a stand-in Open-Meteo, and the example body-shadow module.
 
 #include "app.hpp"
+#include "region_test_support.hpp"
+#include "security.hpp"
 #include "test_support.hpp"
 
 #include <rfcore/constants.hpp>
@@ -182,6 +184,9 @@ protected:
         rfmap::test::writeCog(env->dir / "dem.cog.tif", kWest, kNorth, kPx, kCols, kRows, terrain);
         rfmap::test::writeCog(env->dir / "landcover.tif", kWest, kNorth, kPx, kCols, kRows, landcover);
         env->weather = std::make_unique<FakeOpenMeteo>();
+        const rfmap::test::TestWorld world(env->dir / "world");
+        std::ofstream(env->dir / "regions.json")
+            << json{{"regions", {{{"id", "ridge"}, {"name", "Ridge"}, {"bbox", {35.1, 48.5, 35.3, 48.7}}}}}}.dump();
 
         // The database is fresh per ctest run (fixture); empty it anyway so reruns work.
         {
@@ -213,6 +218,12 @@ protected:
                       {"trustStore", (env->dir / "keys.json").string()},
                       {"allowDevOwnerKey", true}}},
                     {"weather", {{"baseUrl", "http://127.0.0.1:" + std::to_string(env->weather->port)}}},
+                    {"regions",
+                     {{"worldDir", (env->dir / "world").string()},
+                      {"definitions", (env->dir / "regions.json").string()},
+                      {"packageDir", (env->dir / "region-packages").string()},
+                      {"pmtiles", FAKE_PMTILES},
+                      {"rescanMinutes", 0}}},
                     {"auth", {{"argon2Cost", "interactive"}, {"pinLockoutMinutes", 15}}},
                     {"coverage", {{"threads", 4}, {"maxCells", 20000}}},
                     // Generous limits: the test makes many requests from one address.
@@ -431,6 +442,59 @@ TEST_F(Integration, MapConfigOffersOnlyBuiltLayers) {
     fs::remove(manifest);
     ASSERT_EQ(unreadable.status, 200);
     EXPECT_TRUE(unreadable.body.contains("satellite"));
+}
+
+TEST_F(Integration, OfflineRegionCatalogAndPackages) {
+    // The first scan runs in the background from the start.
+    json status;
+    for (int i = 0; i < 100; ++i) {
+        status = call("GET", "/admin/regions", nullptr, admin()).body;
+        if (status.value("scans", 0) > 0) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    ASSERT_EQ(status["regions"].size(), 1U) << status.dump();
+    EXPECT_EQ(status["regions"][0]["state"], "ready");
+    EXPECT_EQ(call("GET", "/admin/regions").status, 401);
+
+    const auto list = call("GET", "/regions");
+    ASSERT_EQ(list.status, 200);
+    ASSERT_EQ(list.body["regions"].size(), 1U);
+    const json region = list.body["regions"][0];
+    EXPECT_EQ(region["id"], "ridge");
+    EXPECT_EQ(region["bbox"], json({35.1, 48.5, 35.3, 48.7}));
+    const std::string version = region["version"];
+    EXPECT_EQ(region["package"], "/api/v1/regions/ridge/packages/" + version + ".zip");
+    const std::string etag = list.headers.find("ETag")->second;
+    EXPECT_EQ(call("GET", "/regions", nullptr, {{"If-None-Match", etag}}).status, 304);
+    EXPECT_EQ(call("GET", "/regions/ridge").body["version"], version);
+    EXPECT_EQ(call("GET", "/regions/nowhere").status, 404);
+
+    httplib::Client c("127.0.0.1", env->port);
+    const std::string package = region["package"];
+    const auto zip = c.Get(package);
+    ASSERT_TRUE(zip);
+    ASSERT_EQ(zip->status, 200);
+    EXPECT_EQ(zip->get_header_value("Content-Type"), "application/zip");
+    EXPECT_EQ(zip->get_header_value("ETag"), "\"" + version + "\"");
+    EXPECT_EQ(zip->body.size(), region["size"].get<std::size_t>());
+    EXPECT_EQ(json(Secrets::hex(Secrets::sha256(zip->body))), region["sha256"]);
+    // A resumed download: the rest from byte 100.
+    const auto part = c.Get(package, {{"Range", "bytes=100-"}});
+    ASSERT_TRUE(part);
+    EXPECT_EQ(part->status, 206);
+    EXPECT_EQ(part->body, zip->body.substr(100));
+    EXPECT_EQ(c.Get(package, {{"If-None-Match", "\"" + version + "\""}})->status, 304);
+    const auto old = call("GET", "/regions/ridge/packages/" + std::string(64, '0') + ".zip");
+    EXPECT_EQ(old.status, 404);
+    EXPECT_EQ(old.body["version"], json(version));
+
+    const std::string preview = region["preview"];
+    const auto png = c.Get(preview);
+    ASSERT_TRUE(png);
+    EXPECT_EQ(png->status, 200);
+    EXPECT_EQ(png->body.substr(1, 3), "PNG");
+
+    EXPECT_EQ(call("POST", "/admin/regions/reload", json::object(), admin()).status, 202);
 }
 
 TEST_F(Integration, AdminAddsLibraryItemsWithVersions) {

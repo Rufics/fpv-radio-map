@@ -136,11 +136,31 @@ try {
   await empty.goto(`${BASE}/admin/sources`);
   await settle(empty, 3000);
   await empty.screenshot({ path: `${OUT}/admin-sources.png` });
+  // the offline regions at the end of the side panel: their state, and the rescan button
+  await empty.getByRole('heading', { name: 'Offline regions' }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await settle(empty, 500);
+  await empty.screenshot({ path: `${OUT}/admin-offline-regions.png` });
   await empty.goto(`${BASE}/admin/library`);
   await empty.getByRole('button', { name: 'Batteries' }).click();
   await empty.getByRole('button', { name: /6S LiPo 3300/ }).click();
   await settle(empty, 800);
   await empty.screenshot({ path: `${OUT}/admin-library.png` });
+
+  // offline regions: the catalog of packages the server cut from its world map data
+  const offline = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watch(offline, 'offline');
+  await offline.goto(`${BASE}/offline`);
+  await offline.getByRole('link', { name: /^Download / }).first().waitFor({ timeout: 10000 });
+  await settle(offline, 800);
+  await offline.screenshot({ path: `${OUT}/laptop-offline-regions.png` });
+  await offline.close();
+  const offlinePhone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  watch(offlinePhone, 'phone-offline');
+  await offlinePhone.goto(`${BASE}/offline`);
+  await offlinePhone.getByRole('link', { name: /^Download / }).first().waitFor({ timeout: 10000 });
+  await settle(offlinePhone, 800);
+  await offlinePhone.screenshot({ path: `${OUT}/phone-offline-regions.png` });
+  await offlinePhone.close();
 
   // extra: missing elevation data, outlined on the map
   const missing = await browser.newPage({ viewport: { width: 1440, height: 900 } });

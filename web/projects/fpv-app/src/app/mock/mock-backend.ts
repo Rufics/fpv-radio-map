@@ -43,6 +43,7 @@ import {
 } from './reference-case';
 import { baseMap, contourLines } from './mock-terrain';
 import { MockFlights } from './mock-flights';
+import { MockRegions } from './mock-regions';
 
 interface StoredMission {
   id: string;
@@ -142,6 +143,9 @@ export class MockBackend {
     r('GET', /^\/admin\/keys$/, (req) => this.admin(req, () => this.ok(this.keys)));
     r('DELETE', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(null, 204)));
     r('GET', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(this.cache)));
+    r('GET', /^\/regions$/, () => this.ok({ regions: MockRegions.list }));
+    r('GET', /^\/admin\/regions$/, (req) => this.admin(req, () => this.ok(MockRegions.admin())));
+    r('POST', /^\/admin\/regions\/reload$/, (req) => this.admin(req, () => this.ok({ queued: true }, 202)));
     r('PUT', /^\/admin\/cache$/, (req) => this.admin(req, () => this.putCache(req.body as CacheLimit[])));
   }
 

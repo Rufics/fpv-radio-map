@@ -1,7 +1,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { Map as MlMap } from 'maplibre-gl';
-import { ApiError, CacheTier, CacheTierId, LayerPanelComponent, LayerRegistry, MapViewComponent, RfmapApiClient, createStandardLayers, provideMapView } from '@rfmap/ui-kit';
+import { ApiError, CacheTier, CacheTierId, LayerPanelComponent, LayerRegistry, MapViewComponent, OfflineRegionAdmin, RfmapApiClient, createStandardLayers, provideMapView } from '@rfmap/ui-kit';
 import { FpvDataService } from '../core/fpv-data.service';
+import { OfflineRegionFormat } from '../offline/offline-region-format';
 
 /** Map layers and data sources (MapSources.dc.html) plus the server cache limits. */
 @Component({
@@ -62,6 +63,31 @@ import { FpvDataService } from '../core/fpv-data.service';
             @if (saved(); as msg) {<span class="ok-text" role="status">{{ msg }}</span>}
           </div>
         }
+
+        <h2>Offline regions</h2>
+        <p class="muted small">Cut from the world map files by the server and rebuilt when those files or the region list change. Clients download them from the Offline regions page.</p>
+        @if (regionError(); as e) {<div class="rf-field-error" role="alert">{{ e }}</div>}
+        @if (regionAdmin(); as ra) {
+          @if (!ra.enabled) {
+            <p class="muted small">Off on this server: set regions.worldDir in the server configuration.</p>
+          }
+          @for (r of ra.regions; track r.id) {
+            <div class="tier region">
+              <div class="tier-head">
+                <b>{{ r.package?.name ?? r.id }}</b>
+                <span class="state" [class]="'state ' + r.state">{{ r.state }}</span>
+              </div>
+              @if (r.package; as p) {
+                <span class="muted small rf-num">{{ f.size(p.size) }} · {{ f.layers(p) }} · version {{ f.version(p) }} · {{ f.builtOn(p) }}</span>
+              }
+              @if (r.error) {<span class="rf-field-error small">{{ r.error }}</span>}
+            </div>
+          }
+          <div class="actions">
+            <button type="button" class="rf-btn rf-btn--secondary" [disabled]="busy() || !ra.enabled" (click)="rescanRegions()">Rescan regions</button>
+            @if (regionNote(); as msg) {<span class="ok-text" role="status">{{ msg }}</span>}
+          </div>
+        }
       </section>
     </div>
   `,
@@ -91,6 +117,10 @@ import { FpvDataService } from '../core/fpv-data.service';
     .lim input { width: 100px; height: 32px; }
     .actions { display: flex; align-items: center; gap: 10px; }
     .ok-text { color: var(--rf-ok-text); font-size: 13px; }
+    .state { font-size: 12px; font-weight: 600; text-transform: capitalize; }
+    .state.ready { color: var(--rf-ok-text); }
+    .state.building { color: var(--rf-text-2); }
+    .state.failed { color: var(--rf-blocked-text); }
     @media (max-width: 1100px) { .layout { grid-template-columns: 1fr; height: auto; } .map { height: 420px; } .side { border-left: 0; } }
   `,
 })
@@ -105,6 +135,10 @@ export class SourcesPage implements OnInit {
   protected readonly busy = signal(false);
   protected readonly saved = signal<string | null>(null);
   protected readonly cacheError = signal<string | null>(null);
+  protected readonly regionAdmin = signal<OfflineRegionAdmin | null>(null);
+  protected readonly regionError = signal<string | null>(null);
+  protected readonly regionNote = signal<string | null>(null);
+  protected readonly f = OfflineRegionFormat;
 
   protected readonly rows: string[][] = [
     ['Base map', 'OpenStreetMap → PMTiles (our builder)', 'z0–16', 'ODbL, credit'],
@@ -125,8 +159,36 @@ export class SourcesPage implements OnInit {
     try {
       this.tiers.set(await this.api.adminCache());
     } catch (e) {
-      const err = ApiError.from(e);
-      this.cacheError.set(err.status === 401 || err.status === 403 ? 'Set the admin token (top right) to see and change cache limits.' : err.message);
+      this.cacheError.set(SourcesPage.adminMessage(e, 'see and change cache limits'));
+    }
+    await this.loadRegions();
+  }
+
+  private async loadRegions(): Promise<void> {
+    try {
+      this.regionAdmin.set(await this.api.adminOfflineRegions());
+      this.regionError.set(null);
+    } catch (e) {
+      this.regionError.set(SourcesPage.adminMessage(e, 'see the offline regions'));
+    }
+  }
+
+  private static adminMessage(e: unknown, what: string): string {
+    const err = ApiError.from(e);
+    return err.status === 401 || err.status === 403 ? `Set the admin token (top right) to ${what}.` : err.message;
+  }
+
+  protected async rescanRegions(): Promise<void> {
+    this.busy.set(true);
+    this.regionNote.set(null);
+    try {
+      await this.api.reloadOfflineRegions();
+      this.regionNote.set('Rescan started. Changed regions are rebuilt in the background.');
+      await this.loadRegions();
+    } catch (e) {
+      this.regionError.set(ApiError.from(e).message);
+    } finally {
+      this.busy.set(false);
     }
   }
 

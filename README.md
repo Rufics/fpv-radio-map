@@ -76,6 +76,14 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 <td><b>Plan a fixed-wing.</b> The route is checked against the plane's envelope: climb and dive angles over the terrain, turn radius at each waypoint and the stall margin in a banked turn.</td>
 <td><b>Fly an uploaded route.</b> In autonomous mode the links are optional. A lost link is a warning that shows where the pilot cannot take over or loses the picture, not a block.</td>
 </tr>
+<tr>
+<td><img src="docs/images/laptop-offline-regions.png" alt="Offline regions: three region packages with preview, area, size, layers and version, each with a Download button"></td>
+<td><img src="docs/images/admin-offline-regions.png" alt="Admin data sources: offline regions with their state, ready or building, and a Rescan regions button"></td>
+</tr>
+<tr>
+<td><b>Take a region offline.</b> The server cuts each region out of one world map set and packs the map, relief, 3D terrain, style and fonts into one zip with a version.</td>
+<td><b>See the packages build.</b> The admin page shows each region's state and last error, and rescans the region list on demand.</td>
+</tr>
 </table>
 
 <p align="center">
@@ -109,6 +117,7 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 | ⚖️ | Scenario compare, KML and GPX export | `fpv.core` |
 | 🎞️ | Flight replay from Betaflight Blackbox logs: track, battery, altitude, speed, link, modes and failsafe on the map, the flight's story, a logbook, and plan against fact | `fpv.blackbox`, `rf-flightlog` |
 | 🔗 | Read-only share links with a PIN; only the owner key revokes them | server |
+| 📦 | Offline regions: packages of the map, relief and 3D terrain cut from one world PMTiles set by a box, an admin boundary or a polygon, versioned for updates | server, web |
 | 📚 | Equipment library: radios, antennas, batteries, drones, with sources and admin-verified flags | server, web |
 
 ## Architecture

@@ -30,4 +30,6 @@
 
 **Stall margin.** How far the airspeed is above the stall speed. In a banked turn the stall speed rises (by the square root of 1/cos of the bank angle, ×1.19 at 45°), so a plane with a small margin in level flight can stall in a turn.
 
+**Offline region.** An area the server offers for download, cut out of its world map data by a box, an administrative boundary or a polygon. Its **package** is one zip with the map tiles, the relief and terrain, the style, fonts and a manifest. The package's **version** changes only when its contents change, so a different version means an update is available.
+
 **Turn radius.** How wide a fixed-wing turns at its airspeed plus the wind and its maximum bank. At a waypoint the plane starts the turn before it and cuts inside; a turn that needs more than half of either leg does not fit.

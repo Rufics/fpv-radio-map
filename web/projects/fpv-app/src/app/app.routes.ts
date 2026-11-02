@@ -6,6 +6,7 @@ export const routes: Routes = [
   { path: '', component: WorkspacePage },
   { path: 'mission/:id', component: WorkspacePage, title: 'Mission' },
   { path: 'm/:role/:token', loadComponent: () => import('./shared/pin-entry.page').then((m) => m.PinEntryPage), title: 'Shared mission' },
+  { path: 'offline', loadComponent: () => import('./offline/offline-regions.page').then((m) => m.OfflineRegionsPage), title: 'Offline regions' },
   {
     path: 'admin',
     loadComponent: () => import('./admin/admin-shell.component').then((m) => m.AdminShellComponent),

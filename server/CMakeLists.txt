@@ -31,6 +31,14 @@ add_library(rfmap_server_lib STATIC
   src/result_cache.cpp
   src/weather.cpp
   src/tiles_manifest.cpp
+  src/region_definition.cpp
+  src/world_tiles.cpp
+  src/pmtiles_tool.cpp
+  src/region_archive.cpp
+  src/region_package.cpp
+  src/region_preview.cpp
+  src/region_catalog.cpp
+  src/region_api.cpp
   src/link_service.cpp
   src/module_runner.cpp
   src/invocation_scope.cpp

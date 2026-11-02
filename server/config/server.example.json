@@ -159,6 +159,21 @@
     "queue": 0,
     "waitMs": 10000
   },
+  // Offline regions: map packages a client downloads to use the map without a network, cut out of
+  // one world-wide tiles-builder output by go-pmtiles (docs/admin/offline-regions.md).
+  "regions": {
+    // The world tiles-builder out/ directory; empty turns offline regions off.
+    "worldDir": "",
+    // The list of regions: {"regions": [{"id", "name", "bbox" | "boundary" | "geometry", ...}]}.
+    // A missing file offers no region.
+    "definitions": "/etc/rfmap/regions/regions.json",
+    // Written by the server only: the packages, their previews and the builds in progress.
+    "packageDir": "/var/lib/rfmap/regions",
+    "pmtiles": "/usr/local/bin/pmtiles",
+    // Minutes between checks for changed regions or world files; 0 = only at start and on
+    // POST /api/v1/admin/regions/reload.
+    "rescanMinutes": 10
+  },
   // Merged over the defaults GET /api/v1/config/map returns (tiles-builder names under /tiles).
   "map": {
     "zoom": 11

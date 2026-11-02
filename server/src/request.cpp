@@ -3,9 +3,14 @@
 #include "security.hpp"
 
 #include <httplib.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <rfmod/bounded_json.hpp>
 
 #include <algorithm>
+#include <array>
+#include <memory>
 #include <cctype>
 #include <charconv>
 #include <cmath>
@@ -82,6 +87,21 @@ int HttpRequest::ifMatchRevision() const {
     }
 }
 
+bool HttpRequest::holdsCurrent(std::string_view etag) const {
+    const std::string list = header("If-None-Match");
+    std::size_t start = 0;
+    while (start < list.size()) {
+        const std::size_t comma = std::min(list.find(',', start), list.size());
+        std::string_view tag = std::string_view(list).substr(start, comma - start);
+        tag.remove_prefix(std::min(tag.find_first_not_of(' '), tag.size()));
+        tag.remove_suffix(tag.size() - std::min(tag.find_last_not_of(' ') + 1, tag.size()));
+        if (tag.starts_with("W/")) tag.remove_prefix(2);
+        if (tag == "*" || tag == etag) return true;
+        start = comma + 1;
+    }
+    return false;
+}
+
 json HttpRequest::body() const {
     if (request_.body.size() > server_.maxBodyBytes) throw HttpError(413, "request body too large");
     try {
@@ -137,6 +157,59 @@ void HttpReply::text(int status, const std::string& body, const char* contentTyp
 }
 
 void HttpReply::header(const char* name, const std::string& value) { response_.set_header(name, value); }
+
+void HttpReply::notModified(const std::string& etag) {
+    response_.status = 304;
+    response_.set_header("ETag", etag);
+}
+
+namespace {
+
+/// A file streamed as a response body in chunks, from any offset: httplib cuts Range requests
+/// out of it, so a download resumes where it broke off. (httplib's own set_file_content does
+/// open the file before the handler returns, so a missing one cannot become a JSON 404.)
+class FileBody {
+public:
+    explicit FileBody(const std::filesystem::path& file) : fd_(::open(file.c_str(), O_RDONLY | O_CLOEXEC)) {
+        struct stat st {};
+        if (fd_ < 0 || ::fstat(fd_, &st) != 0 || !S_ISREG(st.st_mode)) {
+            if (fd_ >= 0) ::close(fd_);
+            throw HttpError(404, "no such file");
+        }
+        size_ = static_cast<std::size_t>(st.st_size);
+    }
+    FileBody(const FileBody&) = delete;
+    FileBody& operator=(const FileBody&) = delete;
+    ~FileBody() { ::close(fd_); }
+
+    [[nodiscard]] std::size_t size() const { return size_; }
+
+    /// Writes `length` bytes from `offset` to `sink`; false when the file cannot be read.
+    bool write(std::size_t offset, std::size_t length, httplib::DataSink& sink) const {
+        std::array<char, kChunk> buffer{};
+        const std::size_t want = std::min(length, buffer.size());
+        const ssize_t got = ::pread(fd_, buffer.data(), want, static_cast<off_t>(offset));
+        if (got <= 0) return false;
+        return sink.write(buffer.data(), static_cast<std::size_t>(got));
+    }
+
+private:
+    static constexpr std::size_t kChunk = std::size_t{64} * 1024;
+    int fd_;
+    std::size_t size_ = 0;
+};
+
+}  // namespace
+
+void HttpReply::file(const std::filesystem::path& file, const char* contentType, bool ranged) {
+    auto body = std::make_shared<const FileBody>(file);
+    // httplib cuts the range only out of a 206 answer (and turns a bad range into 416).
+    response_.status = ranged ? 206 : 200;
+    response_.set_content_provider(body->size(), contentType,
+                                   [body](std::size_t offset, std::size_t length, httplib::DataSink& sink) {
+                                       return body->write(offset, length, sink);
+                                   });
+}
 
 int HttpReply::status() const { return response_.status; }
 

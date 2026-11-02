@@ -61,6 +61,7 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
       flightLogApi_(services_),
       dataApi_(services_, admin_),
       adminApi_(services_, admin_),
+      regionApi_(services_.regions(), admin_),
       startTimeSeconds_(std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count()),
       http_(std::make_unique<httplib::Server>()) {
     configureServer();
@@ -212,6 +213,7 @@ void Application::routes() {
     flightLogRoutes(api);
     dataRoutes(api);
     adminRoutes(api);
+    regionRoutes(api);
 }
 
 void Application::missionRoutes(const std::string& api) {
@@ -268,6 +270,19 @@ void Application::dataRoutes(const std::string& api) {
 
     s.Get(api + "/modules", route("default", on(d, &DataApi::getModules)));
     s.Get(api + R"(/modules/([a-z0-9._-]+)/(.+))", route("default", on(d, &DataApi::getModuleFile)));
+}
+
+void Application::regionRoutes(const std::string& api) {
+    httplib::Server& s = *http_;
+    const RegionApi& r = regionApi_;
+    const std::string region = api + R"(/regions/([a-z0-9-]+))";
+    const std::string version = R"(([0-9a-f]{64}))";
+    s.Get(api + "/regions", route("default", on(r, &RegionApi::getList)));
+    s.Get(region, route("default", on(r, &RegionApi::getRegion)));
+    s.Get(region + "/packages/" + version + R"(\.zip)", route("default", on(r, &RegionApi::getPackage)));
+    s.Get(region + "/previews/" + version + R"(\.png)", route("default", on(r, &RegionApi::getPreview)));
+    s.Get(api + "/admin/regions", route("admin", on(r, &RegionApi::getAdminList)));
+    s.Post(api + "/admin/regions/reload", route("admin", on(r, &RegionApi::postAdminReload)));
 }
 
 void Application::adminRoutes(const std::string& api) {
