@@ -19,6 +19,8 @@ import {
   LinkResult,
   MapSourcesConfig,
   ModuleInfo,
+  OfflineRegion,
+  OfflineRegionAdmin,
   OpenLinkResponse,
   Profile,
   RouteResult,
@@ -292,6 +294,32 @@ export class RfmapApiClient {
   deleteFlightLog(missionId: string, logId: string): Promise<void> {
     const url = this.url(`/missions/${encodeURIComponent(missionId)}/flightlogs/${encodeURIComponent(logId)}`);
     return this.run(this.http.delete(url, { headers: this.sessionHeaders(missionId) }).pipe(map(() => undefined)));
+  }
+
+  /** GET /regions: the offline region packages this server offers. */
+  async offlineRegions(): Promise<OfflineRegion[]> {
+    const body = await this.run(this.http.get<{ regions: OfflineRegion[] }>(this.url('/regions')));
+    return body.regions.map((r) => ({
+      ...r,
+      package: this.resource(r.package),
+      preview: r.preview === null ? null : this.resource(r.preview),
+    }));
+  }
+
+  /** A URL the server gives as /api/v1/..., under the configured API base instead. */
+  private resource(path: string): string {
+    const prefix = '/api/v1/';
+    return path.startsWith(prefix) ? this.url(path.slice(prefix.length - 1)) : path;
+  }
+
+  /** GET /admin/regions: every region with its build state. */
+  adminOfflineRegions(): Promise<OfflineRegionAdmin> {
+    return this.run(this.http.get<OfflineRegionAdmin>(this.url('/admin/regions'), { headers: this.adminHeaders() }));
+  }
+
+  /** POST /admin/regions/reload: asks the server to look for changed regions and rebuild them. */
+  reloadOfflineRegions(): Promise<void> {
+    return this.run(this.http.post(this.url('/admin/regions/reload'), {}, { headers: this.adminHeaders() }).pipe(map(() => undefined)));
   }
 
   /** GET /config/map. Falls back to the app environment when the server cannot be reached. */

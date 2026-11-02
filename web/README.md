@@ -140,7 +140,8 @@ export function register(api) {
 | `/` | Workspace: layout A on laptop/desktop, layout C on phones (≤ 767 px) |
 | `/mission/:id` | Workspace for a saved mission |
 | `/m/:role/:token` | PIN entry (`e` = edit, `v` = view) |
-| `/admin/modules`, `/admin/library`, `/admin/sources` | Admin pages |
+| `/offline` | Offline regions: the packages `GET /api/v1/regions` lists, with preview, area, size, layers, version and a download link |
+| `/admin/modules`, `/admin/library`, `/admin/sources` | Admin pages; `/admin/sources` also shows the state of each offline region and rescans them |
 
 Route `title`s name the page only (`Mission`, `Modules · Admin`); `AppTitleStrategy` appends ` · FPV Radio Map`, and a route without a title shows the app name alone.
 

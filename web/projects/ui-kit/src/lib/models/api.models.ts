@@ -508,3 +508,44 @@ export interface MapSourcesConfig {
   center?: [number, number];
   zoom?: number;
 }
+
+/** A region whose map can be downloaded for use without a network (GET /regions). */
+export interface OfflineRegion {
+  id: string;
+  name: string;
+  /** [minLon, minLat, maxLon, maxLat] in degrees */
+  bbox: [number, number, number, number];
+  /** Highest zoom the package holds; null = the world's own. */
+  maxzoom: number | null;
+  /** Map layers in the package: basemap, satellite, hillshade, terrain, contours. */
+  layers: string[];
+  /** Bytes of the package zip. */
+  size: number;
+  /** Changes exactly when the package content changes; also its ETag. */
+  version: string;
+  /** SHA-256 of the zip, to check a download. */
+  sha256: string;
+  builtAt: string;
+  /** URL of a small hillshade picture, or null. */
+  preview: string | null;
+  /** URL of the package zip; it names the version, so it never changes content. */
+  package: string;
+}
+
+export type OfflineRegionState = 'ready' | 'building' | 'failed';
+
+/** GET /admin/regions item. */
+export interface OfflineRegionStatus {
+  id: string;
+  state: OfflineRegionState;
+  error: string | null;
+  /** The package clients get, also while a newer one is built or after a failed build. */
+  package: OfflineRegion | null;
+}
+
+/** GET /admin/regions */
+export interface OfflineRegionAdmin {
+  enabled: boolean;
+  scans: number;
+  regions: OfflineRegionStatus[];
+}

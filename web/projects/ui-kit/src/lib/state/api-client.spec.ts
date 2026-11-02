@@ -108,6 +108,20 @@ describe('RfmapApiClient', () => {
     expect(await done).toEqual({ flights: [] });
   });
 
+  it('serves offline region files under the configured API base', async () => {
+    const regions = api.offlineRegions();
+    http.expectOne('/api/x/regions').flush({
+      regions: [
+        { id: 'a', package: '/api/v1/regions/a/packages/v.zip', preview: '/api/v1/regions/a/previews/p.png' },
+        { id: 'b', package: 'https://cdn.example/b.zip', preview: null },
+      ],
+    });
+    expect(await regions).toMatchObject([
+      { id: 'a', package: '/api/x/regions/a/packages/v.zip', preview: '/api/x/regions/a/previews/p.png' },
+      { id: 'b', package: 'https://cdn.example/b.zip', preview: null },
+    ]);
+  });
+
   it('saves with If-Match and reads the new revision from the ETag', async () => {
     const saved = api.saveMission('m 1', mission, 3);
     const req = http.expectOne('/api/x/missions/m%201');

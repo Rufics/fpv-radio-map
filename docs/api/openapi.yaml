@@ -37,6 +37,10 @@ tags:
   - name: weather
   - name: modules
   - name: flightlogs
+  - name: regions
+    description: >-
+      Offline regions: map packages a client downloads to use the map without a network, cut out of
+      the server's world-wide map files (docs/admin/offline-regions.md).
   - name: admin
 
 paths:
@@ -882,6 +886,138 @@ paths:
         '422': { description: Unknown scope }
         '503': { description: 'A topic failed to reload on this process (see its log; with scope all, `announced` says whether the others were still told), or with scope all the notice to the other processes could not be sent' }
 
+  /regions:
+    get:
+      tags: [regions]
+      summary: >-
+        The offline regions this server offers, sorted by id: what a client can download, and whether
+        the copy it has is current (compare `version`). A region whose newer package is being built
+        keeps its current one here until the new one is ready. Answers carry an ETag; send it in
+        If-None-Match to get 304 while nothing changed. An empty list when offline regions are off.
+      parameters:
+        - { name: If-None-Match, in: header, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: The catalog
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [regions]
+                properties:
+                  regions: { type: array, items: { $ref: '#/components/schemas/OfflineRegion' } }
+        '304': { description: The client's copy of the catalog is current }
+
+  /regions/{regionId}:
+    get:
+      tags: [regions]
+      summary: One region of the catalog, with an ETag like the list.
+      parameters:
+        - { name: regionId, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]+$' } }
+        - { name: If-None-Match, in: header, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: The region
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfflineRegion' }
+        '304': { description: Unchanged }
+        '404': { description: No such region, or it has no package yet }
+
+  /regions/{regionId}/packages/{version}.zip:
+    get:
+      tags: [regions]
+      summary: >-
+        The package zip of one version. The URL names the version, so its bytes never change: it may
+        be cached for good, and a download that broke off resumes with a Range request. A version that
+        was replaced answers 404 with the current one; fetch the catalog again then. The zip stores
+        manifest.json first, then style.json, tiles/<layer>.pmtiles, glyphs/<fontstack>/<range>.pbf
+        and sprites/, every URL in style.json relative to the root of the package.
+      parameters:
+        - { name: regionId, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]+$' } }
+        - { name: version, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
+        - { name: Range, in: header, required: false, schema: { type: string }, description: 'bytes=<from>-[<to>]' }
+        - { name: If-None-Match, in: header, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: The whole package
+          headers:
+            ETag: { schema: { type: string }, description: 'The version in quotes' }
+            Cache-Control: { schema: { type: string }, description: 'public, max-age=31536000, immutable' }
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '206': { description: The part asked for by Range }
+        '304': { description: The client has this version }
+        '404':
+          description: No such region, or this version was replaced
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  version: { type: string, description: 'The current version' }
+        '416': { description: The range lies outside the package }
+        '503': { description: 'Too many downloads at once (regions.maxDownloads); Retry-After' }
+
+  /regions/{regionId}/previews/{previewVersion}.png:
+    get:
+      tags: [regions]
+      summary: A small grey hillshade of the region (256 px wide), drawn from the server DEM.
+      parameters:
+        - { name: regionId, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]+$' } }
+        - { name: previewVersion, in: path, required: true, description: 'SHA-256 of the PNG, from the preview URL in the catalog', schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
+      responses:
+        '200':
+          description: The preview
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+        '304': { description: The client already has this preview (If-None-Match) }
+        '404': { description: No such region, a replaced preview, or no preview (no DEM over the region) }
+
+  /admin/regions:
+    get:
+      tags: [admin, regions]
+      security: [{ admin: [] }]
+      summary: Every region of the definitions file with its build state.
+      responses:
+        '200':
+          description: Region states
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean, description: 'false without regions.worldDir' }
+                  scans: { type: integer, description: 'Scans completed since the server started' }
+                  regions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        state: { enum: [ready, building, failed] }
+                        error: { type: [string, 'null'], description: 'Why the last build failed' }
+                        package:
+                          oneOf: [{ $ref: '#/components/schemas/OfflineRegion' }, { type: 'null' }]
+                          description: 'The package clients get, kept while a newer one is built or after a failed build'
+
+  /admin/regions/reload:
+    post:
+      tags: [admin, regions]
+      security: [{ admin: [] }]
+      summary: >-
+        Asks for a scan now (the server also scans at start and every regions.rescanMinutes): regions
+        whose definition or world files changed are rebuilt in the background, and files no region uses
+        any more are removed.
+      responses:
+        '202': { description: Scan queued }
+        '409': { description: Offline regions are off on this server }
+
 components:
   securitySchemes:
     session: { type: http, scheme: bearer }
@@ -1278,6 +1414,22 @@ components:
         key: { type: string }
         builtIn: { type: boolean }
         firstParty: { type: boolean }
+
+    OfflineRegion:
+      type: object
+      required: [id, name, bbox, layers, size, version, sha256, builtAt, preview, package]
+      properties:
+        id: { type: string, pattern: '^[a-z0-9-]+$' }
+        name: { type: string }
+        bbox: { type: array, items: { type: number }, minItems: 4, maxItems: 4, description: '[minLon, minLat, maxLon, maxLat], degrees; the box around a polygon region' }
+        maxzoom: { type: [integer, 'null'], description: 'Highest zoom in the package; null = that of the world files' }
+        layers: { type: array, items: { enum: [basemap, satellite, hillshade, terrain, contours] } }
+        size: { type: integer, description: 'Bytes of the zip' }
+        version: { type: string, pattern: '^[0-9a-f]{64}$', description: 'Opaque package version: a SHA-256 over the whole manifest (metadata and every file with its size and SHA-256), so it changes exactly when the zip does. Compare it; do not compute it.' }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$', description: 'SHA-256 of the zip, to check a download' }
+        builtAt: { type: string, format: date-time }
+        preview: { type: [string, 'null'], description: 'URL of the preview PNG, named by its own SHA-256: it changes when the preview is redrawn' }
+        package: { type: string, description: 'URL of the package zip of this version' }
 
     CacheTier:
       type: object

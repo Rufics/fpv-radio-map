@@ -118,6 +118,24 @@ public:
     };
     Data data;
 
+    /// Offline regions (region_catalog.hpp): packages a client downloads to use the map without a
+    /// network, cut out of one world-wide set of map layers.
+    struct Regions {
+        /// The world-wide tiles-builder output; empty = no offline regions.
+        std::filesystem::path worldDir;
+        /// The JSON file listing the regions (region_definition.hpp).
+        std::filesystem::path definitions = "/etc/rfmap/regions/regions.json";
+        /// Where the server keeps the packages it builds; written by the server only.
+        std::filesystem::path packageDir = "/var/lib/rfmap/regions";
+        /// The go-pmtiles executable that cuts the regions.
+        std::filesystem::path pmtiles = "/usr/local/bin/pmtiles";
+        /// Minutes between scans for changed regions; 0 = only at start and on admin reload.
+        int rescanMinutes = 10;
+        /// Package downloads streamed at once; 0 = automatic, a quarter of server.threads.
+        int maxDownloads = 0;
+    };
+    Regions regions;
+
     std::filesystem::path schemasDir = "schemas";
     std::filesystem::path seedDir = "data/library";
 
