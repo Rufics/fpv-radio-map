@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.hpp"
+#include "bulkhead.hpp"
 #include "config.hpp"
 
 #include <rfcore/geodesy.hpp>
@@ -79,7 +80,7 @@ public:
     /// `ranged` (has a Range header). HttpError 404 when the file cannot be opened. `hold` is kept
     /// alive until the last byte is sent or the client goes away, for example a download slot.
     void file(const std::filesystem::path& file, const char* contentType, bool ranged,
-              std::shared_ptr<const void> hold = nullptr);
+              std::shared_ptr<const Bulkhead::Permit> hold = nullptr);
     [[nodiscard]] int status() const;
 
 private:

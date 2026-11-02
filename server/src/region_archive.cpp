@@ -62,11 +62,12 @@ ZipWriter::ZipWriter(const fs::path& file) : out_(file, std::ios::binary | std::
 
 ZipWriter::~ZipWriter() = default;
 
-la_ssize_t ZipWriter::write(archive*, void* self, const void* buffer, std::size_t length) {
+la_ssize_t ZipWriter::write(archive*, void* self, const void* buffer, std::size_t length) {  // NOSONAR(cpp:S5008): libarchive API
     auto* zip = static_cast<ZipWriter*>(self);
-    zip->out_.write(static_cast<const char*>(buffer), static_cast<std::streamsize>(length));
+    const auto* bytes = static_cast<const char*>(buffer);
+    zip->out_.write(bytes, static_cast<std::streamsize>(length));
     if (!zip->out_) return -1;
-    zip->hash_.update(buffer, length);
+    zip->hash_.update(bytes, length);
     zip->size_ += length;
     return static_cast<la_ssize_t>(length);
 }
@@ -81,7 +82,7 @@ void ZipWriter::header(const std::string& name, std::uintmax_t size) {
     check(archive_write_header(archive_.get(), entry.get()));
 }
 
-void ZipWriter::data(const void* bytes, std::size_t size) {
+void ZipWriter::data(const char* bytes, std::size_t size) {
     if (archive_write_data(archive_.get(), bytes, size) != static_cast<la_ssize_t>(size)) check(ARCHIVE_FATAL);
 }
 

@@ -202,7 +202,7 @@ private:
 }  // namespace
 
 void HttpReply::file(const std::filesystem::path& file, const char* contentType, bool ranged,
-                     std::shared_ptr<const void> hold) {
+                     std::shared_ptr<const Bulkhead::Permit> hold) {
     auto body = std::make_shared<const FileBody>(file);
     // httplib cuts the range only out of a 206 answer (and turns a bad range into 416).
     response_.status = ranged ? 206 : 200;

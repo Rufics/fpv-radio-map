@@ -114,7 +114,7 @@ private:
 
     std::mutex scanMutex_;  ///< one scan at a time in this process; FileLock keeps processes apart
     std::mutex wakeMutex_;
-    std::condition_variable_any wake_;
+    std::condition_variable_any wake_;  // NOSONAR(cpp:S8467): only the _any variant waits on a stop_token
     bool pending_ = false;  ///< under wakeMutex_
     std::stop_source stop_;
     std::jthread worker_;  ///< declared last: started after everything it uses, joined first

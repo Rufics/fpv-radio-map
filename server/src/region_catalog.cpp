@@ -77,9 +77,11 @@ void RegionCatalog::run() {
 
 std::optional<std::vector<RegionDefinition>> RegionCatalog::definitions() const {
     try {
-        return RegionDefinitions::load(settings_.definitions, [this](const std::string& id, const std::string& why) {
-            log_.warn("regions", std::format("region '{}' skipped: {}", id, why));
-        });
+        const RegionDefinitions file(settings_.definitions);
+        for (const RegionDefinitions::Skip& s : file.skipped()) {
+            log_.warn("regions", std::format("region '{}' skipped: {}", s.id, s.why));
+        }
+        return file.regions();
     } catch (const RegionError& e) {
         log_.error("regions", std::string(e.what()) + "; the packages already built stay as they are");
         return std::nullopt;
@@ -126,7 +128,7 @@ std::vector<RegionCatalog::Pending> RegionCatalog::prime(const std::vector<Regio
         auto package = store_.load(region.id());
         const bool fresh = package && package->fingerprint == fingerprint;
         set({region.id(), fresh ? RegionState::Ready : RegionState::Building, {}, std::move(package)});
-        if (!fresh) pending.push_back({&region, std::move(fingerprint)});
+        if (!fresh) pending.emplace_back(&region, std::move(fingerprint));
     }
     return pending;
 }

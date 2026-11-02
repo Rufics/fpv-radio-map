@@ -49,9 +49,9 @@ private:
 
 std::vector<std::string> PmtilesTool::extractArguments(const Extract& job) {
     std::vector<std::string> args{"extract", job.input.string(), job.output.string(), "--quiet"};
-    if (job.region) args.push_back("--region=" + job.region->string());
+    if (job.region.has_value()) args.push_back("--region=" + job.region->string());
     else args.push_back("--bbox=" + job.bbox.toArgument());
-    if (job.maxZoom) args.push_back(std::format("--maxzoom={}", *job.maxZoom));
+    if (job.maxZoom.has_value()) args.push_back(std::format("--maxzoom={}", *job.maxZoom));
     return args;
 }
 

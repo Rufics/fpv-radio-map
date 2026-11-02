@@ -65,7 +65,7 @@ private:
 /// The area a region covers: a box, or a GeoJSON Polygon or MultiPolygon with the box around it.
 class RegionArea {
 public:
-    explicit RegionArea(GeoBox box) : box_(box) {}
+    explicit RegionArea(const GeoBox& box) : box_(box) {}
     /// From a GeoJSON geometry, Feature or FeatureCollection (its features' polygons together);
     /// RegionError when it holds no polygon with valid coordinates.
     [[nodiscard]] static RegionArea fromGeoJson(const json& geojson);
@@ -75,7 +75,7 @@ public:
     [[nodiscard]] const std::optional<json>& polygon() const { return polygon_; }
 
 private:
-    RegionArea(GeoBox box, json polygon) : box_(box), polygon_(std::move(polygon)) {}
+    RegionArea(const GeoBox& box, json polygon) : box_(box), polygon_(std::move(polygon)) {}
     /// The rings of a Polygon or MultiPolygon appended to `polygons`, checked.
     static void collect(const json& geometry, json& polygons);
     /// The box around every position of `polygons`.
@@ -122,14 +122,27 @@ private:
     std::vector<std::string> glyphRanges_;
 };
 
-/// The definitions file.
+/// The definitions file, read once.
 class RegionDefinitions {
 public:
-    /// The regions of `file`, sorted by id. A missing file defines no regions; a file that is
-    /// not JSON is RegionError. An entry that is wrong is reported to `skipped` and left out,
-    /// and so is a second entry with an id already taken.
-    using Skipped = std::function<void(const std::string& entry, const std::string& why)>;
-    [[nodiscard]] static std::vector<RegionDefinition> load(const std::filesystem::path& file, const Skipped& skipped);
+    /// An entry left out, and why.
+    struct Skip {
+        std::string id;  ///< "?" when the entry has no string id
+        std::string why;
+    };
+
+    /// Reads `file`. A missing file defines no regions; a file that cannot be read or is not
+    /// JSON is RegionError. An entry that is wrong is left out and listed in skipped(), and so
+    /// is a second entry with an id already taken.
+    explicit RegionDefinitions(const std::filesystem::path& file);
+
+    /// The regions, sorted by id.
+    [[nodiscard]] const std::vector<RegionDefinition>& regions() const { return regions_; }
+    [[nodiscard]] const std::vector<Skip>& skipped() const { return skipped_; }
+
+private:
+    std::vector<RegionDefinition> regions_;
+    std::vector<Skip> skipped_;
 };
 
 }  // namespace rfmap

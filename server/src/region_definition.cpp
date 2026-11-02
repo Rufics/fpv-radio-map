@@ -194,20 +194,19 @@ std::string RegionDefinition::canonical() const {
                 {"name", name_},
                 {"bbox", area_.box().toJson()},
                 {"polygon", polygon.value_or(json())},
-                {"maxzoom", maxZoom_ ? json(*maxZoom_) : json()},
+                {"maxzoom", maxZoom_.has_value() ? json(*maxZoom_) : json()},
                 {"layers", layers_},
                 {"glyphRanges", glyphRanges_}};
     return doc.dump();
 }
 
-std::vector<RegionDefinition> RegionDefinitions::load(const fs::path& file, const Skipped& skipped) {
-    std::vector<RegionDefinition> out;
+RegionDefinitions::RegionDefinitions(const fs::path& file) {
     std::error_code ec;
     if (!fs::exists(file, ec)) {
         if (ec && ec != std::errc::no_such_file_or_directory) {
             throw RegionError(std::format("cannot read {}: {}", file.string(), ec.message()));
         }
-        return out;  // no file: no regions
+        return;  // no file: no regions
     }
     const json doc = readJsonFile(file);
     if (!doc.is_object() || !doc.contains("regions") || !doc.at("regions").is_array()) {
@@ -216,19 +215,18 @@ std::vector<RegionDefinition> RegionDefinitions::load(const fs::path& file, cons
     std::set<std::string, std::less<>> taken;
     for (const json& entry : doc.at("regions")) {
         const bool named = entry.is_object() && entry.contains("id") && entry.at("id").is_string();
-        const std::string label = named ? entry.at("id").get<std::string>() : "?";
+        std::string label = named ? entry.at("id").get<std::string>() : "?";
         try {
             RegionDefinition definition(entry, file.parent_path());
             if (!taken.insert(definition.id()).second) throw RegionError("the id is used by an earlier region");
-            out.push_back(std::move(definition));
+            regions_.push_back(std::move(definition));
         } catch (const RegionError& e) {
-            skipped(label, e.what());
+            skipped_.push_back({std::move(label), e.what()});
         } catch (const json::exception& e) {
-            skipped(label, e.what());
+            skipped_.push_back({std::move(label), e.what()});
         }
     }
-    std::ranges::sort(out, {}, &RegionDefinition::id);
-    return out;
+    std::ranges::sort(regions_, {}, &RegionDefinition::id);
 }
 
 }  // namespace rfmap

@@ -36,7 +36,7 @@ json RegionApi::describe(const RegionPackage& p) {
     return {{"id", p.id},
             {"name", p.name},
             {"bbox", p.bbox.toJson()},
-            {"maxzoom", p.maxZoom ? json(*p.maxZoom) : json()},
+            {"maxzoom", p.maxZoom.has_value() ? json(*p.maxZoom) : json()},
             {"layers", p.layers},
             {"size", p.size},
             {"version", p.version},

@@ -77,15 +77,16 @@ TEST(RegionDefinition, BoundaryFileIsReadBesideTheDefinitions) {
                   {{"id", "a"}, {"bbox", {0, 0, 1, 1}}},
                   {{"id", "a"}, {"bbox", {0, 0, 2, 2}}},
                   {{"id", "bad"}}}}}.dump();
+    const RegionDefinitions file(dir / "regions.json");
+    const auto& regions = file.regions();
     std::vector<std::string> skipped;
-    const auto regions =
-        RegionDefinitions::load(dir / "regions.json", [&skipped](const std::string& id, const std::string&) { skipped.push_back(id); });
+    for (const auto& s : file.skipped()) skipped.push_back(s.id);
     ASSERT_EQ(regions.size(), 2U);
     EXPECT_EQ(regions[0].id(), "a");
     EXPECT_EQ(regions[0].area().box().toJson(), json({0, 0, 1, 1}));
     EXPECT_EQ(regions[1].area().box().toJson(), json({30.0, 50.0, 31.0, 51.0}));
     EXPECT_EQ(skipped, (std::vector<std::string>{"a", "bad"}));
-    EXPECT_TRUE(RegionDefinitions::load(dir / "missing.json", [](const std::string&, const std::string&) {}).empty());
+    EXPECT_TRUE(RegionDefinitions(dir / "missing.json").regions().empty());
 }
 
 TEST(RegionStyle, PointsAtThePackageAndDropsWhatItLacks) {

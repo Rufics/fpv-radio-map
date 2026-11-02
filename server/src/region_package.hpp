@@ -131,7 +131,7 @@ public:
         Logger& log;
     };
 
-    RegionPackageBuilder(Tools tools, std::stop_token stop) : t_(tools), stop_(std::move(stop)) {}
+    RegionPackageBuilder(const Tools& tools, std::stop_token stop) : t_(tools), stop_(std::move(stop)) {}
 
     /// Builds and records the package of `region`; RegionError when it cannot, and the region's
     /// earlier package then stays current. `fingerprint` is recorded with it.

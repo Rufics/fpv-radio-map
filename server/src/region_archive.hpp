@@ -21,8 +21,8 @@ namespace rfmap {
 class Sha256Stream {
 public:
     Sha256Stream() { crypto_hash_sha256_init(&state_); }
-    void update(const void* data, std::size_t size) {
-        crypto_hash_sha256_update(&state_, static_cast<const unsigned char*>(data), size);
+    void update(const char* data, std::size_t size) {
+        crypto_hash_sha256_update(&state_, reinterpret_cast<const unsigned char*>(data), size);
     }
     /// The digest in hex; the stream is finished after it.
     [[nodiscard]] std::string hex();
@@ -53,9 +53,9 @@ private:
     struct Free {
         void operator()(archive* a) const { archive_write_free(a); }
     };
-    static la_ssize_t write(archive*, void* self, const void* buffer, std::size_t length);
+    static la_ssize_t write(archive*, void* self, const void* buffer, std::size_t length);  // NOSONAR(cpp:S5008): libarchive API
     void header(const std::string& name, std::uintmax_t size);
-    void data(const void* bytes, std::size_t size);
+    void data(const char* bytes, std::size_t size);
     void check(int status) const;
 
     std::ofstream out_;
