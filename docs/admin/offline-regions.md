@@ -25,7 +25,7 @@ server needs these files from it:
 |---|---|---|
 | `basemap.pmtiles`, `hillshade.pmtiles`, `terrain.pmtiles`, `contours.pmtiles`, `satellite.pmtiles` | cut to the region, under `tiles/` | whichever were built; hillshade and terrain are separate layers |
 | `style-dark.json` | as `style.json`, URLs rewritten | required |
-| `fonts/<fontstack>/<range>.pbf` | the fontstacks the style uses, under `glyphs/`; every fontstack when a layer may take its font from the map data (an expression such as `["get", "font"]` or `["split", ...]` rather than literal font lists), since the data may then name any of them | the ranges the region asks for, or all of them |
+| `fonts/<fontstack>/<range>.pbf` | the fontstacks the style uses, under `glyphs/`; every fontstack when a layer may take its font from the map data (an expression such as `["get", "font"]` or `["split", ...]` rather than literal font lists), since the data may then name any of them | the ranges the region asks for, or all of them. A fontstack the style names that has no glyphs fails the region, because its labels could not draw |
 | `sprites/sprite.json`, `sprite.png`, `sprite@2x.json`, `sprite@2x.png` | as they are, under `sprites/` | optional; the current dark style uses no icons |
 | `dem.cog.tif` | no | the preview picture is drawn from it |
 

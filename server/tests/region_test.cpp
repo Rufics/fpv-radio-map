@@ -397,6 +397,17 @@ TEST_F(RegionCatalogTest, AFontChosenByFeatureDataBringsEveryWorldFont) {
     EXPECT_NE(std::ranges::find(zip.names, "glyphs/Unused Font/0-255.pbf"), zip.names.end()) << "a font the data may name";
 }
 
+TEST_F(RegionCatalogTest, AFontTheStyleNamesWithoutGlyphsFailsTheRegion) {
+    fs::remove_all(world_->dir() / "fonts" / "Noto Sans Medium");
+    RegionCatalog catalog(settings(), log_, clock_);
+    catalog.scan();
+    EXPECT_TRUE(catalog.packages().empty()) << "a package whose labels cannot draw is not published";
+    for (const auto& s : catalog.statuses()) {
+        EXPECT_EQ(s.state, RegionState::Failed);
+        EXPECT_NE(s.error.find("Noto Sans Medium"), std::string::npos) << s.error;
+    }
+}
+
 TEST_F(RegionCatalogTest, WithoutTheToolEveryRegionFailsAndNothingIsBuilt) {
     RegionCatalog catalog(settings(dir_ / "no-such-pmtiles"), log_, clock_);
     catalog.scan();

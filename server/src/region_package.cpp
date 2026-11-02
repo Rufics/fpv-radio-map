@@ -355,7 +355,8 @@ std::vector<RegionPackageBuilder::Entry> RegionPackageBuilder::extractLayers(con
 std::vector<RegionPackageBuilder::Entry> RegionPackageBuilder::styleAssets(const RegionDefinition& region,
                                                                            const json& style) const {
     std::vector<Entry> out;
-    std::vector<std::string> stacks = RegionStyle::fontstacks(style);
+    const std::vector<std::string> named = RegionStyle::fontstacks(style);
+    std::vector<std::string> stacks = named;
     if (RegionStyle::fontsFromData(style)) {
         // A font the style does not list may come from the feature data: every fontstack of the
         // world goes in, so the labels still draw offline.
@@ -366,7 +367,11 @@ std::vector<RegionPackageBuilder::Entry> RegionPackageBuilder::styleAssets(const
     }
     for (const std::string& stack : stacks) {
         const auto files = t_.world.glyphs(stack, region.glyphRanges());
-        if (files.empty()) t_.log.warn("regions", std::format("{}: no glyphs for '{}'", region.id(), stack));
+        // The style names this fontstack, so a package without its glyphs would draw no labels.
+        if (files.empty() && std::ranges::find(named, stack) != named.end()) {
+            throw RegionError(std::format("the style uses the fontstack '{}', but {}/{} has no glyphs for it", stack,
+                                          WorldTiles::kFontsDir, stack));
+        }
         for (const fs::path& f : files) out.push_back(snapshot(region, std::format("glyphs/{}/{}", stack, f.filename().string()), f));
     }
     for (const fs::path& f : t_.world.sprites()) out.push_back(snapshot(region, "sprites/" + f.filename().string(), f));
@@ -430,6 +435,8 @@ bool RegionPackageBuilder::writePreview(RegionPackage& package) const {
         RegionPreview::render(*dem, package.bbox, png);
         package.previewVersion = Sha256Stream::ofFile(png, stop_);
         return true;
+    } catch (const RegionBuildCancelled&) {
+        throw;  // a stopped build publishes nothing, so it keeps the previous package
     } catch (const RegionError& e) {
         t_.log.warn("regions", std::format("{}: no preview: {}", package.id, e.what()));
         return false;
