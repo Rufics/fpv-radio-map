@@ -16,7 +16,9 @@ world tiles-builder output ──► rfmap-server ──► one zip per region �
 ## 1. The world files
 
 Build the map data once for the whole area you serve, which can be the planet, with
-[tools/tiles-builder](tiles-builder.md). It is the same output directory the map already uses. The
+[tools/tiles-builder](tiles-builder.md). [The whole planet](tiles-builder.md#the-whole-planet) has
+the commands for a planet build, its size, and the setup we recommend: the basemap for the planet
+and the elevation layers for the area you serve. It is the same output directory the map already uses. The
 server needs these files from it:
 
 | file | in the package | notes |

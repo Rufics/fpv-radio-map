@@ -123,6 +123,51 @@ rsync -av --delete data/out/ server:/srv/rfmap/data/tiles/
 
 The smoke test is a 0.1°×0.06° box plus Monaco. It ran in about 30 s on 4 cores, with all downloads included.
 
+### The whole planet
+
+The offline regions ([Offline regions](offline-regions.md)) are cut from one world directory, so it
+can make sense to build it for the planet. The tool takes that, but the raster layers become very
+large. Nobody has run a full planet build with this tool yet, so the figures below are worked out
+from the per-degree rates in the table above. They are **(estimate)**.
+
+The basemap for the planet, from the full OpenStreetMap planet file (run without `--bbox`, so
+nothing is clipped):
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder basemap \
+    --osm-url https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf \
+    --basemap-maxzoom 14 \
+    --java-heap 200g
+```
+
+The planet `.pbf` is around 80 GB. By the rule in the table that means about 160–240 GB of RAM, up
+to several hundred GB of temporary disk, and many hours. The `basemap.pmtiles` comes out at
+roughly the size of the `.pbf`.
+
+The elevation layers for the planet. The bbox may reach ±85° latitude, and it crosses the
+Copernicus spacing zones, so it needs `--allow-dem-resample`:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-builder dem \
+    --bbox -180,-85,180,85 \
+    --allow-dem-resample
+```
+
+Copernicus GLO-30 has about 26,000 land tiles of 1°×1°. At the rates above, that is about
+0.5–1 TB of download cache, 0.6–1.2 TB for `dem.cog.tif`, 0.6–1.3 TB for `terrain.pmtiles`,
+0.3–0.5 TB for `hillshade.pmtiles`, and up to 0.5 TB for contours. All of it is built on one
+machine in one run. The step also checks each of the about 61,000 cells of the bbox, ocean included, before it downloads.
+
+What we recommend instead:
+
+- Build the **basemap for the planet**, or for a continent (`--region europe`), so that a region
+  can be cut anywhere the map exists.
+- Build the **elevation, landcover and satellite layers for the area you actually serve**, with
+  its own `--bbox`, into the same output directory. A region outside that area still gets its map,
+  but no relief (hillshade, terrain and contours have no tiles there) and no preview picture.
+- To cover more area later, run `dem` again with the larger bbox. Downloaded tiles are reused
+  from the cache.
+
 ## 8. Attribution to show on the map
 
 These are required by the data licences. The style already sets each one on its source, so MapLibre's attribution control shows them. The combined text is also in `manifest.json → attribution_display_text`.
