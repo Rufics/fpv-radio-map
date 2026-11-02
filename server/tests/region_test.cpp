@@ -107,6 +107,17 @@ TEST(RegionStyle, PointsAtThePackageAndDropsWhatItLacks) {
     EXPECT_EQ(RegionStyle::rewrite(test::TestWorld::style(), p, true)["sprite"], "sprites/sprite");
 }
 
+TEST(RegionStyle, FindsTheFontstacksInsideExpressionsButNotInFeatureData) {
+    const json style = {{"layers",
+                         {{{"layout", {{"text-font", {"get", "font"}}}}},
+                          {{"layout",
+                            {{"text-font",
+                              {"step", {"zoom"}, {"literal", {"Noto Sans Regular"}}, 10, {"literal", {"Noto Sans Bold", "Arial"}}}}}}},
+                          {{"layout", {{"text-font", {"Noto Sans Medium"}}}}}}}};
+    EXPECT_EQ(RegionStyle::fontstacks(style),
+              (std::vector<std::string>{"Noto Sans Bold,Arial", "Noto Sans Medium", "Noto Sans Regular"}));
+}
+
 TEST(PmtilesTool, CutsByBoxOrPolygonWithoutAShell) {
     PmtilesTool::Extract job{"/w/basemap.pmtiles", "/p/basemap.pmtiles", GeoBox(1, 2, 3, 4), std::nullopt, 12};
     EXPECT_EQ(PmtilesTool::extractArguments(job), (std::vector<std::string>{"extract", "/w/basemap.pmtiles", "/p/basemap.pmtiles",

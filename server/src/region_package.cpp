@@ -24,6 +24,34 @@ bool isHex64(const std::string& text) {
     return text.size() == 64 && text.find_first_not_of("0123456789abcdef") == std::string::npos;
 }
 
+/// The MapLibre expression operators a text-font value can be built from.
+constexpr std::array<std::string_view, 38> kExpressionOperators{
+    "!",        "!=",          "<",      "<=",     ">",             "==",     ">=",            "all",
+    "any",      "array",       "at",     "boolean", "case",         "coalesce", "concat",      "feature-state",
+    "format",   "geometry-type", "get",  "has",    "id",            "in",     "index-of",      "interpolate",
+    "let",      "literal",     "match",  "number", "properties",    "slice",  "step",          "string",
+    "to-string", "var",        "zoom",   "line-progress", "heatmap-density", "accumulated"};
+
+/// An expression rather than a literal list of font names.
+bool isExpression(const json& value) {
+    return value.is_array() && !value.empty() && value.front().is_string() &&
+           std::ranges::find(kExpressionOperators, value.front().get<std::string>()) != kExpressionOperators.end();
+}
+
+/// The fontstacks a text-font value can name: a literal list, or the literal lists inside an
+/// expression (a stack read from feature data, such as ["get", "font"], cannot be known).
+void collectFontstacks(const json& value, std::set<std::string, std::less<>>& out) {
+    if (!value.is_array() || value.empty()) return;
+    if (isExpression(value)) {
+        for (std::size_t i = 1; i < value.size(); ++i) collectFontstacks(value.at(i), out);
+        return;
+    }
+    if (!std::ranges::all_of(value, [](const json& f) { return f.is_string(); })) return;
+    std::string stack;
+    for (const json& f : value) stack += (stack.empty() ? "" : ",") + f.get<std::string>();
+    out.insert(stack);
+}
+
 void renameInto(const fs::path& from, const fs::path& to) {
     std::error_code ec;
     fs::rename(from, to, ec);
@@ -233,14 +261,7 @@ std::vector<std::string> RegionStyle::fontstacks(const json& style) {
     if (!style.contains("layers") || !style.at("layers").is_array()) return {};
     for (const json& layer : style.at("layers")) {
         if (!layer.is_object() || !layer.contains("layout") || !layer.at("layout").is_object()) continue;
-        const json& fonts = layer.at("layout").value("text-font", json());
-        // Only a literal list names its fonts; an expression would have to be evaluated.
-        if (!fonts.is_array() || fonts.empty() || !std::ranges::all_of(fonts, [](const json& f) { return f.is_string(); })) {
-            continue;
-        }
-        std::string stack;
-        for (const json& f : fonts) stack += (stack.empty() ? "" : ",") + f.get<std::string>();
-        out.insert(stack);
+        collectFontstacks(layer.at("layout").value("text-font", json()), out);
     }
     return {out.begin(), out.end()};
 }

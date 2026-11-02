@@ -299,7 +299,17 @@ export class RfmapApiClient {
   /** GET /regions: the offline region packages this server offers. */
   async offlineRegions(): Promise<OfflineRegion[]> {
     const body = await this.run(this.http.get<{ regions: OfflineRegion[] }>(this.url('/regions')));
-    return body.regions;
+    return body.regions.map((r) => ({
+      ...r,
+      package: this.resource(r.package),
+      preview: r.preview === null ? null : this.resource(r.preview),
+    }));
+  }
+
+  /** A URL the server gives as /api/v1/..., under the configured API base instead. */
+  private resource(path: string): string {
+    const prefix = '/api/v1/';
+    return path.startsWith(prefix) ? this.url(path.slice(prefix.length - 1)) : path;
   }
 
   /** GET /admin/regions: every region with its build state. */
