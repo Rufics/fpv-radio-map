@@ -141,8 +141,8 @@ docker run --rm --user "$(id -u):$(id -g)" -v "$PWD/data:/data" rfmap/tiles-buil
 ```
 
 The planet `.pbf` is around 80 GB. By the rule in the table that means about 160–240 GB of RAM, up
-to several hundred GB of temporary disk, and many hours. The `basemap.pmtiles` comes out at
-roughly the size of the `.pbf`.
+to several hundred GB of temporary disk, and many hours. With `--basemap-maxzoom 14` the
+`basemap.pmtiles` comes out at roughly half the size of the `.pbf`.
 
 The elevation layers for the planet. The bbox may reach ±85° latitude, and it crosses the
 Copernicus spacing zones, so it needs `--allow-dem-resample`:
@@ -187,7 +187,7 @@ Before going public, check the current licence pages of Copernicus DEM, ESA Worl
 - **DEM and landcover**: these sources rarely change. Rebuild only when you change the area: run `dem` and `landcover` with the new `--bbox`. Downloaded tiles are reused from the cache.
 - **New tool versions**: `git pull`, `docker build …` again, then run `all --force`.
 - After each update, run `verify` and copy `out/` to the server again (step 6). Clients pick up new files on their next load.
-- The server rebuilds the [offline region](offline-regions.md) packages cut from these files on its next scan, and only those whose files changed.
+- The server rebuilds the [offline region](offline-regions.md) packages cut from these files on its next scan, and only those whose input changed: the world files they read, their region definition, or the go-pmtiles version.
 - To free disk space, delete `data/cache` and `data/work`. Never delete them while a build is running.
 
 ## 10. Known limitations and honest notes
