@@ -1,8 +1,10 @@
 #pragma once
 
+#include "bulkhead.hpp"
 #include "region_catalog.hpp"
 #include "request.hpp"
 
+#include <memory>
 #include <string>
 
 namespace rfmap {
@@ -17,7 +19,10 @@ class RegionApi {
 public:
     static constexpr const char* kPrefix = "/api/v1";
 
-    RegionApi(RegionCatalog& catalog, const AdminToken& admin) : catalog_(catalog), admin_(admin) {}
+    /// `maxDownloads` packages stream at once (regions.maxDownloads, 0 = a quarter of the
+    /// `serverThreads`); a slow client holds a request thread for its whole download, so more
+    /// are turned away with 503 and Retry-After instead of starving the other requests.
+    RegionApi(RegionCatalog& catalog, const AdminToken& admin, int maxDownloads, int serverThreads);
 
     void getList(const HttpRequest& req, HttpReply& res) const;
     void getRegion(const HttpRequest& req, HttpReply& res) const;
@@ -25,6 +30,9 @@ public:
     void getPreview(const HttpRequest& req, HttpReply& res) const;
     void getAdminList(const HttpRequest& req, HttpReply& res) const;
     void postAdminReload(const HttpRequest& req, HttpReply& res) const;
+
+    /// The gate of package downloads, for the metrics.
+    [[nodiscard]] const Bulkhead& downloadGate() const { return *downloads_; }
 
     /// A package as the catalog lists it.
     [[nodiscard]] static json describe(const RegionPackage& package);
@@ -39,6 +47,7 @@ private:
 
     RegionCatalog& catalog_;
     const AdminToken& admin_;
+    std::unique_ptr<Bulkhead> downloads_;
 };
 
 }  // namespace rfmap

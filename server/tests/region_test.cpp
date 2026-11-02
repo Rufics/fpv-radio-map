@@ -1,6 +1,7 @@
 // Offline regions: definitions, the style of a package, the pmtiles call, and the catalog building,
 // keeping and cleaning packages (with a stand-in for go-pmtiles).
 
+#include "region_api.hpp"
 #include "region_catalog.hpp"
 #include "region_test_support.hpp"
 #include "request.hpp"
@@ -242,6 +243,45 @@ TEST_F(RegionCatalogTest, KeepsTheLastGoodPackageWhenABuildFailsAndRemovesUndefi
     }
 }
 
+TEST_F(RegionCatalogTest, AnUnreadableDefinitionsFileKeepsEveryPackage) {
+    RegionCatalog catalog(settings(), log_, clock_);
+    catalog.scan();
+    const RegionPackage alpha = *catalog.find("alpha");
+    std::ofstream(dir_ / "regions.json", std::ios::trunc) << "{\"regions\": [";  // a typo while editing
+    catalog.scan();
+    EXPECT_EQ(catalog.packages().size(), 2U);
+    EXPECT_TRUE(fs::exists(catalog.store().archive(alpha)));
+
+    // An entry with an id of the wrong type is left out like any other wrong entry.
+    define(json::array({{{"id", 5}, {"bbox", {35.1, 48.5, 35.3, 48.7}}},
+                        {{"id", "alpha"}, {"name", "Alpha"}, {"bbox", {35.1, 48.5, 35.3, 48.7}}, {"glyphRanges", {"1024-1279"}}}}));
+    catalog.scan();
+    EXPECT_EQ(catalog.statuses().size(), 1U);
+    EXPECT_EQ(catalog.find("alpha")->version, alpha.version);
+}
+
+TEST_F(RegionCatalogTest, AWorldStyleOfAnUnexpectedShapeFailsTheRegionOnly) {
+    world_->write("style-dark.json", R"({"version": 8, "metadata": "not an object", "sources": {}, "layers": []})");
+    RegionCatalog catalog(settings(), log_, clock_);
+    catalog.scan();
+    const auto statuses = catalog.statuses();
+    ASSERT_EQ(statuses.size(), 2U);
+    EXPECT_EQ(statuses[0].state, RegionState::Failed);
+    EXPECT_FALSE(statuses[0].error.empty());
+}
+
+TEST_F(RegionCatalogTest, ANewGlyphFileRebuildsThePackages) {
+    RegionCatalog catalog(settings(), log_, clock_);
+    catalog.scan();
+    const RegionPackage first = *catalog.find("alpha");
+    clock_.advance(std::chrono::seconds(60));
+    const fs::path fontstack = world_->dir() / "fonts" / "Noto Sans Regular";
+    std::ofstream(fontstack / "256-511.pbf") << "glyphs";
+    fs::last_write_time(fontstack, fs::file_time_type::clock::now() + std::chrono::seconds(5));
+    catalog.scan();
+    EXPECT_NE(catalog.find("alpha")->builtAt, first.builtAt);
+}
+
 TEST_F(RegionCatalogTest, WithoutTheToolEveryRegionFailsAndNothingIsBuilt) {
     RegionCatalog catalog(settings(dir_ / "no-such-pmtiles"), log_, clock_);
     catalog.scan();
@@ -261,4 +301,15 @@ TEST(RegionCatalog, IsOffWithoutAWorldDirectory) {
     catalog.reload();
     EXPECT_TRUE(catalog.packages().empty());
     EXPECT_EQ(catalog.scans(), 0U);
+}
+
+TEST(RegionApi, StreamsAQuarterOfTheRequestThreadsAtOnceUnlessConfigured) {
+    Logger log;
+    const test::FakeClock clock;
+    RegionCatalog catalog({}, log, clock);
+    const AdminToken admin("");
+    EXPECT_EQ(RegionApi(catalog, admin, 0, 16).downloadGate().limits().concurrency, 4);
+    EXPECT_EQ(RegionApi(catalog, admin, 0, 2).downloadGate().limits().concurrency, 1);
+    EXPECT_EQ(RegionApi(catalog, admin, 7, 16).downloadGate().limits().concurrency, 7);
+    EXPECT_EQ(RegionApi(catalog, admin, 1, 16).downloadGate().limits().queue, 0) << "a busy client retries, it does not wait";
 }

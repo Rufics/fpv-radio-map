@@ -961,6 +961,7 @@ paths:
                   message: { type: string }
                   version: { type: string, description: 'The current version' }
         '416': { description: The range lies outside the package }
+        '503': { description: 'Too many downloads at once (regions.maxDownloads); Retry-After' }
 
   /regions/{regionId}/previews/{version}.png:
     get:

@@ -172,7 +172,10 @@
     "pmtiles": "/usr/local/bin/pmtiles",
     // Minutes between checks for changed regions or world files; 0 = only at start and on
     // POST /api/v1/admin/regions/reload.
-    "rescanMinutes": 10
+    "rescanMinutes": 10,
+    // Package downloads streamed at once; each holds a request thread while it lasts, so more
+    // get 503 with Retry-After. 0 = a quarter of server.threads.
+    "maxDownloads": 0
   },
   // Merged over the defaults GET /api/v1/config/map returns (tiles-builder names under /tiles).
   "map": {

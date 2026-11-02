@@ -43,7 +43,7 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
         "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "concurrency",
         "queue", "waitMs", "map", "metrics", "enabled", "allowFrom", "ops", "drainSeconds", "listenUrl", "settingsSync", "pollSeconds",
-        "regions", "worldDir", "definitions", "packageDir", "pmtiles", "rescanMinutes"});
+        "regions", "worldDir", "definitions", "packageDir", "pmtiles", "rescanMinutes", "maxDownloads"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -201,6 +201,8 @@ Config::Regions readRegions(const json& r) {
     readPath(r, "pmtiles", out.pmtiles);
     read(r, "rescanMinutes", out.rescanMinutes);
     if (out.rescanMinutes < 0) throw std::invalid_argument("regions.rescanMinutes must be >= 0");
+    read(r, "maxDownloads", out.maxDownloads);
+    if (out.maxDownloads < 0) throw std::invalid_argument("regions.maxDownloads must be >= 0");
     return out;
 }
 

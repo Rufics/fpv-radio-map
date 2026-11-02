@@ -201,12 +201,14 @@ private:
 
 }  // namespace
 
-void HttpReply::file(const std::filesystem::path& file, const char* contentType, bool ranged) {
+void HttpReply::file(const std::filesystem::path& file, const char* contentType, bool ranged,
+                     std::shared_ptr<const void> hold) {
     auto body = std::make_shared<const FileBody>(file);
     // httplib cuts the range only out of a 206 answer (and turns a bad range into 416).
     response_.status = ranged ? 206 : 200;
     response_.set_content_provider(body->size(), contentType,
-                                   [body](std::size_t offset, std::size_t length, httplib::DataSink& sink) {
+                                   [body, hold = std::move(hold)](std::size_t offset, std::size_t length,
+                                                                  httplib::DataSink& sink) {
                                        return body->write(offset, length, sink);
                                    });
 }

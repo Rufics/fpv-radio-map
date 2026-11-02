@@ -61,7 +61,7 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
       flightLogApi_(services_),
       dataApi_(services_, admin_),
       adminApi_(services_, admin_),
-      regionApi_(services_.regions(), admin_),
+      regionApi_(services_.regions(), admin_, config_.regions.maxDownloads, config_.server.threads),
       startTimeSeconds_(std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count()),
       http_(std::make_unique<httplib::Server>()) {
     configureServer();
@@ -123,7 +123,8 @@ std::string Application::metricsText() const {
                     {"job-runners", sample.jobs.runners},
                     {"job-cells", sample.jobs.cells}};
     sample.db = services_.db().stats();
-    sample.gates = {services_.auth().pinGate().sample("pin"), missionApi_.calcGate().sample("calc")};
+    sample.gates = {services_.auth().pinGate().sample("pin"), missionApi_.calcGate().sample("calc"),
+                    regionApi_.downloadGate().sample("downloads")};
     sample.caches = {{"dem-blocks", services_.blocks().stats()},
                      {"results-memory", services_.results().memoryStats()},
                      {"results-table", services_.results().tableCounts(), false}};

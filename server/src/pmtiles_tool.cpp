@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <array>
+#include <cerrno>
 #include <chrono>
 #include <format>
 #include <fstream>
@@ -96,13 +97,17 @@ int PmtilesTool::run(const std::vector<std::string>& args, const fs::path& logFi
         throw RegionError(std::format("cannot start {}: {}", executable_.string(), std::generic_category().message(error)));
     }
     int status = 0;
-    while (waitpid(pid, &status, WNOHANG) == 0) {
+    pid_t waited = 0;
+    while ((waited = waitpid(pid, &status, WNOHANG)) == 0) {
         if (stop.stop_requested()) {
             kill(pid, SIGTERM);
             waitpid(pid, &status, 0);
             return -1;
         }
         std::this_thread::sleep_for(kPoll);
+    }
+    if (waited < 0) {  // the child cannot be waited for, so its result is unknown
+        throw RegionError(std::format("cannot wait for {}: {}", executable_.string(), std::generic_category().message(errno)));
     }
     if (WIFEXITED(status)) return WEXITSTATUS(status);
     return 128 + (WIFSIGNALED(status) ? WTERMSIG(status) : 0);

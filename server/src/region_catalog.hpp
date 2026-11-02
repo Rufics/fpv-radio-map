@@ -97,8 +97,9 @@ private:
     void set(RegionStatus status);
     /// Drops the regions that are no longer in `found`.
     void retain(const std::vector<RegionDefinition>& found);
-    /// The definitions file as it is now; logs what it leaves out.
-    [[nodiscard]] std::vector<RegionDefinition> definitions() const;
+    /// The definitions file as it is now, and logs what it leaves out; nullopt when the file
+    /// cannot be read or parsed, so a typo there never removes the packages already built.
+    [[nodiscard]] std::optional<std::vector<RegionDefinition>> definitions() const;
 
     Settings settings_;
     Logger& log_;

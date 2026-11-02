@@ -75,8 +75,10 @@ public:
     /// 304 for a client whose copy has entity tag `etag`.
     void notModified(const std::string& etag);
     /// Streams `file` from disk with 200, or with 206 and the part asked for when the request is
-    /// `ranged` (has a Range header). HttpError 404 when the file cannot be opened.
-    void file(const std::filesystem::path& file, const char* contentType, bool ranged);
+    /// `ranged` (has a Range header). HttpError 404 when the file cannot be opened. `hold` is kept
+    /// alive until the last byte is sent or the client goes away, for example a download slot.
+    void file(const std::filesystem::path& file, const char* contentType, bool ranged,
+              std::shared_ptr<const void> hold = nullptr);
     [[nodiscard]] int status() const;
 
 private:

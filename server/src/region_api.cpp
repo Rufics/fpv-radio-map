@@ -2,6 +2,8 @@
 
 #include "security.hpp"
 
+#include <algorithm>
+#include <chrono>
 #include <format>
 
 namespace rfmap {
@@ -13,7 +15,21 @@ constexpr const char* kImmutable = "public, max-age=31536000, immutable";
 
 std::string regionUrl(const RegionPackage& p) { return std::format("{}/regions/{}", RegionApi::kPrefix, p.id); }
 
+/// The download slots: as asked, or a quarter of the request threads but at least one. Nobody
+/// queues for one; a client that finds them busy retries after the Retry-After.
+Bulkhead::Limits downloadLimits(int maxDownloads, int serverThreads) {
+    const int automatic = std::max(1, serverThreads / 4);
+    return {maxDownloads > 0 ? maxDownloads : automatic, 0, std::chrono::milliseconds(0)};
+}
+
 }  // namespace
+
+RegionApi::RegionApi(RegionCatalog& catalog, const AdminToken& admin, int maxDownloads, int serverThreads)
+    : catalog_(catalog),
+      admin_(admin),
+      downloads_(std::make_unique<Bulkhead>(downloadLimits(maxDownloads, serverThreads),
+                                            "too many package downloads at once, try again shortly",
+                                            "regions.maxDownloads")) {}
 
 json RegionApi::describe(const RegionPackage& p) {
     const std::string base = regionUrl(p);
@@ -74,7 +90,9 @@ void RegionApi::getPackage(const HttpRequest& req, HttpReply& res) const {
     }
     res.header("ETag", p.etag());
     res.header("Content-Disposition", std::format("attachment; filename=\"{}-{}.zip\"", p.id, p.version.substr(0, 12)));
-    res.file(catalog_.store().archive(p), "application/zip", !req.header("Range").empty());
+    // The slot is held by the response body and freed once it is sent or the client leaves.
+    auto slot = std::make_shared<const Bulkhead::Permit>(downloads_->enter());
+    res.file(catalog_.store().archive(p), "application/zip", !req.header("Range").empty(), std::move(slot));
 }
 
 void RegionApi::getPreview(const HttpRequest& req, HttpReply& res) const {

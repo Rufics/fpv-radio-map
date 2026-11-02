@@ -203,14 +203,20 @@ std::string RegionDefinition::canonical() const {
 std::vector<RegionDefinition> RegionDefinitions::load(const fs::path& file, const Skipped& skipped) {
     std::vector<RegionDefinition> out;
     std::error_code ec;
-    if (!fs::exists(file, ec)) return out;
+    if (!fs::exists(file, ec)) {
+        if (ec && ec != std::errc::no_such_file_or_directory) {
+            throw RegionError(std::format("cannot read {}: {}", file.string(), ec.message()));
+        }
+        return out;  // no file: no regions
+    }
     const json doc = readJsonFile(file);
     if (!doc.is_object() || !doc.contains("regions") || !doc.at("regions").is_array()) {
         throw RegionError(file.string() + " must hold {\"regions\": [...]}");
     }
     std::set<std::string, std::less<>> taken;
     for (const json& entry : doc.at("regions")) {
-        const std::string label = entry.is_object() ? entry.value("id", "?") : "?";
+        const bool named = entry.is_object() && entry.contains("id") && entry.at("id").is_string();
+        const std::string label = named ? entry.at("id").get<std::string>() : "?";
         try {
             RegionDefinition definition(entry, file.parent_path());
             if (!taken.insert(definition.id()).second) throw RegionError("the id is used by an earlier region");

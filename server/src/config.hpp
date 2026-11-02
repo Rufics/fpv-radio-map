@@ -131,6 +131,8 @@ public:
         std::filesystem::path pmtiles = "/usr/local/bin/pmtiles";
         /// Minutes between scans for changed regions; 0 = only at start and on admin reload.
         int rescanMinutes = 10;
+        /// Package downloads streamed at once; 0 = automatic, a quarter of server.threads.
+        int maxDownloads = 0;
     };
     Regions regions;
 

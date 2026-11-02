@@ -69,18 +69,20 @@ void RegionCatalog::run() {
             scanWith(stop);
         } catch (const std::system_error& e) {  // the package directory or its lock file
             log_.error("regions", std::string("scan failed: ") + e.what());
+        } catch (const json::exception& e) {  // an input of an unexpected shape that no build caught
+            log_.error("regions", std::string("scan failed: ") + e.what());
         }
     }
 }
 
-std::vector<RegionDefinition> RegionCatalog::definitions() const {
+std::optional<std::vector<RegionDefinition>> RegionCatalog::definitions() const {
     try {
         return RegionDefinitions::load(settings_.definitions, [this](const std::string& id, const std::string& why) {
             log_.warn("regions", std::format("region '{}' skipped: {}", id, why));
         });
     } catch (const RegionError& e) {
-        log_.error("regions", e.what());
-        return {};
+        log_.error("regions", std::string(e.what()) + "; the packages already built stay as they are");
+        return std::nullopt;
     }
 }
 
@@ -88,7 +90,9 @@ void RegionCatalog::scanWith(const std::stop_token& stop) {
     const std::scoped_lock lock(scanMutex_);
     fs::create_directories(settings_.packageDir);
     const FileLock processes(store_.lockFile(), FileLock::Mode::Exclusive);
-    const auto found = definitions();
+    const auto loaded = definitions();
+    if (!loaded) return;
+    const std::vector<RegionDefinition>& found = *loaded;
     retain(found);
     std::string tool;
     try {
@@ -139,6 +143,8 @@ bool RegionCatalog::build(const Pending& pending, const RegionPackageBuilder& bu
     } catch (const RegionError& e) {
         failed(status, e.what());
     } catch (const std::system_error& e) {  // the work directory: disk full, permissions
+        failed(status, e.what());
+    } catch (const json::exception& e) {  // a world style of an unexpected shape
         failed(status, e.what());
     }
     set(std::move(status));

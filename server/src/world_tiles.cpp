@@ -22,6 +22,18 @@ bool isPlainDirectory(const fs::path& dir) {
     return fs::symlink_status(dir, ec).type() == fs::file_type::directory;
 }
 
+/// The directories directly in `dir`, sorted so the fingerprint does not depend on the listing order.
+std::vector<fs::path> plainDirectories(const fs::path& dir) {
+    std::vector<fs::path> out;
+    if (!isPlainDirectory(dir)) return out;
+    std::error_code ec;
+    for (const fs::directory_entry& entry : fs::directory_iterator(dir, ec)) {
+        if (isPlainDirectory(entry.path())) out.push_back(entry.path());
+    }
+    std::ranges::sort(out);
+    return out;
+}
+
 }  // namespace
 
 std::vector<fs::path> WorldTiles::plainFiles(const fs::path& dir) {
@@ -92,9 +104,10 @@ std::string WorldTiles::fingerprint(const std::vector<std::string>& layers) cons
         if (const auto file = layer(name)) text += stamp(*file);
     }
     text += stamp(dir_ / kStyleFile);
-    // Glyph and sprite files change together with the style in practice; their directories'
-    // times change whenever a file is added or replaced in them.
+    // A directory's time changes whenever a file is added, removed or replaced in it: the fonts
+    // directory for a fontstack, each fontstack's directory for its glyph ranges.
     text += stamp(dir_ / kFontsDir);
+    for (const fs::path& fontstack : plainDirectories(dir_ / kFontsDir)) text += stamp(fontstack);
     text += stamp(dir_ / kSpritesDir);
     for (const fs::path& file : sprites()) text += stamp(file);
     text += stamp(dir_ / kDemFile);

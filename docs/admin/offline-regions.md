@@ -91,7 +91,8 @@ the go-pmtiles version. For each region where something changed it:
 While a region is being rebuilt, clients keep getting its previous package. If a build fails, the
 previous package stays current and the error is shown under **Admin → Data sources**. Packages of
 regions that were taken out of the list, older versions and the leftovers of interrupted builds
-are removed at the end of each scan. Several server processes can share `regions.packageDir`: a
+are removed at the end of each scan. If `regions.json` cannot be read or is not valid JSON, the
+scan logs the error and changes nothing, so a typo while editing never removes a package. Several server processes can share `regions.packageDir`: a
 lock file lets one build at a time.
 
 ![Offline regions under Admin → Data sources](../images/admin-offline-regions.png)
@@ -137,6 +138,7 @@ the client.
 | `regions.packageDir` | `/var/lib/rfmap/regions` | Written only by the server. |
 | `regions.pmtiles` | `/usr/local/bin/pmtiles` | go-pmtiles. The server image carries the same pinned release as tools/tiles-builder. It is started directly with fixed arguments and an empty environment, never through a shell. |
 | `regions.rescanMinutes` | 10 | 0 = only at start and on reload. A scan that finds nothing changed reads no tile data. |
+| `regions.maxDownloads` | 0 (automatic) | Package downloads streamed at once. Each one holds a request thread until the client has it all, so a further one gets `503` with `Retry-After` instead of starving the other requests. Automatic is a quarter of `server.threads`, at least one. Metrics show it as the `downloads` gate. |
 
 The bundled nginx streams package downloads without buffering them (`proxy_buffering off`) and
 passes Range requests through. Behind another proxy, do the same for
