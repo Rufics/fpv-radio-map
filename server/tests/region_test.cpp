@@ -116,8 +116,22 @@ TEST(RegionStyle, FindsTheFontstacksInsideExpressionsButNotInFeatureData) {
                           {{"layout", {{"text-font", {"Noto Sans Medium"}}}}}}}};
     EXPECT_EQ(RegionStyle::fontstacks(style),
               (std::vector<std::string>{"Noto Sans Bold,Arial", "Noto Sans Medium", "Noto Sans Regular"}));
-    EXPECT_TRUE(RegionStyle::fontsByExpression(style));
-    EXPECT_FALSE(RegionStyle::fontsByExpression({{"layers", {{{"layout", {{"text-font", {"Noto Sans Medium"}}}}}}}}));
+    EXPECT_TRUE(RegionStyle::fontsFromData(style));
+    EXPECT_FALSE(RegionStyle::fontsFromData({{"layers", {{{"layout", {{"text-font", {"Noto Sans Medium"}}}}}}}}));
+}
+
+TEST(RegionStyle, KnowsWhenEveryFontAnExpressionPicksIsInTheStyle) {
+    const auto layers = [](const json& font) { return json{{"layers", {{{"layout", {{"text-font", font}}}}}}}; };
+    const json step = {"step", {"zoom"}, {"literal", {"Noto Sans Regular"}}, 10, {"literal", {"Noto Sans Bold"}}};
+    const json match = {"match", {"get", "class"}, "city", {"literal", {"Noto Sans Bold"}}, {"literal", {"Noto Sans Regular"}}};
+    const json picked = {"case", {"has", "bold"}, match, {"coalesce", step, {"literal", {"Noto Sans Medium"}}}};
+    EXPECT_FALSE(RegionStyle::fontsFromData(layers(picked)));
+    EXPECT_EQ(RegionStyle::fontstacks(layers(picked)),
+              (std::vector<std::string>{"Noto Sans Bold", "Noto Sans Medium", "Noto Sans Regular"}));
+    EXPECT_FALSE(RegionStyle::fontsFromData(layers({"semiliteral", {"Noto Sans Regular"}})));
+    EXPECT_TRUE(RegionStyle::fontsFromData(layers({"split", {"get", "font"}, ","})));
+    EXPECT_TRUE(RegionStyle::fontsFromData(layers({"step", {"zoom"}, {"literal", {"Noto Sans Regular"}}, 10, {"get", "font"}})));
+    EXPECT_TRUE(RegionStyle::fontsFromData(layers({"let", "f", {"get", "font"}, {"var", "f"}})));
 }
 
 TEST(PmtilesTool, CutsByBoxOrPolygonWithoutAShell) {
@@ -373,7 +387,7 @@ TEST_F(RegionCatalogTest, ANewGlyphFileRebuildsThePackages) {
 TEST_F(RegionCatalogTest, AFontChosenByFeatureDataBringsEveryWorldFont) {
     json style = test::TestWorld::style();
     style["layers"].push_back({{"id", "poi"}, {"type", "symbol"}, {"source", "openmaptiles"}, {"source-layer", "poi"},
-                               {"layout", {{"text-field", "{name}"}, {"text-font", {"get", "font"}}}}});
+                               {"layout", {{"text-field", "{name}"}, {"text-font", {"split", {"get", "font"}, ","}}}}});
     world_->write("style-dark.json", style.dump());
     RegionCatalog catalog(settings(), log_, clock_);
     catalog.scan();

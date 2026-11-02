@@ -8,6 +8,7 @@
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <tuple>
 
 namespace rfmap {
@@ -24,13 +25,22 @@ bool isHex64(const std::string& text) {
     return text.size() == 64 && text.find_first_not_of("0123456789abcdef") == std::string::npos;
 }
 
-/// The MapLibre expression operators a text-font value can be built from.
-constexpr std::array<std::string_view, 38> kExpressionOperators{
-    "!",        "!=",          "<",      "<=",     ">",             "==",     ">=",            "all",
-    "any",      "array",       "at",     "boolean", "case",         "coalesce", "concat",      "feature-state",
-    "format",   "geometry-type", "get",  "has",    "id",            "in",     "index-of",      "interpolate",
-    "let",      "literal",     "match",  "number", "properties",    "slice",  "step",          "string",
-    "to-string", "var",        "zoom",   "line-progress", "heatmap-density", "accumulated"};
+/// The operators of the MapLibre style spec (expression_name in v8.json): an array that starts
+/// with one is an expression, not a list of font names.
+constexpr std::array<std::string_view, 88> kExpressionOperators{
+    "!",          "!=",           "%",           "*",          "+",          "-",          "/",
+    "<",          "<=",           "==",          ">",          ">=",         "^",          "abs",
+    "accumulated", "acos",        "all",         "any",        "array",      "asin",       "at",
+    "atan",       "boolean",      "case",        "ceil",       "coalesce",   "collator",   "concat",
+    "cos",        "distance",     "downcase",    "e",          "elevation",  "feature-state", "floor",
+    "format",     "geometry-type", "get",        "global-state", "has",      "heatmap-density", "id",
+    "image",      "in",           "index-of",    "interpolate", "interpolate-hcl", "interpolate-lab", "is-supported-script",
+    "join",       "length",       "let",         "line-progress", "literal", "ln",         "ln2",
+    "log10",      "log2",         "match",       "max",        "min",        "number",     "number-format",
+    "object",     "pi",           "properties",  "resolved-locale", "rgb",   "rgba",       "round",
+    "semiliteral", "sin",         "slice",       "split",      "sqrt",       "step",       "string",
+    "tan",        "to-boolean",   "to-color",    "to-number",  "to-rgba",    "to-string",  "typeof",
+    "upcase",     "var",          "within",      "zoom"};
 
 /// An expression rather than a literal list of font names.
 bool isExpression(const json& value) {
@@ -38,18 +48,58 @@ bool isExpression(const json& value) {
            std::ranges::find(kExpressionOperators, value.front().get<std::string>()) != kExpressionOperators.end();
 }
 
-/// The fontstacks a text-font value names: a literal list, or the literal lists inside an
-/// expression (a stack read from feature data, such as ["get", "font"], is not listed here).
-void collectFontstacks(const json& value, std::set<std::string, std::less<>>& out) {
-    if (!value.is_array() || value.empty()) return;
-    if (isExpression(value)) {
-        for (std::size_t i = 1; i < value.size(); ++i) collectFontstacks(value.at(i), out);
-        return;
+/// Adds `value` as one fontstack when it is a list of font names; false when it is not.
+bool addStack(const json& value, std::set<std::string, std::less<>>& out) {
+    if (!value.is_array() || value.empty() || !std::ranges::all_of(value, [](const json& f) { return f.is_string(); })) {
+        return false;
     }
-    if (!std::ranges::all_of(value, [](const json& f) { return f.is_string(); })) return;
     std::string stack;
     for (const json& f : value) stack += (stack.empty() ? "" : ",") + f.get<std::string>();
     out.insert(stack);
+    return true;
+}
+
+/// Where the results of an expression that picks one of its arguments are; nothing for any
+/// other operator, whose result this reader cannot know.
+std::optional<std::vector<std::size_t>> resultIndices(std::string_view op, std::size_t size) {
+    std::vector<std::size_t> out;
+    if (op == "step") {
+        for (std::size_t i = 2; i < size; i += 2) out.push_back(i);  // ["step", input, out0, stop1, out1, ...]
+    } else if (op == "match") {
+        for (std::size_t i = 3; i + 1 < size; i += 2) out.push_back(i);  // ["match", input, label, out, ..., fallback]
+        if (size > 2) out.push_back(size - 1);
+    } else if (op == "case") {
+        for (std::size_t i = 2; i + 1 < size; i += 2) out.push_back(i);  // ["case", cond, out, ..., fallback]
+        if (size > 1) out.push_back(size - 1);
+    } else if (op == "coalesce") {
+        for (std::size_t i = 1; i < size; ++i) out.push_back(i);
+    } else if (op == "let" || op == "array") {
+        if (size > 1) out.push_back(size - 1);  // the body, the checked value
+    } else {
+        return std::nullopt;
+    }
+    return out;
+}
+
+/// Collects the fontstacks a text-font value can produce: a literal list, or the literal lists
+/// an expression picks from. True when some result is not one of them, such as a stack read
+/// from the feature data (["get", "font"]) or split from a string.
+bool collectFontstacks(const json& value, std::set<std::string, std::less<>>& out) {
+    if (!value.is_array() || value.empty()) return false;
+    if (!isExpression(value)) return !addStack(value, out);
+    const std::string op = value.front().get<std::string>();
+    if (op == "literal" || op == "semiliteral") return value.size() != 2 || !addStack(value.at(1), out);
+    const auto results = resultIndices(op, value.size());
+    if (!results) return true;
+    bool open = false;
+    for (const std::size_t i : *results) open = collectFontstacks(value.at(i), out) || open;
+    return open;
+}
+
+/// The text-font value of a style layer; null when it has none.
+json textFont(const json& layer) {
+    if (!layer.is_object() || !layer.contains("layout") || !layer.at("layout").is_object()) return {};
+    return layer.at("layout").value("text-font", json());
 }
 
 void renameInto(const fs::path& from, const fs::path& to) {
@@ -259,19 +309,14 @@ json RegionStyle::rewrite(json style, const RegionPackage& package, bool sprites
 std::vector<std::string> RegionStyle::fontstacks(const json& style) {
     std::set<std::string, std::less<>> out;
     if (!style.contains("layers") || !style.at("layers").is_array()) return {};
-    for (const json& layer : style.at("layers")) {
-        if (!layer.is_object() || !layer.contains("layout") || !layer.at("layout").is_object()) continue;
-        collectFontstacks(layer.at("layout").value("text-font", json()), out);
-    }
+    for (const json& layer : style.at("layers")) collectFontstacks(textFont(layer), out);
     return {out.begin(), out.end()};
 }
 
-bool RegionStyle::fontsByExpression(const json& style) {
+bool RegionStyle::fontsFromData(const json& style) {
     if (!style.contains("layers") || !style.at("layers").is_array()) return false;
-    return std::ranges::any_of(style.at("layers"), [](const json& layer) {
-        return layer.is_object() && layer.contains("layout") && layer.at("layout").is_object() &&
-               isExpression(layer.at("layout").value("text-font", json()));
-    });
+    std::set<std::string, std::less<>> seen;
+    return std::ranges::any_of(style.at("layers"), [&seen](const json& layer) { return collectFontstacks(textFont(layer), seen); });
 }
 
 // ---- builder -----------------------------------------------------------------------------
@@ -311,9 +356,9 @@ std::vector<RegionPackageBuilder::Entry> RegionPackageBuilder::styleAssets(const
                                                                            const json& style) const {
     std::vector<Entry> out;
     std::vector<std::string> stacks = RegionStyle::fontstacks(style);
-    if (RegionStyle::fontsByExpression(style)) {
-        // The font may come from the feature data: every fontstack of the world goes in, so the
-        // labels still draw offline.
+    if (RegionStyle::fontsFromData(style)) {
+        // A font the style does not list may come from the feature data: every fontstack of the
+        // world goes in, so the labels still draw offline.
         std::ranges::move(t_.world.fontstacks(), std::back_inserter(stacks));
         std::ranges::sort(stacks);
         const auto [first, last] = std::ranges::unique(stacks);
