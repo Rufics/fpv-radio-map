@@ -433,9 +433,10 @@ TEST(RegionApi, StreamsAQuarterOfTheRequestThreadsAtOnceUnlessConfigured) {
     Logger log;
     const test::FakeClock clock;
     RegionCatalog catalog({}, log, clock);
+    RegionAreas areas({}, log, clock);
     const AdminToken admin("");
-    EXPECT_EQ(RegionApi(catalog, admin, 0, 16).downloadGate().limits().concurrency, 4);
-    EXPECT_EQ(RegionApi(catalog, admin, 0, 2).downloadGate().limits().concurrency, 1);
-    EXPECT_EQ(RegionApi(catalog, admin, 7, 16).downloadGate().limits().concurrency, 7);
-    EXPECT_EQ(RegionApi(catalog, admin, 1, 16).downloadGate().limits().queue, 0) << "a busy client retries, it does not wait";
+    EXPECT_EQ(RegionApi(catalog, areas, admin, 0, 16).downloadGate().limits().concurrency, 4);
+    EXPECT_EQ(RegionApi(catalog, areas, admin, 0, 2).downloadGate().limits().concurrency, 1);
+    EXPECT_EQ(RegionApi(catalog, areas, admin, 7, 16).downloadGate().limits().concurrency, 7);
+    EXPECT_EQ(RegionApi(catalog, areas, admin, 1, 16).downloadGate().limits().queue, 0) << "a busy client retries, it does not wait";
 }

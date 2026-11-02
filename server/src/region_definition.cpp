@@ -1,9 +1,11 @@
 #include "region_definition.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <fstream>
 #include <limits>
+#include <numbers>
 #include <set>
 
 namespace rfmap {
@@ -15,6 +17,24 @@ namespace {
 constexpr std::size_t kMaxIdLength = 64;
 constexpr std::size_t kMaxNameLength = 120;
 constexpr int kMaxZoom = 22;
+/// The mean radius of the Earth (IUGG), km.
+constexpr double kEarthRadiusKm = 6371.0088;
+constexpr double kRadiansPerDegree = std::numbers::pi / 180.0;
+
+/// The area a closed ring encloses on the sphere, km², whichever way it runs: the line integral
+/// of Chamberlain and Duquette, "Some algorithms for polygons on a sphere" (JPL, 2007).
+double ringAreaKm2(const json& ring) {
+    const std::size_t n = ring.size() - 1;  // the last position repeats the first
+    if (n < 3) return 0.0;
+    double sum = 0.0;
+    for (std::size_t i = 0; i < n; ++i) {
+        const json& previous = ring[(i + n - 1) % n];
+        const json& next = ring[(i + 1) % n];
+        const double dLon = (next[0].get<double>() - previous[0].get<double>()) * kRadiansPerDegree;
+        sum += dLon * std::sin(ring[i][1].get<double>() * kRadiansPerDegree);
+    }
+    return std::abs(sum) * kEarthRadiusKm * kEarthRadiusKm / 2.0;
+}
 
 bool validLonLat(const json& position) {
     if (!position.is_array() || position.size() < 2 || !position[0].is_number() || !position[1].is_number()) {
@@ -132,6 +152,30 @@ GeoBox RegionArea::boxAround(const json& polygons) {
     const auto box = GeoBox::fromJson(json::array({minLon, minLat, maxLon, maxLat}));
     if (!box) throw RegionError("the boundary encloses no area");
     return *box;
+}
+
+double RegionArea::areaKm2() const {
+    if (!polygon_) {
+        const double dLon = (box_.maxLon() - box_.minLon()) * kRadiansPerDegree;
+        const double band = std::sin(box_.maxLat() * kRadiansPerDegree) - std::sin(box_.minLat() * kRadiansPerDegree);
+        return dLon * band * kEarthRadiusKm * kEarthRadiusKm;
+    }
+    double total = 0.0;
+    for (const json& polygon : polygon_->at("coordinates")) {
+        double area = ringAreaKm2(polygon.front());
+        for (std::size_t hole = 1; hole < polygon.size(); ++hole) area -= ringAreaKm2(polygon[hole]);
+        total += std::max(0.0, area);
+    }
+    return total;
+}
+
+std::size_t RegionArea::vertices() const {
+    if (!polygon_) return 4;
+    std::size_t count = 0;
+    for (const json& polygon : polygon_->at("coordinates")) {
+        for (const json& ring : polygon) count += ring.size() - 1;
+    }
+    return count;
 }
 
 RegionDefinition::RegionDefinition(const json& entry, const fs::path& base)

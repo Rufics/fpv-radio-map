@@ -73,6 +73,10 @@ public:
     [[nodiscard]] const GeoBox& box() const { return box_; }
     /// The polygon as a GeoJSON MultiPolygon geometry; nothing for a plain box.
     [[nodiscard]] const std::optional<json>& polygon() const { return polygon_; }
+    /// The area on the Earth in km²: the polygon's, holes taken out, or the box's.
+    [[nodiscard]] double areaKm2() const;
+    /// The positions of every ring of the polygon; 4 for a box.
+    [[nodiscard]] std::size_t vertices() const;
 
 private:
     RegionArea(const GeoBox& box, json polygon) : box_(box), polygon_(std::move(polygon)) {}

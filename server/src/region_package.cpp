@@ -330,6 +330,13 @@ std::vector<std::string> RegionPackageBuilder::layersOf(const RegionDefinition& 
     return out;
 }
 
+std::string RegionPackageBuilder::fingerprint(const RegionDefinition& region, const WorldTiles& world,
+                                              const std::string& tool) {
+    const std::string text = std::format("format {}\ntool {}\n{}\n{}", kFormat, tool, region.canonical(),
+                                         world.fingerprint(layersOf(region, world)));
+    return Secrets::hex(Secrets::sha256(text));
+}
+
 std::vector<RegionPackageBuilder::Entry> RegionPackageBuilder::extractLayers(const RegionDefinition& region,
                                                                              const RegionPackage& package) const {
     const fs::path work = t_.store.workDir(region.id());

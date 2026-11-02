@@ -150,6 +150,10 @@ public:
 
     /// The layers a package of `region` carries: those it asks for that the world has.
     [[nodiscard]] static std::vector<std::string> layersOf(const RegionDefinition& region, const WorldTiles& world);
+    /// What a package of `region` is built from, as a SHA-256 (hex): the package format, the
+    /// `tool` version, the definition and the world files it reads. Unchanged = no rebuild.
+    [[nodiscard]] static std::string fingerprint(const RegionDefinition& region, const WorldTiles& world,
+                                                 const std::string& tool);
 
     /// One file of a package: its name inside, and where its bytes come from.
     struct Entry {
