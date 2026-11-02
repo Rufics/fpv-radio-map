@@ -115,6 +115,19 @@ std::optional<RegionPackage> RegionPackageStore::load(const std::string& id) con
     return package;
 }
 
+std::vector<RegionPackage> RegionPackageStore::loadAll() const {
+    std::vector<RegionPackage> out;
+    std::error_code ec;
+    for (const fs::directory_entry& entry : fs::directory_iterator(dir_, ec)) {
+        const fs::path& path = entry.path();
+        if (path.extension() != ".json") continue;
+        const std::string id = path.stem().string();
+        if (!RegionDefinition::validId(id)) continue;  // temporary records start with a dot
+        if (auto package = load(id)) out.push_back(std::move(*package));
+    }
+    return out;
+}
+
 void RegionPackageStore::commit(const RegionPackage& package) const {
     renameInto(tempArchive(package.id), archive(package));
     if (package.preview) renameInto(tempPreview(package.id), preview(package));

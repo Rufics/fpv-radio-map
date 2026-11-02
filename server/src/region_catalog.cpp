@@ -93,7 +93,10 @@ void RegionCatalog::scanWith(const std::stop_token& stop) {
     fs::create_directories(settings_.packageDir);
     const FileLock processes(store_.lockFile(), FileLock::Mode::Exclusive);
     const auto loaded = definitions();
-    if (!loaded) return;
+    if (!loaded) {
+        recover();
+        return;
+    }
     const std::vector<RegionDefinition>& found = *loaded;
     retain(found);
     std::string tool;
@@ -163,6 +166,16 @@ void RegionCatalog::failAll(const std::vector<RegionDefinition>& found, const st
     log_.error("regions", "no packages built: " + why);
     for (const RegionDefinition& region : found) {
         set({region.id(), RegionState::Failed, why, store_.load(region.id())});
+    }
+}
+
+void RegionCatalog::recover() {
+    std::vector<RegionPackage> packages = store_.loadAll();
+    const std::scoped_lock lock(mutex_);
+    for (RegionPackage& p : packages) {
+        if (regions_.contains(p.id)) continue;
+        const std::string id = p.id;
+        regions_.try_emplace(id, RegionStatus{id, RegionState::Ready, {}, std::move(p)});
     }
 }
 

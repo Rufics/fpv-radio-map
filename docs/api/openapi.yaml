@@ -1425,10 +1425,10 @@ components:
         maxzoom: { type: [integer, 'null'], description: 'Highest zoom in the package; null = that of the world files' }
         layers: { type: array, items: { enum: [basemap, satellite, hillshade, terrain, contours] } }
         size: { type: integer, description: 'Bytes of the zip' }
-        version: { type: string, pattern: '^[0-9a-f]{64}$', description: 'SHA-256 of the package file list (names, sizes, SHA-256 of each file): changes exactly when the content does' }
+        version: { type: string, pattern: '^[0-9a-f]{64}$', description: 'Opaque package version: a SHA-256 over the whole manifest (metadata and every file with its size and SHA-256), so it changes exactly when the zip does. Compare it; do not compute it.' }
         sha256: { type: string, pattern: '^[0-9a-f]{64}$', description: 'SHA-256 of the zip, to check a download' }
         builtAt: { type: string, format: date-time }
-        preview: { type: [string, 'null'], description: 'URL of the preview PNG' }
+        preview: { type: [string, 'null'], description: 'URL of the preview PNG, named by its own SHA-256: it changes when the preview is redrawn' }
         package: { type: string, description: 'URL of the package zip of this version' }
 
     CacheTier:

@@ -292,6 +292,13 @@ TEST_F(RegionCatalogTest, AnUnreadableDefinitionsFileKeepsEveryPackage) {
     EXPECT_EQ(catalog.packages().size(), 2U);
     EXPECT_TRUE(fs::exists(catalog.store().archive(alpha)));
 
+    // A server started while the file is broken still serves what was built before.
+    RegionCatalog restarted(settings(), log_, clock_);
+    restarted.scan();
+    EXPECT_EQ(restarted.packages().size(), 2U);
+    ASSERT_TRUE(restarted.find("alpha"));
+    EXPECT_EQ(restarted.find("alpha")->version, alpha.version);
+
     // An entry with an id of the wrong type is left out like any other wrong entry.
     define(json::array({{{"id", 5}, {"bbox", {35.1, 48.5, 35.3, 48.7}}},
                         {{"id", "alpha"}, {"name", "Alpha"}, {"bbox", {35.1, 48.5, 35.3, 48.7}}, {"glyphRanges", {"1024-1279"}}}}));

@@ -104,10 +104,14 @@ the largest one again while it is rebuilt.
 
 ## 4. Versions and updates
 
-The **version** of a package is the SHA-256 of its file list (names, sizes and SHA-256 of every
-file). The zip is written the same way every time, with fixed times and owners. So rebuilding the
+The **version** of a package is the SHA-256 of everything in `manifest.json` except the version
+itself: the name, bbox, max zoom and layers, and the list of files with the size and SHA-256 of
+each. The zip is written the same way every time, with fixed times and owners. So rebuilding the
 same tiles gives the same version, and a client downloads again only when something it would get
-actually changed.
+actually changed. Treat the version as an opaque name: compare it, do not compute it.
+
+The preview has a version of its own, the SHA-256 of the PNG, because a new `dem.cog.tif` redraws
+it without changing the package. Its URL in the catalog changes with it.
 
 A client:
 
