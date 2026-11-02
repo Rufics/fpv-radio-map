@@ -51,7 +51,7 @@ std::string Sha256Stream::ofFile(const fs::path& file, const std::stop_token& st
     return hash.hex();
 }
 
-ZipWriter::ZipWriter(const fs::path& file) : out_(file, std::ios::binary | std::ios::trunc), archive_(archive_write_new()) {
+ZipWriter::ZipWriter(const fs::path& file) : out_(file, std::ios::binary | std::ios::trunc) {
     if (!out_) throw RegionError("cannot write " + file.string());
     archive* a = archive_.get();
     check(archive_write_set_format_zip(a));
@@ -72,7 +72,7 @@ la_ssize_t ZipWriter::write(archive*, void* self, const void* buffer, std::size_
     return static_cast<la_ssize_t>(length);
 }
 
-void ZipWriter::header(const std::string& name, std::uintmax_t size) {
+void ZipWriter::header(const std::string& name, std::uintmax_t size) const {
     const std::unique_ptr<archive_entry, FreeEntry> entry(archive_entry_new());
     archive_entry_set_pathname_utf8(entry.get(), name.c_str());
     archive_entry_set_filetype(entry.get(), AE_IFREG);
@@ -82,7 +82,7 @@ void ZipWriter::header(const std::string& name, std::uintmax_t size) {
     check(archive_write_header(archive_.get(), entry.get()));
 }
 
-void ZipWriter::data(const char* bytes, std::size_t size) {
+void ZipWriter::data(const char* bytes, std::size_t size) const {
     if (archive_write_data(archive_.get(), bytes, size) != static_cast<la_ssize_t>(size)) check(ARCHIVE_FATAL);
 }
 

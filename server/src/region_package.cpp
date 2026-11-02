@@ -266,10 +266,20 @@ std::vector<RegionPackageBuilder::Entry> RegionPackageBuilder::styleAssets(const
     for (const std::string& stack : RegionStyle::fontstacks(style)) {
         const auto files = t_.world.glyphs(stack, region.glyphRanges());
         if (files.empty()) t_.log.warn("regions", std::format("{}: no glyphs for '{}'", region.id(), stack));
-        for (const fs::path& f : files) out.push_back({std::format("glyphs/{}/{}", stack, f.filename().string()), f, {}});
+        for (const fs::path& f : files) out.push_back(snapshot(region, std::format("glyphs/{}/{}", stack, f.filename().string()), f));
     }
-    for (const fs::path& f : t_.world.sprites()) out.push_back({"sprites/" + f.filename().string(), f, {}});
+    for (const fs::path& f : t_.world.sprites()) out.push_back(snapshot(region, "sprites/" + f.filename().string(), f));
     return out;
+}
+
+RegionPackageBuilder::Entry RegionPackageBuilder::snapshot(const RegionDefinition& region, std::string name,
+                                                           const fs::path& file) const {
+    // A copy of its own, so the manifest and the zip read the same bytes even when the world
+    // files are replaced during the build. Glyph and sprite files are small.
+    const fs::path copy = t_.store.workDir(region.id()) / name;
+    fs::create_directories(copy.parent_path());
+    fs::copy_file(file, copy, fs::copy_options::overwrite_existing);
+    return {std::move(name), copy, {}};
 }
 
 json RegionPackageBuilder::manifest(RegionPackage& package, const std::vector<Entry>& entries) const {

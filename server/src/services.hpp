@@ -17,7 +17,6 @@
 #include "module_runner.hpp"
 #include "pg_auth_store.hpp"
 #include "rate_limiter.hpp"
-#include "region_catalog.hpp"
 #include "raster.hpp"
 #include "result_cache.hpp"
 #include "schemas.hpp"
@@ -70,7 +69,6 @@ public:
     [[nodiscard]] JobManager& jobs() const { return *jobs_; }
     [[nodiscard]] RateLimiter& limiter() const { return *limiter_; }
     /// Offline region packages, built in the background from the world map data.
-    [[nodiscard]] RegionCatalog& regions() const { return *regions_; }
     /// Keeps the admin settings of this process in step with the other processes.
     [[nodiscard]] SettingsSync& settings() const { return *settings_; }
 
@@ -143,7 +141,6 @@ private:
     std::unique_ptr<FlightLogService> flightLogs_;
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
-    std::unique_ptr<RegionCatalog> regions_;
     std::unique_ptr<SettingsSync> settings_;  ///< its reloads use the members above
 };
 

@@ -50,6 +50,11 @@ void sendJson(Res& res, int status, const json& body) {
     res.set_content(body.dump(), "application/json");
 }
 
+/// The offline region catalog the config asks for, building in the background.
+RegionCatalog::Settings regionSettings(const Config::Regions& r) {
+    return {r.worldDir, r.definitions, r.packageDir, r.pmtiles, r.rescanMinutes, true};
+}
+
 }  // namespace
 
 Application::Application(Config config, const std::string& ownerKeyText, bool ownerKeyIsDev,
@@ -61,7 +66,8 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
       flightLogApi_(services_),
       dataApi_(services_, admin_),
       adminApi_(services_, admin_),
-      regionApi_(services_.regions(), admin_, config_.regions.maxDownloads, config_.server.threads),
+      regions_(regionSettings(config_.regions), log_, services_.clock()),
+      regionApi_(regions_, admin_, config_.regions.maxDownloads, config_.server.threads),
       startTimeSeconds_(std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count()),
       http_(std::make_unique<httplib::Server>()) {
     configureServer();

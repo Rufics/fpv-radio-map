@@ -104,10 +104,14 @@ std::string WorldTiles::fingerprint(const std::vector<std::string>& layers) cons
         if (const auto file = layer(name)) text += stamp(*file);
     }
     text += stamp(dir_ / kStyleFile);
-    // A directory's time changes whenever a file is added, removed or replaced in it: the fonts
-    // directory for a fontstack, each fontstack's directory for its glyph ranges.
+    // A directory's time changes when a file is added or removed in it, a file's when it is
+    // written again in place: the fonts directory for its fontstacks, each fontstack's
+    // directory and glyph files for its ranges.
     text += stamp(dir_ / kFontsDir);
-    for (const fs::path& fontstack : plainDirectories(dir_ / kFontsDir)) text += stamp(fontstack);
+    for (const fs::path& fontstack : plainDirectories(dir_ / kFontsDir)) {
+        text += stamp(fontstack);
+        for (const fs::path& glyphs : plainFiles(fontstack)) text += stamp(glyphs);
+    }
     text += stamp(dir_ / kSpritesDir);
     for (const fs::path& file : sprites()) text += stamp(file);
     text += stamp(dir_ / kDemFile);

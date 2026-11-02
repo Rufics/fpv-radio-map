@@ -148,6 +148,8 @@ public:
     };
 
 private:
+    /// `file` copied into the work directory as package entry `name`.
+    [[nodiscard]] Entry snapshot(const RegionDefinition& region, std::string name, const std::filesystem::path& file) const;
     /// Cuts every layer into the work directory; returns their entries.
     std::vector<Entry> extractLayers(const RegionDefinition& region, const RegionPackage& package) const;
     /// The glyph and sprite entries for `style`.

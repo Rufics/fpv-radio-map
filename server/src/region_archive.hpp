@@ -54,14 +54,14 @@ private:
         void operator()(archive* a) const { archive_write_free(a); }
     };
     static la_ssize_t write(archive*, void* self, const void* buffer, std::size_t length);  // NOSONAR(cpp:S5008): libarchive API
-    void header(const std::string& name, std::uintmax_t size);
-    void data(const char* bytes, std::size_t size);
+    void header(const std::string& name, std::uintmax_t size) const;
+    void data(const char* bytes, std::size_t size) const;
     void check(int status) const;
 
     std::ofstream out_;
     Sha256Stream hash_;
     std::uintmax_t size_ = 0;
-    std::unique_ptr<archive, Free> archive_;
+    std::unique_ptr<archive, Free> archive_{archive_write_new()};
 };
 
 }  // namespace rfmap

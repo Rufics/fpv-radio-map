@@ -88,15 +88,11 @@ Services::Services(const Config& config, Logger& log, const std::string& ownerKe
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
-    const Config::Regions& r = config_.regions;
-    regions_ = std::make_unique<RegionCatalog>(
-        RegionCatalog::Settings{r.worldDir, r.definitions, r.packageDir, r.pmtiles, r.rescanMinutes, true}, log_, clock_);
     settings_ = startSettingsSync(*this);
 }
 
 Services::~Services() {
     settings_.reset();  // its thread reloads the modules: stop it before they go
-    regions_.reset();   // stop a package build before the logger and clock it uses go
     jobs_.reset();  // running calculations hold module instances: finish them before the registry goes
     modules_.registry.reset();
 }

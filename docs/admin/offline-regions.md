@@ -37,7 +37,8 @@ mounted at `/data`, and `RFMAP__REGIONS__WORLDDIR=/data` is already set.
 ## 2. Describe the regions
 
 The regions are listed in a JSON file, `regions.definitions` (default
-`/etc/rfmap/regions/regions.json`). In compose, put it in the directory `RFMAP_REGIONS_DIR` names.
+`/etc/rfmap/regions/regions.json`). In compose, put `regions.json` in the directory that `RFMAP_REGIONS_DIR` points to; compose mounts it
+read-only at `/etc/rfmap/regions`.
 Without the file, no region is offered.
 
 ```json
