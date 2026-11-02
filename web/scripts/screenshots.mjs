@@ -162,9 +162,12 @@ try {
   await drawMap.waitFor({ timeout: 10000 });
   await settle(offline, 1500);
   const box = await drawMap.boundingBox();
-  for (const [fx, fy] of [[0.36, 0.3], [0.62, 0.26], [0.7, 0.62], [0.42, 0.72]]) {
-    await offline.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
-  }
+  // one corner after another: the clicks must not overlap
+  const corners = [[0.36, 0.3], [0.62, 0.26], [0.7, 0.62], [0.42, 0.72]];
+  await corners.reduce(
+    (done, [fx, fy]) => done.then(() => offline.mouse.click(box.x + box.width * fx, box.y + box.height * fy)),
+    Promise.resolve(),
+  );
   await offline.getByLabel('Name').fill('Launch field north');
   await settle(offline, 500);
   await offline.locator('#draw-h').evaluate((el) => el.scrollIntoView({ block: 'start' }));

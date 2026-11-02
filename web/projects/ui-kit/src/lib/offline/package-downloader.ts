@@ -44,13 +44,8 @@ export class PackageDownloader {
       onProgress({ received, total });
     };
     if (res.body) {
-      const reader = res.body.getReader();
-      try {
-        for (let r = await reader.read(); !r.done; r = await reader.read()) take(r.value);
-      } catch (e) {
-        await reader.cancel().catch(() => undefined);
-        throw e;
-      }
+      // A chunk that take() refuses fails the pipe, which cancels the response body.
+      await res.body.pipeTo(new WritableStream<Uint8Array>({ write: take }));
     } else {
       take(new Uint8Array(await res.arrayBuffer()));
     }
