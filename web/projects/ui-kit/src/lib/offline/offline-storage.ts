@@ -87,20 +87,22 @@ export class MemoryOfflineStorage implements OfflineStorage {
 
   constructor(readonly persistent = false) {}
 
-  async list(): Promise<SavedPackage[]> {
-    return [...this.records.values()].map((r) => r.saved);
+  list(): Promise<SavedPackage[]> {
+    return Promise.resolve([...this.records.values()].map((r) => r.saved));
   }
 
-  async zip(key: string): Promise<Blob | null> {
-    return this.records.get(key)?.zip ?? null;
+  zip(key: string): Promise<Blob | null> {
+    return Promise.resolve(this.records.get(key)?.zip ?? null);
   }
 
-  async put(saved: SavedPackage, zip: Blob): Promise<void> {
+  put(saved: SavedPackage, zip: Blob): Promise<void> {
     this.records.set(saved.key, { saved, zip });
+    return Promise.resolve();
   }
 
-  async remove(key: string): Promise<void> {
+  remove(key: string): Promise<void> {
     this.records.delete(key);
+    return Promise.resolve();
   }
 }
 

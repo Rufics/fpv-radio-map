@@ -23,7 +23,7 @@ const MAX16 = 0xffff;
 const MAX32 = 0xffffffff;
 
 function uint64(v: DataView, at: number): number {
-  return v.getUint32(at + 4, true) * 0x1_0000_0000 + v.getUint32(at, true);
+  return v.getUint32(at + 4, true) * 0x100000000 + v.getUint32(at, true);
 }
 
 async function view(blob: Blob, start: number, end: number): Promise<DataView> {

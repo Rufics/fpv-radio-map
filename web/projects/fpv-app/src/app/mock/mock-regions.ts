@@ -64,12 +64,18 @@ export class MockRegions {
   }
 
   /** The package for a catalog URL, as fetch answers it; 404 for any other URL. */
-  static readonly fetch: typeof fetch = async (input) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-    const path = /\/(regions|areas)\/[a-z0-9-]+\/packages\/[0-9a-f]{64}\.zip$/.exec(url)?.[0] ?? '';
+  static readonly fetch: typeof fetch = (input) => {
+    const path = /\/(regions|areas)\/[a-z0-9-]+\/packages\/[0-9a-f]{64}\.zip$/.exec(MockRegions.urlOf(input))?.[0] ?? '';
     const bytes = MockRegions.packages.get(path);
-    return bytes ? new Response(bytes as BlobPart, { headers: { 'Content-Type': 'application/zip' } }) : new Response(null, { status: 404 });
+    return Promise.resolve(
+      bytes ? new Response(bytes as BlobPart, { headers: { 'Content-Type': 'application/zip' } }) : new Response(null, { status: 404 }),
+    );
   };
+
+  private static urlOf(input: string | URL | Request): string {
+    if (typeof input === 'string') return input;
+    return input instanceof URL ? input.href : input.url;
+  }
 
   /** A package whose zip the mock fetch serves. */
   static described(

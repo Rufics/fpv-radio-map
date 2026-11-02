@@ -91,9 +91,12 @@ public:
     std::size_t removeUnused(const std::set<std::string, std::less<>>& current) const;
     /// The lock file that keeps the builds of several server processes apart.
     [[nodiscard]] std::filesystem::path lockFile() const { return dir_ / ".rfmap-regions.lock"; }
+    /// `relative` under the directory, symbolic links and ".." resolved; RegionError when the
+    /// result would lie outside it.
+    [[nodiscard]] std::filesystem::path inside(const std::filesystem::path& relative) const;
 
 private:
-    [[nodiscard]] std::filesystem::path record(const std::string& id) const { return dir_ / (id + ".json"); }
+    [[nodiscard]] std::filesystem::path record(const std::string& id) const { return inside(id + ".json"); }
     /// The names of the entries the current packages of `current` use.
     [[nodiscard]] std::set<std::string, std::less<>> inUse(const std::set<std::string, std::less<>>& current) const;
 

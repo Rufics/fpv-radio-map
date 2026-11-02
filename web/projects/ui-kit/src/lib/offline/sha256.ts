@@ -61,7 +61,7 @@ export class Sha256 {
     const pad = new Uint8Array((this.filled < 56 ? 64 : 128) - this.filled);
     pad[0] = 0x80;
     const tail = new DataView(pad.buffer);
-    tail.setUint32(pad.length - 8, Math.floor(bits / 0x1_0000_0000));
+    tail.setUint32(pad.length - 8, Math.floor(bits / 0x100000000));
     tail.setUint32(pad.length - 4, bits >>> 0);
     this.length -= pad.length; // the padding is not message length
     this.update(pad);
@@ -79,25 +79,25 @@ export class Sha256 {
       const b = w[t - 2];
       const s0 = ((a >>> 7) | (a << 25)) ^ ((a >>> 18) | (a << 14)) ^ (a >>> 3);
       const s1 = ((b >>> 17) | (b << 15)) ^ ((b >>> 19) | (b << 13)) ^ (b >>> 10);
-      w[t] = (w[t - 16] + s0 + w[t - 7] + s1) | 0;
+      w[t] = (w[t - 16] + s0 + w[t - 7] + s1) >>> 0;
     }
     const s = this.state;
     let [a, b, c, d, e, f, g, h] = s;
     for (let t = 0; t < 64; t++) {
       const S1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
       const ch = (e & f) ^ (~e & g);
-      const t1 = (h + S1 + ch + Sha256.k[t] + w[t]) | 0;
+      const t1 = (h + S1 + ch + Sha256.k[t] + w[t]) >>> 0;
       const S0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
       const maj = (a & b) ^ (a & c) ^ (b & c);
-      const t2 = (S0 + maj) | 0;
+      const t2 = (S0 + maj) >>> 0;
       h = g;
       g = f;
       f = e;
-      e = (d + t1) | 0;
+      e = (d + t1) >>> 0;
       d = c;
       c = b;
       b = a;
-      a = (t1 + t2) | 0;
+      a = (t1 + t2) >>> 0;
     }
     s[0] += a;
     s[1] += b;

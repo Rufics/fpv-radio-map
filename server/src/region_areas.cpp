@@ -40,11 +40,12 @@ RegionDefinition parse(const json& entry) {
 }  // namespace
 
 std::string_view areaStateName(AreaState state) {
+    using enum AreaState;
     switch (state) {
-        case AreaState::Queued: return "queued";
-        case AreaState::Building: return "building";
-        case AreaState::Ready: return "ready";
-        case AreaState::Failed: return "failed";
+        case Queued: return "queued";
+        case Building: return "building";
+        case Ready: return "ready";
+        case Failed: return "failed";
     }
     return "unknown";
 }
@@ -207,7 +208,7 @@ bool RegionAreas::buildNext(const std::stop_token& stop) {
     }
     const std::string id = region->id();
     try {
-        fs::create_directories(settings_.areaDir);
+        fs::create_directories(settings_.areaDir);  // NOSONAR(cppsecurity:S2083): operator configuration
         const FileLock processes(store_.lockFile(), FileLock::Mode::Exclusive);
         const std::string tool = pmtiles_.version(settings_.areaDir / ".pmtiles-version.log");
         const std::string current = RegionPackageBuilder::fingerprint(*region, world_, tool);
@@ -258,7 +259,7 @@ TimePoint RegionAreas::lastUsed(const RegionPackage& package) const {
 std::size_t RegionAreas::sweep() {
     if (!enabled()) return 0;
     const std::scoped_lock building(buildMutex_);
-    fs::create_directories(settings_.areaDir);
+    fs::create_directories(settings_.areaDir);  // NOSONAR(cppsecurity:S2083): operator configuration
     const FileLock processes(store_.lockFile(), FileLock::Mode::Exclusive);
     const auto all = store_.loadAll();
     if (!all) return 0;

@@ -86,7 +86,7 @@ export class AreaShapeLayer extends StyleLayerSet {
       geometry: geometry ?? { type: 'LineString' as const, coordinates: shape.points.map((p) => [p.lon, p.lat]) },
     }] : [];
     this.data = { type: 'FeatureCollection', features: [...outline, ...corners] };
-    (this.map?.getSource('rf-offline-area') as GeoJSONSource | undefined)?.setData(this.data);
+    void (this.map?.getSource('rf-offline-area') as GeoJSONSource | undefined)?.setData(this.data);
   }
 
   protected sources(): Record<string, SourceSpecification> {

@@ -211,7 +211,7 @@ std::optional<std::vector<RegionPackage>> RegionPackageStore::loadAll() const {
 void RegionPackageStore::commit(const RegionPackage& package) const {
     renameInto(tempArchive(package.id), archive(package));
     if (package.preview) renameInto(tempPreview(package.id), preview(package));
-    const fs::path temp = dir_ / std::format("{}{}.json", kTempPrefix, package.id);
+    const fs::path temp = inside(std::format("{}{}.json", kTempPrefix, package.id));
     {
         std::ofstream out(temp, std::ios::trunc);
         out << package.toRecord().dump(2) << '\n';
@@ -221,21 +221,32 @@ void RegionPackageStore::commit(const RegionPackage& package) const {
 }
 
 fs::path RegionPackageStore::archive(const RegionPackage& package) const {
-    return dir_ / std::format("{}-{}.zip", package.id, package.version);
+    return inside(std::format("{}-{}.zip", package.id, package.version));
 }
 
 fs::path RegionPackageStore::preview(const RegionPackage& package) const {
-    return dir_ / std::format("{}-{}.png", package.id, package.previewVersion);
+    return inside(std::format("{}-{}.png", package.id, package.previewVersion));
 }
 
-fs::path RegionPackageStore::workDir(const std::string& id) const { return dir_ / std::format("{}{}", kWorkPrefix, id); }
+fs::path RegionPackageStore::workDir(const std::string& id) const { return inside(std::format("{}{}", kWorkPrefix, id)); }
 
 fs::path RegionPackageStore::tempArchive(const std::string& id) const {
-    return dir_ / std::format("{}{}.zip", kTempPrefix, id);
+    return inside(std::format("{}{}.zip", kTempPrefix, id));
 }
 
 fs::path RegionPackageStore::tempPreview(const std::string& id) const {
-    return dir_ / std::format("{}{}.png", kTempPrefix, id);
+    return inside(std::format("{}{}.png", kTempPrefix, id));
+}
+
+fs::path RegionPackageStore::inside(const fs::path& relative) const {
+    // Ids are checked where regions are defined; this keeps any other name from leaving the
+    // directory too, through "..", an absolute path or a symbolic link.
+    const fs::path root = fs::weakly_canonical(dir_);
+    fs::path resolved = fs::weakly_canonical(root / relative);
+    if (relative.is_absolute() || !resolved.string().starts_with((root / "").string())) {
+        throw RegionError(std::format("{} is outside {}", relative.string(), dir_.string()));
+    }
+    return resolved;
 }
 
 std::set<std::string, std::less<>> RegionPackageStore::inUse(const std::set<std::string, std::less<>>& current) const {
@@ -389,7 +400,7 @@ RegionPackageBuilder::Entry RegionPackageBuilder::snapshot(const RegionDefinitio
                                                            const fs::path& file) const {
     // A copy of its own, so the manifest and the zip read the same bytes even when the world
     // files are replaced during the build. Glyph and sprite files are small.
-    const fs::path copy = t_.store.workDir(region.id()) / name;
+    const fs::path copy = t_.store.inside(fs::path(t_.store.workDir(region.id()).filename()) / name);
     fs::create_directories(copy.parent_path());
     fs::copy_file(file, copy, fs::copy_options::overwrite_existing);
     return {std::move(name), copy, {}};

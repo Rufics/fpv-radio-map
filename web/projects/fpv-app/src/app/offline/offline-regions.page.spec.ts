@@ -152,7 +152,7 @@ describe('OfflineRegionsPage', () => {
     fixture.detectChanges();
     expect(cards[0].textContent).toContain('On this device, saved');
     const saved = el.querySelectorAll('ul[aria-label="Saved packages"] li');
-    expect(saved.length).toBe(2); // the server's map, and the region
+    expect(saved).toHaveLength(2); // the server's map, and the region
     expect((saved[1].querySelector('input') as HTMLInputElement).checked).toBe(true);
     const zip = await storage.zip('regions/dnipro-ridge');
     expect((await ZipIndex.read(zip!)).has('manifest.json')).toBe(true);
@@ -214,9 +214,9 @@ describe('AreaDrawComponent', () => {
     draw.shape.set(draw.shape().withoutLast());
 
     await MockApiHarness.settle(draw.submit());
-    expect(asked.length).toBe(1);
+    expect(asked).toHaveLength(1);
     expect(asked[0]).toMatch(/^area-[0-9a-f]{24}$/);
     expect(TestBed.inject(OfflineLibrary).drawn()[0]).toEqual(expect.objectContaining({ id: asked[0], name: 'Launch field' }));
-    expect(draw.shape().points.length).toBe(0);
+    expect(draw.shape().points).toHaveLength(0);
   });
 });

@@ -144,6 +144,21 @@ TEST(PmtilesTool, CutsByBoxOrPolygonWithoutAShell) {
     EXPECT_THROW((void)PmtilesTool("pmtiles").version("/dev/null"), RegionError);  // not an absolute path
 }
 
+TEST(RegionPackageStore, KeepsEveryPathInsideItsDirectory) {
+    const fs::path dir = test::scratchDir("region-store-inside");
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    const RegionPackageStore store(dir);
+    const fs::path root = fs::weakly_canonical(dir);
+    EXPECT_EQ(store.workDir("ridge"), root / ".work-ridge");
+    EXPECT_EQ(store.inside("a/b.pbf"), root / "a" / "b.pbf");
+    EXPECT_THROW((void)store.inside("../elsewhere"), RegionError);
+    EXPECT_THROW((void)store.inside("/etc/passwd"), RegionError);
+    EXPECT_THROW((void)store.tempArchive("/../../x"), RegionError);
+    fs::create_directory_symlink(fs::temp_directory_path(), dir / "out");
+    EXPECT_THROW((void)store.inside("out/x"), RegionError) << "a symbolic link out of the directory";
+}
+
 TEST(HttpRequest, IfNoneMatchNamesTheCurrentTag) {
     httplib::Request raw;
     const Config::Server server;

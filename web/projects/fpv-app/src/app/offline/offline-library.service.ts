@@ -54,7 +54,8 @@ export class OfflineLibrary {
 
   async refresh(): Promise<void> {
     const list = await this.storage.list();
-    this.saved.set(list.sort((a, b) => a.region.name.localeCompare(b.region.name)));
+    list.sort((a, b) => a.region.name.localeCompare(b.region.name));
+    this.saved.set(list);
     const active = this.active();
     if (active && !list.some((s) => s.key === active)) this.setActive(list[0]?.key ?? null);
   }

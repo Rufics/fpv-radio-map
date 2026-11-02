@@ -55,7 +55,7 @@ export class OfflineMapSources {
     OfflineMapSources.opened.set(saved.key, index);
     OfflineMapSources.registerFonts();
     const protocol = ensurePmtilesProtocol();
-    const config: MapSourcesConfig = { ...(base ?? {}) };
+    const config: MapSourcesConfig = { ...base };
     for (const layer of saved.region.layers) {
       const key = OfflineMapSources.layerKeys[layer];
       const entry = `tiles/${layer}.pmtiles`;
