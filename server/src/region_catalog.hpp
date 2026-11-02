@@ -94,8 +94,8 @@ private:
     void failed(RegionStatus& status, const std::string& why) const;
     /// Marks every region failed with `why`, keeping the packages they have.
     void failAll(const std::vector<RegionDefinition>& found, const std::string& why);
-    /// Without readable definitions: serves the packages on disk the catalog does not know yet,
-    /// so a server started with a broken regions.json still serves what it built before.
+    /// Without readable definitions: serves the packages on disk as they are now, so a server
+    /// started with a broken regions.json still serves what it built before.
     void recover();
     void set(RegionStatus status);
     /// Drops the regions that are no longer in `found`.

@@ -299,6 +299,12 @@ TEST_F(RegionCatalogTest, AnUnreadableDefinitionsFileKeepsEveryPackage) {
     ASSERT_TRUE(restarted.find("alpha"));
     EXPECT_EQ(restarted.find("alpha")->version, alpha.version);
 
+    // Another process removed a package meanwhile: it is not offered any more.
+    fs::remove(dir_ / "packages" / "beta.json");
+    catalog.scan();
+    EXPECT_FALSE(catalog.find("beta"));
+    EXPECT_TRUE(catalog.find("alpha"));
+
     // An entry with an id of the wrong type is left out like any other wrong entry.
     define(json::array({{{"id", 5}, {"bbox", {35.1, 48.5, 35.3, 48.7}}},
                         {{"id", "alpha"}, {"name", "Alpha"}, {"bbox", {35.1, 48.5, 35.3, 48.7}}, {"glyphRanges", {"1024-1279"}}}}));

@@ -104,9 +104,9 @@ the largest one again while it is rebuilt.
 
 ## 4. Versions and updates
 
-The **version** of a package is the SHA-256 of everything in `manifest.json` except the version
-itself: the name, bbox, max zoom and layers, and the list of files with the size and SHA-256 of
-each. The zip is written the same way every time, with fixed times and owners. So rebuilding the
+The **version** of a package is an opaque SHA-256 over everything in `manifest.json` except the
+`version` field itself: format, format version, id, name, bbox, max zoom, layers, style, total
+bytes, and each file's name, size and SHA-256. The zip is written the same way every time, with fixed times and owners. So rebuilding the
 same tiles gives the same version, and a client downloads again only when something it would get
 actually changed. Treat the version as an opaque name: compare it, do not compute it.
 
