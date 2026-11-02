@@ -74,8 +74,9 @@ public:
     [[nodiscard]] const std::filesystem::path& dir() const { return dir_; }
     /// The recorded package of `id`, if its record is sound and its zip is there.
     [[nodiscard]] std::optional<RegionPackage> load(const std::string& id) const;
-    /// Every sound recorded package in the directory, whatever regions are defined now.
-    [[nodiscard]] std::vector<RegionPackage> loadAll() const;
+    /// Every sound recorded package in the directory, whatever regions are defined now;
+    /// nothing when the directory cannot be listed.
+    [[nodiscard]] std::optional<std::vector<RegionPackage>> loadAll() const;
     /// Moves the files of a finished build into place and records `package` as current.
     void commit(const RegionPackage& package) const;
     [[nodiscard]] std::filesystem::path archive(const RegionPackage& package) const;

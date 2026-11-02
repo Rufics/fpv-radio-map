@@ -170,13 +170,23 @@ void RegionCatalog::failAll(const std::vector<RegionDefinition>& found, const st
 }
 
 void RegionCatalog::recover() {
-    std::vector<RegionPackage> packages = store_.loadAll();
+    auto listed = store_.loadAll();
+    if (!listed) return;  // the directory cannot be listed: keep what is known
+    std::vector<RegionPackage>& packages = *listed;
     const std::scoped_lock lock(mutex_);
     // Known regions keep their state and error but take the package on disk now: another
     // process may have replaced it, and the old zip may be gone.
     for (auto& [id, status] : regions_) {
         const auto found = std::ranges::find(packages, id, &RegionPackage::id);
-        status.package = found == packages.end() ? std::nullopt : std::optional<RegionPackage>(*found);
+        if (found != packages.end()) {
+            status.package = *found;
+        } else if (status.package) {
+            status.package.reset();
+            if (status.state != RegionState::Failed) {
+                status.state = RegionState::Failed;
+                status.error = "the package was removed from the package directory";
+            }
+        }
     }
     for (RegionPackage& p : packages) {
         const std::string id = p.id;
