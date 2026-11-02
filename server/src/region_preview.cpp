@@ -39,7 +39,8 @@ private:
 
 /// The world DEM over `box`, scaled to the preview width, in memory.
 Dataset shrink(GDALDataset& source, const GeoBox& box) {
-    GdalArgs args{"-of", "MEM", "-outsize", std::to_string(RegionPreview::kWidth), "0", "-r", "average",
+    // -eco: a region wholly outside the DEM is an error, not a blank picture.
+    GdalArgs args{"-of", "MEM", "-eco", "-outsize", std::to_string(RegionPreview::kWidth), "0", "-r", "average",
                   "-projwin_srs", "EPSG:4326", "-projwin", std::to_string(box.minLon()), std::to_string(box.maxLat()),
                   std::to_string(box.maxLon()), std::to_string(box.minLat())};
     const std::unique_ptr<GDALTranslateOptions, decltype(&GDALTranslateOptionsFree)> options(

@@ -225,6 +225,28 @@ TEST_F(RegionCatalogTest, RebuildsOnlyWhatChangedAndKeepsTheVersionOfTheSameFile
     EXPECT_EQ(other.find("alpha")->builtAt, second.builtAt);
 }
 
+TEST_F(RegionCatalogTest, ANewNameIsANewVersion) {
+    RegionCatalog catalog(settings(), log_, clock_);
+    catalog.scan();
+    const RegionPackage first = *catalog.find("alpha");
+    define(json::array({{{"id", "alpha"}, {"name", "Alpha, renamed"}, {"bbox", {35.1, 48.5, 35.3, 48.7}}, {"glyphRanges", {"1024-1279"}}}}));
+    catalog.scan();
+    const RegionPackage second = *catalog.find("alpha");
+    EXPECT_NE(second.version, first.version) << "the manifest in the zip changed, so its URL must change too";
+    const test::ZipContents zip(catalog.store().archive(second));
+    EXPECT_EQ(json::parse(zip.files.at("manifest.json"))["name"], "Alpha, renamed");
+}
+
+TEST_F(RegionCatalogTest, ARegionOutsideTheDemHasNoPreview) {
+    define(json::array({{{"id", "far"}, {"bbox", {10.0, 40.0, 10.2, 40.2}}}}));
+    RegionCatalog catalog(settings(), log_, clock_);
+    catalog.scan();
+    const auto far = catalog.find("far");
+    ASSERT_TRUE(far);
+    EXPECT_FALSE(far->preview);
+    EXPECT_FALSE(fs::exists(catalog.store().preview(*far)));
+}
+
 TEST_F(RegionCatalogTest, KeepsTheLastGoodPackageWhenABuildFailsAndRemovesUndefinedRegions) {
     RegionCatalog catalog(settings(), log_, clock_);
     catalog.scan();

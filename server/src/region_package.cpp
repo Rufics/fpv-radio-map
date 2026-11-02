@@ -293,18 +293,20 @@ json RegionPackageBuilder::manifest(RegionPackage& package, const std::vector<En
         list += std::format("{}\t{}\t{}\n", e.name, size, sha);
         total += size;
     }
-    package.version = Secrets::hex(Secrets::sha256(std::format("rfmap-region {}\n{}", kFormat, list)));
-    return {{"format", "rfmap-region"},
-            {"formatVersion", kFormat},
-            {"id", package.id},
-            {"name", package.name},
-            {"version", package.version},
-            {"bbox", package.bbox.toJson()},
-            {"maxzoom", package.maxZoom.has_value() ? json(*package.maxZoom) : json()},
-            {"layers", package.layers},
-            {"style", kStyle},
-            {"bytes", total},
-            {"files", files}};
+    json description = {{"format", "rfmap-region"},
+                        {"formatVersion", kFormat},
+                        {"id", package.id},
+                        {"name", package.name},
+                        {"bbox", package.bbox.toJson()},
+                        {"maxzoom", package.maxZoom.has_value() ? json(*package.maxZoom) : json()},
+                        {"layers", package.layers},
+                        {"style", kStyle},
+                        {"bytes", total},
+                        {"files", files}};
+    // The version names every byte of the zip: the files and the rest of the manifest.
+    package.version = Secrets::hex(Secrets::sha256(std::format("rfmap-region {}\n{}\n{}", kFormat, description.dump(), list)));
+    description["version"] = package.version;
+    return description;
 }
 
 std::pair<std::uintmax_t, std::string> RegionPackageBuilder::writeZip(const json& manifest,
