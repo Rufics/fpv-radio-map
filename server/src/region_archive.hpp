@@ -43,9 +43,9 @@ public:
     ZipWriter(const ZipWriter&) = delete;
     ZipWriter& operator=(const ZipWriter&) = delete;
 
-    void addBytes(const std::string& name, std::string_view bytes);
+    void addBytes(const std::string& name, std::string_view bytes) const;
     /// Adds `file`, read in chunks with `stop` checked between them (RegionBuildCancelled).
-    void addFile(const std::string& name, const std::filesystem::path& file, const std::stop_token& stop);
+    void addFile(const std::string& name, const std::filesystem::path& file, const std::stop_token& stop) const;
     /// Finishes the zip; returns its size and SHA-256.
     std::pair<std::uintmax_t, std::string> close();
 

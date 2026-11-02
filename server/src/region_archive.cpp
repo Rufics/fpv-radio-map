@@ -86,12 +86,12 @@ void ZipWriter::data(const char* bytes, std::size_t size) const {
     if (archive_write_data(archive_.get(), bytes, size) != static_cast<la_ssize_t>(size)) check(ARCHIVE_FATAL);
 }
 
-void ZipWriter::addBytes(const std::string& name, std::string_view bytes) {
+void ZipWriter::addBytes(const std::string& name, std::string_view bytes) const {
     header(name, bytes.size());
     data(bytes.data(), bytes.size());
 }
 
-void ZipWriter::addFile(const std::string& name, const fs::path& file, const std::stop_token& stop) {
+void ZipWriter::addFile(const std::string& name, const fs::path& file, const std::stop_token& stop) const {
     std::error_code ec;
     const std::uintmax_t size = fs::file_size(file, ec);
     if (ec) throw RegionError("cannot read " + file.string());

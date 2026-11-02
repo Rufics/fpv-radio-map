@@ -152,7 +152,7 @@ passes Range requests through. Behind another proxy, do the same for
 | `GET /api/v1/regions` | the catalog, with ETag |
 | `GET /api/v1/regions/{id}` | one region |
 | `GET /api/v1/regions/{id}/packages/{version}.zip` | the package; Range, ETag, immutable |
-| `GET /api/v1/regions/{id}/previews/{version}.png` | the preview |
+| `GET /api/v1/regions/{id}/previews/{previewVersion}.png` | the preview |
 | `GET /api/v1/admin/regions` | every region with `ready`, `building` or `failed` and the last error |
 | `POST /api/v1/admin/regions/reload` | scan now |
 

@@ -963,20 +963,21 @@ paths:
         '416': { description: The range lies outside the package }
         '503': { description: 'Too many downloads at once (regions.maxDownloads); Retry-After' }
 
-  /regions/{regionId}/previews/{version}.png:
+  /regions/{regionId}/previews/{previewVersion}.png:
     get:
       tags: [regions]
       summary: A small grey hillshade of the region (256 px wide), drawn from the server DEM.
       parameters:
         - { name: regionId, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]+$' } }
-        - { name: version, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
+        - { name: previewVersion, in: path, required: true, description: 'SHA-256 of the PNG, from the preview URL in the catalog', schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
       responses:
         '200':
           description: The preview
           content:
             image/png:
               schema: { type: string, format: binary }
-        '404': { description: No such region or version, or no preview (no DEM over the region) }
+        '304': { description: The client already has this preview (If-None-Match) }
+        '404': { description: No such region, a replaced preview, or no preview (no DEM over the region) }
 
   /admin/regions:
     get:

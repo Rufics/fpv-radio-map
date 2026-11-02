@@ -237,6 +237,23 @@ TEST_F(RegionCatalogTest, ANewNameIsANewVersion) {
     EXPECT_EQ(json::parse(zip.files.at("manifest.json"))["name"], "Alpha, renamed");
 }
 
+TEST_F(RegionCatalogTest, ANewDemRedrawsThePreviewUnderANewNameAndKeepsThePackage) {
+    define(json::array({{{"id", "alpha"}, {"bbox", {35.1, 48.5, 35.3, 48.7}}, {"layers", {"basemap"}}}}));
+    RegionCatalog catalog(settings(), log_, clock_);
+    catalog.scan();
+    const RegionPackage first = *catalog.find("alpha");
+    ASSERT_TRUE(first.preview);
+    test::writeCog(world_->dir() / "dem.cog.tif", 35.0, 48.8, 0.01, 60, 40, [](int c, int r) { return 400.0 - 7.0 * c + 2.0 * r; });
+    fs::last_write_time(world_->dir() / "dem.cog.tif", fs::file_time_type::clock::now() + std::chrono::seconds(5));
+    catalog.scan();
+    const RegionPackage second = *catalog.find("alpha");
+    EXPECT_EQ(second.version, first.version) << "the basemap is the same";
+    ASSERT_TRUE(second.preview);
+    EXPECT_NE(second.previewVersion, first.previewVersion);
+    EXPECT_TRUE(fs::is_regular_file(catalog.store().preview(second)));
+    EXPECT_FALSE(fs::exists(catalog.store().preview(first)));
+}
+
 TEST_F(RegionCatalogTest, ARegionOutsideTheDemHasNoPreview) {
     define(json::array({{{"id", "far"}, {"bbox", {10.0, 40.0, 10.2, 40.2}}}}));
     RegionCatalog catalog(settings(), log_, clock_);

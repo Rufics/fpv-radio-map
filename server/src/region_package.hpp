@@ -16,7 +16,7 @@
 // something it would get changed. It is also the package's entity tag.
 //
 // regions.packageDir keeps each package as <id>-<version>.zip next to <id>.json, its record, and
-// <id>-<version>.png, its preview. A new version is written under a temporary name and only then
+// <id>-<preview version>.png, its preview, named by its own SHA-256. A new version is written under a temporary name and only then
 // recorded, so no client ever gets a half-written package.
 
 #include "common.hpp"
@@ -45,7 +45,7 @@ struct RegionPackage {
     std::vector<std::string> layers;
     /// Bytes of the zip.
     std::uintmax_t size = 0;
-    /// The package version: SHA-256 (hex) of the manifest's file list.
+    /// The package version: SHA-256 (hex) of the manifest.
     std::string version;
     /// SHA-256 (hex) of the zip, for checking a download.
     std::string sha256;
@@ -53,12 +53,17 @@ struct RegionPackage {
     /// What it was built from (definition, world files, tool version); unchanged = no rebuild.
     std::string fingerprint;
     bool preview = false;
+    /// The preview's own version: SHA-256 (hex) of the PNG. A new DEM redraws the preview without
+    /// changing the package, and the preview URL changes with it.
+    std::string previewVersion;
 
     [[nodiscard]] json toRecord() const;
     /// A record as toRecord wrote it; nothing when it is damaged or of another layout.
     [[nodiscard]] static std::optional<RegionPackage> fromRecord(const json& record);
     /// The strong entity tag: the version in quotes.
     [[nodiscard]] std::string etag() const { return "\"" + version + "\""; }
+    /// The strong entity tag of the preview.
+    [[nodiscard]] std::string previewEtag() const { return "\"" + previewVersion + "\""; }
 };
 
 /// The package directory: packages, previews, their records and the builds in progress.
@@ -159,8 +164,8 @@ private:
     /// Writes the zip; returns its size and SHA-256.
     [[nodiscard]] std::pair<std::uintmax_t, std::string> writeZip(const json& manifest, const std::vector<Entry>& entries,
                                                                 const std::string& id) const;
-    /// Draws the preview; false without a DEM or when it fails (logged).
-    [[nodiscard]] bool writePreview(const RegionPackage& package) const;
+    /// Draws the preview and sets its version; false without a DEM or when it fails (logged).
+    [[nodiscard]] bool writePreview(RegionPackage& package) const;
 
     Tools t_;
     std::stop_token stop_;

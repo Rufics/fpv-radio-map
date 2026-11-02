@@ -16,7 +16,7 @@ namespace fs = std::filesystem;
 
 namespace {
 
-constexpr int kRecordLayout = 1;
+constexpr int kRecordLayout = 2;
 constexpr std::string_view kTempPrefix = ".tmp-";
 constexpr std::string_view kWorkPrefix = ".work-";
 
@@ -66,7 +66,8 @@ json RegionPackage::toRecord() const {
             {"sha256", sha256},
             {"builtAt", builtAt},
             {"fingerprint", fingerprint},
-            {"preview", preview}};
+            {"preview", preview},
+            {"previewVersion", previewVersion}};
 }
 
 std::optional<RegionPackage> RegionPackage::fromRecord(const json& record) {
@@ -86,7 +87,9 @@ std::optional<RegionPackage> RegionPackage::fromRecord(const json& record) {
         p.builtAt = record.at("builtAt").get<std::string>();
         p.fingerprint = record.at("fingerprint").get<std::string>();
         p.preview = record.at("preview").get<bool>();
+        p.previewVersion = record.at("previewVersion").get<std::string>();
         if (!RegionDefinition::validId(p.id) || !isHex64(p.version) || !isHex64(p.sha256)) return std::nullopt;
+        if (p.preview && !isHex64(p.previewVersion)) return std::nullopt;
         return p;
     } catch (const json::exception&) {
         return std::nullopt;  // a damaged record: the region is built again
@@ -129,7 +132,7 @@ fs::path RegionPackageStore::archive(const RegionPackage& package) const {
 }
 
 fs::path RegionPackageStore::preview(const RegionPackage& package) const {
-    return dir_ / std::format("{}-{}.png", package.id, package.version);
+    return dir_ / std::format("{}-{}.png", package.id, package.previewVersion);
 }
 
 fs::path RegionPackageStore::workDir(const std::string& id) const { return dir_ / std::format("{}{}", kWorkPrefix, id); }
@@ -321,11 +324,13 @@ std::pair<std::uintmax_t, std::string> RegionPackageBuilder::writeZip(const json
     return zip.close();
 }
 
-bool RegionPackageBuilder::writePreview(const RegionPackage& package) const {
+bool RegionPackageBuilder::writePreview(RegionPackage& package) const {
     const auto dem = t_.world.dem();
     if (!dem) return false;
     try {
-        RegionPreview::render(*dem, package.bbox, t_.store.tempPreview(package.id));
+        const fs::path png = t_.store.tempPreview(package.id);
+        RegionPreview::render(*dem, package.bbox, png);
+        package.previewVersion = Sha256Stream::ofFile(png, stop_);
         return true;
     } catch (const RegionError& e) {
         t_.log.warn("regions", std::format("{}: no preview: {}", package.id, e.what()));

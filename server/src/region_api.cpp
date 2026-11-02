@@ -42,7 +42,7 @@ json RegionApi::describe(const RegionPackage& p) {
             {"version", p.version},
             {"sha256", p.sha256},
             {"builtAt", p.builtAt},
-            {"preview", p.preview ? json(std::format("{}/previews/{}.png", base, p.version)) : json()},
+            {"preview", p.preview ? json(std::format("{}/previews/{}.png", base, p.previewVersion)) : json()},
             {"package", std::format("{}/packages/{}.zip", base, p.version)}};
 }
 
@@ -96,10 +96,15 @@ void RegionApi::getPackage(const HttpRequest& req, HttpReply& res) const {
 }
 
 void RegionApi::getPreview(const HttpRequest& req, HttpReply& res) const {
-    const RegionPackage p = exact(req);
+    const RegionPackage p = current(req);
     if (!p.preview) throw HttpError(404, "this region has no preview");
+    if (req.match(2) != p.previewVersion) throw HttpError(404, "this preview was replaced");
     res.header("Cache-Control", kImmutable);
-    res.header("ETag", p.etag());
+    if (req.holdsCurrent(p.previewEtag())) {
+        res.notModified(p.previewEtag());
+        return;
+    }
+    res.header("ETag", p.previewEtag());
     res.file(catalog_.store().preview(p), "image/png", !req.header("Range").empty());
 }
 
