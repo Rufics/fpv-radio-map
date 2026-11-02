@@ -38,7 +38,7 @@ type AreaView = OfflineAreaStatus | { id: string; state: 'gone' } | { id: string
           </p>
         }
         @if (library.saved().length) {
-          <p class="muted small rf-num">
+          <p class="muted small">
             {{ library.saved().length }} saved, {{ f.size(library.savedBytes()) }} together. The map reads the one chosen here
             (open the map again after a change).
           </p>
