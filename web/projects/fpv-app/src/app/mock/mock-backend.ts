@@ -23,6 +23,7 @@ import {
   Mission,
   MissionAltitude,
   ModuleInfo,
+  OfflineAreaRequest,
   Reason,
   linksEvaluated,
   RouteResult,
@@ -43,7 +44,7 @@ import {
 } from './reference-case';
 import { baseMap, contourLines } from './mock-terrain';
 import { MockFlights } from './mock-flights';
-import { MockRegions } from './mock-regions';
+import { MockAreas, MockRegions } from './mock-regions';
 
 interface StoredMission {
   id: string;
@@ -145,6 +146,13 @@ export class MockBackend {
     r('GET', /^\/admin\/cache$/, (req) => this.admin(req, () => this.ok(this.cache)));
     r('GET', /^\/regions$/, () => this.ok({ regions: MockRegions.list }));
     r('GET', /^\/admin\/regions$/, (req) => this.admin(req, () => this.ok(MockRegions.admin())));
+    r('GET', /^\/areas$/, () => this.ok(MockAreas.limits));
+    r('POST', /^\/areas$/, (req) => this.requestArea(req.body as OfflineAreaRequest));
+    r('GET', /^\/areas\/(area-[0-9a-f]{24})$/, (_req, m) => {
+      const status = MockAreas.status(m[1]);
+      if (!status) throw this.error(404, 'no such area; ask for it again');
+      return this.ok(status);
+    });
     r('POST', /^\/admin\/regions\/reload$/, (req) => this.admin(req, () => this.ok({ queued: true }, 202)));
     r('PUT', /^\/admin\/cache$/, (req) => this.admin(req, () => this.putCache(req.body as CacheLimit[])));
   }
@@ -182,6 +190,12 @@ export class MockBackend {
       { linkId: 'l-demo-revoked', role: 'view', label: 'Old link', createdAt: new Date(Date.now() - 5 * 86400e3).toISOString(), revoked: true, openCount: 12, token: 'demo-revoked', pin: '000000', wrong: 0 },
     );
     this.missions.set(id, s);
+  }
+
+  private requestArea(body: OfflineAreaRequest) {
+    const status = MockAreas.request(body);
+    if (typeof status === 'string') throw this.error(422, status);
+    return this.ok(status, status.state === 'ready' ? 200 : 202);
   }
 
   private mapConfig() {

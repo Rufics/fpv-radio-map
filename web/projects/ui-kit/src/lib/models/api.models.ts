@@ -548,4 +548,41 @@ export interface OfflineRegionAdmin {
   enabled: boolean;
   scans: number;
   regions: OfflineRegionStatus[];
+  /** Areas users draw: whether they are on, and the builds waiting or running. */
+  areas?: { enabled: boolean; pending: number };
+}
+
+/** GET /areas: whether this server builds areas users draw, and the limits of one. */
+export interface OfflineAreaLimits {
+  enabled: boolean;
+  /** The largest area built, km² */
+  maxAreaKm2: number;
+  /** Positions in all rings of the polygon together */
+  maxVertices: number;
+  /** The highest zoom of a drawn area, also the zoom of a request that names none */
+  maxzoom: number;
+  /** The layers a request may name */
+  layers: string[];
+}
+
+/** POST /areas body: the polygon to build a package of. */
+export interface OfflineAreaRequest {
+  name?: string;
+  geometry: Polygon | MultiPolygon;
+  layers?: string[];
+  maxzoom?: number;
+}
+
+export type OfflineAreaState = 'queued' | 'building' | 'ready' | 'failed';
+
+/** POST /areas and GET /areas/{id}: where the build of a drawn area stands. */
+export interface OfflineAreaStatus {
+  /** "area-" and 24 hex digits: a hash of the request, so the same polygon is one area */
+  id: string;
+  state: OfflineAreaState;
+  /** Place in the queue, 1 = next (queued only) */
+  position: number | null;
+  error: string | null;
+  /** The package, as GET /regions lists one; also an older one while a newer one is built */
+  package: OfflineRegion | null;
 }
