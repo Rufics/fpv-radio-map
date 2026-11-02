@@ -68,6 +68,12 @@ json WorldTiles::style() const {
     }
 }
 
+std::vector<std::string> WorldTiles::fontstacks() const {
+    std::vector<std::string> out;
+    for (const fs::path& dir : plainDirectories(dir_ / kFontsDir)) out.push_back(dir.filename().string());
+    return out;
+}
+
 std::vector<fs::path> WorldTiles::glyphs(const std::string& fontstack, const std::vector<std::string>& ranges) const {
     // A fontstack names a directory: one name, never a path.
     if (fontstack.empty() || fontstack.find('/') != std::string::npos || fontstack.starts_with('.')) return {};

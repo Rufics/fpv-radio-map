@@ -38,8 +38,8 @@ bool isExpression(const json& value) {
            std::ranges::find(kExpressionOperators, value.front().get<std::string>()) != kExpressionOperators.end();
 }
 
-/// The fontstacks a text-font value can name: a literal list, or the literal lists inside an
-/// expression (a stack read from feature data, such as ["get", "font"], cannot be known).
+/// The fontstacks a text-font value names: a literal list, or the literal lists inside an
+/// expression (a stack read from feature data, such as ["get", "font"], is not listed here).
 void collectFontstacks(const json& value, std::set<std::string, std::less<>>& out) {
     if (!value.is_array() || value.empty()) return;
     if (isExpression(value)) {
@@ -266,6 +266,14 @@ std::vector<std::string> RegionStyle::fontstacks(const json& style) {
     return {out.begin(), out.end()};
 }
 
+bool RegionStyle::fontsByExpression(const json& style) {
+    if (!style.contains("layers") || !style.at("layers").is_array()) return false;
+    return std::ranges::any_of(style.at("layers"), [](const json& layer) {
+        return layer.is_object() && layer.contains("layout") && layer.at("layout").is_object() &&
+               isExpression(layer.at("layout").value("text-font", json()));
+    });
+}
+
 // ---- builder -----------------------------------------------------------------------------
 
 std::vector<std::string> RegionPackageBuilder::layersOf(const RegionDefinition& region, const WorldTiles& world) {
@@ -302,7 +310,16 @@ std::vector<RegionPackageBuilder::Entry> RegionPackageBuilder::extractLayers(con
 std::vector<RegionPackageBuilder::Entry> RegionPackageBuilder::styleAssets(const RegionDefinition& region,
                                                                            const json& style) const {
     std::vector<Entry> out;
-    for (const std::string& stack : RegionStyle::fontstacks(style)) {
+    std::vector<std::string> stacks = RegionStyle::fontstacks(style);
+    if (RegionStyle::fontsByExpression(style)) {
+        // The font may come from the feature data: every fontstack of the world goes in, so the
+        // labels still draw offline.
+        std::ranges::move(t_.world.fontstacks(), std::back_inserter(stacks));
+        std::ranges::sort(stacks);
+        const auto [first, last] = std::ranges::unique(stacks);
+        stacks.erase(first, last);
+    }
+    for (const std::string& stack : stacks) {
         const auto files = t_.world.glyphs(stack, region.glyphRanges());
         if (files.empty()) t_.log.warn("regions", std::format("{}: no glyphs for '{}'", region.id(), stack));
         for (const fs::path& f : files) out.push_back(snapshot(region, std::format("glyphs/{}/{}", stack, f.filename().string()), f));

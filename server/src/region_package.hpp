@@ -109,6 +109,9 @@ public:
     [[nodiscard]] static json rewrite(json style, const RegionPackage& package, bool sprites);
     /// The fontstacks the style's symbol layers name, e.g. "Noto Sans Regular".
     [[nodiscard]] static std::vector<std::string> fontstacks(const json& style);
+    /// Whether a symbol layer chooses its font with an expression, so the feature data may name
+    /// fontstacks that fontstacks() cannot list.
+    [[nodiscard]] static bool fontsByExpression(const json& style);
 
 private:
     /// Points each pmtiles source at the package or drops it; returns the dropped source names.

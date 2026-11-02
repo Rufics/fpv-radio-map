@@ -116,6 +116,8 @@ TEST(RegionStyle, FindsTheFontstacksInsideExpressionsButNotInFeatureData) {
                           {{"layout", {{"text-font", {"Noto Sans Medium"}}}}}}}};
     EXPECT_EQ(RegionStyle::fontstacks(style),
               (std::vector<std::string>{"Noto Sans Bold,Arial", "Noto Sans Medium", "Noto Sans Regular"}));
+    EXPECT_TRUE(RegionStyle::fontsByExpression(style));
+    EXPECT_FALSE(RegionStyle::fontsByExpression({{"layers", {{{"layout", {{"text-font", {"Noto Sans Medium"}}}}}}}}));
 }
 
 TEST(PmtilesTool, CutsByBoxOrPolygonWithoutAShell) {
@@ -366,6 +368,19 @@ TEST_F(RegionCatalogTest, ANewGlyphFileRebuildsThePackages) {
     fs::last_write_time(fontstack, fs::file_time_type::clock::now() + std::chrono::seconds(5));
     catalog.scan();
     EXPECT_NE(catalog.find("alpha")->builtAt, first.builtAt);
+}
+
+TEST_F(RegionCatalogTest, AFontChosenByFeatureDataBringsEveryWorldFont) {
+    json style = test::TestWorld::style();
+    style["layers"].push_back({{"id", "poi"}, {"type", "symbol"}, {"source", "openmaptiles"}, {"source-layer", "poi"},
+                               {"layout", {{"text-field", "{name}"}, {"text-font", {"get", "font"}}}}});
+    world_->write("style-dark.json", style.dump());
+    RegionCatalog catalog(settings(), log_, clock_);
+    catalog.scan();
+    const auto beta = catalog.find("beta");  // every glyph range
+    ASSERT_TRUE(beta);
+    const test::ZipContents zip(catalog.store().archive(*beta));
+    EXPECT_NE(std::ranges::find(zip.names, "glyphs/Unused Font/0-255.pbf"), zip.names.end()) << "a font the data may name";
 }
 
 TEST_F(RegionCatalogTest, WithoutTheToolEveryRegionFailsAndNothingIsBuilt) {

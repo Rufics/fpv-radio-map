@@ -37,6 +37,8 @@ public:
     /// The glyph files of `fontstack` whose range is in `ranges` (empty = all), sorted.
     [[nodiscard]] std::vector<std::filesystem::path> glyphs(const std::string& fontstack,
                                                             const std::vector<std::string>& ranges) const;
+    /// Every fontstack the fonts directory holds, sorted.
+    [[nodiscard]] std::vector<std::string> fontstacks() const;
     /// The sprite files, 1x and 2x, sorted; empty without a sprites directory.
     [[nodiscard]] std::vector<std::filesystem::path> sprites() const;
     [[nodiscard]] std::optional<std::filesystem::path> dem() const;
