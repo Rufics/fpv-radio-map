@@ -463,6 +463,9 @@ RegionPackage RegionPackageBuilder::build(const RegionDefinition& region, const 
     std::tie(p.size, p.sha256) = writeZip(description, entries, region.id());
     p.builtAt = UtcTime::format(t_.clock.now());
     p.preview = writePreview(p);
+    // A stop that came during the preview (which may then fail rather than report the stop)
+    // still keeps the previous package.
+    if (stop_.stop_requested()) throw RegionBuildCancelled();
     t_.store.commit(p);
     return p;
 }
