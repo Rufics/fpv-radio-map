@@ -10,6 +10,7 @@ import {
   RfmapApiClient,
   ZipIndex,
 } from '@rfmap/ui-kit';
+import { FpvDataService } from '../core/fpv-data.service';
 import { MockApiHarness } from '../tests/mock-api-harness';
 import { MockAreas, MockRegions } from '../mock/mock-regions';
 import { AreaDrawComponent } from './area-draw.component';
@@ -92,6 +93,19 @@ describe('OfflineLibrary', () => {
     const config = await MockApiHarness.settle(library.mapConfig({ weather: { tiles: ['w'] } }));
     expect(config?.glyphs).toBe('rfoffline://regions/dnipro-ridge/glyphs/{fontstack}/{range}.pbf');
     expect(config?.weather?.tiles).toEqual(['w']);
+
+    // the map takes another choice without a reload
+    const data = TestBed.inject(FpvDataService);
+    await MockApiHarness.settle(data.load());
+    expect(data.mapConfig()?.glyphs).toContain('rfoffline://regions/dnipro-ridge/');
+    library.setActive(null);
+    TestBed.tick();
+    await MockApiHarness.wait(100);
+    expect(data.mapConfig()?.glyphs ?? '').not.toContain('rfoffline:');
+    library.setActive('regions/dnipro-ridge');
+    TestBed.tick();
+    await MockApiHarness.wait(100);
+    expect(data.mapConfig()?.glyphs).toContain('rfoffline://regions/dnipro-ridge/');
 
     await MockApiHarness.settle(library.remove('regions/dnipro-ridge'));
     expect(library.saved()).toEqual([]);

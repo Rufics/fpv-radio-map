@@ -33,7 +33,9 @@ export class PackageDownloader {
       pending = [];
       pendingBytes = 0;
     };
+    const overrun = () => new DamagedDownloadError(`The download is larger than the package's ${total} bytes; try again`);
     const take = (chunk: Uint8Array) => {
+      if (received + chunk.length > total) throw overrun();
       hash.update(chunk);
       pending.push(chunk);
       pendingBytes += chunk.length;
@@ -43,7 +45,12 @@ export class PackageDownloader {
     };
     if (res.body) {
       const reader = res.body.getReader();
-      for (let r = await reader.read(); !r.done; r = await reader.read()) take(r.value);
+      try {
+        for (let r = await reader.read(); !r.done; r = await reader.read()) take(r.value);
+      } catch (e) {
+        await reader.cancel().catch(() => undefined);
+        throw e;
+      }
     } else {
       take(new Uint8Array(await res.arrayBuffer()));
     }

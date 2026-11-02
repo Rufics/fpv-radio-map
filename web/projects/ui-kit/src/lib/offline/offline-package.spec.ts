@@ -98,6 +98,14 @@ describe('PackageDownloader', () => {
     const gone = new PackageDownloader(serving(zip, 4096, 404));
     await expect(gone.download(region(zip), () => undefined)).rejects.toThrow('replaced');
   });
+
+  it('stops reading a download that grows past the package size', async () => {
+    const big = sample();
+    const seen: number[] = [];
+    const d = new PackageDownloader(serving(big, 65_536));
+    await expect(d.download(region(big, { size: 100_000 }), (p) => seen.push(p.received))).rejects.toThrow('larger');
+    expect(Math.max(...seen)).toBeLessThanOrEqual(100_000);
+  });
 });
 
 describe('OfflineMapSources', () => {

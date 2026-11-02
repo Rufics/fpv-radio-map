@@ -1035,7 +1035,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/OfflineArea' }
         '409': { description: Drawn areas are off on this server }
-        '422': { description: 'Not a polygon, or over a limit: the message says which' }
+        '422': { description: 'Not a polygon, a polygon whose outline crosses itself or whose holes are not inside it, or over a limit: the message says which' }
         '429': { description: Rate limit (class area); Retry-After }
         '503': { description: 'The queue is full (regions.areas.maxQueued) or the world data cannot be read; Retry-After' }
 

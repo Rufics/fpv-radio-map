@@ -140,7 +140,9 @@ its package on request, with the same builder and from the same world files as t
 
 - **Limits.** `regions.areas` bounds what one request may cost: the area (km² on the Earth,
   holes taken out), the corners of the polygon and the highest zoom. A request over a limit is
-  refused with `422` and a message that says which. The app shows the limits while the user draws.
+  refused with `422` and a message that says which. So is a polygon whose outline crosses itself,
+  or with a hole outside its outline or overlapping another hole. The app shows the limits while
+  the user draws.
 - **One build per polygon.** The id of an area is a hash of what was asked (polygon, name, layers,
   zoom). The same polygon asked twice, by anyone, is one package. When it is current, the answer
   comes at once.

@@ -82,11 +82,12 @@ RegionDefinition RegionAreas::define(const json& body) const {
     if (asked.maxZoom().value_or(l.maxZoom) > l.maxZoom) {
         throw AreaRefused(std::format("maxzoom must be at most {} for a drawn area", l.maxZoom));
     }
-    if (const double km2 = asked.area().areaKm2(); km2 > l.maxAreaKm2) {
-        throw AreaRefused(std::format("the area is {:.0f} km², more than the {:.0f} km² this server builds", km2, l.maxAreaKm2));
-    }
     if (const std::size_t n = asked.area().vertices(); n > l.maxVertices) {
         throw AreaRefused(std::format("the polygon has {} vertices, more than the {} this server takes", n, l.maxVertices));
+    }
+    if (auto flaw = asked.area().flaw()) throw AreaRefused(*flaw);
+    if (const double km2 = asked.area().areaKm2(); km2 > l.maxAreaKm2) {
+        throw AreaRefused(std::format("the area is {:.0f} km², more than the {:.0f} km² this server builds", km2, l.maxAreaKm2));
     }
     entry["id"] = std::string(kIdPrefix) + Secrets::hex(Secrets::sha256(asked.canonical())).substr(0, kIdHexDigits);
     return parse(entry);

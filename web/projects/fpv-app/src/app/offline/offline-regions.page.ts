@@ -39,8 +39,7 @@ type AreaView = OfflineAreaStatus | { id: string; state: 'gone' } | { id: string
         }
         @if (library.saved().length) {
           <p class="muted small">
-            {{ library.saved().length }} saved, {{ f.size(library.savedBytes()) }} together. The map reads the one chosen here
-            (open the map again after a change).
+            {{ library.saved().length }} saved, {{ f.size(library.savedBytes()) }} together. The map reads the one chosen here.
           </p>
           <ul class="saved" aria-label="Saved packages">
             <li>
@@ -254,10 +253,14 @@ export class OfflineRegionsPage implements OnInit {
     Object.values(this.areas()).some((a) => a.state === 'queued' || a.state === 'building'),
   );
   private timer?: ReturnType<typeof setTimeout>;
+  private destroyed = false;
   static readonly pollMs = 3000;
 
   constructor() {
-    inject(DestroyRef).onDestroy(() => clearTimeout(this.timer));
+    inject(DestroyRef).onDestroy(() => {
+      this.destroyed = true;
+      clearTimeout(this.timer);
+    });
   }
 
   ngOnInit(): void {
@@ -341,6 +344,6 @@ export class OfflineRegionsPage implements OnInit {
 
   private schedule(): void {
     clearTimeout(this.timer);
-    if (this.building()) this.timer = setTimeout(() => void this.poll(), OfflineRegionsPage.pollMs);
+    if (!this.destroyed && this.building()) this.timer = setTimeout(() => void this.poll(), OfflineRegionsPage.pollMs);
   }
 }

@@ -45,6 +45,8 @@ export class OfflineLibrary {
   readonly active = signal<string | null>(OfflineLibrary.read(OfflineLibrary.activeKey));
   readonly drawn = signal<DrawnArea[]>(OfflineLibrary.readList<DrawnArea>(OfflineLibrary.drawnKey));
   readonly savedBytes = computed(() => this.saved().reduce((n, s) => n + s.region.size, 0));
+  /** Counts changes to what the map reads: another package chosen, or the chosen one saved anew or removed. */
+  readonly mapRevision = signal(0);
 
   static key(kind: SavedPackageKind, id: string): string {
     return `${kind}/${id}`;
@@ -81,7 +83,8 @@ export class OfflineLibrary {
       const zip = await this.downloader.download(region, (p) => this.progress(key, p), abort.signal);
       await this.storage.put({ key, kind, region, savedAt: new Date().toISOString(), request }, zip);
       OfflineMapSources.close(key);
-      if (!this.active()) this.setActive(key);
+      if (this.active()) this.changedMap(key);
+      else this.setActive(key);
       await this.refresh();
     } catch (e) {
       if (!abort.signal.aborted) this.failures.update((f) => ({ ...f, [key]: e instanceof Error ? e.message : String(e) }));
@@ -99,11 +102,14 @@ export class OfflineLibrary {
     await this.storage.remove(key);
     OfflineMapSources.close(key);
     await this.refresh();
+    this.changedMap(key);
   }
 
   setActive(key: string | null): void {
+    if (key === this.active()) return;
     this.active.set(key);
     OfflineLibrary.write(OfflineLibrary.activeKey, key);
+    this.mapRevision.update((n) => n + 1);
   }
 
   remember(area: DrawnArea): void {
@@ -130,6 +136,11 @@ export class OfflineLibrary {
     } catch {
       return null; // a damaged or missing package: the server's map instead
     }
+  }
+
+  /** A package changed: when it is the one the map reads, the map's configuration is built again. */
+  private changedMap(key: string): void {
+    if (key === this.active()) this.mapRevision.update((n) => n + 1);
   }
 
   private progress(key: string, p: DownloadProgress): void {

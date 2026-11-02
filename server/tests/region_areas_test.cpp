@@ -126,6 +126,25 @@ TEST_F(RegionAreasTest, RefusesWhatIsWrongOrOverTheLimits) {
     refused({{"name", "x"}}, "geometry");
     refused({{"geometry", square(35, 48, 0.5)}}, "more than the 100 km²");
     refused({{"geometry", ring(35, 48, 0.01, 30)}}, "30 vertices, more than the 20");
+    // A bow tie measures small (its halves cancel) but has no clear inside.
+    const json bowTie = {{"type", "Polygon"},
+                         {"coordinates", {{{35.0, 48.0}, {35.5, 48.5}, {35.5, 48.0}, {35.0, 48.5}, {35.0, 48.0}}}}};
+    refused({{"geometry", bowTie}}, "crosses itself");
+    // A hole that is not in its polygon would be taken out of an area it is not part of.
+    json outside = square(35, 48, 0.05);
+    outside["coordinates"].push_back(square(35.2, 48, 0.05)["coordinates"][0]);
+    refused({{"geometry", outside}}, "hole of the polygon is not inside");
+    json across = square(35, 48, 0.05);
+    across["coordinates"].push_back(square(35.04, 48.01, 0.02)["coordinates"][0]);
+    refused({{"geometry", across}}, "hole of the polygon is not inside");
+    json overlapping = square(35, 48, 0.05);
+    overlapping["coordinates"].push_back(square(35.01, 48.01, 0.02)["coordinates"][0]);
+    overlapping["coordinates"].push_back(square(35.02, 48.02, 0.02)["coordinates"][0]);
+    refused({{"geometry", overlapping}}, "two holes");
+    json holed = square(35, 48, 0.05);
+    holed["coordinates"].push_back(square(35.01, 48.01, 0.02)["coordinates"][0]);
+    EXPECT_NO_THROW((void)areas.define({{"geometry", holed}}));
+    EXPECT_NO_THROW((void)areas.define({{"geometry", ring(35, 48, 0.01, 20)}}));
     refused({{"geometry", square(35, 48, 0.05)}, {"maxzoom", 14}}, "at most 13");
     refused({{"geometry", square(35, 48, 0.05)}, {"bbox", {35, 48, 36, 49}}}, "unknown field 'bbox'");
     refused({{"geometry", square(35, 48, 0.05)}, {"boundary", "/etc/passwd"}}, "unknown field 'boundary'");
