@@ -141,6 +141,13 @@ TEST_F(RegionAreasTest, RefusesWhatIsWrongOrOverTheLimits) {
     overlapping["coordinates"].push_back(square(35.01, 48.01, 0.02)["coordinates"][0]);
     overlapping["coordinates"].push_back(square(35.02, 48.02, 0.02)["coordinates"][0]);
     refused({{"geometry", overlapping}}, "two holes");
+    // A hole inside another would be taken out twice; either order.
+    json nested = square(35, 48, 0.05);
+    nested["coordinates"].push_back(square(35.005, 48.005, 0.04)["coordinates"][0]);
+    nested["coordinates"].push_back(square(35.01, 48.01, 0.02)["coordinates"][0]);
+    refused({{"geometry", nested}}, "two holes");
+    std::swap(nested["coordinates"][1], nested["coordinates"][2]);
+    refused({{"geometry", nested}}, "two holes");
     json holed = square(35, 48, 0.05);
     holed["coordinates"].push_back(square(35.01, 48.01, 0.02)["coordinates"][0]);
     EXPECT_NO_THROW((void)areas.define({{"geometry", holed}}));

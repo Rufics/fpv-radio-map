@@ -120,7 +120,10 @@ std::optional<std::string> polygonFlaw(const json& polygon) {
             return "a hole of the polygon is not inside its outline";
         }
         for (std::size_t other = hole + 1; other < rings.size(); ++other) {
-            if (ringsMeet(rings[hole], rings[other])) return "two holes of the polygon overlap";
+            if (ringsMeet(rings[hole], rings[other]) || inside(rings[hole], rings[other].front()) ||
+                inside(rings[other], rings[hole].front())) {
+                return "two holes of the polygon overlap";
+            }
         }
     }
     return std::nullopt;
