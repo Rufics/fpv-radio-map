@@ -38,6 +38,7 @@ add_library(rfmap_server_lib STATIC
   src/region_package.cpp
   src/region_preview.cpp
   src/region_catalog.cpp
+  src/region_areas.cpp
   src/region_api.cpp
   src/link_service.cpp
   src/module_runner.cpp

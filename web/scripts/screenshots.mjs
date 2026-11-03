@@ -151,8 +151,34 @@ try {
   watch(offline, 'offline');
   await offline.goto(`${BASE}/offline`);
   await offline.getByRole('link', { name: /^Download / }).first().waitFor({ timeout: 10000 });
+  // the reference area saved on this device, the map reading it
+  await offline.getByRole('button', { name: /^Save on this device: Dnipro ridge/ }).click();
+  await offline.getByText('On this device, saved').first().waitFor({ timeout: 10000 });
   await settle(offline, 800);
   await offline.screenshot({ path: `${OUT}/laptop-offline-regions.png` });
+  // an area drawn on the map, checked against the server's limits, then asked for and built
+  const drawMap = offline.locator('fpv-area-draw canvas');
+  await drawMap.scrollIntoViewIfNeeded();
+  await drawMap.waitFor({ timeout: 10000 });
+  await settle(offline, 1500);
+  const box = await drawMap.boundingBox();
+  // one corner after another: the clicks must not overlap
+  const corners = [[0.36, 0.3], [0.62, 0.26], [0.7, 0.62], [0.42, 0.72]];
+  await corners.reduce(
+    (done, [fx, fy]) => done.then(() => offline.mouse.click(box.x + box.width * fx, box.y + box.height * fy)),
+    Promise.resolve(),
+  );
+  await offline.getByLabel('Name').fill('Launch field north');
+  await settle(offline, 500);
+  await offline.locator('#draw-h').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await settle(offline, 500);
+  await offline.screenshot({ path: `${OUT}/laptop-offline-draw.png` });
+  await offline.getByRole('button', { name: 'Build package' }).click();
+  await offline.getByRole('heading', { name: 'Your drawn areas' }).waitFor({ timeout: 10000 });
+  await offline.locator('ul[aria-label="Drawn areas"] a[download]').first().waitFor({ timeout: 20000 });
+  await offline.locator('#drawn-h').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  await settle(offline, 800);
+  await offline.screenshot({ path: `${OUT}/laptop-offline-drawn.png` });
   await offline.close();
   const offlinePhone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   watch(offlinePhone, 'phone-offline');

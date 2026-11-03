@@ -139,6 +139,7 @@
     "create":   { "perMinute": 20,  "burst": 10 },
     "calc":     { "perMinute": 120, "burst": 30 },
     "coverage": { "perMinute": 6,   "burst": 3 },
+    "area":     { "perMinute": 12,  "burst": 4 },
     "admin":    { "perMinute": 60,  "burst": 20 }
   },
   "coverage": {
@@ -175,7 +176,23 @@
     "rescanMinutes": 10,
     // Package downloads streamed at once; each holds a request thread while it lasts, so more
     // get 503 with Retry-After. 0 = max(1, server.threads / 4).
-    "maxDownloads": 0
+    "maxDownloads": 0,
+    // Written by the server only: the packages of areas users draw (POST /api/v1/areas).
+    "areaDir": "/var/lib/rfmap/areas",
+    "areas": {
+      // The largest drawn area built, km²; 0 turns drawing areas off.
+      "maxAreaKm2": 2500,
+      // Positions in all rings of the polygon together.
+      "maxVertices": 1000,
+      // The highest zoom of a drawn area; a request that names none gets this one.
+      "maxZoom": 14,
+      // Builds waiting for the one running; more get 503 with Retry-After.
+      "maxQueued": 8,
+      // A package nobody asked for or downloaded this long is removed.
+      "keepHours": 168,
+      // All drawn packages together; past it the least recently used go first.
+      "maxStoredMb": 20480
+    }
   },
   // Merged over the defaults GET /api/v1/config/map returns (tiles-builder names under /tiles).
   "map": {

@@ -73,6 +73,14 @@ public:
     [[nodiscard]] const GeoBox& box() const { return box_; }
     /// The polygon as a GeoJSON MultiPolygon geometry; nothing for a plain box.
     [[nodiscard]] const std::optional<json>& polygon() const { return polygon_; }
+    /// The area on the Earth in km²: the polygon's, holes taken out, or the box's.
+    [[nodiscard]] double areaKm2() const;
+    /// What is wrong with the polygon's shape: an outline that crosses itself, a hole outside
+    /// its outline or overlapping another. The edges are taken as straight in degrees and each
+    /// pair is tried, so this is for small polygons of few vertices, as users draw.
+    [[nodiscard]] std::optional<std::string> flaw() const;
+    /// The positions of every ring of the polygon; 4 for a box.
+    [[nodiscard]] std::size_t vertices() const;
 
 private:
     RegionArea(const GeoBox& box, json polygon) : box_(box), polygon_(std::move(polygon)) {}

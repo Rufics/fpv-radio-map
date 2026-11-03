@@ -91,9 +91,12 @@ public:
     std::size_t removeUnused(const std::set<std::string, std::less<>>& current) const;
     /// The lock file that keeps the builds of several server processes apart.
     [[nodiscard]] std::filesystem::path lockFile() const { return dir_ / ".rfmap-regions.lock"; }
+    /// `relative` under the directory, symbolic links and ".." resolved; RegionError when the
+    /// result would lie outside it.
+    [[nodiscard]] std::filesystem::path inside(const std::filesystem::path& relative) const;
 
 private:
-    [[nodiscard]] std::filesystem::path record(const std::string& id) const { return dir_ / (id + ".json"); }
+    [[nodiscard]] std::filesystem::path record(const std::string& id) const { return inside(id + ".json"); }
     /// The names of the entries the current packages of `current` use.
     [[nodiscard]] std::set<std::string, std::less<>> inUse(const std::set<std::string, std::less<>>& current) const;
 
@@ -150,6 +153,10 @@ public:
 
     /// The layers a package of `region` carries: those it asks for that the world has.
     [[nodiscard]] static std::vector<std::string> layersOf(const RegionDefinition& region, const WorldTiles& world);
+    /// What a package of `region` is built from, as a SHA-256 (hex): the package format, the
+    /// `tool` version, the definition and the world files it reads. Unchanged = no rebuild.
+    [[nodiscard]] static std::string fingerprint(const RegionDefinition& region, const WorldTiles& world,
+                                                 const std::string& tool);
 
     /// One file of a package: its name inside, and where its bytes come from.
     struct Entry {

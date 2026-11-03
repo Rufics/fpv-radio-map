@@ -133,6 +133,23 @@ public:
         int rescanMinutes = 10;
         /// Package downloads streamed at once; 0 = automatic, a quarter of server.threads.
         int maxDownloads = 0;
+        /// Where the packages of areas users draw are kept (region_areas.hpp).
+        std::filesystem::path areaDir = "/var/lib/rfmap/areas";
+        /// The limits of drawn areas.
+        struct Areas {
+            /// The largest area built, km²; 0 turns drawn areas off.
+            double maxAreaKm2 = 2500.0;
+            int maxVertices = 1000;
+            /// The highest zoom of a drawn area's package.
+            int maxZoom = 14;
+            /// Builds that may wait for the one running.
+            int maxQueued = 8;
+            /// A package nobody asked for or downloaded this long is removed.
+            int keepHours = 168;
+            /// All packages of drawn areas together, MB; the least recently used go first.
+            int maxStoredMb = 20480;
+        };
+        Areas areas;
     };
     Regions regions;
 
@@ -194,10 +211,12 @@ public:
         double perMinute;
         double burst;
     };
-    /// Per client address and class: default, open (PIN attempts), create, calc, admin, coverage.
+    /// Per client address and class: default, open (PIN attempts), create, calc, admin, coverage,
+    /// area (drawn offline areas asked for).
     std::map<std::string, RateLimit, std::less<>> rateLimits{{"default", {600, 120}}, {"open", {10, 5}},
                                                              {"create", {20, 10}},     {"calc", {120, 30}},
-                                                             {"admin", {60, 20}},      {"coverage", {6, 3}}};
+                                                             {"admin", {60, 20}},      {"coverage", {6, 3}},
+                                                             {"area", {12, 4}}};
 
     struct Coverage {
         int threads = 4;

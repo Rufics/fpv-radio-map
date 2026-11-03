@@ -131,14 +131,57 @@ Full downloads keyed by version are the simple and reliable choice. **Delta pack
 tiles that changed since a given version) are a possible later extension. PMTiles directories make
 it possible to compare two versions tile by tile, but the server does not offer them today.
 
-The web app lists the regions under **Offline** (`/offline`), with a download button for each.
+## 5. Areas users draw
+
+A pilot whose area is not in the list draws it on the map under **Offline**, and the server builds
+its package on request, with the same builder and from the same world files as the regions.
+
+![Drawing an area under Offline](../images/laptop-offline-draw.png)
+
+- **Limits.** `regions.areas` bounds what one request may cost: the area (km² on the Earth,
+  holes taken out), the corners of the polygon and the highest zoom. A request over a limit is
+  refused with `422` and a message that says which. So is a polygon whose outline crosses itself,
+  or with a hole outside its outline, overlapping or inside another hole. The app shows the limits while
+  the user draws.
+- **One build per polygon.** The id of an area is a hash of what was asked (polygon, name, layers,
+  zoom). The same polygon asked twice, by anyone, is one package. When it is current, the answer
+  comes at once.
+- **Queue.** Builds run one at a time on their own worker, beside the region scans, and up to
+  `regions.areas.maxQueued` wait. Past that a request gets `503` with `Retry-After`. Asking is in
+  its own rate class, `area`.
+- **Updates.** Asking again for an area already built checks it against the world files. When
+  they changed, the package is built anew and the older one stays downloadable meanwhile.
+- **Clean-up.** Packages live in `regions.areaDir`, apart from the regions. Asking for one or
+  downloading it counts as a use. One unused for `regions.areas.keepHours` is removed, and so are
+  the least recently used once they take more than `regions.areas.maxStoredMb`. Asking again
+  builds a removed one anew.
+
+The queue is held by the server process that took the request. With several processes behind
+one address, route `/api/v1/areas` to one of them, or accept that a status poll that reaches
+another process sees a queued area only once it is built (the packages on disk are shared).
+
+## 6. On the device
+
+The web app lists the regions under **Offline** (`/offline`).
 
 ![Offline regions page](../images/laptop-offline-regions.png)
 
-Saving a package inside the app and using it for the map without a network is the next step on
-the client.
+**Save on this device** downloads a package into the browser's storage (IndexedDB). The app
+hashes it while it arrives and keeps it only when its size and SHA-256 are those of the catalog.
+It asks the browser to keep the data (persistent storage) and checks the room the browser allows
+before it starts. When the catalog lists a newer version, the card says **Update available**. The
+saved copy stays usable until the update is complete.
 
-## 5. Settings
+Under **On this device** the user picks the saved package the map reads. The map then takes the
+tiles and fonts of the package from the stored zip, by byte ranges, without unpacking it. It does
+so also when the server cannot be reached, and keeps the server's weather layers when it can.
+The radio calculations still need the server. The app itself must already be open, or cached by
+the browser, to start without a network.
+
+A browser without IndexedDB (some private modes) keeps a saved package only while the page is
+open, and the page says so. **Download zip** gives the package as a file for other tools.
+
+## 7. Settings
 
 | Key | Default | Notes |
 |---|---|---|
@@ -148,12 +191,19 @@ the client.
 | `regions.pmtiles` | `/usr/local/bin/pmtiles` | go-pmtiles. The server image carries the same pinned release as tools/tiles-builder. It is started directly with fixed arguments and an empty environment, never through a shell. |
 | `regions.rescanMinutes` | 10 | 0 = only at start and on reload. A scan that finds nothing changed reads no tile data. |
 | `regions.maxDownloads` | 0 (automatic) | Package downloads streamed at once. Each one holds a request thread until the client has it all, so a further one gets `503` with `Retry-After` instead of starving the other requests. Automatic is a quarter of `server.threads`, at least one. Metrics show it as the `downloads` gate. |
+| `regions.areaDir` | `/var/lib/rfmap/areas` | Packages of drawn areas; written only by the server. Not inside `packageDir`. |
+| `regions.areas.maxAreaKm2` | 2500 | The largest drawn area built. 0 turns drawing areas off. |
+| `regions.areas.maxVertices` | 1000 | Corners in all rings of the polygon together. |
+| `regions.areas.maxZoom` | 14 | The highest zoom of a drawn area, and that of a request that names none. One zoom more is about four times the tiles. |
+| `regions.areas.maxQueued` | 8 | Builds that may wait for the one running. |
+| `regions.areas.keepHours` | 168 | A package nobody asked for or downloaded this long is removed. |
+| `regions.areas.maxStoredMb` | 20480 | All drawn packages together. Past it the least recently used go first. |
 
 The bundled nginx streams package downloads without buffering them (`proxy_buffering off`) and
 passes Range requests through. Behind another proxy, do the same for
-`/api/v1/regions/*/packages/`.
+`/api/v1/regions/*/packages/` and `/api/v1/areas/*/packages/`.
 
-## 6. API
+## 8. API
 
 | | |
 |---|---|
@@ -163,5 +213,9 @@ passes Range requests through. Behind another proxy, do the same for
 | `GET /api/v1/regions/{id}/previews/{previewVersion}.png` | the preview |
 | `GET /api/v1/admin/regions` | every region with `ready`, `building` or `failed` and the last error |
 | `POST /api/v1/admin/regions/reload` | scan now |
+| `GET /api/v1/areas` | whether areas can be drawn, and the limits |
+| `POST /api/v1/areas` | ask for the package of a polygon: `200` when current, `202` when queued |
+| `GET /api/v1/areas/{id}` | `queued` (with its place), `building`, `ready` or `failed` |
+| `GET /api/v1/areas/{id}/packages/{version}.zip` | the package, as for a region |
 
 Details are in the [OpenAPI description](../api/openapi.yaml).
