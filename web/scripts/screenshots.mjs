@@ -225,6 +225,40 @@ try {
   await plane.locator('#gap-title').evaluate(scrollPanelTo);
   await settle(plane, 500);
   await plane.screenshot({ path: `${OUT}/laptop-autonomous.png` });
+  await plane.close();
+
+  // the 3D view with the altitude profile and the climb assistant, after the altitude corridor
+  // is turned on for the mission
+  const view3d = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  watch(view3d, '3d');
+  await view3d.goto(`${BASE}/?scenario=normal`);
+  await view3d.getByRole('button', { name: 'Use example route' }).click();
+  await view3d.getByRole('button', { name: /^Calculate$/ }).click();
+  await view3d.getByRole('button', { name: 'Show why' }).waitFor({ timeout: 20000 });
+  await view3d.getByRole('button', { name: 'Layers' }).click();
+  await view3d.getByLabel('3D terrain and route').check();
+  await view3d.getByRole('button', { name: 'Close layers' }).click();
+  await view3d.getByRole('button', { name: 'Turn on and calculate' }).click();
+  await view3d.getByRole('button', { name: '▶ Chase' }).waitFor({ timeout: 20000 });
+  await settle(view3d, 5000);
+  await view3d.screenshot({ path: `${OUT}/laptop-3d-altitude.png` });
+
+  // flight replay: a Blackbox log opened over the calculated mission (the mock answers a
+  // synthetic flight along the route for any file of 16 KB or more), then plan against fact
+  await view3d.getByRole('button', { name: 'Back to 2D' }).click();
+  await view3d.getByRole('button', { name: 'Replay', exact: true }).click();
+  await view3d
+    .locator('fpv-flight-import input[type=file]')
+    .setInputFiles({ name: 'LOG00007.BFL', mimeType: 'application/octet-stream', buffer: Buffer.alloc(64 * 1024, 1) });
+  await view3d.getByRole('button', { name: 'Replay flight 1' }).click();
+  await view3d.getByText('What happened').waitFor({ timeout: 20000 });
+  await settle(view3d, 3000);
+  await view3d.screenshot({ path: `${OUT}/laptop-replay.png` });
+  await view3d.getByRole('button', { name: 'Plan vs fact', exact: true }).click();
+  await view3d.getByText('Planned against flown').waitFor({ timeout: 20000 });
+  await settle(view3d, 2500);
+  await view3d.screenshot({ path: `${OUT}/laptop-plan-fact.png` });
+  await view3d.close();
 
   // ---- phone: PIN entry, then the mission view ----
   const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });

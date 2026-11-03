@@ -393,6 +393,7 @@ docker compose logs rfmap-server | head -20
 ```
 
 `dem` and `landcover` must be `true`. In the log you should see `applied migration 001_init.sql`,
+`applied migration 002_flight_logs.sql`,
 `seeded 4 radio-profiles` (DJI video, `seed-video.json`), `seeded 14 radio-profiles`,
 `seeded 38 antennas`, `seeded 21 batteries`, `seeded 3 drones`,
 `terrain: DEM /data/dem.cog.tif` and `listening on 0.0.0.0:8080`. No `seeded` line may end in
@@ -402,6 +403,27 @@ build: check `.env` and run `docker compose up -d --build` again.
 
 Open <http://127.0.0.1:8088> in a browser on the server (or `http://<server-ip>:8088` from your
 network). The map should show your area with hillshade and the attribution line at the bottom.
+
+### 5.1 Offline regions (optional)
+
+Pilots can take the map into the field: **Offline** in the header lists the regions the server
+offers, keeps a package in the browser, and builds packages for areas the pilots draw. The server
+cuts every package out of the tiles from step 2, so nothing else has to be built. To offer
+regions, write `regions.json` into `RFMAP_REGIONS_DIR` (default `deploy/regions`), for example
+one box:
+
+```sh
+mkdir -p ~/fpv-radio-map/deploy/regions
+cat > ~/fpv-radio-map/deploy/regions/regions.json <<'JSON'
+{ "regions": [ { "id": "home", "name": "Home district", "bbox": [34.8, 48.3, 35.4, 48.7] } ] }
+JSON
+TOKEN=$(sed -n 's/^RFMAP_ADMIN_TOKEN=//p' ~/fpv-radio-map/deploy/.env)
+curl -s -X POST -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8088/api/v1/admin/regions/reload
+```
+
+**Admin → Data sources** shows each region's state. Drawn areas need no file; their size limits
+are `regions.areas.*`. Boundaries, zoom levels, layers and updates are in
+[Offline regions](offline-regions.md).
 
 ## 6. Install the FPV modules
 

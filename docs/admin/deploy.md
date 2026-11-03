@@ -7,9 +7,9 @@ The stack has four parts, described in [`deploy/docker-compose.yml`](../../deplo
 
 | Service | What it does |
 |---|---|
-| `postgis` | PostgreSQL 18 + PostGIS 3.6. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
+| `postgis` | PostgreSQL 18 + PostGIS 3.6. Holds missions, share links, sessions, the library and its history, flight logs, module and admin settings and the result cache. |
 | `open-meteo`, `open-meteo-init`, `open-meteo-sync` | Your own Open-Meteo. `open-meteo-init` downloads a first copy of the model data and exits, `open-meteo-sync` then keeps it fresh, and the API answers rfmap-server. No request leaves your network for a forecast. |
-| `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly. |
+| `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly, and cuts the offline region packages out of the same tiles. Its operations listener (`/healthz`, `/readyz`, `/metrics`) stays on `127.0.0.1:9090` inside the container. |
 | `web` | nginx with the built client, `/tiles` (PMTiles over HTTP Range) and a reverse proxy for `/api`. The only service with a published port. |
 
 `postgis`, `open-meteo` and `rfmap-server` sit only on internal networks with no route out.
@@ -43,10 +43,12 @@ from outside.
    | `RFMAP_ADMIN_TOKEN` | At least 24 random characters, for example `openssl rand -base64 33`. Compared in constant time. Empty disables the admin API. |
    | `RFMAP_OWNER_PUBKEY` | Contents of `owner.pub`. |
    | `RFMAP_TILES_DIR` | Absolute path of the tiles-builder output. |
+   | `RFMAP_REGIONS_DIR` | Directory with `regions.json` and the boundary files it names, mounted at `/etc/rfmap/regions` (default `deploy/regions`). Without a `regions.json` no offline region is offered. See [Offline regions](offline-regions.md). |
    | `RFMAP_DEM_STATED_ERROR_M`, `RFMAP_DEM_STATED_ERROR_SOURCE` | From step 2. |
    | `RFMAP_HTTP_PORT` | Port `web` listens on (default 8088). |
    | `OPEN_METEO_MODELS` | The Open-Meteo model rfmap-server asks for (default `dwd_icon`). |
    | `OPEN_METEO_SYNC_MODELS` | The model directories `open-meteo-sync` downloads (default `dwd_icon,dwd_icon_global_eps_native`). See section 4. |
+   | `OPEN_METEO_VARIABLES` | The stored variables `open-meteo-init` and `open-meteo-sync` download. The default is the list section 4 explains; change it only together with the model. |
 
 ## 2. Start
 
@@ -200,6 +202,8 @@ Settings you will most likely touch:
 | `ops.listen`, `ops.port`, `ops.drainSeconds` | `127.0.0.1`, 9090, 5 | The operations listener: `GET /healthz`, `/readyz` and `/metrics` on a port of its own, see [Health, readiness and metrics](#health-readiness-and-metrics). |
 | `metrics.enabled`, `metrics.token`, `metrics.allowFrom` | `false`, empty, `[]` | Serves `GET /metrics` on the operations listener in the Prometheus text format: request rates and durations, the request, job and cell thread pools, the database pool (open and idle sessions, waits, lease timeouts, sessions opened, closed and failed to open), the PIN, calculation and package download gates (`rfmap_gate_*`), the caches, and the process's CPU time, memory, threads and open files. Guarded by a token of its own (`RFMAP_METRICS_TOKEN`, at least 16 characters) and/or the scraper's networks; with neither, only loopback may read it. |
 | `regions.*` | off | Offline region packages cut from the world map data: `worldDir`, `definitions`, `packageDir`, `pmtiles`, `rescanMinutes`, `maxDownloads`, and for areas users draw `areaDir` and `areas.*`. Compose sets `worldDir` to `/data` and mounts `RFMAP_REGIONS_DIR` with `regions.json`. See [Offline regions](offline-regions.md). |
+| `data.demName`, `data.landcoverName` | from `manifest.json` | The source names results show for the DEM and the land cover. Empty takes them from the tiles builder's `manifest.json` next to the DEM, then from the file name. |
+| `modules.maxMemoryMb`, `modules.maxTimeoutMs` | 2048, 60000 | Caps on the `limits` a module's manifest asks for; a module that asks for more runs with the cap. They apply to modules in a worker; owner-signed modules in the server process are not time-limited. |
 | `map` | — | Merged over the map sources `GET /api/v1/config/map` returns. Attribution comes from `manifest.json` next to the DEM. |
 
 ### Health, readiness and metrics
@@ -392,8 +396,8 @@ To update a compose image by hand, resolve the tag's current digest yourself, fo
 recreate the containers from `deploy/` with `docker compose pull && docker compose up -d`;
 `docker compose restart` keeps the old image.
 
-The server image and an API smoke test (missions, share link and PIN, `/calc/route`, module
-upload) were run against the pins of 2026-10-17. The `postgis/postgis:18-3.6` pin came later, on
+The server image and an API smoke test (missions, share link and PIN, `/calc/route`, installing a
+module, which was still an upload at the time) were run against the pins of 2026-10-17. The `postgis/postgis:18-3.6` pin came later, on
 2026-10-22, and was not part of that test; run the smoke test once on it. The web image was built on
 `node:24-trixie-slim` and served the client on 2026-10-21. The Open-Meteo image could not be
 pulled through the test network; build and check it once in your environment.
