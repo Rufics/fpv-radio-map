@@ -22,7 +22,10 @@ runs:
       env:
         KIND: ${{ inputs.kind }}
       run: |
-        case "$KIND" in ''|*[!a-z0-9-]*) echo "::error::kind must be lower-case letters, digits and dashes"; exit 1;; esac
+        case "$KIND" in
+          ""|*[!a-z0-9-]*) echo "::error::kind must be lower-case letters, digits and dashes"; exit 1 ;;
+          *) ;;
+        esac
         prefix="ccache-$KIND-${ImageOS:-$RUNNER_OS}-"
         echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
         echo "key=$prefix$GITHUB_SHA" >> "$GITHUB_OUTPUT"
