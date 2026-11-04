@@ -21,6 +21,7 @@ COPY platform/ platform/
 COPY modules/ modules/
 COPY examples/ examples/
 COPY server/ server/
+COPY cli/ cli/
 COPY schemas/ schemas/
 COPY data/library/ data/library/
 
@@ -33,9 +34,10 @@ RUN --mount=type=secret,id=build_ca,required=false \
     && cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
         -DRFMAP_BUILD_TESTS=OFF -DRFMAP_BUILD_SERVER=ON \
         -DRFMAP_OWNER_PUBKEY="${RFMAP_OWNER_PUBKEY}" -DRFMAP_VERSION="${RFMAP_VERSION}" \
-    && cmake --build build --target rfmap-server rfmod-worker rfmod \
+    && cmake --build build --target rfmap-server rfmod-worker rfmod rfmap \
     && DESTDIR=/out cmake --install build/server \
-    && install -D -m 0755 build/platform/rfmod/rfmod /out/usr/bin/rfmod
+    && install -D -m 0755 build/platform/rfmod/rfmod /out/usr/bin/rfmod \
+    && install -D -m 0755 build/cli/rfmap /out/usr/bin/rfmap
 
 # ---- go-pmtiles: cuts the offline region packages out of the world tiles (docs/admin/offline-regions.md) ----
 # The same pinned release as tools/tiles-builder/Dockerfile, verified by sha256; keep both in step.

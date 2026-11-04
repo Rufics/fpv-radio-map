@@ -115,8 +115,15 @@ long long secondsUntil(TimePoint until, TimePoint now) {
 }  // namespace
 
 AuthService::AuthService(IAuthStore& store, const PinHasher& pins, PinGate& gate, const IClock& clock,
-                         Settings settings)
-    : store_(store), pins_(pins), gate_(gate), clock_(clock), settings_(settings) {}
+                         Settings settings, ServiceTokens services)
+    : store_(store), pins_(pins), gate_(gate), clock_(clock), settings_(settings), services_(std::move(services)) {}
+
+Principal AuthService::calculationCaller(const std::string& bearer) {
+    if (auto name = services_.match(bearer)) {
+        return {ServiceTokens::principalId(*name), Role::View, std::nullopt, std::move(name)};
+    }
+    return authenticate(bearer);
+}
 
 AuthService::OwnerKey AuthService::newOwnerKey() {
     OwnerKey k;
@@ -211,7 +218,7 @@ Principal AuthService::authenticate(const std::string& bearer) {
     if (bearer.empty()) throw HttpError(401, "session required (Authorization: Bearer <session>)");
     const auto s = store_.session(Secrets::sha256(bearer), clock_.now());
     if (!s) throw HttpError(401, "session unknown or expired");
-    return {s->missionId, s->role, s->linkId};
+    return {s->missionId, s->role, s->linkId, std::nullopt};
 }
 
 json AuthService::linkJson(const LinkRecord& l) {

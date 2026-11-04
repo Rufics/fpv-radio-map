@@ -2,7 +2,8 @@
 # semantic-release reads the Conventional Commits since the last tag and decides the next version
 # (fix → patch, feat → minor, ! or BREAKING CHANGE → major). The workflow then runs the full CI,
 # builds and signs the FPV modules with the owner key, creates the tag and the GitHub release with
-# generated notes and the signed packages, and publishes the Docker images with that version.
+# generated notes, the signed packages and the rfmod and rfmap command-line tools, and publishes the
+# Docker images with that version.
 #
 # Needs:
 #   repository variable RFMAP_OWNER_PUBKEY        contents of owner.pub   (rfmod keygen --out owner)
@@ -138,6 +139,7 @@ jobs:
           python3 -I tools/ci/pack_modules.py build "$RUNNER_TEMP/owner.secret" "$RUNNER_TEMP/owner.pub" dist/release
           rm -f "$RUNNER_TEMP/owner.secret"
           install -m 0755 build/platform/rfmod/rfmod dist/release/rfmod-linux-x86_64
+          install -m 0755 build/cli/rfmap dist/release/rfmap-linux-x86_64
           ls -l dist/release
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

@@ -9,7 +9,8 @@
       "assets": [
         { "path": "../../dist/release/*.rfmod" },
         { "path": "../../dist/release/SHA256SUMS", "label": "SHA256SUMS (FPV modules)" },
-        { "path": "../../dist/release/rfmod-linux-x86_64", "label": "rfmod CLI (linux-x86_64)" }
+        { "path": "../../dist/release/rfmod-linux-x86_64", "label": "rfmod CLI (linux-x86_64)" },
+        { "path": "../../dist/release/rfmap-linux-x86_64", "label": "rfmap API client CLI (linux-x86_64)" }
       ],
       "successComment": false,
       "failComment": false,

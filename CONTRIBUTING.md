@@ -78,8 +78,8 @@ history, so commit messages follow [Conventional Commits 1.0](https://www.conven
 | `feat!`, `fix!` or a `BREAKING CHANGE:` footer | an incompatible change: API, mission or library schema, module ABI or host contract | major |
 | `docs`, `test`, `refactor`, `build`, `ci`, `chore`, `style`, `revert` | everything else | none |
 
-Scopes: `rf-core`, `rf-ext`, `rf-flightlog`, `rf-db`, `rfmod`, `fpv`, `server`, `web`, `tiles`, `deploy`, `data`,
-`schemas`, `docs`, `ci`, `perf`, `deps`. The scope is optional.
+Scopes: `rf-core`, `rf-ext`, `rf-flightlog`, `rf-db`, `rfmod`, `fpv`, `server`, `cli`, `web`, `tiles`, `deploy`,
+`data`, `schemas`, `docs`, `ci`, `perf`, `deps`. The scope is optional.
 
 Examples:
 
@@ -220,7 +220,7 @@ notes. A release:
 3. builds with that version and the owner key, signs every FPV module (`.rfmod`) and runs its
    package checks and self-test;
 4. tags `vX.Y.Z` and publishes the GitHub release with generated notes, the signed modules,
-   their `SHA256SUMS` and the `rfmod` CLI;
+   their `SHA256SUMS`, the `rfmod` CLI and the `rfmap` API client;
 5. publishes `fpv-radio-map-server` and `fpv-radio-map-web` images as `X.Y.Z`, `X.Y` and `latest`.
 
 It needs the repository variable `RFMAP_OWNER_PUBKEY` (contents of `owner.pub`) and the secret

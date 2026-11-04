@@ -44,7 +44,7 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "concurrency",
         "queue", "waitMs", "map", "metrics", "enabled", "allowFrom", "ops", "drainSeconds", "listenUrl", "settingsSync", "pollSeconds",
         "regions", "worldDir", "definitions", "packageDir", "pmtiles", "rescanMinutes", "maxDownloads", "areaDir", "areas",
-        "maxAreaKm2", "maxVertices", "maxZoom", "maxQueued", "keepHours", "maxStoredMb"});
+        "maxAreaKm2", "maxVertices", "maxZoom", "maxQueued", "keepHours", "maxStoredMb", "services", "tokens"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -117,12 +117,62 @@ Config::SettingsSync readSettingsSync(const json& sync) {
     return out;
 }
 
-/// Connection URLs carry the password: the admin page shows that they are set, not what they are.
-void hideDatabaseUrls(json& raw) {
-    if (!raw.contains("database") || !raw["database"].is_object()) return;
-    for (const char* secret : {"url", "listenUrl"}) {
-        if (raw["database"].contains(secret)) raw["database"][secret] = "(set)";
+/// A service token's name goes into logs and metrics: lowercase letters, digits, '.', '_', '-'.
+bool serviceNameOk(const std::string& name) {
+    const auto nameChar = [](unsigned char c) {
+        return std::islower(c) != 0 || std::isdigit(c) != 0 || c == '.' || c == '_' || c == '-';
+    };
+    return !name.empty() && name.size() <= 64 && std::isalnum(static_cast<unsigned char>(name.front())) != 0 &&
+           std::ranges::all_of(name, nameChar);
+}
+
+/// services.tokens, checked: names unique and fit for logs and metrics, digests 64 hex digits.
+std::vector<Config::ServiceToken> readServiceTokens(const json& services) {
+    std::vector<Config::ServiceToken> out;
+    if (!services.is_object() || !services.contains("tokens")) return out;
+    const json& tokens = services.at("tokens");
+    if (!tokens.is_array()) throw std::invalid_argument("services.tokens must be a list of {name, sha256}");
+    for (const json& t : tokens) {
+        if (!t.is_object() || !t.contains("name") || !t.at("name").is_string() || !t.contains("sha256") ||
+            !t.at("sha256").is_string()) {
+            throw std::invalid_argument("each services.tokens entry needs a name and a sha256 (rfmap token new)");
+        }
+        Config::ServiceToken entry{t.at("name").get<std::string>(), lower(t.at("sha256").get<std::string>())};
+        if (!serviceNameOk(entry.name)) {
+            throw std::invalid_argument("services.tokens name \"" + entry.name +
+                                        "\" must be lowercase letters, digits, '.', '_' or '-', at most 64, starting "
+                                        "with a letter or digit");
+        }
+        if (entry.sha256.size() != 64 ||
+            !std::ranges::all_of(entry.sha256, [](unsigned char c) { return std::isxdigit(c) != 0; })) {
+            throw std::invalid_argument("services.tokens " + entry.name +
+                                        ": sha256 must be the token's SHA-256 as 64 hex digits, never the token itself");
+        }
+        if (std::ranges::any_of(out, [&entry](const Config::ServiceToken& o) { return o.name == entry.name; })) {
+            throw std::invalid_argument("services.tokens names must be unique: " + entry.name);
+        }
+        out.push_back(std::move(entry));
     }
+    return out;
+}
+
+/// The configuration as the admin page shows it: secrets say that they are set, not what they are.
+json withoutSecrets(json raw, const std::vector<Config::ServiceToken>& serviceTokens) {
+    if (raw.contains("admin")) raw["admin"]["token"] = "(set)";
+    if (raw.contains("metrics") && raw["metrics"].contains("token")) raw["metrics"]["token"] = "(set)";
+    // The names say which services may calculate; the digests stay out of the admin page.
+    if (raw.contains("services") && raw["services"].is_object() && raw["services"].contains("tokens")) {
+        json names = json::array();
+        for (const Config::ServiceToken& t : serviceTokens) names.push_back({{"name", t.name}, {"sha256", "(set)"}});
+        raw["services"]["tokens"] = names;
+    }
+    // Connection URLs carry the password.
+    if (raw.contains("database") && raw["database"].is_object()) {
+        for (const char* secret : {"url", "listenUrl"}) {
+            if (raw["database"].contains(secret)) raw["database"][secret] = "(set)";
+        }
+    }
+    return raw;
 }
 
 }  // namespace
@@ -242,6 +292,7 @@ Config Config::fromJson(json doc) {
     c.settingsSync = readSettingsSync(doc.value("settingsSync", json::object()));
 
     read(doc.value("admin", json::object()), "token", c.adminToken);
+    c.serviceTokens = readServiceTokens(doc.value("services", json::object()));
     readOperations(doc, c);
 
     const json& d = doc.value("data", json::object());
@@ -323,10 +374,7 @@ Config Config::fromJson(json doc) {
         throw std::invalid_argument("modules.maxMemoryMb and modules.maxTimeoutMs must be >= 1");
     }
 
-    c.raw = doc;
-    if (c.raw.contains("admin")) c.raw["admin"]["token"] = "(set)";
-    if (c.raw.contains("metrics") && c.raw["metrics"].contains("token")) c.raw["metrics"]["token"] = "(set)";
-    hideDatabaseUrls(c.raw);
+    c.raw = withoutSecrets(std::move(doc), c.serviceTokens);
     return c;
 }
 

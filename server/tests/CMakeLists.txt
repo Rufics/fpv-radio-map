@@ -10,7 +10,7 @@ set(_defs
 add_executable(rfmap_server_tests auth_test.cpp pin_gate_test.cpp calc_gate_test.cpp cache_test.cpp validation_test.cpp
   host_services_test.cpp weather_test.cpp raster_test.cpp command_line_test.cpp metrics_test.cpp
   migrations_test.cpp input_limits_test.cpp settings_sync_test.cpp ops_server_test.cpp lifecycle_test.cpp
-  region_test.cpp region_areas_test.cpp)
+  region_test.cpp region_areas_test.cpp service_tokens_test.cpp)
 target_link_libraries(rfmap_server_tests PRIVATE rfmap_server_lib LibArchive::LibArchive GTest::gtest_main)
 target_compile_definitions(rfmap_server_tests PRIVATE ${_defs} FAKE_PMTILES="$<TARGET_FILE:fake_pmtiles>")
 add_dependencies(rfmap_server_tests fake_pmtiles)
@@ -39,6 +39,11 @@ target_compile_definitions(rfmap_server_integration PRIVATE ${_defs}
   BODY_SHADOW_STAGE="${PROJECT_BINARY_DIR}/examples/modules/body-shadow/stage"
   PROBE_STAGE="${CMAKE_CURRENT_BINARY_DIR}/probe-stage"
   BLACKBOX_STAGE="${PROJECT_BINARY_DIR}/modules/fpv/blackbox/stage")
+# The command-line client against the running server, when it is built.
+if(TARGET rfmap_cli_lib)
+  target_link_libraries(rfmap_server_integration PRIVATE rfmap_cli_lib)
+  target_compile_definitions(rfmap_server_integration PRIVATE RFMAP_TEST_CLI)
+endif()
 # The sample log fpv.blackbox checks itself with, to upload in the flight log tests.
 target_include_directories(rfmap_server_integration PRIVATE ${PROJECT_SOURCE_DIR}/modules/fpv/blackbox/src)
 add_dependencies(rfmap_server_integration rfmod-worker body_shadow test_probe fpv_blackbox fake_pmtiles)

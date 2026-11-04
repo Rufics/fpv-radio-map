@@ -4,6 +4,7 @@
 
 - [Glossary](guide/glossary.md)
 - [FAQ](guide/faq.md)
+- [Command-line client](guide/cli.md)
 - [Field reports](community/field-reports.md)
 
 **Running it**

@@ -34,3 +34,7 @@ check "admin cache"        "$base/api/v1/admin/cache" -H "Authorization: Bearer 
 code=$(curl -s -o /dev/null -w '%{http_code}' "$base/api/v1/admin/cache")
 [ "$code" = 401 ] || { echo "FAIL admin without token: HTTP $code (want 401)"; exit 1; }
 echo "ok   admin without token is refused"
+# rfmap, the API client, ships in the server image and reaches the server from there.
+compose exec -T rfmap-server rfmap --server http://127.0.0.1:8080 health > "$work/body" \
+  || { echo "FAIL rfmap health in the server image"; cat "$work/body"; exit 1; }
+echo "ok   rfmap client in the server image"

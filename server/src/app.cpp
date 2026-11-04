@@ -159,7 +159,15 @@ void Application::dispatch(const std::string& rateClass, const Fn& handler, cons
     const HttpRequest request(req, config_.server);
     HttpReply reply(res);
     try {
-        services_.limiter().take(rateClass, request.client());
+        // A service token's calculations and reads count against its own budget, wherever it calls
+        // from. PIN attempts, new missions and the admin API stay limited by address.
+        const bool serviceClass = rateClass == "calc" || rateClass == "coverage" || rateClass == "default";
+        if (const auto service = serviceClass ? services_.auth().serviceTokens().match(request.bearer()) : std::nullopt;
+            service.has_value()) {
+            services_.limiter().take("service", ServiceTokens::principalId(*service));
+        } else {
+            services_.limiter().take(rateClass, request.client());
+        }
         handler(request, reply);
     } catch (const HttpError& e) {
         reply.error(e);

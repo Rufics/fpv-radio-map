@@ -3,6 +3,7 @@
 #include "common.hpp"
 #include "pin_gate.hpp"
 #include "security.hpp"
+#include "service_tokens.hpp"
 
 #include <map>
 #include <memory>
@@ -101,9 +102,13 @@ struct Principal {
     std::string missionId;
     Role role;
     std::optional<std::string> linkId;
+    /// The service token's name when a service (services.tokens) calls instead of a mission
+    /// session. missionId is then ServiceTokens::principalId(name), which no mission has.
+    std::optional<std::string> service;
 };
 
-/// Mission credentials: owner keys, share links with PINs, sessions.
+/// Mission credentials: owner keys, share links with PINs, sessions; and the service tokens
+/// that run calculations without a mission.
 class AuthService {
 public:
     struct Settings {
@@ -113,7 +118,8 @@ public:
     };
 
     /// Every PIN hash and check passes through `gate`, so PIN work cannot take every request thread.
-    AuthService(IAuthStore& store, const PinHasher& pins, PinGate& gate, const IClock& clock, Settings settings);
+    AuthService(IAuthStore& store, const PinHasher& pins, PinGate& gate, const IClock& clock, Settings settings,
+                ServiceTokens services = ServiceTokens({}));
 
     /// The bulkhead PIN checks run in.
     [[nodiscard]] const PinGate& pinGate() const { return gate_; }
@@ -152,6 +158,11 @@ public:
                               std::optional<TimePoint> notAfter = std::nullopt);
     /// Throws HttpError 401 for a missing, unknown or expired session.
     Principal authenticate(const std::string& bearer);
+    /// services.tokens: the bearer tokens that run calculations without a mission session.
+    [[nodiscard]] const ServiceTokens& serviceTokens() const { return services_; }
+    /// Who asks for a calculation: a service token, else a mission session. HttpError 401 when
+    /// the bearer token is neither.
+    Principal calculationCaller(const std::string& bearer);
 
     [[nodiscard]] static json linkJson(const LinkRecord& l);
 
@@ -164,6 +175,7 @@ private:
     PinGate& gate_;
     const IClock& clock_;
     Settings settings_;
+    ServiceTokens services_;
 };
 
 }  // namespace rfmap

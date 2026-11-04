@@ -56,7 +56,7 @@ Checks: >-
   readability-misleading-indentation,
   readability-simplify-boolean-expr
 WarningsAsErrors: '*'
-HeaderFilterRegex: '/(core|platform|modules|server|examples)/'
+HeaderFilterRegex: '/(core|platform|modules|server|cli|examples)/'
 CheckOptions:
   # A deliberately empty catch says why in a comment that starts with "Ignored:".
   bugprone-empty-catch.IgnoreCatchWithKeywords: '@TODO;@FIXME;Ignored:'

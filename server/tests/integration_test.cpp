@@ -13,6 +13,10 @@
 
 #include <httplib.h>
 
+#ifdef RFMAP_TEST_CLI
+#include "cli.hpp"
+#endif
+
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -30,6 +34,9 @@ using namespace rfmap;
 namespace fs = std::filesystem;
 
 namespace {
+
+// A service token (services.tokens) the server is configured with, as `rfmap token new` makes them.
+constexpr const char* kServiceToken = "rfmap_svc_integration-test-token-0123456789abcdefghij";
 
 // Synthetic terrain: flat 150 m with a north-south ridge 120 m high at lon 35.25, and a NoData
 // hole in the south-east corner. 3 arc-second pixels.
@@ -201,6 +208,7 @@ protected:
         json cfg = {{"server", {{"listen", "127.0.0.1"}, {"port", env->port}, {"threads", 8}}},
                     {"database", {{"url", url}, {"poolSize", 4}}},
                     {"admin", {{"token", "integration-admin-token-0123456789"}}},
+                    {"services", {{"tokens", {{{"name", "ci"}, {"sha256", Secrets::hex(Secrets::sha256(kServiceToken))}}}}}},
                     {"ops", {{"listen", "127.0.0.1"}, {"port", env->opsPort}, {"drainSeconds", 0}}},
                     {"metrics", {{"enabled", true}, {"token", "integration-metrics-token"}}},
                     {"data",
@@ -235,7 +243,8 @@ protected:
                                     {"open", {{"perMinute", 6000}, {"burst", 1000}}},
                                     {"create", {{"perMinute", 6000}, {"burst", 1000}}},
                                     {"coverage", {{"perMinute", 6000}, {"burst", 1000}}},
-                                    {"area", {{"perMinute", 6000}, {"burst", 1000}}}}}};
+                                    {"area", {{"perMinute", 6000}, {"burst", 1000}}},
+                                    {"service", {{"perMinute", 6000}, {"burst", 1000}}}}}};
         env->config = cfg;
         env->app = std::make_unique<Application>(Config::fromJson(cfg), readFile(RFMOD_TEST_KEYS "/dev-owner.pub"), true,
                                                  RFMAP_SQL_DIR);
@@ -937,6 +946,8 @@ public:
     }
     Peer(const Peer&) = delete;
     Peer& operator=(const Peer&) = delete;
+
+    [[nodiscard]] int port() const { return port_; }
 
     [[nodiscard]] json get(const std::string& path) const {
         httplib::Client c("127.0.0.1", port_);
@@ -1816,3 +1827,113 @@ TEST_F(Integration, HostileInputsAreRefusedNotFatal) {
     EXPECT_EQ(huge.status, 422) << huge.body;
     EXPECT_GT(huge.body["samples"].get<double>(), huge.body["maxSamples"].get<double>()) << huge.body;
 }
+
+TEST_F(Integration, ServiceTokensRunCalculationsButReachNoMission) {
+    const json path = {{"from", point(48.50, 35.20, 1.5)}, {"to", point(48.52, 35.22, 120)}, {"kind", "control"},
+                       {"link", controlLink()}};
+    const auto ok = call("POST", "/calc/path", path, bearer(kServiceToken));
+    ASSERT_EQ(ok.status, 200) << ok.body;
+    EXPECT_TRUE(ok.body.contains("marginDb")) << ok.body;
+    EXPECT_EQ(call("POST", "/calc/path", path, bearer("rfmap_svc_not-a-configured-token")).status, 401);
+
+    // A route is calculated for whatever mission the service sends; it is stored with no mission.
+    const auto route = call("POST", "/calc/route", mission(), bearer(kServiceToken));
+    ASSERT_EQ(route.status, 200) << route.body;
+    EXPECT_FALSE(route.body.contains("missionRevision")) << route.body;
+
+    // Missions stay with their own sessions.
+    const auto created = call("POST", "/missions", mission());
+    ASSERT_EQ(created.status, 201) << created.body;
+    const std::string missionId = created.body["missionId"];
+    const std::string session = created.body["session"];
+    const auto refused = call("GET", "/missions/" + missionId, nullptr, bearer(kServiceToken));
+    EXPECT_EQ(refused.status, 403) << refused.body;
+    EXPECT_NE(refused.body.value("message", "").find("service token"), std::string::npos) << refused.body;
+
+    // A service's coverage jobs are its own, and a mission's jobs are not the service's.
+    const auto start = call("POST", "/calc/coverage", shortMission(point(48.52, 35.22, 100)), bearer(kServiceToken));
+    ASSERT_EQ(start.status, 202) << start.body;
+    const std::string job = start.body["jobId"];
+    EXPECT_EQ(waitForJob(job, kServiceToken)["state"], "done");
+    EXPECT_EQ(call("GET", "/jobs/" + job + "/coverage/control.json", nullptr, bearer(kServiceToken)).status, 200);
+    EXPECT_EQ(call("GET", "/jobs/" + job, nullptr, bearer(session)).status, 404);
+    const auto theirs = call("POST", "/calc/coverage", shortMission(point(48.52, 35.22, 100)), bearer(session));
+    ASSERT_EQ(theirs.status, 202) << theirs.body;
+    EXPECT_EQ(call("GET", "/jobs/" + theirs.body["jobId"].get<std::string>(), nullptr, bearer(kServiceToken)).status, 404);
+
+    // Flight logs are decoded for a service too: an empty file is the decoder's 400, not a 401.
+    httplib::Client c("127.0.0.1", env->port);
+    EXPECT_NE(c.Post("/api/v1/flightlogs/decode", bearer(kServiceToken), "", "application/octet-stream")->status, 401);
+    EXPECT_EQ(c.Post("/api/v1/flightlogs/decode", "", "application/octet-stream")->status, 401);
+}
+
+TEST_F(Integration, AServiceTokenHasItsOwnRateLimit) {
+    json config = env->config;
+    config["rateLimits"]["service"] = {{"perMinute", 1}, {"burst", 2}};
+    const Peer peer(config);
+    httplib::Client c("127.0.0.1", peer.port());
+    const httplib::Headers service = bearer(kServiceToken);
+    EXPECT_EQ(c.Get("/api/v1/health", service)->status, 200);
+    EXPECT_EQ(c.Get("/api/v1/health", service)->status, 200);
+    const auto spent = c.Get("/api/v1/health", service);
+    EXPECT_EQ(spent->status, 429);
+    EXPECT_TRUE(spent->has_header("Retry-After"));
+    // The address's own budget is untouched, and so are the classes a token does not change:
+    // creating missions counts by address whatever the bearer says.
+    EXPECT_EQ(c.Get("/api/v1/health")->status, 200);
+    EXPECT_EQ(c.Post("/api/v1/missions", service, mission().dump(), "application/json")->status, 201);
+}
+
+#ifdef RFMAP_TEST_CLI
+TEST_F(Integration, TheCommandLineClientCalculatesWithAServiceToken) {
+    struct Outcome {
+        int status;
+        std::string out;
+        std::string err;
+    };
+    const auto rfmapCli = [](std::vector<std::string> words, const std::string& input = "") {
+        std::istringstream in(input);
+        std::ostringstream out;
+        std::ostringstream err;
+        rfmap::cli::Cli cli("test", {in, out, err,
+                                     {{"RFMAP_SERVER", "http://127.0.0.1:" + std::to_string(env->port)},
+                                      {"RFMAP_TOKEN", kServiceToken}},
+                                     [](std::chrono::milliseconds wait) { std::this_thread::sleep_for(wait); }});
+        const int status = cli.run(words);
+        return Outcome{status, out.str(), err.str()};
+    };
+
+    EXPECT_EQ(rfmapCli({"health"}).status, 0);
+
+    const Outcome route = rfmapCli({"calc", "route", "-", "--summary"}, mission().dump());
+    ASSERT_EQ(route.status, 0) << route.err;
+    const json legs = json::parse(route.out)["legs"];
+    ASSERT_EQ(legs.size(), 3U);
+    EXPECT_NE(route.err.find("leg 1 (Pilot -> WP1)"), std::string::npos) << route.err;
+    const bool blocked = std::ranges::any_of(legs, [](const json& l) { return l["status"] != "ok" && l["status"] != "warn"; });
+    EXPECT_EQ(rfmapCli({"calc", "route", "-", "--fail-on", "blocked"}, mission().dump()).status, blocked ? 1 : 0);
+    EXPECT_EQ(rfmapCli({"calc", "route", "-", "--min-margin", "1000"}, mission().dump()).status, 1);
+
+    const Outcome path = rfmapCli({"calc", "path", "--from", "48.5,35.2,1.5", "--to", "48.52,35.22,120", "--radio",
+                                   "elrs-915-50hz", "--tx-power", "27", "--ground-antenna", "test-ground-dipole",
+                                   "--air-antenna", "test-air-dipole", "--required-margin", "10"});
+    ASSERT_EQ(path.status, 0) << path.err;
+    EXPECT_TRUE(json::parse(path.out).contains("marginDb")) << path.out;
+
+    const Outcome coverage =
+        rfmapCli({"calc", "coverage", "-", "--poll", "0.1"}, shortMission(point(48.52, 35.22, 100)).dump());
+    ASSERT_EQ(coverage.status, 0) << coverage.err;
+    EXPECT_EQ(json::parse(coverage.out)["job"]["state"], "done") << coverage.out;
+    EXPECT_FALSE(json::parse(coverage.out)["grids"]["control"]["marginDb"].empty());
+
+    const Outcome library = rfmapCli({"library", "list", "radio-profiles"});
+    ASSERT_EQ(library.status, 0) << library.err;
+    EXPECT_FALSE(json::parse(library.out).empty());
+    EXPECT_EQ(rfmapCli({"elevation", "--from", "48.5,35.2", "--to", "48.52,35.22"}).status, 0);
+
+    // The server's schema report reaches the CI log, with exit status 2.
+    const Outcome invalid = rfmapCli({"calc", "route", "-"}, json{{"schema", "mission/v1"}}.dump());
+    EXPECT_EQ(invalid.status, 2);
+    EXPECT_NE(invalid.err.find("422"), std::string::npos) << invalid.err;
+}
+#endif
