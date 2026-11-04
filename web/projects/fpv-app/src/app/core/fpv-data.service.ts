@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import {
   Antenna,
   Battery,
@@ -11,11 +11,13 @@ import {
   RfmapApiClient,
 } from '@rfmap/ui-kit';
 import { environment } from '../../environments/environment';
+import { OfflineLibrary } from '../offline/offline-library.service';
 
 /** Reference library, forecast horizon, map config and module list — loaded once. */
 @Injectable({ providedIn: 'root' })
 export class FpvDataService {
   private readonly api = inject(RfmapApiClient);
+  private readonly offline = inject(OfflineLibrary);
 
   readonly radios = signal<RadioProfile[]>([]);
   readonly antennas = signal<Antenna[]>([]);
@@ -27,6 +29,16 @@ export class FpvDataService {
   readonly loaded = signal(false);
 
   private loading?: Promise<void>;
+  /** The server's map configuration, as last loaded; null when the server could not be reached. */
+  private serverMap: MapSourcesConfig | null = null;
+  private mapRequests = 0;
+
+  constructor() {
+    // Another saved package chosen for the map: the next map opened reads it.
+    effect(() => {
+      if (this.offline.mapRevision() && untracked(this.loaded)) void this.refreshMapConfig();
+    });
+  }
 
   load(): Promise<void> {
     this.loading ??= this.doLoad();
@@ -47,7 +59,7 @@ export class FpvDataService {
       safe(this.api.library<Battery>('batteries'), []),
       safe(this.api.library<Drone>('drones'), []),
       safe(this.api.weatherHorizon(), null),
-      safe(this.api.mapConfig(), environment.mapFallback as MapSourcesConfig),
+      safe<MapSourcesConfig | null>(this.api.mapConfig(), null),
       safe(this.api.modules(), []),
     ]);
     this.radios.set(radios);
@@ -55,9 +67,21 @@ export class FpvDataService {
     this.batteries.set(batteries);
     this.drones.set(drones);
     this.horizon.set(horizon);
-    this.mapConfig.set(config);
+    this.serverMap = config;
+    await this.refreshMapConfig();
     this.modules.set(modules);
     this.loaded.set(true);
+  }
+
+  /**
+   * The map configuration: a package saved on this device, when one is chosen for the map,
+   * replaces the server's tiles, also when the server cannot be reached at all.
+   */
+  async refreshMapConfig(): Promise<void> {
+    const request = ++this.mapRequests;
+    const saved = await this.offline.mapConfig(this.serverMap);
+    if (request !== this.mapRequests) return; // a later choice is being read
+    this.mapConfig.set(saved ?? this.serverMap ?? (environment.mapFallback as MapSourcesConfig));
   }
 
   async reloadLibrary(): Promise<void> {

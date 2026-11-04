@@ -30,6 +30,16 @@
 
 **Stall margin.** How far the airspeed is above the stall speed. In a banked turn the stall speed rises (by the square root of 1/cos of the bank angle, ×1.19 at 45°), so a plane with a small margin in level flight can stall in a turn.
 
-**Offline region.** An area the server offers for download, cut out of its world map data by a box, an administrative boundary or a polygon. Its **package** is one zip with the map tiles, the relief and terrain, the style, fonts and a manifest. The package's **version** changes only when its contents change, so a different version means an update is available.
+**Offline region.** An area the server offers for download, cut out of its world map data by a box, an administrative boundary or a polygon. Its **package** is one zip with the map tiles, the relief and terrain, the style, fonts and a manifest. The package's **version** changes only when its contents change, so a different version means an update is available. A **drawn area** is the same, for a polygon a user drew; the server builds its package on request. A package **saved on this device** lives in the browser, and the map can read it without a network.
+
+**Climb assistant.** Part of the altitude profile (module `fpv.altitude`). It compares the planned heights with the energy-optimal climb through the safe corridor and with simpler strategies, such as climbing over the launch point first, and offers each one as a fix.
+
+**Height above launch.** Waypoint heights are planned above the launch point by default, the way a flight controller reports altitude. Above ground (AGL) is an option per mission. A waypoint without a height, or marked *auto*, gets the lowest height that keeps its legs in the safe corridor.
+
+**Pre-flight briefing.** The weather along the route at the time the drone reaches each point: wind against or with the route on each leg, temperature and rain, and a verdict for the flight.
+
+**Flight log replay.** A Betaflight Blackbox log (`.bbl`, `.bfl` or `.txt`) played back over the mission: the track, flight modes, battery, altitude, speed and link quality on one timeline, and the flight's *story*, the events that mattered, such as a failsafe. Flights saved to the mission form its **logbook**.
+
+**Plan against fact.** A replayed flight set against the calculated plan: distance, energy, the weakest link and how far the drone flew off the route, leg by leg.
 
 **Turn radius.** How wide a fixed-wing turns at its airspeed plus the wind and its maximum bank. At a waypoint the plane starts the turn before it and cuts inside; a turn that needs more than half of either leg does not fit.

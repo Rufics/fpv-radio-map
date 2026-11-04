@@ -41,6 +41,18 @@ export class OfflineRegionFormat {
         });
   }
 
+  /** When a package was saved on this device: "2 Nov 2026". */
+  static savedOn(iso: string): string {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  /** km² with a precision that suits the size: "0.42 km²", "38 km²", "2,500 km²". */
+  static km2(v: number): string {
+    if (v < 10) return `${v.toFixed(2)} km²`;
+    return `${Math.round(v).toLocaleString('en-US')} km²`;
+  }
+
   /** The box as "48.30° N – 48.70° N, 34.90° E – 35.50° E". */
   static bbox(r: OfflineRegion): string {
     const [w, s, e, n] = r.bbox;

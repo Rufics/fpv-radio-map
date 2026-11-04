@@ -144,6 +144,21 @@ TEST(PmtilesTool, CutsByBoxOrPolygonWithoutAShell) {
     EXPECT_THROW((void)PmtilesTool("pmtiles").version("/dev/null"), RegionError);  // not an absolute path
 }
 
+TEST(RegionPackageStore, KeepsEveryPathInsideItsDirectory) {
+    const fs::path dir = test::scratchDir("region-store-inside");
+    fs::remove_all(dir);
+    fs::create_directories(dir);
+    const RegionPackageStore store(dir);
+    const fs::path root = fs::weakly_canonical(dir);
+    EXPECT_EQ(store.workDir("ridge"), root / ".work-ridge");
+    EXPECT_EQ(store.inside("a/b.pbf"), root / "a" / "b.pbf");
+    EXPECT_THROW((void)store.inside("../elsewhere"), RegionError);
+    EXPECT_THROW((void)store.inside("/etc/passwd"), RegionError);
+    EXPECT_THROW((void)store.tempArchive("/../../x"), RegionError);
+    fs::create_directory_symlink(fs::temp_directory_path(), dir / "out");
+    EXPECT_THROW((void)store.inside("out/x"), RegionError) << "a symbolic link out of the directory";
+}
+
 TEST(HttpRequest, IfNoneMatchNamesTheCurrentTag) {
     httplib::Request raw;
     const Config::Server server;
@@ -433,9 +448,10 @@ TEST(RegionApi, StreamsAQuarterOfTheRequestThreadsAtOnceUnlessConfigured) {
     Logger log;
     const test::FakeClock clock;
     RegionCatalog catalog({}, log, clock);
+    RegionAreas areas({}, log, clock);
     const AdminToken admin("");
-    EXPECT_EQ(RegionApi(catalog, admin, 0, 16).downloadGate().limits().concurrency, 4);
-    EXPECT_EQ(RegionApi(catalog, admin, 0, 2).downloadGate().limits().concurrency, 1);
-    EXPECT_EQ(RegionApi(catalog, admin, 7, 16).downloadGate().limits().concurrency, 7);
-    EXPECT_EQ(RegionApi(catalog, admin, 1, 16).downloadGate().limits().queue, 0) << "a busy client retries, it does not wait";
+    EXPECT_EQ(RegionApi(catalog, areas, admin, 0, 16).downloadGate().limits().concurrency, 4);
+    EXPECT_EQ(RegionApi(catalog, areas, admin, 0, 2).downloadGate().limits().concurrency, 1);
+    EXPECT_EQ(RegionApi(catalog, areas, admin, 7, 16).downloadGate().limits().concurrency, 7);
+    EXPECT_EQ(RegionApi(catalog, areas, admin, 1, 16).downloadGate().limits().queue, 0) << "a busy client retries, it does not wait";
 }

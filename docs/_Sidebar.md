@@ -19,7 +19,9 @@
 **Extending it**
 
 - [Writing a module](modules/developer-guide.md)
+- [HTTP API (OpenAPI)](api/openapi.yaml)
 - [Database migrations](dev/migrations.md)
 - [Fuzz testing](dev/fuzzing.md)
+- [SonarQube Cloud](dev/sonarcloud.md)
 - [Contributing](../CONTRIBUTING.md)
 - [Repository settings](maintainers/repository-settings.md)

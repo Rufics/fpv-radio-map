@@ -13,7 +13,8 @@ namespace {
 /// Downloads by version never change; the browser may keep them as long as it likes.
 constexpr const char* kImmutable = "public, max-age=31536000, immutable";
 
-std::string regionUrl(const RegionPackage& p) { return std::format("{}/regions/{}", RegionApi::kPrefix, p.id); }
+/// How long a client waits before it asks for a drawn area again when the queue is full.
+constexpr int kQueueFullRetryS = 60;
 
 /// The download slots: as asked, or a quarter of the request threads but at least one. Nobody
 /// queues for one; a client that finds them busy retries after the Retry-After.
@@ -24,15 +25,17 @@ Bulkhead::Limits downloadLimits(int maxDownloads, int serverThreads) {
 
 }  // namespace
 
-RegionApi::RegionApi(RegionCatalog& catalog, const AdminToken& admin, int maxDownloads, int serverThreads)
+RegionApi::RegionApi(RegionCatalog& catalog, RegionAreas& areas, const AdminToken& admin, int maxDownloads,
+                     int serverThreads)
     : catalog_(catalog),
+      areas_(areas),
       admin_(admin),
       downloads_(std::make_unique<Bulkhead>(downloadLimits(maxDownloads, serverThreads),
                                             "too many package downloads at once, try again shortly",
                                             "regions.maxDownloads")) {}
 
-json RegionApi::describe(const RegionPackage& p) {
-    const std::string base = regionUrl(p);
+json RegionApi::describe(const RegionPackage& p, std::string_view collection) {
+    const std::string base = std::format("{}/{}/{}", kPrefix, collection, p.id);
     return {{"id", p.id},
             {"name", p.name},
             {"bbox", p.bbox.toJson()},
@@ -44,6 +47,14 @@ json RegionApi::describe(const RegionPackage& p) {
             {"builtAt", p.builtAt},
             {"preview", p.preview ? json(std::format("{}/previews/{}.png", base, p.previewVersion)) : json()},
             {"package", std::format("{}/packages/{}.zip", base, p.version)}};
+}
+
+json RegionApi::describe(const AreaStatus& s) {
+    return {{"id", s.id},
+            {"state", areaStateName(s.state)},
+            {"position", s.state == AreaState::Queued ? json(s.position) : json()},
+            {"error", s.error.empty() ? json() : json(s.error)},
+            {"package", s.package ? describe(*s.package, "areas") : json()}};
 }
 
 void RegionApi::sendTagged(const HttpRequest& req, HttpReply& res, const json& body) {
@@ -81,8 +92,8 @@ void RegionApi::getList(const HttpRequest& req, HttpReply& res) const {
 
 void RegionApi::getRegion(const HttpRequest& req, HttpReply& res) const { sendTagged(req, res, describe(current(req))); }
 
-void RegionApi::getPackage(const HttpRequest& req, HttpReply& res) const {
-    const RegionPackage p = exact(req);
+void RegionApi::sendPackage(const HttpRequest& req, HttpReply& res, const RegionPackage& p,
+                            const RegionPackageStore& store) const {
     res.header("Cache-Control", kImmutable);
     if (req.holdsCurrent(p.etag())) {
         res.notModified(p.etag());
@@ -92,11 +103,11 @@ void RegionApi::getPackage(const HttpRequest& req, HttpReply& res) const {
     res.header("Content-Disposition", std::format("attachment; filename=\"{}-{}.zip\"", p.id, p.version.substr(0, 12)));
     // The slot is held by the response body and freed once it is sent or the client leaves.
     auto slot = std::make_shared<const Bulkhead::Permit>(downloads_->enter());
-    res.file(catalog_.store().archive(p), "application/zip", !req.header("Range").empty(), std::move(slot));
+    res.file(store.archive(p), "application/zip", !req.header("Range").empty(), std::move(slot));
 }
 
-void RegionApi::getPreview(const HttpRequest& req, HttpReply& res) const {
-    const RegionPackage p = current(req);
+void RegionApi::sendPreview(const HttpRequest& req, HttpReply& res, const RegionPackage& p,
+                            const RegionPackageStore& store) {
     if (!p.preview) throw HttpError(404, "this region has no preview");
     if (req.match(2) != p.previewVersion) throw HttpError(404, "this preview was replaced");
     res.header("Cache-Control", kImmutable);
@@ -105,7 +116,61 @@ void RegionApi::getPreview(const HttpRequest& req, HttpReply& res) const {
         return;
     }
     res.header("ETag", p.previewEtag());
-    res.file(catalog_.store().preview(p), "image/png", !req.header("Range").empty());
+    res.file(store.preview(p), "image/png", !req.header("Range").empty());
+}
+
+void RegionApi::getPackage(const HttpRequest& req, HttpReply& res) const {
+    sendPackage(req, res, exact(req), catalog_.store());
+}
+
+void RegionApi::getPreview(const HttpRequest& req, HttpReply& res) const {
+    sendPreview(req, res, current(req), catalog_.store());
+}
+
+void RegionApi::getAreas(const HttpRequest& req, HttpReply& res) const {
+    const RegionAreas::Limits& l = areas_.limits();
+    sendTagged(req, res,
+               {{"enabled", areas_.enabled()},
+                {"maxAreaKm2", l.maxAreaKm2},
+                {"maxVertices", l.maxVertices},
+                {"maxzoom", l.maxZoom},
+                {"layers", RegionDefinition::kLayers}});
+}
+
+void RegionApi::postArea(const HttpRequest& req, HttpReply& res) const {
+    if (!areas_.enabled()) throw HttpError(409, "drawn areas are off on this server");
+    try {
+        const AreaStatus status = areas_.request(req.body());
+        res.send(status.state == AreaState::Ready ? 200 : 202, describe(status));
+    } catch (const AreaRefused& e) {
+        throw HttpError(422, e.what());
+    } catch (const AreaQueueFull& e) {
+        throw HttpError(503, std::string(e.what()) + "; try again shortly", {{"retryAfterS", kQueueFullRetryS}});
+    } catch (const RegionError& e) {  // the world data or the pmtiles tool
+        throw HttpError(503, std::string("drawn areas cannot be built now: ") + e.what(), {{"retryAfterS", kQueueFullRetryS}});
+    }
+}
+
+void RegionApi::getArea(const HttpRequest& req, HttpReply& res) const {
+    const auto status = areas_.status(req.match(1));
+    if (!status) throw HttpError(404, "no such area; ask for it again");
+    res.header("Cache-Control", "no-store");
+    res.send(200, describe(*status));
+}
+
+void RegionApi::getAreaPackage(const HttpRequest& req, HttpReply& res) const {
+    const auto package = areas_.use(req.match(1));
+    if (!package) throw HttpError(404, "no such area; ask for it again");
+    if (req.match(2) != package->version) {
+        throw HttpError(404, "this version of the area was replaced", {{"version", package->version}});
+    }
+    sendPackage(req, res, *package, areas_.store());
+}
+
+void RegionApi::getAreaPreview(const HttpRequest& req, HttpReply& res) const {
+    const auto status = areas_.status(req.match(1));
+    if (!status || !status->package) throw HttpError(404, "no such area; ask for it again");
+    sendPreview(req, res, *status->package, areas_.store());
 }
 
 void RegionApi::getAdminList(const HttpRequest& req, HttpReply& res) const {
@@ -117,7 +182,10 @@ void RegionApi::getAdminList(const HttpRequest& req, HttpReply& res) const {
                            {"error", s.error.empty() ? json() : json(s.error)},
                            {"package", s.package ? describe(*s.package) : json()}});
     }
-    res.send(200, {{"enabled", catalog_.enabled()}, {"scans", catalog_.scans()}, {"regions", regions}});
+    res.send(200, {{"enabled", catalog_.enabled()},
+                   {"scans", catalog_.scans()},
+                   {"regions", regions},
+                   {"areas", {{"enabled", areas_.enabled()}, {"pending", areas_.pending()}}}});
 }
 
 void RegionApi::postAdminReload(const HttpRequest& req, HttpReply& res) const {

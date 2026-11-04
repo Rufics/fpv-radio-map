@@ -1,7 +1,6 @@
 #include "region_catalog.hpp"
 
 #include "file_lock.hpp"
-#include "security.hpp"
 
 #include <algorithm>
 #include <format>
@@ -124,10 +123,7 @@ std::vector<RegionCatalog::Pending> RegionCatalog::prime(const std::vector<Regio
                                                          const std::string& tool) {
     std::vector<Pending> pending;
     for (const RegionDefinition& region : found) {
-        const std::string text =
-            std::format("format {}\ntool {}\n{}\n{}", RegionPackageBuilder::kFormat, tool, region.canonical(),
-                        world_.fingerprint(RegionPackageBuilder::layersOf(region, world_)));
-        std::string fingerprint = Secrets::hex(Secrets::sha256(text));
+        std::string fingerprint = RegionPackageBuilder::fingerprint(region, world_, tool);
         auto package = store_.load(region.id());
         const bool fresh = package && package->fingerprint == fingerprint;
         set({region.id(), fresh ? RegionState::Ready : RegionState::Building, {}, std::move(package)});

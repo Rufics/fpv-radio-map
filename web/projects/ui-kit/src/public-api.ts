@@ -47,6 +47,13 @@ export * from './lib/weather/route-timeline';
 export * from './lib/weather/route-weather';
 export * from './lib/weather/weather-scale';
 export * from './lib/weather/route-weather-layer';
+// offline packages kept on the device
+export * from './lib/offline/sha256';
+export * from './lib/offline/zip-index';
+export * from './lib/offline/offline-storage';
+export * from './lib/offline/package-downloader';
+export * from './lib/offline/offline-map';
+export * from './lib/offline/area-shape';
 // state + API client
 export * from './lib/state/api-client';
 export * from './lib/state/credential-store';

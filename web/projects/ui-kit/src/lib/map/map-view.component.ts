@@ -20,14 +20,18 @@ import { LatLon } from '../tools/geo';
 import { MapContext } from './map-context';
 import { MapControls, MapControlsOptions } from './map-controls';
 
-let pmtilesRegistered = false;
+let pmtiles: Protocol | undefined;
 
-/** Register the pmtiles:// protocol once per page (map sources come from our server as PMTiles). */
-export function ensurePmtilesProtocol(): void {
-  if (pmtilesRegistered) return;
-  const protocol = new Protocol();
-  addProtocol('pmtiles', protocol.tile);
-  pmtilesRegistered = true;
+/**
+ * Register the pmtiles:// protocol once per page (map sources come from our server as PMTiles)
+ * and return it; archives added to it are read from their own source (offline packages).
+ */
+export function ensurePmtilesProtocol(): Protocol {
+  if (!pmtiles) {
+    pmtiles = new Protocol();
+    addProtocol('pmtiles', pmtiles.tile);
+  }
+  return pmtiles;
 }
 
 /**

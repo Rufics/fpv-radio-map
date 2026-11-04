@@ -979,6 +979,120 @@ paths:
         '304': { description: The client already has this preview (If-None-Match) }
         '404': { description: No such region, a replaced preview, or no preview (no DEM over the region) }
 
+  /areas:
+    get:
+      tags: [regions]
+      summary: >-
+        Whether this server builds the offline package of an area a user draws, and the limits of
+        one (regions.areas). A client checks a drawing against them before it asks.
+      responses:
+        '200':
+          description: The limits
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, maxAreaKm2, maxVertices, maxzoom, layers]
+                properties:
+                  enabled: { type: boolean }
+                  maxAreaKm2: { type: number, description: 'The largest area built, km² on the mean Earth sphere' }
+                  maxVertices: { type: integer, description: 'Positions in all rings of the polygon together' }
+                  maxzoom: { type: integer, description: 'The highest zoom of a drawn area; also that of a request that names none' }
+                  layers: { type: array, items: { enum: [basemap, satellite, hillshade, terrain, contours] } }
+    post:
+      tags: [regions]
+      summary: >-
+        Asks for the offline package of a drawn polygon, cut from the same world data as the regions.
+        The id of the area is a hash of the request, so the same polygon asked again (by anyone) is
+        the same area and is built once. When its package is current the answer is 200 with it;
+        otherwise the build is queued (202) and the client follows it with GET /areas/{areaId}. Asking
+        again for an area already built is also how a client learns that the world data changed:
+        the answer is then 202 while the newer package is built, with the older one meanwhile.
+        Rate class `area`. Packages nobody asked for or downloaded for regions.areas.keepHours are
+        removed; asking again builds them anew.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [geometry]
+              additionalProperties: false
+              properties:
+                geometry: { type: object, description: 'A GeoJSON Polygon or MultiPolygon, or a Feature or FeatureCollection of them' }
+                name: { type: string, minLength: 1, maxLength: 120, default: Drawn area }
+                layers: { type: array, items: { enum: [basemap, satellite, hillshade, terrain, contours] }, description: 'Default: every layer the world has' }
+                maxzoom: { type: integer, minimum: 0, description: 'At most regions.areas.maxZoom, which is also the default' }
+      responses:
+        '200':
+          description: The package is current
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfflineArea' }
+        '202':
+          description: The build is queued or running
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfflineArea' }
+        '409': { description: Drawn areas are off on this server }
+        '422': { description: 'Not a polygon, a polygon whose outline crosses itself or whose holes are not inside it, or over a limit: the message says which' }
+        '429': { description: Rate limit (class area); Retry-After }
+        '503': { description: 'The queue is full (regions.areas.maxQueued) or the world data cannot be read; Retry-After' }
+
+  /areas/{areaId}:
+    get:
+      tags: [regions]
+      summary: >-
+        Where the build of a drawn area stands. A failed build is reported for an hour; asking for the
+        area again retries it. 404 for an area never asked for, or removed for want of use.
+      parameters:
+        - { name: areaId, in: path, required: true, schema: { type: string, pattern: '^area-[0-9a-f]{24}$' } }
+      responses:
+        '200':
+          description: The area
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OfflineArea' }
+        '404': { description: 'No such area; ask for it again' }
+
+  /areas/{areaId}/packages/{version}.zip:
+    get:
+      tags: [regions]
+      summary: >-
+        The package zip of a drawn area, as /regions/{regionId}/packages/{version}.zip: immutable,
+        resumable with Range, 404 with the current version once replaced. A download counts as a use,
+        which keeps the package on the server.
+      parameters:
+        - { name: areaId, in: path, required: true, schema: { type: string, pattern: '^area-[0-9a-f]{24}$' } }
+        - { name: version, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
+        - { name: Range, in: header, required: false, schema: { type: string } }
+        - { name: If-None-Match, in: header, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: The whole package
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+        '206': { description: The part asked for by Range }
+        '304': { description: The client has this version }
+        '404': { description: 'No such area, or this version was replaced (the body names the current one)' }
+        '503': { description: 'Too many downloads at once (regions.maxDownloads); Retry-After' }
+
+  /areas/{areaId}/previews/{previewVersion}.png:
+    get:
+      tags: [regions]
+      summary: The preview of a drawn area, as that of a region.
+      parameters:
+        - { name: areaId, in: path, required: true, schema: { type: string, pattern: '^area-[0-9a-f]{24}$' } }
+        - { name: previewVersion, in: path, required: true, schema: { type: string, pattern: '^[0-9a-f]{64}$' } }
+      responses:
+        '200':
+          description: The preview
+          content:
+            image/png:
+              schema: { type: string, format: binary }
+        '404': { description: No such area, a replaced preview, or no preview }
+
   /admin/regions:
     get:
       tags: [admin, regions]
@@ -1005,6 +1119,12 @@ paths:
                         package:
                           oneOf: [{ $ref: '#/components/schemas/OfflineRegion' }, { type: 'null' }]
                           description: 'The package clients get, kept while a newer one is built or after a failed build'
+                  areas:
+                    type: object
+                    description: Areas users draw
+                    properties:
+                      enabled: { type: boolean, description: 'false without regions.worldDir or with regions.areas.maxAreaKm2 0' }
+                      pending: { type: integer, description: 'Builds waiting or running in this process' }
 
   /admin/regions/reload:
     post:
@@ -1430,6 +1550,18 @@ components:
         builtAt: { type: string, format: date-time }
         preview: { type: [string, 'null'], description: 'URL of the preview PNG, named by its own SHA-256: it changes when the preview is redrawn' }
         package: { type: string, description: 'URL of the package zip of this version' }
+
+    OfflineArea:
+      type: object
+      required: [id, state, position, error, package]
+      properties:
+        id: { type: string, pattern: '^area-[0-9a-f]{24}$', description: 'A hash of the request' }
+        state: { enum: [queued, building, ready, failed] }
+        position: { type: [integer, 'null'], description: 'Place in the build queue, 1 = next (queued only)' }
+        error: { type: [string, 'null'], description: 'Why the build failed (failed only)' }
+        package:
+          oneOf: [{ $ref: '#/components/schemas/OfflineRegion' }, { type: 'null' }]
+          description: 'The package, its URLs under /areas; also an older one while a newer one is built'
 
     CacheTier:
       type: object

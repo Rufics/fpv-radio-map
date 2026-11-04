@@ -19,6 +19,9 @@ import {
   LinkResult,
   MapSourcesConfig,
   ModuleInfo,
+  OfflineAreaLimits,
+  OfflineAreaRequest,
+  OfflineAreaStatus,
   OfflineRegion,
   OfflineRegionAdmin,
   OpenLinkResponse,
@@ -299,11 +302,34 @@ export class RfmapApiClient {
   /** GET /regions: the offline region packages this server offers. */
   async offlineRegions(): Promise<OfflineRegion[]> {
     const body = await this.run(this.http.get<{ regions: OfflineRegion[] }>(this.url('/regions')));
-    return body.regions.map((r) => ({
-      ...r,
-      package: this.resource(r.package),
-      preview: r.preview === null ? null : this.resource(r.preview),
-    }));
+    return body.regions.map((r) => this.located(r));
+  }
+
+  /** GET /areas: whether areas can be drawn here, and how large. */
+  offlineAreaLimits(): Promise<OfflineAreaLimits> {
+    return this.run(this.http.get<OfflineAreaLimits>(this.url('/areas')));
+  }
+
+  /**
+   * POST /areas: the area of a polygon, ready when its package is current, otherwise queued.
+   * Asking again for the same polygon is how a client learns that a newer package is built.
+   */
+  async requestOfflineArea(body: OfflineAreaRequest): Promise<OfflineAreaStatus> {
+    return this.locatedArea(await this.run(this.http.post<OfflineAreaStatus>(this.url('/areas'), body)));
+  }
+
+  /** GET /areas/{id}: where the build of a drawn area stands. */
+  async offlineArea(id: string): Promise<OfflineAreaStatus> {
+    return this.locatedArea(await this.run(this.http.get<OfflineAreaStatus>(this.url(`/areas/${encodeURIComponent(id)}`))));
+  }
+
+  private locatedArea(a: OfflineAreaStatus): OfflineAreaStatus {
+    return { ...a, package: a.package ? this.located(a.package) : null };
+  }
+
+  /** A package with its URLs under the configured API base. */
+  private located(r: OfflineRegion): OfflineRegion {
+    return { ...r, package: this.resource(r.package), preview: r.preview === null ? null : this.resource(r.preview) };
   }
 
   /** A URL the server gives as /api/v1/..., under the configured API base instead. */

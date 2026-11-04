@@ -7,9 +7,9 @@ The stack has four parts, described in [`deploy/docker-compose.yml`](../../deplo
 
 | Service | What it does |
 |---|---|
-| `postgis` | PostgreSQL 18 + PostGIS 3.6. Holds missions, share links, sessions, the library and its history, module settings and the result cache. |
+| `postgis` | PostgreSQL 18 + PostGIS 3.6. Holds missions, share links, sessions, the library and its history, flight logs, module and admin settings and the result cache. |
 | `open-meteo`, `open-meteo-init`, `open-meteo-sync` | Your own Open-Meteo. `open-meteo-init` downloads a first copy of the model data and exits, `open-meteo-sync` then keeps it fresh, and the API answers rfmap-server. No request leaves your network for a forecast. |
-| `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly. |
+| `rfmap-server` | The HTTP API (`/api/v1`). Reads the DEM and land cover COGs directly, and cuts the offline region packages out of the same tiles. Its operations listener (`/healthz`, `/readyz`, `/metrics`) stays on `127.0.0.1:9090` inside the container. |
 | `web` | nginx with the built client, `/tiles` (PMTiles over HTTP Range) and a reverse proxy for `/api`. The only service with a published port. |
 
 `postgis`, `open-meteo` and `rfmap-server` sit only on internal networks with no route out.
@@ -43,10 +43,12 @@ from outside.
    | `RFMAP_ADMIN_TOKEN` | At least 24 random characters, for example `openssl rand -base64 33`. Compared in constant time. Empty disables the admin API. |
    | `RFMAP_OWNER_PUBKEY` | Contents of `owner.pub`. |
    | `RFMAP_TILES_DIR` | Absolute path of the tiles-builder output. |
+   | `RFMAP_REGIONS_DIR` | Directory with `regions.json` and the boundary files it names, mounted at `/etc/rfmap/regions` (default `deploy/regions`). Without a `regions.json` no offline region is offered. See [Offline regions](offline-regions.md). |
    | `RFMAP_DEM_STATED_ERROR_M`, `RFMAP_DEM_STATED_ERROR_SOURCE` | From step 2. |
    | `RFMAP_HTTP_PORT` | Port `web` listens on (default 8088). |
    | `OPEN_METEO_MODELS` | The Open-Meteo model rfmap-server asks for (default `dwd_icon`). |
    | `OPEN_METEO_SYNC_MODELS` | The model directories `open-meteo-sync` downloads (default `dwd_icon,dwd_icon_global_eps_native`). See section 4. |
+   | `OPEN_METEO_VARIABLES` | The stored variables `open-meteo-init` and `open-meteo-sync` download. The default is the list section 4 explains; change it only together with the model. |
 
 ## 2. Start
 
@@ -188,7 +190,7 @@ Settings you will most likely touch:
 | `database.leaseTimeoutMs` | 10000 | How long a request waits for one of the `database.poolSize` connections. When every connection stays lent that long, the request gives up and answers 503 with `Retry-After`, so the timeout bounds how long it holds its request thread while it waits; `rfmap_db_pool_lease_timeouts_total` counts them. It trips when the pool is exhausted: every connection stays lent for the whole wait, because PostgreSQL is stuck or slow, or because long-running work holds all of them. If it trips often, look at slow queries before raising `database.poolSize`. |
 | `database.statementTimeoutMs` | 60000 | Set as `statement_timeout` on every pooled session, so PostgreSQL cancels a statement that runs longer and frees the connection (the request answers 500). Schema migrations at start run without it. 0 keeps whatever the role or database sets (`ALTER ROLE rfmap SET statement_timeout = ...`). Normal queries take milliseconds; keep the default unless a result table on slow storage needs more. |
 | `database.lockTimeoutMs`, `database.idleInTransactionTimeoutMs` | 10000, 60000 | Set as `lock_timeout` and `idle_in_transaction_session_timeout` on every pooled session, so one session that holds a lock cannot stall the others: a statement that waits longer for a lock gives up (the request answers 500), and PostgreSQL ends a session that sits idle inside a transaction, which releases its locks. Schema migrations at start run without them. 0 keeps the role's or the database's own setting. |
-| `rateLimits.<class>` | see example | Token buckets per client address. Classes: `default`, `open` (PIN attempts and the public link lookup), `create`, `calc`, `coverage`, `admin`. |
+| `rateLimits.<class>` | see example | Token buckets per client address. Classes: `default`, `open` (PIN attempts and the public link lookup), `create`, `calc`, `coverage`, `area` (drawn offline areas asked for), `admin`. |
 | `coverage.maxCells`, `coverage.threads` | 250000, 4 | Larger grids are refused with 422. |
 | `calc.maxRouteSamples` | 20000000 | The most terrain samples one `POST /calc/route` may read. Each leg is sampled at the DEM step and every position builds a profile from the pilot, so the work is positions times profile samples; the server works out an upper bound before it starts and refuses a larger route with 422. A sample costs about 1 µs of one core with both links, so the default holds a request thread for at most about 20 s. A 100 km route with a 30 m DEM is around 10 million. |
 | `calc.concurrency`, `calc.queue`, `calc.waitMs` | automatic, automatic, 10000 | `POST /calc/path` and `POST /calc/route` run on the request threads, so they are bounded like PIN checks: that many run at once, that many more wait up to `waitMs` for a slot, and the rest get 503 with `Retry-After` at once. A request is validated and sized before it takes a slot. Automatic is one calculation per CPU core, at most half of `server.threads` but at least one, with a queue of the same size but at most a quarter of `server.threads` and never the last spare thread, so health checks, map viewers and PIN checks always find a request thread. The one exception is `server.threads` set to 1: that single thread also runs calculations, and nothing is left spare. Coverage jobs have their own limit (`coverage.maxJobs`). |
@@ -199,7 +201,9 @@ Settings you will most likely touch:
 | `weather.metaUrl` | empty | The synced model's `meta.json`. With it, results give the forecast run time (`runUtc`). |
 | `ops.listen`, `ops.port`, `ops.drainSeconds` | `127.0.0.1`, 9090, 5 | The operations listener: `GET /healthz`, `/readyz` and `/metrics` on a port of its own, see [Health, readiness and metrics](#health-readiness-and-metrics). |
 | `metrics.enabled`, `metrics.token`, `metrics.allowFrom` | `false`, empty, `[]` | Serves `GET /metrics` on the operations listener in the Prometheus text format: request rates and durations, the request, job and cell thread pools, the database pool (open and idle sessions, waits, lease timeouts, sessions opened, closed and failed to open), the PIN, calculation and package download gates (`rfmap_gate_*`), the caches, and the process's CPU time, memory, threads and open files. Guarded by a token of its own (`RFMAP_METRICS_TOKEN`, at least 16 characters) and/or the scraper's networks; with neither, only loopback may read it. |
-| `regions.*` | off | Offline region packages cut from the world map data: `worldDir`, `definitions`, `packageDir`, `pmtiles`, `rescanMinutes`, `maxDownloads`. Compose sets `worldDir` to `/data` and mounts `RFMAP_REGIONS_DIR` with `regions.json`. See [Offline regions](offline-regions.md). |
+| `regions.*` | off | Offline region packages cut from the world map data: `worldDir`, `definitions`, `packageDir`, `pmtiles`, `rescanMinutes`, `maxDownloads`, and for areas users draw `areaDir` and `areas.*`. Compose sets `worldDir` to `/data` and mounts `RFMAP_REGIONS_DIR` with `regions.json`. See [Offline regions](offline-regions.md). |
+| `data.demName`, `data.landcoverName` | from `manifest.json` | The source names results show for the DEM and the land cover. Empty takes them from the tiles builder's `manifest.json` next to the DEM, then from the file name. |
+| `modules.maxMemoryMb`, `modules.maxTimeoutMs` | 2048, 60000 | Caps on the `limits` a module's manifest asks for; a module that asks for more runs with the cap. They apply to modules in a worker; owner-signed modules in the server process are not time-limited. |
 | `map` | — | Merged over the map sources `GET /api/v1/config/map` returns. Attribution comes from `manifest.json` next to the DEM. |
 
 ### Health, readiness and metrics
@@ -392,8 +396,8 @@ To update a compose image by hand, resolve the tag's current digest yourself, fo
 recreate the containers from `deploy/` with `docker compose pull && docker compose up -d`;
 `docker compose restart` keeps the old image.
 
-The server image and an API smoke test (missions, share link and PIN, `/calc/route`, module
-upload) were run against the pins of 2026-10-17. The `postgis/postgis:18-3.6` pin came later, on
+The server image and an API smoke test (missions, share link and PIN, `/calc/route`, installing a
+module, which was still an upload at the time) were run against the pins of 2026-10-17. The `postgis/postgis:18-3.6` pin came later, on
 2026-10-22, and was not part of that test; run the smoke test once on it. The web image was built on
 `node:24-trixie-slim` and served the client on 2026-10-21. The Open-Meteo image could not be
 pulled through the test network; build and check it once in your environment.

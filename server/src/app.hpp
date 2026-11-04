@@ -96,8 +96,10 @@ private:
     FlightLogApi flightLogApi_;
     DataApi dataApi_;
     AdminApi adminApi_;
-    /// Offline regions: its background builds stop before the services, logger and clock go.
+    /// Offline regions and drawn areas: their background builds stop before the services, logger
+    /// and clock go.
     RegionCatalog regions_;
+    RegionAreas areas_;
     RegionApi regionApi_;
     HttpMetrics httpMetrics_;  ///< before http_: its request threads report here until they stop
     double startTimeSeconds_ = 0.0;

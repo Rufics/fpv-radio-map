@@ -43,7 +43,8 @@ std::string matchKey(const json& obj, const std::string& wanted) {
         "pinMaxAttempts", "pinLockoutMinutes", "argon2Cost", "pinConcurrency", "pinQueue", "pinWaitMs", "rateLimits",
         "perMinute", "burst", "coverage", "maxCells", "maxJobs", "keepMinutes", "calc", "maxRouteSamples", "concurrency",
         "queue", "waitMs", "map", "metrics", "enabled", "allowFrom", "ops", "drainSeconds", "listenUrl", "settingsSync", "pollSeconds",
-        "regions", "worldDir", "definitions", "packageDir", "pmtiles", "rescanMinutes", "maxDownloads"});
+        "regions", "worldDir", "definitions", "packageDir", "pmtiles", "rescanMinutes", "maxDownloads", "areaDir", "areas",
+        "maxAreaKm2", "maxVertices", "maxZoom", "maxQueued", "keepHours", "maxStoredMb"});
     for (const std::string_view k : known) {
         if (lower(std::string(k)) == lower(wanted)) return std::string(k);
     }
@@ -193,6 +194,23 @@ void readOperations(const json& doc, Config& c) {
     }
 }
 
+Config::Regions::Areas readAreas(const json& a) {
+    Config::Regions::Areas out;
+    read(a, "maxAreaKm2", out.maxAreaKm2);
+    if (!(out.maxAreaKm2 >= 0.0)) throw std::invalid_argument("regions.areas.maxAreaKm2 must be >= 0");
+    read(a, "maxVertices", out.maxVertices);
+    read(a, "maxZoom", out.maxZoom);
+    read(a, "maxQueued", out.maxQueued);
+    read(a, "keepHours", out.keepHours);
+    read(a, "maxStoredMb", out.maxStoredMb);
+    if (out.maxVertices < 4) throw std::invalid_argument("regions.areas.maxVertices must be >= 4");
+    if (out.maxZoom < 0 || out.maxZoom > 22) throw std::invalid_argument("regions.areas.maxZoom must be 0 to 22");
+    if (out.maxQueued < 1) throw std::invalid_argument("regions.areas.maxQueued must be >= 1");
+    if (out.keepHours < 1) throw std::invalid_argument("regions.areas.keepHours must be >= 1");
+    if (out.maxStoredMb < 1) throw std::invalid_argument("regions.areas.maxStoredMb must be >= 1");
+    return out;
+}
+
 Config::Regions readRegions(const json& r) {
     Config::Regions out;
     readPath(r, "worldDir", out.worldDir);
@@ -203,6 +221,8 @@ Config::Regions readRegions(const json& r) {
     if (out.rescanMinutes < 0) throw std::invalid_argument("regions.rescanMinutes must be >= 0");
     read(r, "maxDownloads", out.maxDownloads);
     if (out.maxDownloads < 0) throw std::invalid_argument("regions.maxDownloads must be >= 0");
+    readPath(r, "areaDir", out.areaDir);
+    out.areas = readAreas(r.value("areas", json::object()));
     return out;
 }
 
