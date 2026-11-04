@@ -78,16 +78,12 @@ reached, 64 usage, 66 an input file cannot be read, 73 an output file cannot be 
 
 /// Percent-encodes a query value: everything but the unreserved characters of RFC 3986.
 std::string encodeQuery(std::string_view value) {
-    static constexpr std::string_view kHex = "0123456789ABCDEF";
     std::string out;
     for (const char ch : value) {
-        const auto c = static_cast<unsigned char>(ch);
-        if (std::isalnum(c) != 0 || ch == '-' || ch == '.' || ch == '_' || ch == '~') {
+        if (std::isalnum(static_cast<unsigned char>(ch)) != 0 || ch == '-' || ch == '.' || ch == '_' || ch == '~') {
             out += ch;
         } else {
-            out += '%';
-            out += kHex[c >> 4U];
-            out += kHex[c & 0x0fU];
+            out += std::format("%{:02X}", static_cast<unsigned char>(ch));
         }
     }
     return out;
@@ -96,11 +92,13 @@ std::string encodeQuery(std::string_view value) {
 /// `text` as one URL path segment of the server's own pattern; UsageError otherwise, so no
 /// argument can climb out of the path it is put into.
 std::string segment(const std::string& text, std::string_view extra, const char* what) {
-    const bool ok = !text.empty() && std::ranges::all_of(text, [extra](char ch) {
+    const auto allowed = [extra](char ch) {
         const auto c = static_cast<unsigned char>(ch);
         return std::islower(c) != 0 || std::isdigit(c) != 0 || extra.find(ch) != std::string_view::npos;
-    });
-    if (!ok) throw UsageError(std::format("{} \"{}\" is not one the server knows", what, text));
+    };
+    if (text.empty() || !std::ranges::all_of(text, allowed)) {
+        throw UsageError(std::format("{} \"{}\" is not one the server knows", what, text));
+    }
     return text;
 }
 
@@ -150,8 +148,8 @@ int Cli::run(std::span<const std::string> words) {
             io_.out << "rfmap " << version_ << "\n";
             return kOk;
         }
-        const bool help = args.has("--help") || (!args.positional().empty() && args.positional()[0] == "help");
-        if (help || args.positional().empty()) {
+        if (const bool help = args.has("--help") || (!args.positional().empty() && args.positional()[0] == "help");
+            help || args.positional().empty()) {
             usage(help ? io_.out : io_.err);
             return help ? kOk : kUsage;
         }
@@ -189,7 +187,7 @@ int Cli::run(std::span<const std::string> words) {
     }
 }
 
-int Cli::dispatch(const Arguments& args) {
+int Cli::dispatch(const Arguments& args) const {
     const std::string& command = args.positional()[0];
     if (command == "health") return health(args);
     if (command == "version") return version(args);
@@ -228,11 +226,11 @@ ApiClient Cli::client(const Arguments& args) const {
     } else {
         o.token = envValue("RFMAP_TOKEN").value_or("");
     }
-    if (const auto t = args.number("--timeout")) {
+    if (const auto t = args.number("--timeout"); t.has_value()) {
         if (*t <= 0) throw UsageError("--timeout must be positive");
         o.timeout = std::chrono::seconds(static_cast<long long>(std::ceil(*t)));
     }
-    if (const auto r = args.number("--retries")) {
+    if (const auto r = args.number("--retries"); r.has_value()) {
         if (*r < 0 || *r > 10 || *r != std::floor(*r)) throw UsageError("--retries takes a whole number from 0 to 10");
         o.retries = static_cast<int>(*r);
     }
@@ -277,7 +275,7 @@ int Cli::verdict(const std::vector<std::string>& shortfalls) const {
     return shortfalls.empty() ? kOk : kCheckFailed;
 }
 
-int Cli::health(const Arguments& args) {
+int Cli::health(const Arguments& args) const {
     args.requireOnly({}, 1);
     ApiClient api = client(args);
     const json h = api.get("/health");
@@ -285,12 +283,11 @@ int Cli::health(const Arguments& args) {
     return h.is_object() && h.value("ok", false) ? kOk : kCheckFailed;
 }
 
-int Cli::version(const Arguments& args) {
+int Cli::version(const Arguments& args) const {
     args.requireOnly({}, 1);
     json out = {{"client", version_}};
-    const auto env = io_.env.find("RFMAP_SERVER");
-    const bool haveServer = args.has("--server") || (env != io_.env.end() && !env->second.empty());
-    if (haveServer) {
+    if (const auto env = io_.env.find("RFMAP_SERVER");
+        args.has("--server") || (env != io_.env.end() && !env->second.empty())) {
         ApiClient api = client(args);
         out["server"] = api.get("/health").value("version", "");
     }
@@ -298,7 +295,7 @@ int Cli::version(const Arguments& args) {
     return kOk;
 }
 
-int Cli::calc(const Arguments& args) {
+int Cli::calc(const Arguments& args) const {
     const std::string& what = args.word(1, "what to calculate: path, route or coverage");
     if (what == "path") return calcPath(args);
     if (what == "route") return calcRoute(args);
@@ -306,7 +303,7 @@ int Cli::calc(const Arguments& args) {
     throw UsageError("calc takes path, route or coverage, not " + what);
 }
 
-int Cli::calcPath(const Arguments& args) {
+int Cli::calcPath(const Arguments& args) const {
     args.requireOnly({"--from", "--to", "--link", "--links", "--kind", "--evaluate", "--radio", "--tx-power",
                       "--ground-antenna", "--air-antenna", "--required-margin", "--time", "--modules", "--fail-on",
                       "--min-margin", "--summary"},
@@ -339,7 +336,7 @@ int Cli::calcPath(const Arguments& args) {
     return verdict(pathShortfalls(result, required));
 }
 
-int Cli::calcRoute(const Arguments& args) {
+int Cli::calcRoute(const Arguments& args) const {
     args.requireOnly({"--fail-on", "--min-margin", "--summary"}, 3);
     const Requirements required = requirementsOf(args);
     const json mission = readJson(args.word(2, "the mission file (MISSION.json, or - for stdin)"));
@@ -350,7 +347,7 @@ int Cli::calcRoute(const Arguments& args) {
     return verdict(routeShortfalls(result, required));
 }
 
-int Cli::calcCoverage(const Arguments& args) {
+int Cli::calcCoverage(const Arguments& args) const {
     args.requireOnly({"--out-dir", "--no-wait", "--poll", "--wait"}, 3);
     const json mission = readJson(args.word(2, "the mission file (MISSION.json, or - for stdin)"));
     const double poll = args.number("--poll").value_or(2.0);
@@ -424,14 +421,14 @@ bool Cli::fetchGrids(ApiClient& api, const std::string& id, const json& job, con
     return complete;
 }
 
-int Cli::elevation(const Arguments& args) {
+int Cli::elevation(const Arguments& args) const {
     args.requireOnly({"--from", "--to"}, 1);
     const auto from = Arguments::coordinates(args.need("--from"), "--from", false);
     const auto to = Arguments::coordinates(args.need("--to"), "--to", false);
     return simpleGet(args, "/elevation/profile?from=" + encodeQuery(latLon(from)) + "&to=" + encodeQuery(latLon(to)));
 }
 
-int Cli::library(const Arguments& args) {
+int Cli::library(const Arguments& args) const {
     const std::string& what = args.word(1, "list, get or history");
     const std::string kind = segment(args.word(2, "the library kind, e.g. radio-profiles"), "-", "library kind");
     if (what == "list") {
@@ -444,7 +441,7 @@ int Cli::library(const Arguments& args) {
     return simpleGet(args, "/library/" + kind + "/" + id + (what == "history" ? "/history" : ""));
 }
 
-int Cli::weather(const Arguments& args) {
+int Cli::weather(const Arguments& args) const {
     const std::string& what = args.word(1, "point or horizon");
     if (what == "horizon") {
         args.requireOnly({}, 2);
@@ -459,13 +456,13 @@ int Cli::weather(const Arguments& args) {
     return simpleGet(args, path);
 }
 
-int Cli::simpleGet(const Arguments& args, const std::string& path) {
+int Cli::simpleGet(const Arguments& args, const std::string& path) const {
     ApiClient api = client(args);
     emit(args, api.get(path));
     return kOk;
 }
 
-int Cli::regions(const Arguments& args) {
+int Cli::regions(const Arguments& args) const {
     const std::string& what = args.word(1, "list, get or download");
     if (what == "list") {
         args.requireOnly({}, 2);
@@ -492,9 +489,10 @@ int Cli::regions(const Arguments& args) {
     return kOk;
 }
 
-int Cli::flightlog(const Arguments& args) {
-    const std::string& what = args.word(1, "decode");
-    if (what != "decode") throw UsageError("flightlog takes decode, not " + what);
+int Cli::flightlog(const Arguments& args) const {
+    if (const std::string& what = args.word(1, "decode"); what != "decode") {
+        throw UsageError("flightlog takes decode, not " + what);
+    }
     args.requireOnly({"--name"}, 3);
     const std::string& file = args.word(2, "the flight log file");
     const std::string bytes = readBytes(file);
@@ -504,7 +502,7 @@ int Cli::flightlog(const Arguments& args) {
     return kOk;
 }
 
-int Cli::api(const Arguments& args) {
+int Cli::api(const Arguments& args) const {
     args.requireOnly({"--data"}, 3);
     std::string method = args.word(1, "the method: GET, POST, PUT or DELETE");
     std::ranges::transform(method, method.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
@@ -528,8 +526,7 @@ int Cli::api(const Arguments& args) {
 }
 
 int Cli::token(const Arguments& args) const {
-    const std::string& what = args.word(1, "new");
-    if (what != "new") throw UsageError("token takes new, not " + what);
+    if (const std::string& what = args.word(1, "new"); what != "new") throw UsageError("token takes new, not " + what);
     args.requireOnly({"--name"}, 2);
     const std::string name = segment(args.get("--name").value_or("ci"), "._-", "token name");
     if (name.size() > 64 || std::ispunct(static_cast<unsigned char>(name.front())) != 0) {

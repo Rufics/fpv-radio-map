@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace rfmap::cli {
@@ -24,7 +25,7 @@ struct Requirements {
 };
 
 /// 0 ok, 1 warn, 2 blocked or missing-data, for a leg status.
-int legSeverity(const std::string& status);
+int legSeverity(std::string_view status);
 
 /// The ways a POST /calc/route result falls short, one line each; empty when it meets them.
 std::vector<std::string> routeShortfalls(const json& route, const Requirements& required);

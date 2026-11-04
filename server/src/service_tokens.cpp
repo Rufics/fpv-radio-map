@@ -26,7 +26,7 @@ Digest digestFromHex(std::string_view hex) {
 ServiceTokens ServiceTokens::fromConfig(const std::vector<Config::ServiceToken>& tokens) {
     std::vector<Token> out;
     out.reserve(tokens.size());
-    for (const Config::ServiceToken& t : tokens) out.push_back({t.name, digestFromHex(t.sha256)});
+    for (const Config::ServiceToken& t : tokens) out.emplace_back(t.name, digestFromHex(t.sha256));
     return ServiceTokens(std::move(out));
 }
 

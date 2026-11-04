@@ -14,7 +14,7 @@ std::string FlightLogApi::fileName(const HttpRequest& req) {
 }
 
 void FlightLogApi::postDecode(const HttpRequest& req, HttpReply& res) const {
-    (void)s_.calculationCaller(req.bearer());
+    (void)s_.auth().calculationCaller(req.bearer());
     res.send(200, s_.flightLogs().preview(req.file(), fileName(req)));
 }
 

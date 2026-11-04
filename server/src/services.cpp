@@ -88,7 +88,6 @@ Services::Services(const Config& config, Logger& log, const std::string& ownerKe
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
-    serviceTokens_ = std::make_unique<ServiceTokens>(ServiceTokens::fromConfig(config_.serviceTokens));
     if (!config_.serviceTokens.empty()) {
         std::string names;
         for (const Config::ServiceToken& t : config_.serviceTokens) names += (names.empty() ? "" : ", ") + t.name;
@@ -101,13 +100,6 @@ Services::~Services() {
     settings_.reset();  // its thread reloads the modules: stop it before they go
     jobs_.reset();  // running calculations hold module instances: finish them before the registry goes
     modules_.registry.reset();
-}
-
-Principal Services::calculationCaller(const std::string& bearer) const {
-    if (auto name = serviceTokens_->match(bearer)) {
-        return {ServiceTokens::principalId(*name), Role::View, std::nullopt, std::move(name)};
-    }
-    return store_.auth->authenticate(bearer);
 }
 
 void Services::openDatabase(const std::filesystem::path& sqlDir) {
@@ -186,7 +178,8 @@ void Services::buildStores() {
     store_.auth = std::make_unique<AuthService>(
         *store_.authStore, *store_.pins, *store_.pinGate, clock_,
         AuthService::Settings{config_.auth.pinMaxAttempts, std::chrono::minutes(config_.auth.pinLockoutMinutes),
-                              std::chrono::hours(config_.auth.sessionTtlHours)});
+                              std::chrono::hours(config_.auth.sessionTtlHours)},
+        ServiceTokens::fromConfig(config_.serviceTokens));
     store_.missions = std::make_unique<MissionStore>(*store_.db);
     store_.flightLogs = std::make_unique<FlightLogStore>(*store_.db);
     store_.library = std::make_unique<Library>(*store_.db, *store_.schemas);

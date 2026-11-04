@@ -43,7 +43,7 @@ public:
     static void usage(std::ostream& out);
 
 private:
-    [[nodiscard]] int dispatch(const Arguments& args);
+    [[nodiscard]] int dispatch(const Arguments& args) const;
     [[nodiscard]] ApiClient client(const Arguments& args) const;
     /// Writes `result` to --output or stdout.
     void emit(const Arguments& args, const json& result) const;
@@ -53,25 +53,25 @@ private:
     /// Prints each shortfall and returns kCheckFailed, or kOk when there is none.
     [[nodiscard]] int verdict(const std::vector<std::string>& shortfalls) const;
 
-    [[nodiscard]] int health(const Arguments& args);
-    [[nodiscard]] int version(const Arguments& args);
-    [[nodiscard]] int calc(const Arguments& args);
-    [[nodiscard]] int calcPath(const Arguments& args);
-    [[nodiscard]] int calcRoute(const Arguments& args);
-    [[nodiscard]] int calcCoverage(const Arguments& args);
+    [[nodiscard]] int health(const Arguments& args) const;
+    [[nodiscard]] int version(const Arguments& args) const;
+    [[nodiscard]] int calc(const Arguments& args) const;
+    [[nodiscard]] int calcPath(const Arguments& args) const;
+    [[nodiscard]] int calcRoute(const Arguments& args) const;
+    [[nodiscard]] int calcCoverage(const Arguments& args) const;
     /// Polls the coverage job until it ends; false when it outlasted `patience` and was cancelled.
     [[nodiscard]] bool awaitJob(ApiClient& api, const std::string& id, json& job, double poll, double patience) const;
     /// Puts each finished part's grid into out["grids"], or into a file under `outDir` listed in
     /// out["files"]; false when a part did not finish.
     [[nodiscard]] bool fetchGrids(ApiClient& api, const std::string& id, const json& job,
                                   const std::optional<std::string>& outDir, json& out) const;
-    [[nodiscard]] int elevation(const Arguments& args);
-    [[nodiscard]] int library(const Arguments& args);
-    [[nodiscard]] int weather(const Arguments& args);
-    [[nodiscard]] int simpleGet(const Arguments& args, const std::string& path);
-    [[nodiscard]] int regions(const Arguments& args);
-    [[nodiscard]] int flightlog(const Arguments& args);
-    [[nodiscard]] int api(const Arguments& args);
+    [[nodiscard]] int elevation(const Arguments& args) const;
+    [[nodiscard]] int library(const Arguments& args) const;
+    [[nodiscard]] int weather(const Arguments& args) const;
+    [[nodiscard]] int simpleGet(const Arguments& args, const std::string& path) const;
+    [[nodiscard]] int regions(const Arguments& args) const;
+    [[nodiscard]] int flightlog(const Arguments& args) const;
+    [[nodiscard]] int api(const Arguments& args) const;
     [[nodiscard]] int token(const Arguments& args) const;
 
     std::string version_;

@@ -10,6 +10,7 @@ add_library(rfmap_cli_lib STATIC
   src/arguments.cpp
   src/api_client.cpp
   src/checks.cpp
+  src/digest.cpp
   src/service_token.cpp
   src/cli.cpp)
 target_include_directories(rfmap_cli_lib PUBLIC src)

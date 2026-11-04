@@ -14,6 +14,7 @@ The user guide is [docs/guide/cli.md](../docs/guide/cli.md).
 | `src/arguments.*` | The command line: positional words, `--flag VALUE`, switches, coordinates and numbers |
 | `src/api_client.*` | HTTP to `<server>/api/v1`: the token, retries after 429/503 and failed reads, streamed downloads with SHA-256 |
 | `src/checks.*` | The CI checks (`--fail-on`, `--min-margin`) and the one-line-per-leg summaries |
+| `src/digest.*` | SHA-256 in pieces (downloads, tokens) and hex |
 | `src/service_token.*` | `rfmap token new`: a random token and the SHA-256 the server keeps |
 | `src/cli.*` | One method per command, the exit statuses |
 | `src/main.cpp` | The process: the version, the `RFMAP_*` environment, the streams |

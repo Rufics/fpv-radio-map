@@ -162,8 +162,8 @@ void Application::dispatch(const std::string& rateClass, const Fn& handler, cons
         // A service token's calculations and reads count against its own budget, wherever it calls
         // from. PIN attempts, new missions and the admin API stay limited by address.
         const bool serviceClass = rateClass == "calc" || rateClass == "coverage" || rateClass == "default";
-        const auto service = serviceClass ? services_.serviceTokens().match(request.bearer()) : std::nullopt;
-        if (service) {
+        if (const auto service = serviceClass ? services_.auth().serviceTokens().match(request.bearer()) : std::nullopt;
+            service.has_value()) {
             services_.limiter().take("service", ServiceTokens::principalId(*service));
         } else {
             services_.limiter().take(rateClass, request.client());

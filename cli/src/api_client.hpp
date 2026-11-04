@@ -12,10 +12,12 @@
 
 namespace httplib {
 class Client;
-struct Response;
-}
+class Result;
+}  // namespace httplib
 
 namespace rfmap::cli {
+
+class Sha256;
 
 using json = nlohmann::json;
 
@@ -99,10 +101,16 @@ private:
         std::string retryAfterHeader;
         std::string location;  ///< of a redirect
     };
-    [[nodiscard]] static Answer answerOf(int status, std::string body, const httplib::Response& r);
-    /// Runs `send` with the retry policy and turns an error status into ApiError.
-    Answer exchange(const std::string& method, const std::string& path,
-                    const std::function<Answer(httplib::Client&)>& send, bool idempotent);
+    /// The answer of a request; ConnectionError when there was none.
+    [[nodiscard]] static Answer answerOf(const httplib::Result& r);
+    /// Runs `send(client)` with the retry policy and turns an error status into ApiError.
+    template <typename Send>
+    Answer exchange(const std::string& method, const std::string& path, const Send& send, bool idempotent);
+    /// The ApiError for an answer of 3xx or worse.
+    [[noreturn]] static void fail(const std::string& method, const std::string& path, const Answer& a);
+    /// One attempt of a download: the body into `partial`, hashed into `hash`, counted in `written`.
+    static Answer fetchTo(httplib::Client& c, const std::string& target, const std::filesystem::path& partial,
+                          Sha256& hash, std::uintmax_t& written);
     [[nodiscard]] static json parse(const std::string& body);
     [[nodiscard]] std::string url(const std::string& path) const { return prefix_ + "/api/v1" + path; }
 

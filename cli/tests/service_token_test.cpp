@@ -1,6 +1,11 @@
 #include "service_token.hpp"
 
+#include "digest.hpp"
+
 #include <gtest/gtest.h>
+
+#include <array>
+#include <cstddef>
 
 using rfmap::cli::ServiceToken;
 
@@ -26,4 +31,18 @@ TEST(ServiceToken, ANewTokenIsPrefixedRandomAndHashed) {
     EXPECT_EQ(a.sha256, ServiceToken::sha256Hex(a.token));
     EXPECT_EQ(a.sha256.size(), 64U);
     EXPECT_NE(a.token, b.token);
+}
+
+TEST(Sha256, PiecesHashAsTheWhole) {
+    rfmap::cli::Sha256 h;
+    ASSERT_TRUE(h.add("a"));
+    ASSERT_TRUE(h.add("bc"));
+    EXPECT_EQ(h.hex(), rfmap::cli::Sha256::of("abc"));
+    h.restart();
+    EXPECT_EQ(h.hex(), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");  // of nothing
+}
+
+TEST(Sha256, HexHasTwoLowercaseDigitsPerByte) {
+    const std::array bytes{std::byte{0x00}, std::byte{0x0f}, std::byte{0xa0}, std::byte{0xff}};
+    EXPECT_EQ(rfmap::cli::toHex(bytes), "000fa0ff");
 }

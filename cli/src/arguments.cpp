@@ -86,8 +86,7 @@ std::vector<double> Arguments::coordinates(std::string_view text, std::string_vi
     for (const auto part : text | std::views::split(',')) {
         out.push_back(parseNumber(std::string_view(part.begin(), part.end()), flag));
     }
-    const std::size_t want = withHeight ? 3 : 2;
-    if (out.size() != want) {
+    if (const std::size_t want = withHeight ? 3 : 2; out.size() != want) {
         throw UsageError(std::string(flag) + (withHeight ? " needs lat,lon,agl" : " needs lat,lon") + ", not \"" +
                          std::string(text) + "\"");
     }

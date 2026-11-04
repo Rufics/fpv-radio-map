@@ -36,7 +36,7 @@ std::string margins(const json& worst) {
     std::string out;
     for (const char* kind : {"control", "video"}) {
         if (!worst.is_object() || !worst.contains(kind)) continue;
-        if (const auto m = margin(worst.at(kind))) out += std::format("  {} {:+.1f} dB", kind, *m);
+        if (const auto m = margin(worst.at(kind)); m.has_value()) out += std::format("  {} {:+.1f} dB", kind, *m);
     }
     return out;
 }
@@ -49,7 +49,7 @@ int Requirements::severityOf(const std::string& failOn) {
     throw UsageError("--fail-on takes warn or blocked, not \"" + failOn + "\"");
 }
 
-int legSeverity(const std::string& status) {
+int legSeverity(std::string_view status) {
     if (status == "ok") return 0;
     if (status == "warn") return 1;
     return 2;  // blocked, missing-data, or a status this client does not know yet
@@ -62,14 +62,13 @@ std::vector<std::string> routeShortfalls(const json& route, const Requirements& 
         return out;
     }
     for (const json& leg : route.at("legs")) {
-        const std::string status = leg.value("status", "unknown");
-        if (required.failOnSeverity && legSeverity(status) >= *required.failOnSeverity) {
+        if (const std::string status = leg.value("status", "unknown");
+            required.failOnSeverity.has_value() && legSeverity(status) >= *required.failOnSeverity) {
             out.push_back(std::format("{} is {}", legName(leg), status));
         }
-        if (!required.minMarginDb || !leg.contains("worst") || !leg.at("worst").is_object()) continue;
+        if (!required.minMarginDb.has_value() || !leg.contains("worst") || !leg.at("worst").is_object()) continue;
         for (const auto& [kind, link] : leg.at("worst").items()) {
-            const auto m = margin(link);
-            if (m && *m < *required.minMarginDb) {
+            if (const auto m = margin(link); m.has_value() && *m < *required.minMarginDb) {
                 out.push_back(std::format("{}: {} margin {:+.1f} dB is below {:.1f} dB", legName(leg), kind, *m,
                                           *required.minMarginDb));
             }
@@ -83,12 +82,11 @@ std::vector<std::string> pathShortfalls(const json& path, const Requirements& re
     const auto links = pathLinks(path);
     if (links.empty() && required.any()) out.emplace_back("the result has no link to check");
     for (const auto& [kind, link] : links) {
-        const auto m = margin(link);
-        if (required.minMarginDb && m && *m < *required.minMarginDb) {
+        if (const auto m = margin(link); required.minMarginDb.has_value() && m.has_value() && *m < *required.minMarginDb) {
             out.push_back(std::format("{} margin {:+.1f} dB is below {:.1f} dB", kind, *m, *required.minMarginDb));
         }
         // A path has no leg status: an unreachable link is what blocked means for it.
-        if (required.failOnSeverity && link.contains("reachable") && !link.value("reachable", true)) {
+        if (required.failOnSeverity.has_value() && link.contains("reachable") && !link.value("reachable", true)) {
             out.push_back(kind + " link is not reachable");
         }
     }
@@ -116,7 +114,7 @@ std::string pathSummary(const json& path) {
         const auto m = margin(link);
         out += std::format("{:<8} {:>8.2f} km  {}  margin {}\n", kind, link.value("distanceM", 0.0) / 1000.0,
                            link.value("reachable", false) ? "reachable  " : "unreachable",
-                           m ? std::format("{:+.1f} dB", *m) : std::string("?"));
+                           m.has_value() ? std::format("{:+.1f} dB", *m) : std::string("?"));
     }
     return out;
 }

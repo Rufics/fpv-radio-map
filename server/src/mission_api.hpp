@@ -39,7 +39,7 @@ private:
     /// service token, which runs calculations but reaches no mission.
     [[nodiscard]] Principal session(const HttpRequest& req) const;
     /// Who asks for a calculation or its job: a mission session or a service token.
-    [[nodiscard]] Principal caller(const HttpRequest& req) const { return s_.calculationCaller(req.bearer()); }
+    [[nodiscard]] Principal caller(const HttpRequest& req) const { return s_.auth().calculationCaller(req.bearer()); }
     /// session(), and HttpError 403 unless it belongs to the mission in the path.
     [[nodiscard]] Principal missionSession(const HttpRequest& req, std::string_view missionId) const;
     /// The mission's name for a link holder, or empty.

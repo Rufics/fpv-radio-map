@@ -29,7 +29,7 @@ MissionApi::MissionApi(const Services& services)
 
 Principal MissionApi::session(const HttpRequest& req) const {
     const std::string bearer = req.bearer();
-    if (s_.serviceTokens().match(bearer)) {
+    if (s_.auth().serviceTokens().match(bearer)) {
         throw HttpError(403, "a service token runs calculations; a mission needs a session from its link");
     }
     return s_.auth().authenticate(bearer);
