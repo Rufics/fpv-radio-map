@@ -1,5 +1,6 @@
-# The web part of the SonarQube Cloud analysis (.github/workflows/sonar.yml): the unit tests of
-# both Angular projects with coverage, merged into one LCOV report with repository-relative paths.
+# The web part of the SonarQube Cloud analysis (the sonar job in .github/workflows/ci.yml), used only
+# when the web job of the same run did not run: the unit tests of both Angular projects with
+# coverage, merged into one LCOV report with repository-relative paths.
 name: SonarQube Cloud web coverage
 description: Runs the ui-kit and fpv-app unit tests with coverage and writes sonar-reports/web.lcov.
 runs:

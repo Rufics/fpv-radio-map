@@ -1,5 +1,5 @@
-# The Python part of the SonarQube Cloud analysis (.github/workflows/sonar.yml): the tools/ci,
-# tools/perf and tools/blackbox unit tests with branch coverage.
+# The Python part of the SonarQube Cloud analysis (the sonar job in .github/workflows/ci.yml): the
+# tools/ci, tools/perf and tools/blackbox unit tests with branch coverage.
 name: SonarQube Cloud Python coverage
 description: Runs the tools/ci, tools/perf and tools/blackbox unit tests with coverage and writes sonar-reports/python-coverage.xml.
 runs:

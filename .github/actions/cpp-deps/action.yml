@@ -1,6 +1,9 @@
 # The Ubuntu 26.04 packages the C++ build and tests need, in one place for every C++ job.
+# The downloaded .deb files are kept in the Actions cache, one entry per package list and runner
+# image, so a slow apt mirror costs only the package index. main fills the cache; pull requests
+# read it and never save their own.
 name: C++ build dependencies
-description: Installs the compilers, libraries and the PostgreSQL 18 + PostGIS test cluster.
+description: Installs the compilers, libraries, ccache and the PostgreSQL 18 + PostGIS test cluster.
 inputs:
   extra:
     description: Further apt packages, separated by spaces
@@ -9,15 +12,43 @@ inputs:
 runs:
   using: composite
   steps:
+    - id: key
+      shell: bash
+      env:
+        EXTRA: ${{ inputs.extra }}
+        ACTION_HASH: ${{ hashFiles('.github/actions/cpp-deps/action.yml') }}
+      run: |
+        case "$EXTRA" in *[!a-z0-9.+\ -]*) echo "::error::extra must list apt package names only"; exit 1;; esac
+        extra_hash=$(printf '%s' "$EXTRA" | sha256sum | cut -c1-16)
+        echo "key=apt-${ImageOS:-$RUNNER_OS}-${ImageVersion:-0}-$extra_hash-$ACTION_HASH" >> "$GITHUB_OUTPUT"
+    - id: cache
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: ~/.cache/apt-archives
+        key: ${{ steps.key.outputs.key }}
+    # apt keeps the packages it downloads in the cached folder; it reads them from there when their
+    # version is still the current one and downloads only the rest.
     - shell: bash
       env:
         EXTRA: ${{ inputs.extra }}
       run: |
-        case "$EXTRA" in *[!a-z0-9.+\ -]*) echo "::error::extra must list apt package names only"; exit 1;; esac
+        # Created as the runner user: a folder sudo made under ~/.cache would be root's, and later
+        # steps (ccache) could not write next to it. apt's _apt user cannot reach a folder in the
+        # home directory, so apt downloads as root, which it would fall back to anyway.
+        archives="$HOME/.cache/apt-archives"
+        mkdir -p "$archives/partial"
         sudo apt-get update
         # shellcheck disable=SC2086 # EXTRA is a list of package names.
         sudo apt-get install -y --no-install-recommends \
-          build-essential cmake ninja-build pkg-config \
+          -o Dir::Cache::Archives="$archives" -o APT::Keep-Downloaded-Packages=true -o APT::Sandbox::User=root \
+          build-essential cmake ninja-build pkg-config ccache \
           libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
           libpqxx-dev libgdal-dev gdal-bin libcpp-httplib-dev libgtest-dev \
           postgresql-18 postgresql-18-postgis-3 $EXTRA
+        sudo rm -rf "$archives/partial" "$archives/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$archives"
+    - if: steps.cache.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: ~/.cache/apt-archives
+        key: ${{ steps.key.outputs.key }}

@@ -72,7 +72,8 @@ the C++ build and tests passed, and fuzzes each target for a minute. `.github/wo
 fuzzes ten minutes per target every night, or what the manual run asks for, and keeps the corpus
 it grew in the Actions cache, so every later run starts from it. Both go through
 `.github/actions/fuzz`: it builds only the fuzz binaries, and takes them from the cache when the
-sources did not change. A crash fails the run, and the crashing input is attached to it as the
+sources did not change. When they have to be built, ccache recompiles only the files that changed
+since the last fuzz build on main. A crash fails the run, and the crashing input is attached to it as the
 `fuzz-crashes` artifact.
 
 ## When the fuzzer finds a bug

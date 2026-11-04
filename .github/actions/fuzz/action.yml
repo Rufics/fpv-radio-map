@@ -1,6 +1,7 @@
 # Fuzzes every C++ fuzz target (fuzz/, docs/dev/fuzzing.md). The fuzz binaries are the only thing
 # built here, a Clang tree with libFuzzer and the sanitizers, and only when the cache holds none
-# for these sources: a run on unchanged code takes them from the cache and only fuzzes. A crash
+# for these sources: a run on unchanged code takes them from the cache and only fuzzes. When they
+# are built, ccache (.github/actions/ccache) recompiles only what changed since main. A crash
 # fails the step and its input is attached to the run as the fuzz-crashes artifact.
 name: Fuzz the C++ targets
 description: Builds the fuzz binaries unless cached, then fuzzes each target for a while.
@@ -23,6 +24,11 @@ runs:
       with:
         path: build-fuzz/fuzz/*_fuzzer
         key: fuzz-bin-${{ hashFiles('CMakeLists.txt', 'core/**', 'platform/**', 'server/**', 'schemas/**', 'fuzz/**', '.github/actions/cpp-deps/action.yml', '.github/actions/fuzz/action.yml') }}
+    - id: ccache
+      if: steps.binaries.outputs.cache-hit != 'true'
+      uses: ./.github/actions/ccache
+      with:
+        kind: fuzz
     - name: Build the fuzz binaries
       if: steps.binaries.outputs.cache-hit != 'true'
       shell: bash
@@ -30,6 +36,12 @@ runs:
         cmake -S . -B build-fuzz -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_COMPILER=clang++-21 \
           -DRFMAP_BUILD_FUZZERS=ON -DRFMAP_BUILD_TESTS=OFF
         cmake --build build-fuzz --target rfmap_fuzzers
+        ccache --show-stats
+    - if: steps.binaries.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: ~/.cache/ccache
+        key: ${{ steps.ccache.outputs.key }}
     - if: steps.binaries.outputs.cache-hit != 'true'
       uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
       with:

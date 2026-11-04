@@ -1,0 +1,51 @@
+# Compiler cache for one kind of C++ build (ci.yml, the fuzz action, the SonarQube Cloud fallback).
+# Restores the newest ccache directory that main saved for the same kind of build, so a run
+# recompiles only what changed since then, and points CMake at ccache through the
+# CMAKE_C_COMPILER_LAUNCHER / CMAKE_CXX_COMPILER_LAUNCHER environment variables. The job saves the
+# directory again with actions/cache/save under the `key` output: on main only, so pull requests
+# read main's cache and never fill the repository's cache storage with their own.
+name: C++ compiler cache
+description: Restores the ccache directory of one kind of build and turns ccache on for CMake.
+inputs:
+  kind:
+    description: Kind of build (release, coverage, fuzz, ...); each kind has its own cache
+    required: true
+outputs:
+  key:
+    description: Cache key to save the directory under at the end of the job
+    value: ${{ steps.key.outputs.key }}
+runs:
+  using: composite
+  steps:
+    - id: key
+      shell: bash
+      env:
+        KIND: ${{ inputs.kind }}
+      run: |
+        case "$KIND" in
+          ""|*[!a-z0-9-]*) echo "::error::kind must be lower-case letters, digits and dashes"; exit 1 ;;
+          *) ;;
+        esac
+        prefix="ccache-$KIND-${ImageOS:-$RUNNER_OS}-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "key=$prefix$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      with:
+        path: ~/.cache/ccache
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+    # Every runner checks out to the same path, so absolute paths in the cached objects (debug
+    # information, the .gcno files of a coverage build) stay right. The compiler is compared by
+    # content: apt installs it anew on every runner.
+    - shell: bash
+      run: |
+        {
+          echo "CCACHE_DIR=$HOME/.cache/ccache"
+          echo "CCACHE_MAXSIZE=400M"
+          echo "CCACHE_COMPILERCHECK=content"
+          echo "CCACHE_BASEDIR=$GITHUB_WORKSPACE"
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+        } >> "$GITHUB_ENV"
+        mkdir -p "$HOME/.cache/ccache"
+        CCACHE_DIR="$HOME/.cache/ccache" ccache --zero-stats > /dev/null

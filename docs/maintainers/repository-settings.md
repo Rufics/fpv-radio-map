@@ -56,11 +56,12 @@ Target: the default branch. Enforcement: *Active*.
     does not affect were skipped), `Conventional Commits title`, `SonarCloud Code Analysis`.
 - **Require code scanning results:** CodeQL, *Security alerts: High or higher*, *Alerts: Errors*.
 
-`C++ static analysis`, `C++ build and tests`, `C++ coverage` and `Web build and tests` are not
-required one by one: they are skipped when a change cannot affect them, and `Test report` already
-fails when any of them fails. `C++ static analysis` (clang-tidy, checks in `.clang-tidy`) runs
-first, split into four parallel parts: when any part fails, the C++ build, tests and coverage are
-skipped.
+`C++ static analysis`, `C++ build and tests`, `C++ coverage`, `Web build and tests` and
+`SonarQube Cloud analysis` are not required one by one: they are skipped when a change cannot
+affect them, and `Test report` already fails when any of the CI jobs fails. `C++ static analysis`
+(clang-tidy, checks in `.clang-tidy`) is split into four parallel parts and runs at the same time
+as the C++ build, tests and coverage; a finding fails `Test report`. The SonarQube Cloud quality
+gate is the `SonarCloud Code Analysis` check above.
 
 ### Tag ruleset `v*`
 
