@@ -23,6 +23,7 @@ class ChangeClassifierTest(unittest.TestCase):
         cases = {
             "core/rf-core/src/geodesy.cpp": {Areas.CPP},
             "server/sql/schema.sql": {Areas.CPP},
+            "cli/README.md": {Areas.CPP},
             "CMakeLists.txt": {Areas.CPP},
             "cmake/tools.cmake": {Areas.CPP},
             "web/projects/fpv-app/src/main.ts": {Areas.WEB},

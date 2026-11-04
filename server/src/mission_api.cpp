@@ -27,7 +27,13 @@ std::unique_ptr<CalcGate> makeCalcGate(const Config& config, Logger& log) {
 MissionApi::MissionApi(const Services& services)
     : s_(services), calcGate_(makeCalcGate(services.config(), services.log())) {}
 
-Principal MissionApi::session(const HttpRequest& req) const { return s_.auth().authenticate(req.bearer()); }
+Principal MissionApi::session(const HttpRequest& req) const {
+    const std::string bearer = req.bearer();
+    if (s_.serviceTokens().match(bearer)) {
+        throw HttpError(403, "a service token runs calculations; a mission needs a session from its link");
+    }
+    return s_.auth().authenticate(bearer);
+}
 
 Principal MissionApi::missionSession(const HttpRequest& req, std::string_view missionId) const {
     const Principal p = session(req);
@@ -143,19 +149,21 @@ void MissionApi::postLinkOpen(const HttpRequest& req, HttpReply& res) const {
 // ---- calc ----
 
 void MissionApi::postCalcPath(const HttpRequest& req, HttpReply& res) const {
-    (void)session(req);
+    (void)caller(req);
     const json b = req.body();
     s_.schemas().require("calc-path", b);
     res.send(200, calcGate_->run([this, &b] { return s_.calc().path(b); }));
 }
 
 void MissionApi::postCalcRoute(const HttpRequest& req, HttpReply& res) const {
-    const Principal p = session(req);
+    const Principal p = caller(req);
     const json mission = req.body();
     s_.schemas().require("mission", mission);
     checkRouteSize(mission);
+    // A service calculates any mission it sends; only a mission's own session stores the result.
     std::optional<int> revision;
-    if (const auto stored = s_.missions().get(p.missionId); stored.has_value() && stored->doc == mission) {
+    if (const auto stored = p.service ? std::nullopt : s_.missions().get(p.missionId);
+        stored.has_value() && stored->doc == mission) {
         revision = stored->revision;
     }
     // Checked and sized before the slot is taken, so a refused request never holds one.
@@ -182,7 +190,7 @@ void MissionApi::checkCoverageSize(const json& mission) const {
 }
 
 void MissionApi::postCalcCoverage(const HttpRequest& req, HttpReply& res) const {
-    const Principal p = session(req);
+    const Principal p = caller(req);
     const json mission = req.body();
     s_.schemas().require("mission", mission);
     checkCoverageSize(mission);
@@ -193,16 +201,16 @@ void MissionApi::postCalcCoverage(const HttpRequest& req, HttpReply& res) const 
 }
 
 void MissionApi::getJob(const HttpRequest& req, HttpReply& res) const {
-    res.send(200, s_.jobs().status(session(req).missionId, req.match(1)));
+    res.send(200, s_.jobs().status(caller(req).missionId, req.match(1)));
 }
 
 void MissionApi::deleteJob(const HttpRequest& req, HttpReply& res) const {
-    s_.jobs().cancel(session(req).missionId, req.match(1));
+    s_.jobs().cancel(caller(req).missionId, req.match(1));
     res.noContent();
 }
 
 void MissionApi::getJobGrid(const HttpRequest& req, HttpReply& res) const {
-    res.send(200, s_.jobs().grid(session(req).missionId, req.match(1), req.match(2)));
+    res.send(200, s_.jobs().grid(caller(req).missionId, req.match(1), req.match(2)));
 }
 
 void MissionApi::getElevationProfile(const HttpRequest& req, HttpReply& res) const {

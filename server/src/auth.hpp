@@ -101,6 +101,9 @@ struct Principal {
     std::string missionId;
     Role role;
     std::optional<std::string> linkId;
+    /// The service token's name when a service (services.tokens) calls instead of a mission
+    /// session. missionId is then ServiceTokens::principalId(name), which no mission has.
+    std::optional<std::string> service;
 };
 
 /// Mission credentials: owner keys, share links with PINs, sessions.

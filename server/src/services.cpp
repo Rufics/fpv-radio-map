@@ -88,6 +88,12 @@ Services::Services(const Config& config, Logger& log, const std::string& ownerKe
     jobs_ = std::make_unique<JobManager>(*calc_, config_.coverage.maxJobs, config_.coverage.threads,
                                          config_.coverage.keepMinutes, log_);
     limiter_ = std::make_unique<RateLimiter>(config_.rateLimits, clock_);
+    serviceTokens_ = std::make_unique<ServiceTokens>(ServiceTokens::fromConfig(config_.serviceTokens));
+    if (!config_.serviceTokens.empty()) {
+        std::string names;
+        for (const Config::ServiceToken& t : config_.serviceTokens) names += (names.empty() ? "" : ", ") + t.name;
+        log_.info("startup", "service tokens that may run calculations: " + names);
+    }
     settings_ = startSettingsSync(*this);
 }
 
@@ -95,6 +101,13 @@ Services::~Services() {
     settings_.reset();  // its thread reloads the modules: stop it before they go
     jobs_.reset();  // running calculations hold module instances: finish them before the registry goes
     modules_.registry.reset();
+}
+
+Principal Services::calculationCaller(const std::string& bearer) const {
+    if (auto name = serviceTokens_->match(bearer)) {
+        return {ServiceTokens::principalId(*name), Role::View, std::nullopt, std::move(name)};
+    }
+    return store_.auth->authenticate(bearer);
 }
 
 void Services::openDatabase(const std::filesystem::path& sqlDir) {

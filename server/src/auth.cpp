@@ -211,7 +211,7 @@ Principal AuthService::authenticate(const std::string& bearer) {
     if (bearer.empty()) throw HttpError(401, "session required (Authorization: Bearer <session>)");
     const auto s = store_.session(Secrets::sha256(bearer), clock_.now());
     if (!s) throw HttpError(401, "session unknown or expired");
-    return {s->missionId, s->role, s->linkId};
+    return {s->missionId, s->role, s->linkId, std::nullopt};
 }
 
 json AuthService::linkJson(const LinkRecord& l) {

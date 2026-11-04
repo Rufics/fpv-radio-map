@@ -20,6 +20,7 @@
 #include "raster.hpp"
 #include "result_cache.hpp"
 #include "schemas.hpp"
+#include "service_tokens.hpp"
 #include "settings_sync.hpp"
 #include "weather.hpp"
 
@@ -68,6 +69,11 @@ public:
     [[nodiscard]] FlightLogService& flightLogs() const { return *flightLogs_; }
     [[nodiscard]] JobManager& jobs() const { return *jobs_; }
     [[nodiscard]] RateLimiter& limiter() const { return *limiter_; }
+    /// services.tokens: the bearer tokens that run calculations without a mission session.
+    [[nodiscard]] const ServiceTokens& serviceTokens() const { return *serviceTokens_; }
+    /// Who asks for a calculation: a service token (services.tokens), else a mission session.
+    /// HttpError 401 when the bearer token is neither.
+    [[nodiscard]] Principal calculationCaller(const std::string& bearer) const;
     /// Offline region packages, built in the background from the world map data.
     /// Keeps the admin settings of this process in step with the other processes.
     [[nodiscard]] SettingsSync& settings() const { return *settings_; }
@@ -141,6 +147,7 @@ private:
     std::unique_ptr<FlightLogService> flightLogs_;
     std::unique_ptr<JobManager> jobs_;
     std::unique_ptr<RateLimiter> limiter_;
+    std::unique_ptr<ServiceTokens> serviceTokens_;
     std::unique_ptr<SettingsSync> settings_;  ///< its reloads use the members above
 };
 

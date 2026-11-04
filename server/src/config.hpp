@@ -80,6 +80,15 @@ public:
     /// A shorter token is a configuration error: the admin API changes what the server runs.
     static constexpr std::size_t kMinAdminTokenLength = 24;
 
+    /// services.tokens: bearer tokens for scripts, CI and other services, which run calculations
+    /// without a mission session (service_tokens.hpp). The config keeps each token's SHA-256 only;
+    /// `rfmap token new` makes a token and prints its entry.
+    struct ServiceToken {
+        std::string name;    ///< [a-z0-9][a-z0-9._-]*, at most 64 characters; unique
+        std::string sha256;  ///< of the token, 64 lowercase hex digits
+    };
+    std::vector<ServiceToken> serviceTokens;
+
     /// The operations listener (ops_server.hpp): GET /healthz, /readyz and /metrics on a port of
     /// its own, never behind the rate limiter or the request threads.
     struct Ops {
@@ -212,11 +221,11 @@ public:
         double burst;
     };
     /// Per client address and class: default, open (PIN attempts), create, calc, admin, coverage,
-    /// area (drawn offline areas asked for).
-    std::map<std::string, RateLimit, std::less<>> rateLimits{{"default", {600, 120}}, {"open", {10, 5}},
-                                                             {"create", {20, 10}},     {"calc", {120, 30}},
-                                                             {"admin", {60, 20}},      {"coverage", {6, 3}},
-                                                             {"area", {12, 4}}};
+    /// area (drawn offline areas asked for). A request with a service token counts in `service`
+    /// instead, per token rather than per address.
+    std::map<std::string, RateLimit, std::less<>> rateLimits{
+        {"default", {600, 120}}, {"open", {10, 5}},     {"create", {20, 10}}, {"calc", {120, 30}},
+        {"admin", {60, 20}},     {"coverage", {6, 3}}, {"area", {12, 4}},     {"service", {300, 60}}};
 
     struct Coverage {
         int threads = 4;

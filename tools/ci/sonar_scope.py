@@ -61,7 +61,7 @@ class ChangeClassifier:
     C_FAMILY_PATTERNS = tuple(f"**/*{suffix}" for suffix in (".c", ".cc", ".cpp", ".cxx", *HEADER_SUFFIXES))
     C_FAMILY_TEST_PATTERNS = tuple(f"**/tests/{pattern}" for pattern in C_FAMILY_PATTERNS)
     CPP_NAMES = ("CMakeLists.txt", ".clang-tidy")
-    CPP_FOLDERS = ("core/", "platform/", "modules/", "server/", "examples/", "fuzz/", "schemas/", "data/",
+    CPP_FOLDERS = ("core/", "platform/", "modules/", "server/", "cli/", "examples/", "fuzz/", "schemas/", "data/",
                    ".github/actions/cpp-deps/", ".github/actions/fuzz/")
     WEB_FOLDERS = ("web/", "schemas/")
     PYTHON_SUFFIXES = (".py",)
