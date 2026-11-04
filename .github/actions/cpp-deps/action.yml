@@ -32,13 +32,15 @@ runs:
       env:
         EXTRA: ${{ inputs.extra }}
       run: |
+        # Created as the runner user: a folder sudo made under ~/.cache would be root's, and later
+        # steps (ccache) could not write next to it. apt's _apt user cannot reach a folder in the
+        # home directory, so apt downloads as root, which it would fall back to anyway.
         archives="$HOME/.cache/apt-archives"
-        sudo mkdir -p "$archives/partial"
-        sudo chown _apt "$archives/partial"
+        mkdir -p "$archives/partial"
         sudo apt-get update
         # shellcheck disable=SC2086 # EXTRA is a list of package names.
         sudo apt-get install -y --no-install-recommends \
-          -o Dir::Cache::Archives="$archives" -o APT::Keep-Downloaded-Packages=true \
+          -o Dir::Cache::Archives="$archives" -o APT::Keep-Downloaded-Packages=true -o APT::Sandbox::User=root \
           build-essential cmake ninja-build pkg-config ccache \
           libgeographiclib-dev nlohmann-json3-dev libarchive-dev libsodium-dev \
           libpqxx-dev libgdal-dev gdal-bin libcpp-httplib-dev libgtest-dev \
