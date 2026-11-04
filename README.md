@@ -77,6 +77,22 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 <td><b>Fly an uploaded route.</b> In autonomous mode the links are optional. A lost link is a warning that shows where the pilot cannot take over or loses the picture, not a block.</td>
 </tr>
 <tr>
+<td><img src="docs/images/laptop-3d-altitude.png" alt="3D view of the route over the terrain, with the altitude profile, the safe corridor and the climb assistant's strategy cards"></td>
+<td><img src="docs/images/laptop-weather.png" alt="Weather mode: the route coloured by head and tail wind, the forecast at every point at its arrival time, and a read-out on leg 3"></td>
+</tr>
+<tr>
+<td><b>See the route in 3D.</b> The altitude profile under the map shows the ground, the plan and the safe corridor; the climb assistant compares the plan with the energy-optimal climb, and <b>▶ Chase</b> flies the plan.</td>
+<td><b>Weather on the route.</b> The forecast at each point at the time the drone gets there: wind against the route, temperature and rain, with a pre-flight briefing.</td>
+</tr>
+<tr>
+<td><img src="docs/images/laptop-replay.png" alt="Flight replay of a Betaflight Blackbox log: the flight's story, the track over the plan coloured by cell voltage and the timeline with flight modes"></td>
+<td><img src="docs/images/laptop-offline-draw.png" alt="Offline: drawing an area on the map to have the server build a package for it"></td>
+</tr>
+<tr>
+<td><b>Replay a flight.</b> Open a Betaflight Blackbox log over the mission: the track, the flight's story, battery, altitude, speed and link on a timeline, a logbook, and plan against fact.</td>
+<td><b>Draw your own offline area.</b> Click the corners of the area you need; the server builds its package, and the browser keeps it for use without a network.</td>
+</tr>
+<tr>
 <td><img src="docs/images/laptop-offline-regions.png" alt="Offline regions: three region packages with preview, area, size, layers and version, each with a Download button"></td>
 <td><img src="docs/images/admin-offline-regions.png" alt="Admin data sources: offline regions with their state, ready or building, and a Rescan regions button"></td>
 </tr>
@@ -104,11 +120,14 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 | ⛰️ | Terrain profile, first Fresnel zone, Bullington diffraction, coverage heatmap and maximum range | `rf-core` |
 | 🗺️ | Coverage that keeps the map readable: under the relief and labels, fading while you edit, an optional mini-map, and line of sight to the cursor | web |
 | 🌦️ | Refraction from the forecast (ITU-R P.453) and rain loss (ITU-R P.838-3), including future dates | `rf-ext`, Open-Meteo |
+| 🌬️ | Weather along the route at each point's arrival time: head and tail wind per leg, temperature and rain, a weather map and a pre-flight briefing | server, web, Open-Meteo |
 | 🌲 | Forest and buildings from land-cover classes, with obstacle heights set by the admin | `rf-ext` |
 | ± | Uncertainty band from the DEM's stated error: *reliable*, *marginal*, *blocked*, *blocked, may work* | `rf-ext` |
 | 🔋 | Battery range with wind, temperature and climb, and a turn-back point when the pack won't last | `fpv.battery` |
 | ↕️ | Minimum altitude along the route that keeps the Fresnel zone clear | `fpv.min-altitude` |
 | 🏔️ | 3D view of the route over the terrain, with a linked altitude profile, the safe corridor (terrain clearance, link floor, ceiling) and an optional Fresnel tube | `fpv.altitude`, web |
+| 📈 | Waypoint heights planned above the launch point (or above ground), filled in automatically from the corridor floor, and a climb assistant that compares the plan with the energy-optimal climb | `fpv.altitude` |
+| 🎥 | Chase camera that flies the plan in 3D, and an altitude sheet with the worst spot of the plan on the phone | web |
 | 🏠 | Failsafe check: where the link is lost, and whether return-to-home clears the terrain | `fpv.failsafe` |
 | ✈️ | Fixed-wing planning: the climb angle over the terrain from take-off on, the turn radius at every waypoint, the stall margin in a banked turn, and loiter instead of hover in the failsafe | `fpv.airframe`, `fpv.failsafe` |
 | 🛰️ | Autonomous routes uploaded before take-off: the radio links become optional, and a lost link shows where the pilot cannot take over or loses the picture instead of blocking the route | server, `fpv.failsafe` |
@@ -117,8 +136,9 @@ it was. Generic coverage maps answer "is there signal here". This project answer
 | ⚖️ | Scenario compare, KML and GPX export | `fpv.core` |
 | 🎞️ | Flight replay from Betaflight Blackbox logs: track, battery, altitude, speed, link, modes and failsafe on the map, the flight's story, a logbook, and plan against fact | `fpv.blackbox`, `rf-flightlog` |
 | 🔗 | Read-only share links with a PIN; only the owner key revokes them | server |
-| 📦 | Offline regions: packages of the map, relief and 3D terrain cut from one world PMTiles set by a box, an admin boundary or a polygon, versioned for updates | server, web |
+| 📦 | Offline regions: packages of the map, relief and 3D terrain cut from one world PMTiles set by a box, an admin boundary or a polygon, or built for an area a user draws; saved in the browser for use without a network, with an *update available* flag when the server has a newer version | server, web |
 | 📚 | Equipment library: radios, antennas, batteries, drones, with sources and admin-verified flags | server, web |
+| 🩺 | Operations: liveness, readiness and Prometheus metrics on a port of their own, a graceful drain on stop, bounded calculations and database waits, and admin settings kept in step across server processes | server |
 
 ## Architecture
 
@@ -133,12 +153,15 @@ flowchart LR
     EXT["rf-ext<br/>refraction · rain · clutter · uncertainty"]
     REG["rfmod registry<br/>signature · schema · deps · self-test"]
     POOL["rf-db<br/>bounded session pool"]
+    SYNC["settings sync<br/>LISTEN/NOTIFY + poll"]
+    PKG["offline packages<br/>go-pmtiles extract"]
+    OPS["ops listener :9090<br/>/healthz · /readyz · /metrics"]
   end
   subgraph Modules["Signed modules (.rfmod)"]
     OWN["owner-signed<br/>in process"]
     THIRD["third-party<br/>isolated worker"]
   end
-  DB[("PostgreSQL + PostGIS<br/>missions · library · cache")]
+  DB[("PostgreSQL + PostGIS<br/>missions · library · flight logs<br/>settings · cache")]
   DEM[["DEM (COG) · land cover<br/>PMTiles basemap"]]
   OM["Open-Meteo<br/>(self-hosted)"]
 
@@ -148,6 +171,8 @@ flowchart LR
   API --> REG --> OWN
   REG --> THIRD
   API --> POOL --> DB
+  SYNC --> DB
+  API --> PKG --> DEM
   CORE --> DEM
   EXT --> OM
 ```
@@ -165,6 +190,9 @@ flowchart LR
 | [`web`](web) | `@rfmap/ui-kit` and the FPV app |
 | [`tools/tiles-builder`](tools/tiles-builder) | Builds the DEM COG, hillshade, contours, basemap and satellite PMTiles |
 | [`tools/perf`](tools/perf) | Performance and load test tooling: the fixed terrain dataset for load tests |
+| [`tools/ci`](tools/ci), [`tools/wiki`](tools/wiki), [`tools/blackbox`](tools/blackbox), [`tools/app-icons`](tools/app-icons) | Repository tooling, all in Python: CI reports, coverage and the Sonar scope, the wiki publisher, the Betaflight mode tables and the app icons |
+| [`schemas`](schemas) | JSON Schemas of the mission, the flight log, the library kinds and the module manifest, shared by the server and the browser |
+| [`fuzz`](fuzz) | Fuzz targets for the C++ input parsers |
 | [`deploy`](deploy) | Docker Compose: PostGIS, Open-Meteo, server, web |
 | [`examples/modules/body-shadow`](examples/modules/body-shadow) | A small example module to start from |
 
@@ -203,9 +231,11 @@ All documentation lives in [`docs/`](docs/README.md) and is published to the [wi
 - [Glossary](docs/guide/glossary.md) and [FAQ](docs/guide/faq.md)
 - [Command-line client](docs/guide/cli.md): calculations and data from the server for scripts and CI
 - [Production server, step by step](docs/admin/production-setup.md), then [server deployment](docs/admin/deploy.md) and the [tiles builder](docs/admin/tiles-builder.md) for every option
+- [Offline regions](docs/admin/offline-regions.md), [how map layers reach the browser](docs/admin/map-layers.md) and [how the weather forecast reaches the pilot](docs/admin/weather-data.md)
 - [HTTP API (OpenAPI)](docs/api/openapi.yaml)
 - [Writing a module](docs/modules/developer-guide.md): C ABI, host calls, UI bundles, signing, deprecation
 - [Web frontend](web/README.md)
+- [Database migrations](docs/dev/migrations.md), [fuzz testing](docs/dev/fuzzing.md) and [performance tests](tools/perf/README.md)
 - [Contributing](CONTRIBUTING.md): commit standard, checks, releases
 
 ## Roadmap
@@ -214,7 +244,7 @@ The core is complete and tested. The project is **alpha**: the interfaces may st
 
 **Next**
 - [ ] Relay planning in the interface (the `fpv.relay` module already computes it)
-- [ ] Route editing: snap to terrain features, undo
+- [ ] Route editing: snap to terrain features, and undo for every edit (today only the last point move can be undone)
 - [ ] Battery summary in the route result
 - [ ] Validate weather against a live self-hosted Open-Meteo instance
 - [ ] Time limits for owner-signed modules that run in the server process

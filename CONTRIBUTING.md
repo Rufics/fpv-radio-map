@@ -26,6 +26,12 @@ function. Keep the cognitive load low, within the limits SonarCloud enforces on 
 - at most 3 nested `if`, `for`, `do`, `while` and `switch` statements.
 
 A function that grows past them is split into named steps, usually methods of a small class.
+
+Repository tooling (CI and release helpers, the wiki publisher, generators and other scripts under
+`tools/`) is written in Python, in the same object-oriented style; do not add tooling scripts in
+other languages. Life-cycle work of the product itself, such as backups, restores, migrations and
+housekeeping, belongs in the server (`rfmap-server --backup`, `--restore`, `--migrate`), not in
+external scripts.
 Locally, `clang-tidy` reports the complexity of a build configured with
 `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`:
 
@@ -102,8 +108,11 @@ git config core.hooksPath .githooks      # once per clone
 
 Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a CI report comment:
 
+- C++ static analysis: `clang-tidy` with the checks in `.clang-tidy`, split into four shards;
 - C++: everything under `ctest` on the Release build, including the server integration test against
-  PostgreSQL 18 + PostGIS and the signed-package upload checks of every FPV module;
+  PostgreSQL 18 + PostGIS and the signed-package checks (`rfmod test`) of every FPV module;
+- Python tools: the unit tests of `tools/ci`, `tools/perf` and `tools/blackbox`, run by the `Test report`
+  job;
 - C++ coverage: the same tests on an instrumented build, reported per area (core, FPV modules,
   platform, server) and for the lines the pull request changes;
 - web: both production builds and the unit tests of `ui-kit` and `fpv-app`;
@@ -209,7 +218,7 @@ notes. A release:
 1. computes the version from the commits since the last tag;
 2. runs the full CI;
 3. builds with that version and the owner key, signs every FPV module (`.rfmod`) and runs its
-   upload checks and self-test;
+   package checks and self-test;
 4. tags `vX.Y.Z` and publishes the GitHub release with generated notes, the signed modules,
    their `SHA256SUMS`, the `rfmod` CLI and the `rfmap` API client;
 5. publishes `fpv-radio-map-server` and `fpv-radio-map-web` images as `X.Y.Z`, `X.Y` and `latest`.

@@ -1,6 +1,6 @@
 # FPV Radio Map — web frontend
 
-Angular 22 (standalone components, signals, zoneless), MapLibre GL 5 with PMTiles, strict TypeScript. The UI is English, metric and dark theme only.
+Angular 22 (standalone components, signals, zoneless), MapLibre GL 6 with PMTiles, strict TypeScript. The UI is English, metric and dark theme only.
 
 ```
 web/
@@ -62,12 +62,15 @@ Demo data:
 | `layers/` | `LayerRegistry` (one per map, groups base → terrain → weather → results → mission), the standard layers (dark base on the OpenMapTiles schema, satellite, hillshade, contours, weather with a time slider) and `<rf-layer-panel>` with collapsible Map, Coverage, Weather and Mission sections (`<rf-layer-section>`). |
 | `slots/` | `SlotRegistry` and `<rf-slot-host>` for `header.actions`, `side.panels`, `map.layers`, `map.overlays`, `bottom.drawer` and `verdict.reasons`. |
 | `coverage/` | Heatmap on the viridis scale under the relief and the labels (`CoverageLayer`, `CoverageReliefLayer`), its strength by activity (`CoverageIntensity`), margin under a point (`CoverageProbe`), the hover line of sight (`LineOfSightLayer`), radio and battery limits, and scenario difference: `subtractGrids`, `CoverageDeltaLayer`, `RouteDeltaLayer` and `DeltaScale` (▲/▼ marks as well as colour). |
+| `models/` | The contract types: API, mission, library and flight log (`flightview/v1`) models. |
 | `charts/` | SVG terrain profile with the Fresnel zone and earth bulge, and the link-budget waterfall. |
 | `tools/` | Geo helpers and `RouteTool` (markers, legs, drag with an `onDrag` start/end callback, add point). |
 | `weather/` | Weather along the route: `RouteTimeline` (arrival time at each place at the cruise speed), `RouteWeather` (forecast samples read at any distance, head/tail wind per leg), `WeatherScale` (classes and colours), `RouteWeatherLayer` (the route recoloured by the weather in weather mode) and `PolylineHitTest` (hover read-outs). |
 | `state/` | `RfmapApiClient` (one method per contract operation), `MissionStore` (signals; save, calculate, job parts, preview fix with JSON merge patch), `CredentialStore` and `applyMergePatch`. |
 | `modules/` | `ModuleUiLoader`: runtime UI bundles (see below). |
 | `export/` | `MissionExporter`, a client-side KML/GPX fallback that writes AGL heights. |
+| `offline/` | Offline packages: `PackageDownloader` (checked against the package's SHA-256), `ZipIndex`, `OfflineStorage` (`IndexedDbOfflineStorage`, or `MemoryOfflineStorage` where the browser has no IndexedDB), `OfflineMapSources` (the map reads tiles and fonts from a saved package) and `AreaShape` for drawn areas. |
+| `replay/` | `ReplayTimeline` and `TrackScale` (the replay clock, readings and colour classes of a decoded flight), `ReplayFormat`, and `FlightTrackLayer` (the flown track, coloured by battery, altitude, speed, link or GPS). |
 | `schemas/` | `SchemaValidator` (ajv draft-07 strict plus formats). |
 | `ui/` | Pill, segmented control, stepper, job progress and heat legend. |
 | `styles/rfmap-ui-kit.css` | Design tokens (`--rf-*`), IBM Plex Sans/Mono with tabular figures, radii 6/8/12/16, and touch targets of 44 px (32 px for dense desktop). |
@@ -133,6 +136,20 @@ export function register(api) {
 - **Export (feature 14):** the Share dialog asks for `options.export = [kind]` with `kmlAltitude` (above ground or above sea level) through `/calc/route`, then downloads `data.export[kind].content` as a Blob. Without fpv.core, the browser writes KML/GPX itself, with AGL heights only.
 - **Equipment library (feature 16):** `/admin/library` over `/library/{kind}`. Everyone can browse it read-only. Only the admin token allows edits; entries are validated live with ajv and on the server. Verified and unverified status and the source are shown in the library list and editor, in the radio setup dialog, and in the compare pickers.
 
+## Workspace modes and views
+
+The header switches the mission between **Plan**, **Replay** and **Plan vs fact**:
+
+- **Plan** edits the route and shows the result. **Weather** on the map colours the route by the forecast at each arrival time and opens the weather card and the pre-flight briefing (`RouteWeatherService`, `weather/` in the ui-kit). **Layers → View** turns on the 3D terrain and route and the altitude profile (`AltitudeView` in `core/fpv-altitude.ts`, `route-3d.component.ts`); the profile carries the climb assistant, and **▶ Chase** flies the plan in 3D (`core/fpv-chase.ts`). On a phone the altitude check is a sheet under the map.
+- **Replay** opens Betaflight Blackbox logs (`POST /flightlogs/decode`, then `/missions/{id}/flightlogs` to keep them in the logbook) and plays the flight over the plan: story, details, logbook, and a timeline with the flight modes (`core/flight-replay.service.ts`, `replay/`).
+- **Plan vs fact** sets the replayed flight against the calculated plan, leg by leg.
+
+![3D view with the altitude profile and the climb assistant](screenshots/laptop-3d-altitude.png)
+
+![Flight replay of a Blackbox log](screenshots/laptop-replay.png)
+
+![Plan against fact](screenshots/laptop-plan-fact.png)
+
 ## Routes
 
 | Route | Page |
@@ -140,7 +157,7 @@ export function register(api) {
 | `/` | Workspace: layout A on laptop/desktop, layout C on phones (≤ 767 px) |
 | `/mission/:id` | Workspace for a saved mission |
 | `/m/:role/:token` | PIN entry (`e` = edit, `v` = view) |
-| `/offline` | Offline regions: the packages `GET /api/v1/regions` lists, with preview, area, size, layers, version and a download link |
+| `/offline` | Offline regions: the packages `GET /api/v1/regions` lists, with preview, area, size, layers, version and a download link; **Save on this device** keeps a package in the browser, **On this device** picks the one the map reads, a card says **Update available** when the server has a newer version, and **Draw an area** asks the server to build a package for a polygon (`/api/v1/areas`) |
 | `/admin/modules`, `/admin/library`, `/admin/sources` | Admin pages; `/admin/sources` also shows the state of each offline region and rescans them |
 
 Route `title`s name the page only (`Mission`, `Modules · Admin`); `AppTitleStrategy` appends ` · FPV Radio Map`, and a route without a title shows the app name alone.
