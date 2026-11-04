@@ -34,7 +34,7 @@ services:
   # open-meteo-init has downloaded a first copy: the API keeps a model grid it failed to open
   # (because the files were not there yet) failed until it restarts.
   open-meteo:
-    image: ghcr.io/open-meteo/open-meteo:1.7.0@sha256:64039ca2e6a18e6917cdc0cb1bf8cff5f2fbd8d67b7ca29b5364fab486e1f154
+    image: ghcr.io/open-meteo/open-meteo:1.8.0@sha256:bf94e8b39761b59a91bd04bb926b3834cad00eaf71f1aa64b2fd17fbe987846a
     command: ["serve", "--env", "production", "--hostname", "0.0.0.0", "--port", "8080"]
     depends_on:
       open-meteo-init:
@@ -54,7 +54,7 @@ services:
   # every dwd_icon request and answers "Something went wrong." while it is missing.
   # See docs/admin/deploy.md, section 4.
   open-meteo-init:
-    image: ghcr.io/open-meteo/open-meteo:1.7.0@sha256:64039ca2e6a18e6917cdc0cb1bf8cff5f2fbd8d67b7ca29b5364fab486e1f154
+    image: ghcr.io/open-meteo/open-meteo:1.8.0@sha256:bf94e8b39761b59a91bd04bb926b3834cad00eaf71f1aa64b2fd17fbe987846a
     command:
       - sync
       - &sync-models ${OPEN_METEO_SYNC_MODELS:-dwd_icon,dwd_icon_global_eps_native}
@@ -68,7 +68,7 @@ services:
 
   # Keeps the data fresh after the first pass: checks for new model runs every 5 minutes.
   open-meteo-sync:
-    image: ghcr.io/open-meteo/open-meteo:1.7.0@sha256:64039ca2e6a18e6917cdc0cb1bf8cff5f2fbd8d67b7ca29b5364fab486e1f154
+    image: ghcr.io/open-meteo/open-meteo:1.8.0@sha256:bf94e8b39761b59a91bd04bb926b3834cad00eaf71f1aa64b2fd17fbe987846a
     command:
       - sync
       - *sync-models
