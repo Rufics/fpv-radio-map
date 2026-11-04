@@ -443,6 +443,16 @@ TEST(Cli, FlightLogsAreSentAsBytesWithTheirName) {
     EXPECT_EQ(run({"--server", s.url(), "flightlog", "decode", "/no/such.bbl"}).status, Cli::kNoInput);
 }
 
+TEST(Cli, AMissingTokenGetsAHint) {
+    FakeServer s;
+    s.http().Post("/api/v1/calc/route", [](const httplib::Request&, httplib::Response& res) {
+        FakeServer::reply(res, 401, {{"message", "session required"}});
+    });
+    const Outcome r = run({"--server", s.url(), "calc", "route", "-"}, {}, "{}");
+    EXPECT_EQ(r.status, Cli::kServerError);
+    EXPECT_NE(r.err.find("need a service token"), std::string::npos) << r.err;
+}
+
 TEST(Cli, TokenNewNeedsNoServerAndGivesTheServerEntry) {
     const Outcome r = run({"token", "new", "--name", "nightly-ci"});
     EXPECT_EQ(r.status, Cli::kOk) << r.err;

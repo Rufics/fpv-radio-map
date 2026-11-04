@@ -175,6 +175,10 @@ int Cli::run(std::span<const std::string> words) {
                 io_.err << "  " << issue.value("path", "") << ": " << issue.value("message", issue.dump()) << "\n";
             }
         }
+        if (e.status() == 401) {
+            io_.err << "(calculations need a service token the server knows, in RFMAP_TOKEN or --token-file; "
+                       "rfmap token new makes one)\n";
+        }
         return kServerError;
     } catch (const ConnectionError& e) {
         io_.err << "rfmap: cannot reach the server: " << e.what() << "\n";
