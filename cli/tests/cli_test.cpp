@@ -256,7 +256,26 @@ TEST(Cli, AnUnreachableServerExitsThreeAfterRetryingReads) {
     EXPECT_NE(r.err.find("cannot reach the server"), std::string::npos);
     // A calculation is not repeated after a failed connection: it may have run.
     EXPECT_TRUE(run({"--server", url, "calc", "route", "-"}, {}, "{}").sleeps.empty());
-    EXPECT_EQ(run({"--server", "ftp://x", "map"}).status, Cli::kUnreachable);
+}
+
+TEST(Cli, OnlyAServerOnThisMachineMaySkipHttps) {
+    EXPECT_EQ(ApiClient::splitServer("https://maps.example.org/maps/"),
+              (std::pair<std::string, std::string>{"https://maps.example.org", "/maps"}));
+    EXPECT_EQ(ApiClient::splitServer("http://127.0.0.1:8080").first, "http://127.0.0.1:8080");
+    for (const char* local : {"http://localhost", "http://LocalHost:8080/x", "http://127.4.5.6", "http://[::1]:8080"}) {
+        EXPECT_NO_THROW((void)ApiClient::splitServer(local)) << local;
+    }
+    for (const char* refused :
+         {"http://maps.example.org", "http://10.0.0.5:8080", "http://[::2]", "http://127.0.0.1.example.org",
+          "http://localhost.example.org", "http://127.0.0.1@maps.example.org", "https://user:pw@maps.example.org",
+          "ftp://x", "maps.example.org", "https://", "https:///maps", "https://:8080"}) {
+        EXPECT_THROW((void)ApiClient::splitServer(refused), ServerUrlError) << refused;
+    }
+    // A wrong server URL is a wrong argument, wherever it comes from, and nothing is sent.
+    const Outcome r = run({"--server", "http://maps.example.org", "--token", "t", "map"});
+    EXPECT_EQ(r.status, Cli::kUsage);
+    EXPECT_NE(r.err.find("https://"), std::string::npos);
+    EXPECT_EQ(run({"map"}, {{"RFMAP_SERVER", "ftp://x"}}).status, Cli::kUsage);
 }
 
 TEST(Cli, ServerUrlsMayHaveAPathPrefixAndTokensComeFromFiles) {

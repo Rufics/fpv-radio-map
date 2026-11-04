@@ -2,9 +2,12 @@
 
 #include "digest.hpp"
 
+#include <arpa/inet.h>
 #include <httplib.h>
+#include <netinet/in.h>
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <cmath>
 #include <format>
@@ -15,6 +18,27 @@ namespace {
 
 /// The longest wait between two attempts, whatever the server asks for.
 constexpr std::chrono::seconds kMaxRetryWait{60};
+
+/// The host of a URL authority ("host", "host:port", "[v6]:port"), without the port.
+std::string_view hostOf(std::string_view authority) {
+    if (authority.starts_with('[')) return authority.substr(0, authority.find(']') + 1);
+    return authority.substr(0, authority.find(':'));
+}
+
+/// Whether `host` is this machine, so that what is sent to it never leaves the host:
+/// localhost, an address of 127.0.0.0/8, or [::1].
+bool isLoopback(std::string_view host) {
+    std::string name(host);
+    std::ranges::transform(name, name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (name == "localhost") return true;
+    if (name.size() > 2 && name.front() == '[' && name.back() == ']') {
+        in6_addr v6{};
+        const std::string inner = name.substr(1, name.size() - 2);
+        return inet_pton(AF_INET6, inner.c_str(), &v6) == 1 && IN6_IS_ADDR_LOOPBACK(&v6);
+    }
+    in_addr v4{};
+    return inet_pton(AF_INET, name.c_str(), &v4) == 1 && ntohl(v4.s_addr) >> 24U == 127U;
+}
 
 }  // namespace
 
@@ -33,17 +57,32 @@ ApiClient::ApiClient(ClientOptions options, Sleep sleep) : options_(std::move(op
 ApiClient::~ApiClient() = default;
 
 std::pair<std::string, std::string> ApiClient::splitServer(std::string_view server) {
-    // Plain http is for a server on this host or its network, as in the image's own
-    // `rfmap --server http://127.0.0.1:8080`; https is checked against the system's CAs.
-    if (!server.starts_with("http://") && !server.starts_with("https://")) {  // NOSONAR(cpp:S5332): a scheme check, not a connection
-        throw ConnectionError(std::format("the server must be an http:// or https:// URL, not \"{}\"", server));
+    const auto sep = server.find("://");
+    const std::string_view scheme = sep == std::string_view::npos ? std::string_view{} : server.substr(0, sep);
+    const bool secure = scheme == "https";
+    if (!secure && scheme != "http") {
+        throw ServerUrlError(std::format("the server must be an https:// URL, not \"{}\"", server));
     }
-    const auto hostStart = server.find("://") + 3;
+    const auto hostStart = sep + 3;
     const auto pathStart = server.find('/', hostStart);
+    const std::string_view authority =
+        server.substr(hostStart, pathStart == std::string_view::npos ? pathStart : pathStart - hostStart);
+    if (authority.find('@') != std::string_view::npos) {
+        throw ServerUrlError("the server URL must not carry a user or password: give the token in RFMAP_TOKEN or "
+                             "--token-file");
+    }
+    const std::string_view host = hostOf(authority);
+    if (host.empty()) throw ServerUrlError(std::format("the server URL has no host: {}", server));
+    // https is checked against the system's CAs. Plain http only reaches this machine, as in the
+    // image's own `rfmap --server http://127.0.0.1:8080`: a token never crosses a network in clear.
+    if (!secure && !isLoopback(host)) {
+        throw ServerUrlError(std::format("{} is not encrypted: give the server as https://, plain http only reaches "
+                                         "this machine (localhost, 127.0.0.1, [::1])",
+                                         server));
+    }
     std::string origin(server.substr(0, pathStart));
     std::string prefix(pathStart == std::string_view::npos ? std::string_view{} : server.substr(pathStart));
     while (prefix.ends_with('/')) prefix.pop_back();
-    if (origin.size() == hostStart) throw ConnectionError(std::format("the server URL has no host: {}", server));
     return {origin, prefix};
 }
 

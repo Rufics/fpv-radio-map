@@ -41,6 +41,13 @@ public:
     using std::runtime_error::runtime_error;
 };
 
+/// The server URL is not one the client may use (not https, or plain http to another machine):
+/// exit status 64, like any other wrong argument.
+class ServerUrlError : public std::invalid_argument {
+public:
+    using std::invalid_argument::invalid_argument;
+};
+
 /// A file the client writes (a download) cannot be: exit status 73.
 class LocalFileError : public std::runtime_error {
 public:
@@ -49,7 +56,8 @@ public:
 
 /// How to reach the server and how patient to be with it.
 struct ClientOptions {
-    /// "http(s)://host[:port][/prefix]": the API is at <prefix>/api/v1.
+    /// "https://host[:port][/prefix]": the API is at <prefix>/api/v1. Plain http only to this
+    /// machine (localhost, 127.0.0.0/8, [::1]), so a token never crosses a network unencrypted.
     std::string server;
     std::string token;  ///< Bearer token (a service token); empty = none
     std::chrono::seconds timeout{300};
@@ -90,7 +98,8 @@ public:
     /// the way. The file only appears when the download is complete.
     Download download(const std::string& path, const std::filesystem::path& file) const;
 
-    /// "scheme://host:port" and the path prefix of a server URL; ConnectionError when it is not one.
+    /// "scheme://host:port" and the path prefix of a server URL; ServerUrlError when it is not
+    /// one the client may use.
     static std::pair<std::string, std::string> splitServer(std::string_view server);
     /// The seconds the server asks to wait: retryAfterS in the body, else the Retry-After header.
     [[nodiscard]] static std::chrono::seconds retryAfter(const json& body, std::string_view header);

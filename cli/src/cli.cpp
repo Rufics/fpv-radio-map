@@ -38,6 +38,7 @@ Calculations and data from an FPV Radio Map server, as JSON on stdout.
 
 Server and credentials (or the environment: RFMAP_SERVER, RFMAP_TOKEN, RFMAP_TOKEN_FILE):
   --server URL          https://maps.example.org; the API is at <URL>/api/v1
+                        (plain http:// only to this machine: localhost, 127.0.0.1, [::1])
   --token TOKEN         a service token; prefer RFMAP_TOKEN, which process lists do not show
   --token-file FILE     read the token from FILE
   --timeout SECONDS     per request (default 300)
@@ -73,7 +74,8 @@ Checks for CI (calc path and calc route); a result that falls short exits with 1
   --summary                       one line per leg or link on stderr
 
 Exit status: 0 ok, 1 a check failed, 2 the server answered an error, 3 the server could not be
-reached, 64 usage, 66 an input file cannot be read, 73 an output file cannot be written.
+reached, 64 usage (a wrong server URL too), 66 an input file cannot be read, 73 an output file
+cannot be written.
 )";
 
 /// Percent-encodes a query value: everything but the unreserved characters of RFC 3986.
@@ -155,6 +157,9 @@ int Cli::run(std::span<const std::string> words) {
         return dispatch(args);
     } catch (const UsageError& e) {
         io_.err << "rfmap: " << e.what() << "\n(rfmap --help lists the commands and their options)\n";
+        return kUsage;
+    } catch (const ServerUrlError& e) {
+        io_.err << "rfmap: " << e.what() << "\n";
         return kUsage;
     } catch (const InputError& e) {
         io_.err << "rfmap: " << e.what() << "\n";

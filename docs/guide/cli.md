@@ -30,7 +30,10 @@ rfmap health
 
 - `--server URL` sets the server for one command, and `RFMAP_SERVER` sets it for all of them. A
   URL with a path works: `https://example.org/maps` reaches `https://example.org/maps/api/v1`.
-  `https://` servers are checked against the system's CA certificates.
+- **Only `https://`.** `https://` servers are checked against the system's CA certificates.
+  Plain `http://` works only for a server on the same machine (`localhost`, `127.0.0.1`,
+  `[::1]`), as inside the server image, so a token never crosses a network unencrypted. Any
+  other `http://` server exits with 64.
 - `RFMAP_TOKEN` sets the token. You can also use `--token-file FILE` or `RFMAP_TOKEN_FILE`.
   `--token TOKEN` works too, but process lists show it.
 - **Calculations need a service token:** `calc path`, `calc route`, `calc coverage` and
@@ -190,7 +193,7 @@ jobs:
 | 1 | A check failed: `--fail-on` or `--min-margin`, health not ok, a coverage job failed or ran out of time, a package that does not match its SHA-256 |
 | 2 | The server answered an error (4xx or 5xx). stderr has its message and the schema issues |
 | 3 | The server could not be reached: refused, DNS, TLS or timeout |
-| 64 | The command line is wrong |
+| 64 | The command line is wrong, or the server URL is not `https://` (see [Connect](#connect)) |
 | 66 | An input file cannot be read, or is not JSON |
 | 73 | An output file cannot be written |
 
