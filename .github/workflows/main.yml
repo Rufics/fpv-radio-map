@@ -1,6 +1,7 @@
-# Every push to main: the full CI, then the Docker images are built, started together with
-# PostGIS and checked end to end, and published to GHCR as :edge. Only :edge is pushed and the
-# version it replaces is deleted, so main never piles up images in package storage.
+# Every push to main: the full CI with the SonarQube Cloud analysis, then the Docker images are
+# built, started together with PostGIS and checked end to end, and published to GHCR as :edge. Only
+# :edge is pushed and the version it replaces is deleted, so main never piles up images in package
+# storage.
 name: Main
 
 on:
@@ -18,8 +19,6 @@ on:
       - .github/workflows/wiki.yml
       - .github/workflows/release.yml
       - .github/workflows/ci-report.yml
-      - .github/workflows/sonar.yml
-      - sonar-project.properties
       - .github/CODEOWNERS
       - .github/pull_request_template.md
       - tools/wiki/**
@@ -35,6 +34,9 @@ concurrency:
 jobs:
   ci:
     uses: ./.github/workflows/ci.yml
+    # Only the scan step of ci.yml's SonarQube Cloud job reads it.
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     # ci.yml's comment job asks for pull-requests: write; it runs on pull requests only.
     permissions:
       contents: read

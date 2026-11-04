@@ -1,29 +1,51 @@
-# The C++ part of the SonarQube Cloud analysis (.github/workflows/sonar.yml). One instrumented
-# build gives both the compile database the analyser reads (build-sonar/compile_commands.json) and
-# the coverage, filtered like the coverage job in ci.yml.
-name: SonarQube Cloud C++ coverage
-description: Builds and tests the C++ code with coverage and writes sonar-reports/cpp-coverage.xml.
+# The C++ part of the SonarQube Cloud analysis (the sonar job in .github/workflows/ci.yml). The
+# analyser reads build-sonar/compile_commands.json, so this always configures the instrumented
+# build and generates its headers; that takes seconds. The coverage normally comes from the C++
+# coverage job of the same run (sonar-reports/cpp-coverage.xml, downloaded before this action).
+# Only when that job did not run, for a change to the analysis alone, `build: "true"` builds and
+# tests here and writes the report itself, filtered like the coverage job.
+name: SonarQube Cloud C++ inputs
+description: Writes build-sonar/compile_commands.json and, with build "true", sonar-reports/cpp-coverage.xml.
+inputs:
+  build:
+    description: '"true" to build, test and collect the coverage here'
+    required: false
+    default: "false"
 runs:
   using: composite
   steps:
     - uses: ./.github/actions/cpp-deps
       with:
         extra: gcovr
+    - id: ccache
+      if: inputs.build == 'true'
+      uses: ./.github/actions/ccache
+      with:
+        kind: coverage
+    # The same flags as the C++ coverage job in ci.yml, so the compile database matches the build
+    # whose coverage is reported.
     - name: Configure
       shell: bash
       run: >-
         cmake -S . -B build-sonar -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON -DRFMAP_COVERAGE=ON
+    - name: Generate headers
+      if: inputs.build != 'true'
+      shell: bash
+      run: cmake --build build-sonar --target platform/rfmod/generated/manifest_schema.hpp
     - name: Build
+      if: inputs.build == 'true'
       shell: bash
       run: cmake --build build-sonar
     - name: Test
+      if: inputs.build == 'true'
       shell: bash
       run: ctest --test-dir build-sonar --output-on-failure
     # Branch coverage counts only the decisions in the source: the hidden exception paths the
     # compiler adds to every call that may throw, and branches no code can reach, are left out,
     # or they would dominate the branch count without saying anything about the tests.
     - name: Coverage report
+      if: inputs.build == 'true'
       shell: bash
       run: |
         mkdir -p sonar-reports

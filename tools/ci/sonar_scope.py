@@ -62,11 +62,11 @@ class ChangeClassifier:
     C_FAMILY_TEST_PATTERNS = tuple(f"**/tests/{pattern}" for pattern in C_FAMILY_PATTERNS)
     CPP_NAMES = ("CMakeLists.txt", ".clang-tidy")
     CPP_FOLDERS = ("core/", "platform/", "modules/", "server/", "cli/", "examples/", "fuzz/", "schemas/", "data/",
-                   ".github/actions/cpp-deps/", ".github/actions/fuzz/")
+                   ".github/actions/cpp-deps/", ".github/actions/ccache/", ".github/actions/fuzz/")
     WEB_FOLDERS = ("web/", "schemas/")
     PYTHON_SUFFIXES = (".py",)
     # The analysis itself; sonar_lcov.py runs only in the web coverage step.
-    ANALYSIS_FILES = ("sonar-project.properties", ".github/workflows/sonar.yml", "tools/ci/sonar_scope.py",
+    ANALYSIS_FILES = ("sonar-project.properties", ".github/workflows/ci.yml", "tools/ci/sonar_scope.py",
                       "tools/ci/sonar_lcov.py")
     # The composite actions that build and test each part for the analysis.
     ANALYSIS_FOLDERS = (".github/actions/sonar-",)

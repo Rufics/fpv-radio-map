@@ -3,16 +3,25 @@
 # files can affect are built: a change to docs alone builds nothing. Skipped jobs still report, so
 # the required checks pass without running.
 #
-# This workflow runs the pull request's own code with a read-only token and no secrets. Only the
-# comment job may write, and it runs no code from the pull request: it posts the finished report
-# as text, and only on a pull request from a branch of this repository. A fork's pull request
-# gets its comment from ci-report.yml, which reads the artifacts of this run as data with the
-# code of main.
+# This workflow runs the pull request's own code with a read-only token. Only the comment job may
+# write, and it runs no code from the pull request: it posts the finished report as text, and only
+# on a pull request from a branch of this repository. A fork's pull request gets its comment from
+# ci-report.yml, which reads the artifacts of this run as data with the code of main. The one
+# secret, SONAR_TOKEN, reaches only the scan step of the sonar job, on pull requests from branches
+# of this repository and pushes to main; forks and Dependabot never get it.
+#
+# Each C++ build runs once: the Release build and tests (cpp), the instrumented build (coverage,
+# whose report SonarQube Cloud reads too) and the fuzz build. ccache and the apt package cache
+# (.github/actions/ccache, cpp-deps) carry main's work over to every later run.
 name: CI
 
 on:
   pull_request:
   workflow_call:
+    secrets:
+      SONAR_TOKEN:
+        description: SonarQube Cloud token; without it the analysis is skipped
+        required: false
 
 permissions:
   contents: read
@@ -29,6 +38,7 @@ jobs:
     outputs:
       cpp: ${{ steps.scope.outputs.cpp }}
       web: ${{ steps.scope.outputs.web }}
+      sonar: ${{ steps.scope.outputs.sonar }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name == 'pull_request'
@@ -36,16 +46,18 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       # A file outside the known lists builds everything, so a new folder is never left untested.
+      # SonarQube Cloud analyses every change but docs, Markdown and the licence.
       - id: scope
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "$GITHUB_EVENT_NAME" != pull_request ]; then
-            echo "cpp=true" >> "$GITHUB_OUTPUT"; echo "web=true" >> "$GITHUB_OUTPUT"; exit 0
+            { echo "cpp=true"; echo "web=true"; echo "sonar=true"; } >> "$GITHUB_OUTPUT"; exit 0
           fi
-          cpp=false; web=false
+          cpp=false; web=false; sonar=false
           for f in $(git diff --name-only "$BASE...$HEAD"); do
+            case "$f" in docs/*|*.md|LICENSE) ;; *) sonar=true ;; esac
             case "$f" in
               docs/*|*.md|LICENSE|.github/ISSUE_TEMPLATE/*|.github/DISCUSSION_TEMPLATE/*|.github/dependabot.yml) ;;
               .github/workflows/pr-title.yml|.github/workflows/wiki.yml|tools/wiki/*|tools/app-icons/*|.githooks/*) ;;
@@ -54,22 +66,22 @@ jobs:
               .github/workflows/main.yml|.github/workflows/release.yml|deploy/*|tools/tiles-builder/*|tools/ci/*|tools/blackbox/*) ;;
               .dockerignore|.gitignore) ;;
               .github/workflows/fuzz.yml) ;;
-              .github/workflows/sonar.yml|sonar-project.properties|.github/actions/sonar-*) ;;
+              sonar-project.properties|.github/actions/sonar-*) ;;
               web/*) web=true ;;
               schemas/*|.github/workflows/ci.yml) cpp=true; web=true ;;
-              core/*|platform/*|modules/*|server/*|cli/*|examples/*|data/*|fuzz/*|CMakeLists.txt|.github/actions/cpp-deps/*|.github/actions/fuzz/*) cpp=true ;;
+              core/*|platform/*|modules/*|server/*|cli/*|examples/*|data/*|fuzz/*|CMakeLists.txt|.github/actions/cpp-deps/*|.github/actions/ccache/*|.github/actions/fuzz/*) cpp=true ;;
               *) echo "No rule for $f: building everything."; cpp=true; web=true ;;
             esac
           done
-          echo "C++: $cpp, web: $web"
-          echo "cpp=$cpp" >> "$GITHUB_OUTPUT"
-          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "C++: $cpp, web: $web, SonarQube Cloud: $sonar"
+          { echo "cpp=$cpp"; echo "web=$web"; echo "sonar=$sonar"; } >> "$GITHUB_OUTPUT"
 
-  # The gate in front of every C++ build: when clang-tidy (checks in .clang-tidy) finds anything,
-  # the build, the tests and everything after them are skipped. Configures with Clang to get the
-  # compile database and builds only the generated headers. A pull request checks the sources it
-  # changes, or everything when it changes a header or the build; other runs check everything.
-  # The files are split across four runners; the gate fails when any of them finds anything.
+  # clang-tidy with the checks in .clang-tidy. It runs beside the builds instead of in front of
+  # them, so it is off the critical path; any finding fails the Test report gate. Configures with
+  # Clang to get the compile database and builds only the generated headers. A pull request checks
+  # the sources it changes, or everything when it changes a header or the build; other runs check
+  # everything. The files are split across four runners; the gate fails when any of them finds
+  # anything.
   clang-tidy:
     name: C++ static analysis (${{ matrix.shard }}/4)
     needs: changes
@@ -103,7 +115,7 @@ jobs:
 
   cpp:
     name: C++ build and tests
-    needs: [changes, clang-tidy]
+    needs: changes
     if: needs.changes.outputs.cpp == 'true'
     runs-on: ubuntu-26.04
     timeout-minutes: 30
@@ -112,10 +124,21 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/cpp-deps
+      - id: ccache
+        uses: ./.github/actions/ccache
+        with:
+          kind: release
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON
       - name: Build
-        run: cmake --build build
+        run: |
+          cmake --build build
+          ccache --show-stats
+      - if: github.event_name != 'pull_request'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache.outputs.key }}
       # Includes the server integration test against a throw-away PostgreSQL 18 + PostGIS
       # cluster (server/tests/pg_fixture.sh) and the signed-package upload checks.
       - name: Test
@@ -130,11 +153,13 @@ jobs:
 
   # The same tests on an instrumented build (-O0 --coverage), so the Release job above stays the
   # gate for the binaries that ship. Like every job here it tests the merge commit; the report
-  # links the uncovered lines to that commit, so the line numbers match.
+  # links the uncovered lines to that commit, so the line numbers match. Also writes the coverage
+  # report of the SonarQube Cloud analysis (the sonar job), so the analysis builds nothing itself.
+  # Runs on pull requests and pushes to main, the runs SonarQube Cloud analyses.
   coverage:
     name: C++ coverage
-    needs: [changes, clang-tidy]
-    if: needs.changes.outputs.cpp == 'true' && github.event_name == 'pull_request'
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true' && (github.event_name == 'pull_request' || github.event_name == 'push')
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     outputs:
@@ -147,10 +172,25 @@ jobs:
       - uses: ./.github/actions/cpp-deps
         with:
           extra: gcovr
+      - id: ccache
+        uses: ./.github/actions/ccache
+        with:
+          kind: coverage
+      # The same flags as .github/actions/sonar-cpp, which writes the compile database the
+      # SonarQube Cloud analyser reads next to this job's coverage.
       - name: Configure
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON -DRFMAP_COVERAGE=ON
+        run: >-
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          -DRFMAP_BUILD_TESTS=ON -DRFMAP_BUILD_SERVER=ON -DRFMAP_COVERAGE=ON
       - name: Build
-        run: cmake --build build
+        run: |
+          cmake --build build
+          ccache --show-stats
+      - if: github.event_name != 'pull_request'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache.outputs.key }}
       - name: Test
         run: ctest --test-dir build --output-on-failure
       # Product code only: tests, the example module, fetched dependencies and generated files
@@ -168,6 +208,27 @@ jobs:
             --html-details coverage/html/index.html --html-title 'fpv-radio-map C++ coverage' \
             --print-summary \
             build
+      # The same counters for SonarQube Cloud, whose branch coverage counts only the decisions in
+      # the source: the hidden exception paths the compiler adds to every call that may throw, and
+      # branches no code can reach, are left out.
+      - name: Coverage for SonarQube Cloud
+        if: success() || failure()
+        run: |
+          mkdir -p sonar-reports
+          gcovr --root . -j "$(nproc)" \
+            --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
+            --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' --filter 'cli/' \
+            --exclude '.*/tests/.*' \
+            --exclude-throw-branches --exclude-unreachable-branches \
+            --sonarqube sonar-reports/cpp-coverage.xml \
+            build
+      - if: success() || failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sonar-cpp-coverage
+          path: sonar-reports/cpp-coverage.xml
+          if-no-files-found: ignore
+          retention-days: 1
       # Lines this pull request adds or changes: the merge commit against its first parent, the
       # base branch it was merged onto.
       - name: List the changed lines
@@ -256,7 +317,8 @@ jobs:
           mkdir -p coverage-web
           git diff --unified=0 --no-color --no-ext-diff --no-renames HEAD^1 HEAD -- web > coverage-web/changes.diff
           git rev-parse HEAD > coverage-web/commit.txt
-      - if: (success() || failure()) && github.event_name == 'pull_request'
+      # Also on pushes to main, for the SonarQube Cloud analysis of the sonar job.
+      - if: success() || failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-web
@@ -293,10 +355,11 @@ jobs:
           seconds: "60"
 
   # The gate: the one required check, red when any job above failed. Also writes the report to
-  # the run summary and hands it to the comment job below.
+  # the run summary and hands it to the comment job below. A run cancelled by a newer push skips
+  # it, so the newer run does not wait for a report nobody reads.
   report:
     name: Test report
-    if: always()
+    if: ${{ !cancelled() }}
     needs: [changes, clang-tidy, cpp, coverage, fuzz, web]
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -342,7 +405,7 @@ jobs:
           path: ${{ runner.temp }}/ci-data/tests
           merge-multiple: true
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: (success() || failure()) && needs.coverage.result != 'skipped'
+        if: (success() || failure()) && needs.coverage.result != 'skipped' && github.event_name == 'pull_request'
         continue-on-error: true
         with:
           name: coverage-cpp
@@ -381,6 +444,90 @@ jobs:
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
 
+  # SonarQube Cloud analysis (settings in sonar-project.properties, setup in docs/dev/sonarcloud.md)
+  # for pull requests from branches of this repository and pushes to main. It reads the coverage
+  # the coverage and web jobs above wrote instead of building and testing again; it builds only
+  # what they did not, for a change to the analysis alone. A pull request scans only what it
+  # changes (tools/ci/sonar_scope.py). The token reaches the scan step only, never a step that
+  # runs the pull request's code; without the SONAR_TOKEN secret the analysis is skipped. It is not
+  # part of the Test report gate: its quality gate is the SonarCloud Code Analysis check.
+  sonar:
+    name: SonarQube Cloud analysis
+    needs: [changes, coverage, web]
+    if: >-
+      !cancelled() &&
+      needs.changes.outputs.sonar == 'true' &&
+      (github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository))
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    steps:
+      - id: token
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -n "$SONAR_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::SONAR_TOKEN is not set: the SonarQube Cloud analysis is skipped."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      # Full history, so new code and blame information are right.
+      - if: steps.token.outputs.present == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # Which parts this run analyses and which files it scans. Rewrites sonar-project.properties
+      # in this checkout with the scope appended.
+      - name: Scope
+        id: scope
+        if: steps.token.outputs.present == 'true'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: >-
+          python3 -I tools/ci/sonar_scope.py --settings sonar-project.properties
+          --output sonar-project.properties --base "$BASE" --head "$HEAD"
+      - id: cpp-coverage
+        if: steps.scope.outputs.cpp == 'true' && needs.coverage.result != 'skipped'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: sonar-cpp-coverage
+          path: sonar-reports
+      - name: C++ compile database
+        if: steps.scope.outputs.cpp == 'true'
+        uses: ./.github/actions/sonar-cpp
+        with:
+          build: ${{ steps.cpp-coverage.outcome != 'success' }}
+      - name: Python coverage
+        if: steps.scope.outputs.python == 'true'
+        uses: ./.github/actions/sonar-python
+      - id: web-coverage
+        if: steps.scope.outputs.web == 'true' && needs.web.result != 'skipped'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: coverage-web
+          path: ${{ runner.temp }}/coverage-web
+      - name: Web coverage from the web job
+        if: steps.web-coverage.outcome == 'success'
+        env:
+          LCOV: ${{ runner.temp }}/coverage-web/web.lcov
+        run: |
+          mkdir -p sonar-reports
+          if [ -f "$LCOV" ]; then cp "$LCOV" sonar-reports/web.lcov; fi
+      - name: Web coverage
+        if: steps.scope.outputs.web == 'true' && steps.web-coverage.outcome != 'success'
+        uses: ./.github/actions/sonar-web
+      # The only step that gets the token.
+      - name: SonarQube Cloud scan
+        if: steps.token.outputs.present == 'true'
+        uses: SonarSource/sonarqube-scan-action@4d1dc0c91ee400dcf8a6dddf2f705ac36542e304 # v8.4.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   # One comment per pull request, updated on every run. The only job with write access, and it
   # checks out and runs no code: it reads the finished report as text and posts it with the gh
   # CLI. Only for branches of this repository; ci-report.yml comments on forks' pull requests. A
@@ -391,7 +538,7 @@ jobs:
     name: Post the CI report
     needs: [changes, clang-tidy, cpp, coverage, fuzz, web, report]
     if: >-
-      always() &&
+      !cancelled() &&
       !contains(needs.*.result, 'cancelled') &&
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository

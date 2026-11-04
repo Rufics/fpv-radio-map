@@ -108,7 +108,8 @@ git config core.hooksPath .githooks      # once per clone
 
 Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a CI report comment:
 
-- C++ static analysis: `clang-tidy` with the checks in `.clang-tidy`, split into four shards;
+- C++ static analysis: `clang-tidy` with the checks in `.clang-tidy`, split into four shards that run
+  at the same time as the C++ build;
 - C++: everything under `ctest` on the Release build, including the server integration test against
   PostgreSQL 18 + PostGIS and the signed-package checks (`rfmod test`) of every FPV module;
 - Python tools: the unit tests of `tools/ci`, `tools/perf` and `tools/blackbox`, run by the `Test report`
@@ -120,9 +121,14 @@ Every pull request runs the CI workflow (`.github/workflows/ci.yml`) and gets a 
   minute (longer every night in `.github/workflows/fuzz.yml`; see [Fuzz testing](docs/dev/fuzzing.md));
 - the pull request title against Conventional Commits (its own check, re-run when the title is edited).
 
-A separate workflow (`.github/workflows/sonar.yml`) runs the SonarQube Cloud analysis with C++,
-Python and TypeScript coverage; its quality gate shows on the pull request. See
+The `SonarQube Cloud analysis` job of the same workflow sends the code and the C++, Python and
+TypeScript coverage of this run to SonarQube Cloud; its quality gate shows on the pull request. See
 [SonarQube Cloud](docs/dev/sonarcloud.md).
+
+Each C++ build runs once per run: the Release build with the tests, the instrumented build for
+coverage (which SonarQube Cloud reuses) and the fuzz build. They go through ccache, and the apt
+packages they install come from the Actions cache; `main` fills both caches and pull requests
+read them, so a pull request recompiles only what it changes.
 
 ### The CI report
 
