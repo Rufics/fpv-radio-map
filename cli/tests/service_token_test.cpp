@@ -37,8 +37,12 @@ TEST(Sha256, PiecesHashAsTheWhole) {
     rfmap::cli::Sha256 h;
     ASSERT_TRUE(h.add("a"));
     ASSERT_TRUE(h.add("bc"));
+    EXPECT_EQ(h.size(), 3U);
     EXPECT_EQ(h.hex(), rfmap::cli::Sha256::of("abc"));
+    EXPECT_FALSE(h.add("d"));  // the digest is out: restart first
+    EXPECT_THROW((void)h.hex(), rfmap::cli::CryptoError);
     h.restart();
+    EXPECT_EQ(h.size(), 0U);
     EXPECT_EQ(h.hex(), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");  // of nothing
 }
 

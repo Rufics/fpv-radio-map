@@ -60,10 +60,11 @@ private:
     [[nodiscard]] int calcRoute(const Arguments& args) const;
     [[nodiscard]] int calcCoverage(const Arguments& args) const;
     /// Polls the coverage job until it ends; false when it outlasted `patience` and was cancelled.
-    [[nodiscard]] bool awaitJob(ApiClient& api, const std::string& id, json& job, double poll, double patience) const;
+    [[nodiscard]] bool awaitJob(const ApiClient& api, const std::string& id, json& job, double poll,
+                                double patience) const;
     /// Puts each finished part's grid into out["grids"], or into a file under `outDir` listed in
     /// out["files"]; false when a part did not finish.
-    [[nodiscard]] bool fetchGrids(ApiClient& api, const std::string& id, const json& job,
+    [[nodiscard]] bool fetchGrids(const ApiClient& api, const std::string& id, const json& job,
                                   const std::optional<std::string>& outDir, json& out) const;
     [[nodiscard]] int elevation(const Arguments& args) const;
     [[nodiscard]] int library(const Arguments& args) const;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -27,9 +28,11 @@ public:
 
     /// Starts over, forgetting what was added.
     void restart();
-    /// False when OpenSSL failed; the digest is then of no use.
+    /// False when OpenSSL failed or the digest is already out; the digest is then of no use.
     [[nodiscard]] bool add(std::string_view data) noexcept;
-    /// The digest of what was added since the last restart.
+    /// The bytes added since the last restart.
+    [[nodiscard]] std::uintmax_t size() const { return size_; }
+    /// The digest of what was added since the last restart; then restart before adding more.
     [[nodiscard]] std::string hex();
 
     [[nodiscard]] static std::string of(std::string_view text);
@@ -37,6 +40,8 @@ public:
 private:
     struct State;
     std::unique_ptr<State> state_;
+    std::uintmax_t size_ = 0;
+    bool finished_ = false;
 };
 
 /// `bytes` as lowercase hex, two digits each.

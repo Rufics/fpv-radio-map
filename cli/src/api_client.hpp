@@ -73,21 +73,22 @@ public:
     ApiClient& operator=(ApiClient&&) = delete;
 
     /// `path` is below /api/v1 and may carry a query ("/weather/point?lat=..").
-    [[nodiscard]] json get(const std::string& path);
-    [[nodiscard]] json post(const std::string& path, const json& body);
+    [[nodiscard]] json get(const std::string& path) const;
+    [[nodiscard]] json post(const std::string& path, const json& body) const;
     /// The answer's status with its body: for calls whose 202 or 409 the caller reads itself.
-    [[nodiscard]] std::pair<int, json> postWithStatus(const std::string& path, const json& body);
-    [[nodiscard]] json postBytes(const std::string& path, const std::string& bytes, const std::string& contentType);
-    [[nodiscard]] json put(const std::string& path, const json& body);
+    [[nodiscard]] std::pair<int, json> postWithStatus(const std::string& path, const json& body) const;
+    [[nodiscard]] json postBytes(const std::string& path, const std::string& bytes,
+                                   const std::string& contentType) const;
+    [[nodiscard]] json put(const std::string& path, const json& body) const;
     /// DELETE; a 204 answers null.
-    json remove(const std::string& path);
+    json remove(const std::string& path) const;
     struct Download {
         std::uintmax_t bytes = 0;
         std::string sha256;  ///< of the bytes written, lowercase hex
     };
     /// Writes the answer's body to `file` as it arrives (packages can be gigabytes), hashing it on
     /// the way. The file only appears when the download is complete.
-    Download download(const std::string& path, const std::filesystem::path& file);
+    Download download(const std::string& path, const std::filesystem::path& file) const;
 
     /// "scheme://host:port" and the path prefix of a server URL; ConnectionError when it is not one.
     static std::pair<std::string, std::string> splitServer(std::string_view server);
@@ -105,12 +106,12 @@ private:
     [[nodiscard]] static Answer answerOf(const httplib::Result& r);
     /// Runs `send(client)` with the retry policy and turns an error status into ApiError.
     template <typename Send>
-    Answer exchange(const std::string& method, const std::string& path, const Send& send, bool idempotent);
+    Answer exchange(const std::string& method, const std::string& path, const Send& send, bool idempotent) const;
     /// The ApiError for an answer of 3xx or worse.
     [[noreturn]] static void fail(const std::string& method, const std::string& path, const Answer& a);
-    /// One attempt of a download: the body into `partial`, hashed into `hash`, counted in `written`.
+    /// One attempt of a download: the body into `partial`, hashed (and counted) by `hash`.
     static Answer fetchTo(httplib::Client& c, const std::string& target, const std::filesystem::path& partial,
-                          Sha256& hash, std::uintmax_t& written);
+                          Sha256& hash);
     [[nodiscard]] static json parse(const std::string& body);
     [[nodiscard]] std::string url(const std::string& path) const { return prefix_ + "/api/v1" + path; }
 

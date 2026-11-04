@@ -18,20 +18,24 @@ void Sha256::restart() {
     if (!state_->ctx || EVP_DigestInit_ex(state_->ctx.get(), EVP_sha256(), nullptr) != 1) {
         throw CryptoError("SHA-256 cannot start");
     }
+    size_ = 0;
+    finished_ = false;
 }
 
 bool Sha256::add(std::string_view data) noexcept {
-    return EVP_DigestUpdate(state_->ctx.get(), data.data(), data.size()) == 1;
+    if (finished_ || EVP_DigestUpdate(state_->ctx.get(), data.data(), data.size()) != 1) return false;
+    size_ += data.size();
+    return true;
 }
 
 std::string Sha256::hex() {
-    std::array<std::byte, EVP_MAX_MD_SIZE> digest{};
-    unsigned int size = 0;
-    if (EVP_DigestFinal_ex(state_->ctx.get(), reinterpret_cast<unsigned char*>(digest.data()), &size) != 1 ||
-        size != 32) {
+    std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
+    unsigned int length = 0;
+    if (finished_ || EVP_DigestFinal_ex(state_->ctx.get(), digest.data(), &length) != 1 || length != 32) {
         throw CryptoError("SHA-256 failed");
     }
-    return toHex(std::span(digest).first(size));
+    finished_ = true;
+    return toHex(std::as_bytes(std::span(digest).first(length)));
 }
 
 std::string Sha256::of(std::string_view text) {

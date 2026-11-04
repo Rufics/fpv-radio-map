@@ -33,7 +33,9 @@ ApiClient::ApiClient(ClientOptions options, Sleep sleep) : options_(std::move(op
 ApiClient::~ApiClient() = default;
 
 std::pair<std::string, std::string> ApiClient::splitServer(std::string_view server) {
-    if (!server.starts_with("http://") && !server.starts_with("https://")) {
+    // Plain http is for a server on this host or its network, as in the image's own
+    // `rfmap --server http://127.0.0.1:8080`; https is checked against the system's CAs.
+    if (!server.starts_with("http://") && !server.starts_with("https://")) {  // NOSONAR(cpp:S5332): a scheme check, not a connection
         throw ConnectionError(std::format("the server must be an http:// or https:// URL, not \"{}\"", server));
     }
     const auto hostStart = server.find("://") + 3;
@@ -91,7 +93,7 @@ void ApiClient::fail(const std::string& method, const std::string& path, const A
 
 template <typename Send>
 ApiClient::Answer ApiClient::exchange(const std::string& method, const std::string& path, const Send& send,
-                                      bool idempotent) {
+                                      bool idempotent) const {
     for (int attempt = 0;; ++attempt) {
         const bool mayRetry = attempt < options_.retries;
         Answer a;
@@ -111,12 +113,12 @@ ApiClient::Answer ApiClient::exchange(const std::string& method, const std::stri
     }
 }
 
-json ApiClient::get(const std::string& path) {
+json ApiClient::get(const std::string& path) const {
     const std::string target = url(path);
     return parse(exchange("GET", path, [&target](httplib::Client& c) { return answerOf(c.Get(target)); }, true).body);
 }
 
-std::pair<int, json> ApiClient::postWithStatus(const std::string& path, const json& body) {
+std::pair<int, json> ApiClient::postWithStatus(const std::string& path, const json& body) const {
     const std::string target = url(path);
     const std::string text = body.dump();
     const Answer a = exchange(
@@ -125,9 +127,9 @@ std::pair<int, json> ApiClient::postWithStatus(const std::string& path, const js
     return {a.status, parse(a.body)};
 }
 
-json ApiClient::post(const std::string& path, const json& body) { return postWithStatus(path, body).second; }
+json ApiClient::post(const std::string& path, const json& body) const { return postWithStatus(path, body).second; }
 
-json ApiClient::postBytes(const std::string& path, const std::string& bytes, const std::string& contentType) {
+json ApiClient::postBytes(const std::string& path, const std::string& bytes, const std::string& contentType) const {
     const std::string target = url(path);
     const auto send = [&target, &bytes, &contentType](httplib::Client& c) {
         return answerOf(c.Post(target, bytes, contentType));
@@ -135,25 +137,24 @@ json ApiClient::postBytes(const std::string& path, const std::string& bytes, con
     return parse(exchange("POST", path, send, false).body);
 }
 
-json ApiClient::put(const std::string& path, const json& body) {
+json ApiClient::put(const std::string& path, const json& body) const {
     const std::string target = url(path);
     const std::string text = body.dump();
     const auto send = [&target, &text](httplib::Client& c) { return answerOf(c.Put(target, text, "application/json")); };
     return parse(exchange("PUT", path, send, false).body);
 }
 
-json ApiClient::remove(const std::string& path) {
+json ApiClient::remove(const std::string& path) const {
     const std::string target = url(path);
     return parse(exchange("DELETE", path, [&target](httplib::Client& c) { return answerOf(c.Delete(target)); }, true)
                      .body);
 }
 
 ApiClient::Answer ApiClient::fetchTo(httplib::Client& c, const std::string& target, const std::filesystem::path& partial,
-                                     Sha256& hash, std::uintmax_t& written) {
+                                     Sha256& hash) {
     // A fresh file per attempt: a retry never appends to what a failed one left.
     std::ofstream out(partial, std::ios::binary | std::ios::trunc);
     if (!out) throw LocalFileError("cannot write " + partial.string());
-    written = 0;
     hash.restart();
     int status = 0;
     std::string errorBody;
@@ -161,13 +162,12 @@ ApiClient::Answer ApiClient::fetchTo(httplib::Client& c, const std::string& targ
         status = res.status;
         return true;
     };
-    const auto onData = [&status, &errorBody, &out, &written, &hash](const char* data, std::size_t size) {
+    const auto onData = [&status, &errorBody, &out, &hash](const char* data, std::size_t size) {
         if (status != 200) {
             errorBody.append(data, size);
             return true;
         }
         out.write(data, static_cast<std::streamsize>(size));
-        written += size;
         return static_cast<bool>(out) && hash.add(std::string_view(data, size));
     };
     const auto r = c.Get(target, onResponse, onData);
@@ -178,16 +178,15 @@ ApiClient::Answer ApiClient::fetchTo(httplib::Client& c, const std::string& targ
     return a;
 }
 
-ApiClient::Download ApiClient::download(const std::string& path, const std::filesystem::path& file) {
+ApiClient::Download ApiClient::download(const std::string& path, const std::filesystem::path& file) const {
     const std::string target = url(path);
     const std::filesystem::path partial = file.string() + ".part";
     Download d;
     Sha256 hash;
-    const auto send = [&target, &partial, &hash, &d](httplib::Client& c) {
-        return fetchTo(c, target, partial, hash, d.bytes);
-    };
+    const auto send = [&target, &partial, &hash](httplib::Client& c) { return fetchTo(c, target, partial, hash); };
     try {
         exchange("GET", path, send, true);
+        d.bytes = hash.size();
         d.sha256 = hash.hex();
     } catch (...) {
         std::error_code ignored;

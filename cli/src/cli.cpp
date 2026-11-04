@@ -92,11 +92,10 @@ std::string encodeQuery(std::string_view value) {
 /// `text` as one URL path segment of the server's own pattern; UsageError otherwise, so no
 /// argument can climb out of the path it is put into.
 std::string segment(const std::string& text, std::string_view extra, const char* what) {
-    const auto allowed = [extra](char ch) {
-        const auto c = static_cast<unsigned char>(ch);
-        return std::islower(c) != 0 || std::isdigit(c) != 0 || extra.find(ch) != std::string_view::npos;
-    };
-    if (text.empty() || !std::ranges::all_of(text, allowed)) {
+    if (text.empty() || !std::ranges::all_of(text, [extra](char ch) {
+            const auto c = static_cast<unsigned char>(ch);
+            return std::islower(c) != 0 || std::isdigit(c) != 0 || extra.find(ch) != std::string_view::npos;
+        })) {
         throw UsageError(std::format("{} \"{}\" is not one the server knows", what, text));
     }
     return text;
@@ -277,7 +276,7 @@ int Cli::verdict(const std::vector<std::string>& shortfalls) const {
 
 int Cli::health(const Arguments& args) const {
     args.requireOnly({}, 1);
-    ApiClient api = client(args);
+    const ApiClient api = client(args);
     const json h = api.get("/health");
     emit(args, h);
     return h.is_object() && h.value("ok", false) ? kOk : kCheckFailed;
@@ -288,7 +287,7 @@ int Cli::version(const Arguments& args) const {
     json out = {{"client", version_}};
     if (const auto env = io_.env.find("RFMAP_SERVER");
         args.has("--server") || (env != io_.env.end() && !env->second.empty())) {
-        ApiClient api = client(args);
+        const ApiClient api = client(args);
         out["server"] = api.get("/health").value("version", "");
     }
     emit(args, out);
@@ -329,7 +328,7 @@ int Cli::calcPath(const Arguments& args) const {
     if (const auto time = args.get("--time")) body["timeUtc"] = *time;
     if (const auto modules = args.get("--modules")) body["modules"] = readJson(*modules);
 
-    ApiClient api = client(args);
+    const ApiClient api = client(args);
     const json result = api.post("/calc/path", body);
     emit(args, result);
     if (args.has("--summary")) io_.err << pathSummary(result);
@@ -340,7 +339,7 @@ int Cli::calcRoute(const Arguments& args) const {
     args.requireOnly({"--fail-on", "--min-margin", "--summary"}, 3);
     const Requirements required = requirementsOf(args);
     const json mission = readJson(args.word(2, "the mission file (MISSION.json, or - for stdin)"));
-    ApiClient api = client(args);
+    const ApiClient api = client(args);
     const json result = api.post("/calc/route", mission);
     emit(args, result);
     if (args.has("--summary")) io_.err << routeSummary(result);
@@ -354,7 +353,7 @@ int Cli::calcCoverage(const Arguments& args) const {
     const double patience = args.number("--wait").value_or(1800.0);
     if (poll <= 0 || patience < 0) throw UsageError("--poll must be positive and --wait not negative");
 
-    ApiClient api = client(args);
+    const ApiClient api = client(args);
     json job = api.postWithStatus("/calc/coverage", mission).second;
     const std::string id = segment(job.value("jobId", ""), "_-ABCDEFGHIJKLMNOPQRSTUVWXYZ", "job id");
     if (args.has("--no-wait")) {
@@ -369,7 +368,7 @@ int Cli::calcCoverage(const Arguments& args) const {
     return complete && job.value("state", "") == "done" ? kOk : kCheckFailed;
 }
 
-bool Cli::awaitJob(ApiClient& api, const std::string& id, json& job, double poll, double patience) const {
+bool Cli::awaitJob(const ApiClient& api, const std::string& id, json& job, double poll, double patience) const {
     double waited = 0.0;
     std::string lastProgress;
     while (jobRunning(job)) {
@@ -389,8 +388,8 @@ bool Cli::awaitJob(ApiClient& api, const std::string& id, json& job, double poll
     return true;
 }
 
-bool Cli::fetchGrids(ApiClient& api, const std::string& id, const json& job, const std::optional<std::string>& outDir,
-                     json& out) const {
+bool Cli::fetchGrids(const ApiClient& api, const std::string& id, const json& job,
+                     const std::optional<std::string>& outDir, json& out) const {
     if (outDir) {
         std::error_code made;
         fs::create_directories(*outDir, made);
@@ -457,7 +456,7 @@ int Cli::weather(const Arguments& args) const {
 }
 
 int Cli::simpleGet(const Arguments& args, const std::string& path) const {
-    ApiClient api = client(args);
+    const ApiClient api = client(args);
     emit(args, api.get(path));
     return kOk;
 }
@@ -476,7 +475,7 @@ int Cli::regions(const Arguments& args) const {
     if (what != "download") throw UsageError("regions takes list, get or download, not " + what);
     args.requireOnly({"--out"}, 3);
     const std::string file = args.need("--out");
-    ApiClient api = client(args);
+    const ApiClient api = client(args);
     const json region = api.get("/regions/" + id);
     const std::string version = segment(region.value("version", ""), "", "package version");
     const ApiClient::Download d = api.download("/regions/" + id + "/packages/" + version + ".zip", file);
@@ -497,7 +496,7 @@ int Cli::flightlog(const Arguments& args) const {
     const std::string& file = args.word(2, "the flight log file");
     const std::string bytes = readBytes(file);
     const std::string name = args.get("--name").value_or(file == "-" ? "stdin" : fs::path(file).filename().string());
-    ApiClient api = client(args);
+    const ApiClient api = client(args);
     emit(args, api.postBytes("/flightlogs/decode?fileName=" + encodeQuery(name), bytes, "application/octet-stream"));
     return kOk;
 }
@@ -509,7 +508,7 @@ int Cli::api(const Arguments& args) const {
     const std::string& path = args.word(2, "the path below /api/v1, e.g. /library/antennas");
     if (!path.starts_with('/')) throw UsageError("the path must start with /, e.g. /library/antennas");
     const auto data = args.get("--data");
-    ApiClient client = this->client(args);
+    const ApiClient client = this->client(args);
     json result;
     if (method == "GET") {
         result = client.get(path);
