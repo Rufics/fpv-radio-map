@@ -61,6 +61,7 @@ add_library(rfmap_server_lib STATIC
   src/cache_admin.cpp
   src/map_config.cpp
   src/module_catalog.cpp
+  src/service_tokens.cpp
   src/services.cpp
   src/mission_api.cpp
   src/flight_log_api.cpp

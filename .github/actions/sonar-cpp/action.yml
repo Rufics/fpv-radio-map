@@ -29,7 +29,7 @@ runs:
         mkdir -p sonar-reports
         gcovr --root . -j "$(nproc)" \
           --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
-          --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' \
+          --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' --filter 'cli/' \
           --exclude '.*/tests/.*' \
           --exclude-throw-branches --exclude-unreachable-branches \
           --sonarqube sonar-reports/cpp-coverage.xml \

@@ -35,8 +35,11 @@ public:
     void getElevationProfile(const HttpRequest& req, HttpReply& res) const;
 
 private:
-    /// The session behind the bearer token; HttpError 401 without one.
+    /// The mission session behind the bearer token; HttpError 401 without one, 403 for a
+    /// service token, which runs calculations but reaches no mission.
     [[nodiscard]] Principal session(const HttpRequest& req) const;
+    /// Who asks for a calculation or its job: a mission session or a service token.
+    [[nodiscard]] Principal caller(const HttpRequest& req) const { return s_.auth().calculationCaller(req.bearer()); }
     /// session(), and HttpError 403 unless it belongs to the mission in the path.
     [[nodiscard]] Principal missionSession(const HttpRequest& req, std::string_view missionId) const;
     /// The mission's name for a link holder, or empty.

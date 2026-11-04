@@ -226,6 +226,8 @@ TEST(ConfigTest, ShippedExampleLoads) {
     EXPECT_EQ(c.weather.baseUrl, "http://open-meteo:8080");
     EXPECT_FALSE(c.data.demStatedErrorM.has_value());
     EXPECT_EQ(c.rateLimits.at("open").burst, 5.0);
+    EXPECT_EQ(c.rateLimits.at("service").burst, 60.0);
+    EXPECT_TRUE(c.serviceTokens.empty());
     EXPECT_EQ(c.raw["map"]["zoom"], 11);
 }
 

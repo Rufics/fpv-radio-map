@@ -12,6 +12,7 @@ list(APPEND CMAKE_MODULE_PATH /usr/share/cmake/geographiclib)
 
 option(RFMAP_BUILD_TESTS "Build unit tests" ON)
 option(RFMAP_BUILD_SERVER "Build the HTTP server" ON)
+option(RFMAP_BUILD_CLI "Build rfmap, the command-line client of the server's API" ON)
 option(RFMAP_COVERAGE "Instrument the build for line coverage (GCC or Clang, CI only)" OFF)
 # Fuzz targets (fuzz/). With Clang they are libFuzzer binaries and the whole tree is built with
 # AddressSanitizer and UndefinedBehaviorSanitizer; with other compilers they only replay the corpus.
@@ -54,6 +55,10 @@ add_subdirectory(core/rf-flightlog)
 add_subdirectory(core/rf-db)
 add_subdirectory(platform/rfmod)
 add_subdirectory(examples/modules/body-shadow)
+# Before the server: its integration tests drive the client against a running server.
+if(RFMAP_BUILD_CLI)
+  add_subdirectory(cli)
+endif()
 if(RFMAP_BUILD_SERVER)
   add_subdirectory(server)
 endif()

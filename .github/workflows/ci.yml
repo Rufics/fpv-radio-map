@@ -57,7 +57,7 @@ jobs:
               .github/workflows/sonar.yml|sonar-project.properties|.github/actions/sonar-*) ;;
               web/*) web=true ;;
               schemas/*|.github/workflows/ci.yml) cpp=true; web=true ;;
-              core/*|platform/*|modules/*|server/*|examples/*|data/*|fuzz/*|CMakeLists.txt|.github/actions/cpp-deps/*|.github/actions/fuzz/*) cpp=true ;;
+              core/*|platform/*|modules/*|server/*|cli/*|examples/*|data/*|fuzz/*|CMakeLists.txt|.github/actions/cpp-deps/*|.github/actions/fuzz/*) cpp=true ;;
               *) echo "No rule for $f: building everything."; cpp=true; web=true ;;
             esac
           done
@@ -162,7 +162,7 @@ jobs:
           mkdir -p coverage/html
           gcovr --root . -j "$(nproc)" \
             --exclude-directories '.*/_deps$' --exclude-directories '.*/rfmod-worker\.dir$' \
-            --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' \
+            --filter 'core/' --filter 'platform/' --filter 'modules/' --filter 'server/' --filter 'cli/' \
             --exclude '.*/tests/.*' \
             --json coverage/coverage.json \
             --html-details coverage/html/index.html --html-title 'fpv-radio-map C++ coverage' \
