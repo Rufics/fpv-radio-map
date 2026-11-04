@@ -68,6 +68,7 @@ public:
     [[nodiscard]] FlightLogService& flightLogs() const { return *flightLogs_; }
     [[nodiscard]] JobManager& jobs() const { return *jobs_; }
     [[nodiscard]] RateLimiter& limiter() const { return *limiter_; }
+    /// Offline region packages, built in the background from the world map data.
     /// Keeps the admin settings of this process in step with the other processes.
     [[nodiscard]] SettingsSync& settings() const { return *settings_; }
 

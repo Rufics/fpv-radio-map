@@ -10,7 +10,7 @@ name: rfmap
 
 services:
   postgis:
-    image: postgis/postgis:18-3.6@sha256:b4466ea2ba7e3af54fcbba996d45325720f4b3ecb4f43f99b2f41367dc196f23
+    image: postgis/postgis:18-3.6@sha256:4a43e3c3e5d55b9208240fc71db543b79c638766280c625a425bd0a2390989c4
     environment:
       POSTGRES_DB: rfmap
       POSTGRES_USER: rfmap
@@ -103,9 +103,13 @@ services:
       RFMAP__WEATHER__TIERS: '[{"name": "hourly", "models": "${OPEN_METEO_MODELS:-dwd_icon}"}]'
       RFMAP__DATA__DEMSTATEDERRORM: ${RFMAP_DEM_STATED_ERROR_M:-null}
       RFMAP__DATA__DEMSTATEDERRORSOURCE: ${RFMAP_DEM_STATED_ERROR_SOURCE:-}
+      # Offline regions are cut from the same tiles the map serves (docs/admin/offline-regions.md).
+      RFMAP__REGIONS__WORLDDIR: /data
     volumes:
       - ../server/config/server.example.json:/etc/rfmap/rfmap.json:ro
       - ${RFMAP_TILES_DIR:?set RFMAP_TILES_DIR in .env}:/data:ro
+      # regions.json and the boundary files it names; without a regions.json no region is offered.
+      - ${RFMAP_REGIONS_DIR:-./regions}:/etc/rfmap/regions:ro
       - rfmap-state:/var/lib/rfmap
     networks: [backend, frontend]
     # SIGTERM starts a drain (ops.drainSeconds, 5 s by default) and then lets the requests in

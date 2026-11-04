@@ -59,6 +59,7 @@ import { MapStageComponent } from './map-stage.component';
         @if (ws.mission()) {
           <button type="button" class="rf-btn rf-btn--sm rf-btn--secondary" (click)="ws.shareOpen.set(true)" [disabled]="!ws.store.canEdit()">Share</button>
         }
+        <a class="rf-btn rf-btn--sm rf-btn--muted" routerLink="/offline">Offline</a>
         <a class="rf-btn rf-btn--sm rf-btn--muted" routerLink="/admin/library">Library</a>
         <a class="rf-btn rf-btn--sm rf-btn--muted" routerLink="/admin/modules">Admin</a>
       </div>

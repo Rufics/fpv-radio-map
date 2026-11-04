@@ -10,6 +10,7 @@
 #include "mission_api.hpp"
 #include "ops_server.hpp"
 #include "readiness.hpp"
+#include "region_api.hpp"
 #include "request.hpp"
 #include "services.hpp"
 
@@ -27,7 +28,7 @@ struct Response;
 
 namespace rfmap {
 
-/// The HTTP server: the services, the four API controllers and the routes that lead to them.
+/// The HTTP server: the services, the API controllers and the routes that lead to them.
 /// Every handler runs inside dispatch(): rate limit, uniform JSON errors, request metrics.
 /// Beside it, the operations listener (ops_server.hpp) answers health, readiness and metrics.
 class Application {
@@ -67,6 +68,7 @@ private:
     void flightLogRoutes(const std::string& api);
     void dataRoutes(const std::string& api);
     void adminRoutes(const std::string& api);
+    void regionRoutes(const std::string& api);
     /// The httplib handler that runs `handler` under the rate limit of `rateClass`, answers
     /// its errors as JSON and records the request in the metrics.
     [[nodiscard]] RawHandler route(std::string rateClass, Handler handler);
@@ -94,6 +96,11 @@ private:
     FlightLogApi flightLogApi_;
     DataApi dataApi_;
     AdminApi adminApi_;
+    /// Offline regions and drawn areas: their background builds stop before the services, logger
+    /// and clock go.
+    RegionCatalog regions_;
+    RegionAreas areas_;
+    RegionApi regionApi_;
     HttpMetrics httpMetrics_;  ///< before http_: its request threads report here until they stop
     double startTimeSeconds_ = 0.0;
     std::unique_ptr<httplib::Server> http_;
