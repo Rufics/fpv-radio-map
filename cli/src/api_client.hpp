@@ -12,6 +12,7 @@
 
 namespace httplib {
 class Client;
+struct Response;
 }
 
 namespace rfmap::cli {
@@ -34,6 +35,12 @@ private:
 
 /// The server could not be reached, or did not answer in time: exit status 3.
 class ConnectionError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+/// A file the client writes (a download) cannot be: exit status 73.
+class LocalFileError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
@@ -87,10 +94,12 @@ public:
 
 private:
     struct Answer {
-        int status;
+        int status = 0;
         std::string body;
         std::string retryAfterHeader;
+        std::string location;  ///< of a redirect
     };
+    [[nodiscard]] static Answer answerOf(int status, std::string body, const httplib::Response& r);
     /// Runs `send` with the retry policy and turns an error status into ApiError.
     Answer exchange(const std::string& method, const std::string& path,
                     const std::function<Answer(httplib::Client&)>& send, bool idempotent);

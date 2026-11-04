@@ -72,9 +72,10 @@ void Arguments::requireOnly(std::initializer_list<std::string_view> allowed, std
 
 double Arguments::parseNumber(std::string_view text, std::string_view flag) {
     double value = 0.0;
-    const char* end = text.data() + text.size();
-    const auto [ptr, ec] = std::from_chars(text.data(), end, value);
-    if (ec != std::errc{} || ptr != end || !std::isfinite(value)) {
+    const char* first = text.data();
+    const char* last = first + text.size();
+    const auto [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last || !std::isfinite(value)) {
         throw UsageError(std::string(flag) + " needs a number, not \"" + std::string(text) + "\"");
     }
     return value;

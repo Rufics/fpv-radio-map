@@ -58,6 +58,14 @@
     // Empty disables the admin API.
     "token": ""
   },
+  // Bearer tokens for scripts, CI and other services (the rfmap command-line client): they run
+  // calculations (POST /calc/path, /calc/route, /calc/coverage and its jobs, /flightlogs/decode)
+  // without a mission session, and reach no mission. Keep only each token's SHA-256 here:
+  // `rfmap token new --name ci` makes a token and prints its entry. Set them from the environment
+  // with RFMAP__SERVICES__TOKENS='[{"name": "ci", "sha256": "..."}]'.
+  "services": {
+    "tokens": []
+  },
   // The operations listener: GET /healthz (alive), /readyz (can take traffic) and /metrics on a
   // port of its own, outside the rate limiter and the request threads. Containers probe it on
   // 127.0.0.1; Kubernetes probes and scrapes need "listen": "0.0.0.0".
@@ -140,7 +148,9 @@
     "calc":     { "perMinute": 120, "burst": 30 },
     "coverage": { "perMinute": 6,   "burst": 3 },
     "area":     { "perMinute": 12,  "burst": 4 },
-    "admin":    { "perMinute": 60,  "burst": 20 }
+    "admin":    { "perMinute": 60,  "burst": 20 },
+    // A service token's calculations and reads, per token rather than per address.
+    "service":  { "perMinute": 300, "burst": 60 }
   },
   "coverage": {
     "threads": 4,

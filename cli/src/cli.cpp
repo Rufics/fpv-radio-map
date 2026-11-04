@@ -95,7 +95,7 @@ std::string encodeQuery(std::string_view value) {
 
 /// `text` as one URL path segment of the server's own pattern; UsageError otherwise, so no
 /// argument can climb out of the path it is put into.
-const std::string& segment(const std::string& text, std::string_view extra, const char* what) {
+std::string segment(const std::string& text, std::string_view extra, const char* what) {
     const bool ok = !text.empty() && std::ranges::all_of(text, [extra](char ch) {
         const auto c = static_cast<unsigned char>(ch);
         return std::islower(c) != 0 || std::isdigit(c) != 0 || extra.find(ch) != std::string_view::npos;
@@ -163,6 +163,9 @@ int Cli::run(std::span<const std::string> words) {
         io_.err << "rfmap: " << e.what() << "\n";
         return kNoInput;
     } catch (const OutputError& e) {
+        io_.err << "rfmap: " << e.what() << "\n";
+        return kCantCreate;
+    } catch (const LocalFileError& e) {
         io_.err << "rfmap: " << e.what() << "\n";
         return kCantCreate;
     } catch (const ApiError& e) {
@@ -281,7 +284,8 @@ int Cli::health(const Arguments& args) {
 int Cli::version(const Arguments& args) {
     args.requireOnly({}, 1);
     json out = {{"client", version_}};
-    const bool haveServer = args.has("--server") || io_.env.contains("RFMAP_SERVER");
+    const auto env = io_.env.find("RFMAP_SERVER");
+    const bool haveServer = args.has("--server") || (env != io_.env.end() && !env->second.empty());
     if (haveServer) {
         ApiClient api = client(args);
         out["server"] = api.get("/health").value("version", "");
@@ -348,7 +352,6 @@ int Cli::calcCoverage(const Arguments& args) {
     const double poll = args.number("--poll").value_or(2.0);
     const double patience = args.number("--wait").value_or(1800.0);
     if (poll <= 0 || patience < 0) throw UsageError("--poll must be positive and --wait not negative");
-    const auto outDir = args.get("--out-dir");
 
     ApiClient api = client(args);
     json job = api.postWithStatus("/calc/coverage", mission).second;
@@ -357,13 +360,22 @@ int Cli::calcCoverage(const Arguments& args) {
         emit(args, job);
         return kOk;
     }
+    if (!awaitJob(api, id, job, poll, patience)) return kCheckFailed;
+
+    json out = {{"job", job}};
+    const bool complete = fetchGrids(api, id, job, args.get("--out-dir"), out);
+    emit(args, out);
+    return complete && job.value("state", "") == "done" ? kOk : kCheckFailed;
+}
+
+bool Cli::awaitJob(ApiClient& api, const std::string& id, json& job, double poll, double patience) const {
     double waited = 0.0;
     std::string lastProgress;
     while (jobRunning(job)) {
         if (waited >= patience) {
             (void)api.remove("/jobs/" + id);
             io_.err << std::format("rfmap: coverage job {} still running after {:.0f} s; cancelled it\n", id, waited);
-            return kCheckFailed;
+            return false;
         }
         io_.sleep(std::chrono::milliseconds(static_cast<long long>(poll * 1000.0)));
         waited += poll;
@@ -373,17 +385,24 @@ int Cli::calcCoverage(const Arguments& args) {
             lastProgress = line;
         }
     }
+    return true;
+}
 
-    json out = {{"job", job}};
-    bool failed = job.value("state", "") != "done";
-    if (outDir) fs::create_directories(*outDir);
+bool Cli::fetchGrids(ApiClient& api, const std::string& id, const json& job, const std::optional<std::string>& outDir,
+                     json& out) const {
+    if (outDir) {
+        std::error_code made;
+        fs::create_directories(*outDir, made);
+        if (made) throw OutputError("cannot create " + *outDir + ": " + made.message());
+    }
+    bool complete = true;
     for (const json& part : job.value("parts", json::array())) {
         const std::string state = part.value("state", "");
         const std::string link = part.value("link", "");
         if (state != "done" && state != "cached") {
-            failed = true;
-            io_.err << std::format("rfmap: coverage of the {} link {}{}\n", link, state,
-                                   part.contains("error") ? ": " + part.value("error", "") : "");
+            complete = false;
+            const std::string why = part.contains("error") ? ": " + part.value("error", "") : "";
+            io_.err << std::format("rfmap: coverage of the {} link {}{}\n", link, state, why);
             continue;
         }
         const json grid = api.get("/jobs/" + id + "/coverage/" + segment(link, "", "link") + ".json");
@@ -398,8 +417,7 @@ int Cli::calcCoverage(const Arguments& args) {
         if (!f) throw OutputError("cannot write " + file.string());
         out["files"][link] = file.string();
     }
-    emit(args, out);
-    return failed ? kCheckFailed : kOk;
+    return complete;
 }
 
 int Cli::elevation(const Arguments& args) {
@@ -411,14 +429,14 @@ int Cli::elevation(const Arguments& args) {
 
 int Cli::library(const Arguments& args) {
     const std::string& what = args.word(1, "list, get or history");
-    const std::string& kind = segment(args.word(2, "the library kind, e.g. radio-profiles"), "-", "library kind");
+    const std::string kind = segment(args.word(2, "the library kind, e.g. radio-profiles"), "-", "library kind");
     if (what == "list") {
         args.requireOnly({}, 3);
         return simpleGet(args, "/library/" + kind);
     }
     if (what != "get" && what != "history") throw UsageError("library takes list, get or history, not " + what);
     args.requireOnly({}, 4);
-    const std::string& id = segment(args.word(3, "the item id"), "._-", "library item id");
+    const std::string id = segment(args.word(3, "the item id"), "._-", "library item id");
     return simpleGet(args, "/library/" + kind + "/" + id + (what == "history" ? "/history" : ""));
 }
 
@@ -449,7 +467,7 @@ int Cli::regions(const Arguments& args) {
         args.requireOnly({}, 2);
         return simpleGet(args, "/regions");
     }
-    const std::string& id = segment(args.word(2, "the region id"), "-", "region id");
+    const std::string id = segment(args.word(2, "the region id"), "-", "region id");
     if (what == "get") {
         args.requireOnly({}, 3);
         return simpleGet(args, "/regions/" + id);

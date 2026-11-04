@@ -105,6 +105,8 @@ services:
       RFMAP__DATA__DEMSTATEDERRORSOURCE: ${RFMAP_DEM_STATED_ERROR_SOURCE:-}
       # Offline regions are cut from the same tiles the map serves (docs/admin/offline-regions.md).
       RFMAP__REGIONS__WORLDDIR: /data
+      # Service tokens for rfmap and other services that calculate (docs/guide/cli.md).
+      RFMAP__SERVICES__TOKENS: ${RFMAP_SERVICE_TOKENS:-[]}
     volumes:
       - ../server/config/server.example.json:/etc/rfmap/rfmap.json:ro
       - ${RFMAP_TILES_DIR:?set RFMAP_TILES_DIR in .env}:/data:ro

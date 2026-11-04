@@ -27,7 +27,7 @@ std::string ServiceToken::sha256Hex(std::string_view text) {
     }
     static constexpr std::string_view kHex = "0123456789abcdef";
     std::string out;
-    out.reserve(2 * size);
+    out.reserve(2 * static_cast<std::size_t>(size));
     for (unsigned int i = 0; i < size; ++i) {
         out += kHex[digest[i] >> 4U];
         out += kHex[digest[i] & 0x0fU];

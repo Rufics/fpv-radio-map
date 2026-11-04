@@ -4,6 +4,7 @@
 
 #include <iosfwd>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -58,6 +59,12 @@ private:
     [[nodiscard]] int calcPath(const Arguments& args);
     [[nodiscard]] int calcRoute(const Arguments& args);
     [[nodiscard]] int calcCoverage(const Arguments& args);
+    /// Polls the coverage job until it ends; false when it outlasted `patience` and was cancelled.
+    [[nodiscard]] bool awaitJob(ApiClient& api, const std::string& id, json& job, double poll, double patience) const;
+    /// Puts each finished part's grid into out["grids"], or into a file under `outDir` listed in
+    /// out["files"]; false when a part did not finish.
+    [[nodiscard]] bool fetchGrids(ApiClient& api, const std::string& id, const json& job,
+                                  const std::optional<std::string>& outDir, json& out) const;
     [[nodiscard]] int elevation(const Arguments& args);
     [[nodiscard]] int library(const Arguments& args);
     [[nodiscard]] int weather(const Arguments& args);

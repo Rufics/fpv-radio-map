@@ -67,6 +67,10 @@ json ApiClient::parse(const std::string& body) {
     }
 }
 
+ApiClient::Answer ApiClient::answerOf(int status, std::string body, const httplib::Response& r) {
+    return {status, std::move(body), r.get_header_value("Retry-After"), r.get_header_value("Location")};
+}
+
 ApiClient::Answer ApiClient::exchange(const std::string& method, const std::string& path,
                                       const std::function<Answer(httplib::Client&)>& send, bool idempotent) {
     for (int attempt = 0;; ++attempt) {
@@ -82,6 +86,13 @@ ApiClient::Answer ApiClient::exchange(const std::string& method, const std::stri
         if ((a.status == 429 || a.status == 503) && mayRetry) {
             sleep_(retryAfter(parse(a.body), a.retryAfterHeader));
             continue;
+        }
+        if (a.status >= 300 && a.status < 400) {
+            // Followed, a redirect would carry the token to wherever it points: name it instead.
+            throw ApiError(a.status, nullptr,
+                           method + " " + path + ": " + std::to_string(a.status) + " " + httplib::status_message(a.status) +
+                               ": the server redirects to " + (a.location.empty() ? "another URL" : a.location) +
+                               "; give that address as --server");
         }
         if (a.status >= 400) {
             const json body = parse(a.body);
@@ -100,7 +111,7 @@ json ApiClient::get(const std::string& path) {
                           [&target](httplib::Client& c) {
                               const auto r = c.Get(target);
                               if (!r) throw ConnectionError(describe(r.error()));
-                              return Answer{r->status, r->body, r->get_header_value("Retry-After")};
+                              return answerOf(r->status, r->body, *r);
                           },
                           true)
                      .body);
@@ -113,7 +124,7 @@ std::pair<int, json> ApiClient::postWithStatus(const std::string& path, const js
                               [&target, &text](httplib::Client& c) {
                                   const auto r = c.Post(target, text, "application/json");
                                   if (!r) throw ConnectionError(describe(r.error()));
-                                  return Answer{r->status, r->body, r->get_header_value("Retry-After")};
+                                  return answerOf(r->status, r->body, *r);
                               },
                               false);
     return {a.status, parse(a.body)};
@@ -127,7 +138,7 @@ json ApiClient::postBytes(const std::string& path, const std::string& bytes, con
                           [&](httplib::Client& c) {
                               const auto r = c.Post(target, bytes, contentType);
                               if (!r) throw ConnectionError(describe(r.error()));
-                              return Answer{r->status, r->body, r->get_header_value("Retry-After")};
+                              return answerOf(r->status, r->body, *r);
                           },
                           false)
                      .body);
@@ -140,7 +151,7 @@ json ApiClient::put(const std::string& path, const json& body) {
                           [&target, &text](httplib::Client& c) {
                               const auto r = c.Put(target, text, "application/json");
                               if (!r) throw ConnectionError(describe(r.error()));
-                              return Answer{r->status, r->body, r->get_header_value("Retry-After")};
+                              return answerOf(r->status, r->body, *r);
                           },
                           false)
                      .body);
@@ -152,7 +163,7 @@ json ApiClient::remove(const std::string& path) {
                           [&target](httplib::Client& c) {
                               const auto r = c.Delete(target);
                               if (!r) throw ConnectionError(describe(r.error()));
-                              return Answer{r->status, r->body, r->get_header_value("Retry-After")};
+                              return answerOf(r->status, r->body, *r);
                           },
                           true)
                      .body);
@@ -166,7 +177,7 @@ ApiClient::Download ApiClient::download(const std::string& path, const std::file
     const auto send = [&](httplib::Client& c) {
         // A fresh file per attempt: a retry never appends to what a failed one left.
         std::ofstream out(partial, std::ios::binary | std::ios::trunc);
-        if (!out) throw std::runtime_error("cannot write " + partial.string());
+        if (!out) throw LocalFileError("cannot write " + partial.string());
         written = 0;
         if (!hash || EVP_DigestInit_ex(hash.get(), EVP_sha256(), nullptr) != 1) throw std::runtime_error("SHA-256 failed");
         int status = 0;
@@ -188,8 +199,8 @@ ApiClient::Download ApiClient::download(const std::string& path, const std::file
             });
         if (!r) throw ConnectionError(describe(r.error()));
         out.close();
-        if (r->status == 200 && !out) throw std::runtime_error("cannot write " + partial.string());
-        return Answer{r->status, r->status == 200 ? std::string() : errorBody, r->get_header_value("Retry-After")};
+        if (r->status == 200 && !out) throw LocalFileError("cannot write " + partial.string());
+        return answerOf(r->status, r->status == 200 ? std::string() : errorBody, *r);
     };
     try {
         exchange("GET", path, send, true);
@@ -201,7 +212,9 @@ ApiClient::Download ApiClient::download(const std::string& path, const std::file
     std::array<unsigned char, EVP_MAX_MD_SIZE> digest{};
     unsigned int size = 0;
     if (EVP_DigestFinal_ex(hash.get(), digest.data(), &size) != 1) throw std::runtime_error("SHA-256 failed");
-    std::filesystem::rename(partial, file);
+    std::error_code renamed;
+    std::filesystem::rename(partial, file, renamed);
+    if (renamed) throw LocalFileError("cannot write " + file.string() + ": " + renamed.message());
     static constexpr std::string_view kHex = "0123456789abcdef";
     Download d{written, {}};
     for (unsigned int i = 0; i < size; ++i) {

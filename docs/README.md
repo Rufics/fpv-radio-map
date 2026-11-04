@@ -8,6 +8,7 @@ This folder is the project's documentation. It is reviewed in pull requests like
 
 - [Glossary](guide/glossary.md): the radio terms the app uses, in plain words.
 - [FAQ](guide/faq.md): questions that come up again and again.
+- [Command-line client](guide/cli.md): calculations and data from the server for scripts, CI and other services.
 - [Field reports](community/field-reports.md): flights that were compared with a prediction.
 
 ## Running it

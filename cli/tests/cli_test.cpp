@@ -455,3 +455,34 @@ TEST(Cli, TokenNewNeedsNoServerAndGivesTheServerEntry) {
     EXPECT_EQ(run({"token", "new", "--name", "-x"}).status, Cli::kUsage);
     EXPECT_EQ(run({"token", "new"}).result()["name"], "ci");
 }
+
+TEST(Cli, ARedirectIsNamedNotFollowed) {
+    FakeServer s;
+    s.http().Get("/api/v1/health", [](const httplib::Request&, httplib::Response& res) {
+        res.set_redirect("https://maps.example.org/api/v1/health", 301);
+    });
+    const Outcome r = run({"--server", s.url(), "--token", "secret", "health"});
+    EXPECT_EQ(r.status, Cli::kServerError);
+    EXPECT_NE(r.err.find("redirects to https://maps.example.org/api/v1/health"), std::string::npos) << r.err;
+    EXPECT_EQ(r.err.find("secret"), std::string::npos) << r.err;
+}
+
+TEST(Cli, FilesThatCannotBeWrittenExitSeventyThree) {
+    FakeServer s;
+    const std::string version(64, 'b');
+    s.http().Get("/api/v1/regions/east", [&version](const httplib::Request&, httplib::Response& res) {
+        FakeServer::reply(res, 200, {{"id", "east"}, {"version", version}, {"sha256", std::string(64, '0')}});
+    });
+    s.http().Get("/api/v1/regions/east/packages/" + version + ".zip",
+                 [](const httplib::Request&, httplib::Response& res) { res.set_content("zip", "application/zip"); });
+    EXPECT_EQ(run({"--server", s.url(), "regions", "download", "east", "--out", "/no/such/dir/east.zip"}).status,
+              Cli::kCantCreate);
+
+    s.http().Post("/api/v1/calc/coverage", [](const httplib::Request&, httplib::Response& res) {
+        FakeServer::reply(res, 202, {{"jobId", "j"}, {"state", "done"}, {"parts", json::array()}});
+    });
+    const fs::path file = scratch("not-a-dir");
+    writeFile(file, "x");
+    EXPECT_EQ(run({"--server", s.url(), "calc", "coverage", "-", "--out-dir", (file / "sub").string()}, {}, "{}").status,
+              Cli::kCantCreate);
+}

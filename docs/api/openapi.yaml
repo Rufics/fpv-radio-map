@@ -11,6 +11,11 @@ info:
     * Mission access: `Authorization: Bearer <session>` from `POST /links/{token}/open`.
     * Owner actions: `X-Owner-Key: <key>` returned once when the mission is created.
     * Admin actions: `Authorization: Bearer <admin token>` configured on the server.
+    * Calculations for scripts, CI and other services: `Authorization: Bearer <service token>`,
+      one of the server's services.tokens (`rfmap token new`). It runs POST /calc/path,
+      /calc/route, /calc/coverage and the coverage jobs it started, and POST /flightlogs/decode;
+      the mission endpoints answer it with 403. Its calculations and reads count in the `service`
+      rate class, per token.
 
     Errors are JSON `{message, ...}`. 429 and 503 carry `Retry-After` and `retryAfterS`.
     Request bodies are checked against schemas/ (draft-07); a failure is 422
@@ -303,7 +308,7 @@ paths:
         One radio link between two points, or both links on the same path. `from` is the ground
         (pilot) end, `to` the air end; heights are AGL and MSL comes from the DEM. The video link is
         evaluated drone → ground, the control link ground → drone.
-      security: [{ session: [] }]
+      security: [{ session: [] }, { service: [] }]
       requestBody:
         required: true
         content:
@@ -378,7 +383,7 @@ paths:
         work: every sampled position builds a terrain profile from the pilot, and a route whose
         positions times profile samples could exceed calc.maxRouteSamples is refused with 422
         {samples, positions, maxSamples}.
-      security: [{ session: [] }]
+      security: [{ session: [] }, { service: [] }]
       requestBody:
         required: true
         content:
@@ -408,7 +413,7 @@ paths:
         A mission with evaluate none has no link to cover and is refused with 422.
         Poll the job; finished parts are usable at once. Needs coverage.radiusM, coverage.cellM and
         coverage.droneAglM; the grid may not exceed the server's coverage.maxCells.
-      security: [{ session: [] }]
+      security: [{ session: [] }, { service: [] }]
       requestBody:
         required: true
         content:
@@ -426,7 +431,7 @@ paths:
   /jobs/{jobId}:
     get:
       tags: [calc]
-      security: [{ session: [] }]
+      security: [{ session: [] }, { service: [] }]
       parameters:
         - { name: jobId, in: path, required: true, schema: { type: string } }
       responses:
@@ -437,7 +442,7 @@ paths:
               schema: { $ref: '#/components/schemas/Job' }
     delete:
       tags: [calc]
-      security: [{ session: [] }]
+      security: [{ session: [] }, { service: [] }]
       parameters:
         - { name: jobId, in: path, required: true, schema: { type: string } }
       responses:
@@ -447,7 +452,7 @@ paths:
   /jobs/{jobId}/coverage/{link}.json:
     get:
       tags: [calc]
-      security: [{ session: [] }]
+      security: [{ session: [] }, { service: [] }]
       parameters:
         - { name: jobId, in: path, required: true, schema: { type: string } }
         - { name: link, in: path, required: true, schema: { enum: [control, video] } }
@@ -633,7 +638,7 @@ paths:
   /flightlogs/decode:
     post:
       tags: [flightlogs]
-      security: [{ session: [] }]
+      security: [{ session: [] }, { service: [] }]
       summary: Replay of every flight in a log file, nothing stored.
       description: |
         The server asks each installed module that provides `flightlog.decoder` whether it reads the
@@ -1141,6 +1146,7 @@ paths:
 components:
   securitySchemes:
     session: { type: http, scheme: bearer }
+    service: { type: http, scheme: bearer, description: 'A service token (services.tokens) for calculations' }
     admin: { type: http, scheme: bearer }
     ownerKey: { type: apiKey, in: header, name: X-Owner-Key }
 
