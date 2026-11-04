@@ -83,7 +83,11 @@
     // The vertical error your DEM provider states. Results carry no terrain error without it.
     // Copy the figure and its source from the provider's documentation; do not estimate it.
     "demStatedErrorM": null,
-    "demStatedErrorSource": ""
+    "demStatedErrorSource": "",
+    // The source names results show; empty = the name in manifest.json next to the DEM, then
+    // the file name.
+    "demName": "",
+    "landcoverName": ""
   },
   "schemasDir": "/usr/share/rfmap/schemas",
   "seedDir": "/usr/share/rfmap/library",
@@ -139,6 +143,7 @@
     "create":   { "perMinute": 20,  "burst": 10 },
     "calc":     { "perMinute": 120, "burst": 30 },
     "coverage": { "perMinute": 6,   "burst": 3 },
+    "area":     { "perMinute": 12,  "burst": 4 },
     "admin":    { "perMinute": 60,  "burst": 20 }
   },
   "coverage": {
@@ -158,6 +163,40 @@
     "concurrency": 0,
     "queue": 0,
     "waitMs": 10000
+  },
+  // Offline regions: map packages a client downloads to use the map without a network, cut out of
+  // one world-wide tiles-builder output by go-pmtiles (docs/admin/offline-regions.md).
+  "regions": {
+    // The world tiles-builder out/ directory; empty turns offline regions off.
+    "worldDir": "",
+    // The list of regions: {"regions": [{"id", "name", "bbox" | "boundary" | "geometry", ...}]}.
+    // A missing file offers no region.
+    "definitions": "/etc/rfmap/regions/regions.json",
+    // Written by the server only: the packages, their previews and the builds in progress.
+    "packageDir": "/var/lib/rfmap/regions",
+    "pmtiles": "/usr/local/bin/pmtiles",
+    // Minutes between checks for changed regions or world files; 0 = only at start and on
+    // POST /api/v1/admin/regions/reload.
+    "rescanMinutes": 10,
+    // Package downloads streamed at once; each holds a request thread while it lasts, so more
+    // get 503 with Retry-After. 0 = max(1, server.threads / 4).
+    "maxDownloads": 0,
+    // Written by the server only: the packages of areas users draw (POST /api/v1/areas).
+    "areaDir": "/var/lib/rfmap/areas",
+    "areas": {
+      // The largest drawn area built, km²; 0 turns drawing areas off.
+      "maxAreaKm2": 2500,
+      // Positions in all rings of the polygon together.
+      "maxVertices": 1000,
+      // The highest zoom of a drawn area; a request that names none gets this one.
+      "maxZoom": 14,
+      // Builds waiting for the one running; more get 503 with Retry-After.
+      "maxQueued": 8,
+      // A package nobody asked for or downloaded this long is removed.
+      "keepHours": 168,
+      // All drawn packages together; past it the least recently used go first.
+      "maxStoredMb": 20480
+    }
   },
   // Merged over the defaults GET /api/v1/config/map returns (tiles-builder names under /tiles).
   "map": {

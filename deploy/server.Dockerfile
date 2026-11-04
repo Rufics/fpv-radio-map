@@ -37,6 +37,28 @@ RUN --mount=type=secret,id=build_ca,required=false \
     && DESTDIR=/out cmake --install build/server \
     && install -D -m 0755 build/platform/rfmod/rfmod /out/usr/bin/rfmod
 
+# ---- go-pmtiles: cuts the offline region packages out of the world tiles (docs/admin/offline-regions.md) ----
+# The same pinned release as tools/tiles-builder/Dockerfile, verified by sha256; keep both in step.
+FROM ubuntu:26.04 AS pmtiles
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PMTILES_VERSION=1.31.0
+ARG PMTILES_SHA256_AMD64=e80bf5716f45b5330bc1e3037e12f254da89fce23c58b611897fe4a413aee635
+ARG PMTILES_SHA256_ARM64=33fdb8d1b00c46a11877d1b86220581b7d92da16366ebcd79cdd550241c0b86f
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+RUN set -eu; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+      amd64) pm_arch=x86_64; pm_sha="${PMTILES_SHA256_AMD64}";; \
+      arm64) pm_arch=arm64;  pm_sha="${PMTILES_SHA256_ARM64}";; \
+      *) echo "unsupported arch $arch"; exit 1;; \
+    esac; \
+    curl -fsSL --proto =https --proto-redir =https -o /tmp/pmtiles.tgz \
+      "https://github.com/protomaps/go-pmtiles/releases/download/v${PMTILES_VERSION}/go-pmtiles_${PMTILES_VERSION}_Linux_${pm_arch}.tar.gz"; \
+    echo "${pm_sha}  /tmp/pmtiles.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/pmtiles.tgz -C /usr/local/bin pmtiles; \
+    /usr/local/bin/pmtiles version
+
 # ---- runtime ----
 FROM ubuntu:26.04
 ARG DEBIAN_FRONTEND=noninteractive
@@ -50,6 +72,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && install -d -m 0755 /etc/rfmap /data
 
 COPY --from=build /out/ /
+COPY --from=pmtiles /usr/local/bin/pmtiles /usr/local/bin/pmtiles
 COPY server/config/server.example.json /etc/rfmap/rfmap.json
 
 USER rfmap
