@@ -41,15 +41,21 @@ updates:
       - dependency-name: "*"
         update-types: [version-update:semver-major]
     groups:
-      # Angular packages and the TypeScript version they support move together.
+      # Angular packages and the TypeScript version they support move together: the framework
+      # packages pin each other as exact peers (@angular/compiler-cli needs the same
+      # @angular/compiler), so splitting them across pull requests breaks "npm ci".
       angular:
         patterns: ["@angular/*", "@angular-devkit/*", "ng-packagr", "typescript"]
         update-types: [minor, patch]
+      # The other groups exclude the same packages, so a dependency type match never pulls part
+      # of the framework into a separate pull request. Keep the three lists in sync.
       dev-tools:
         dependency-type: development
+        exclude-patterns: ["@angular/*", "@angular-devkit/*", "ng-packagr", "typescript"]
         update-types: [minor, patch]
       runtime:
         dependency-type: production
+        exclude-patterns: ["@angular/*", "@angular-devkit/*", "ng-packagr", "typescript"]
         update-types: [minor, patch]
 
   - package-ecosystem: npm
