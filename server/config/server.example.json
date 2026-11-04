@@ -83,7 +83,11 @@
     // The vertical error your DEM provider states. Results carry no terrain error without it.
     // Copy the figure and its source from the provider's documentation; do not estimate it.
     "demStatedErrorM": null,
-    "demStatedErrorSource": ""
+    "demStatedErrorSource": "",
+    // The source names results show; empty = the name in manifest.json next to the DEM, then
+    // the file name.
+    "demName": "",
+    "landcoverName": ""
   },
   "schemasDir": "/usr/share/rfmap/schemas",
   "seedDir": "/usr/share/rfmap/library",
