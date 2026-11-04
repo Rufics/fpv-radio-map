@@ -50,6 +50,24 @@ void sendJson(Res& res, int status, const json& body) {
     res.set_content(body.dump(), "application/json");
 }
 
+/// The offline region catalog the config asks for, building in the background.
+RegionCatalog::Settings regionSettings(const Config::Regions& r) {
+    return {r.worldDir, r.definitions, r.packageDir, r.pmtiles, r.rescanMinutes, true};
+}
+
+/// The areas users draw, cut from the same world data, building in the background.
+RegionAreas::Settings areaSettings(const Config::Regions& r) {
+    const Config::Regions::Areas& a = r.areas;
+    constexpr int kBytesPerMbShift = 20;
+    const RegionAreas::Limits limits{a.maxAreaKm2,
+                                     static_cast<std::size_t>(a.maxVertices),
+                                     a.maxZoom,
+                                     static_cast<std::size_t>(a.maxQueued),
+                                     a.keepHours,
+                                     static_cast<std::uintmax_t>(a.maxStoredMb) << kBytesPerMbShift};
+    return {r.worldDir, r.areaDir, r.pmtiles, limits, true};
+}
+
 }  // namespace
 
 Application::Application(Config config, const std::string& ownerKeyText, bool ownerKeyIsDev,
@@ -61,6 +79,9 @@ Application::Application(Config config, const std::string& ownerKeyText, bool ow
       flightLogApi_(services_),
       dataApi_(services_, admin_),
       adminApi_(services_, admin_),
+      regions_(regionSettings(config_.regions), log_, services_.clock()),
+      areas_(areaSettings(config_.regions), log_, services_.clock()),
+      regionApi_(regions_, areas_, admin_, config_.regions.maxDownloads, config_.server.threads),
       startTimeSeconds_(std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count()),
       http_(std::make_unique<httplib::Server>()) {
     configureServer();
@@ -122,7 +143,8 @@ std::string Application::metricsText() const {
                     {"job-runners", sample.jobs.runners},
                     {"job-cells", sample.jobs.cells}};
     sample.db = services_.db().stats();
-    sample.gates = {services_.auth().pinGate().sample("pin"), missionApi_.calcGate().sample("calc")};
+    sample.gates = {services_.auth().pinGate().sample("pin"), missionApi_.calcGate().sample("calc"),
+                    regionApi_.downloadGate().sample("downloads")};
     sample.caches = {{"dem-blocks", services_.blocks().stats()},
                      {"results-memory", services_.results().memoryStats()},
                      {"results-table", services_.results().tableCounts(), false}};
@@ -212,6 +234,7 @@ void Application::routes() {
     flightLogRoutes(api);
     dataRoutes(api);
     adminRoutes(api);
+    regionRoutes(api);
 }
 
 void Application::missionRoutes(const std::string& api) {
@@ -268,6 +291,25 @@ void Application::dataRoutes(const std::string& api) {
 
     s.Get(api + "/modules", route("default", on(d, &DataApi::getModules)));
     s.Get(api + R"(/modules/([a-z0-9._-]+)/(.+))", route("default", on(d, &DataApi::getModuleFile)));
+}
+
+void Application::regionRoutes(const std::string& api) {
+    httplib::Server& s = *http_;
+    const RegionApi& r = regionApi_;
+    const std::string region = api + R"(/regions/([a-z0-9-]+))";
+    const std::string version = R"(([0-9a-f]{64}))";
+    s.Get(api + "/regions", route("default", on(r, &RegionApi::getList)));
+    s.Get(region, route("default", on(r, &RegionApi::getRegion)));
+    s.Get(region + "/packages/" + version + R"(\.zip)", route("default", on(r, &RegionApi::getPackage)));
+    s.Get(region + "/previews/" + version + R"(\.png)", route("default", on(r, &RegionApi::getPreview)));
+    const std::string area = api + R"(/areas/(area-[0-9a-f]{24}))";
+    s.Get(api + "/areas", route("default", on(r, &RegionApi::getAreas)));
+    s.Post(api + "/areas", route("area", on(r, &RegionApi::postArea)));
+    s.Get(area, route("default", on(r, &RegionApi::getArea)));
+    s.Get(area + "/packages/" + version + R"(\.zip)", route("default", on(r, &RegionApi::getAreaPackage)));
+    s.Get(area + "/previews/" + version + R"(\.png)", route("default", on(r, &RegionApi::getAreaPreview)));
+    s.Get(api + "/admin/regions", route("admin", on(r, &RegionApi::getAdminList)));
+    s.Post(api + "/admin/regions/reload", route("admin", on(r, &RegionApi::postAdminReload)));
 }
 
 void Application::adminRoutes(const std::string& api) {

@@ -16,6 +16,7 @@ This folder is the project's documentation. It is reviewed in pull requests like
 - [Production server, step by step](admin/production-setup.md)
 - [Deployment](admin/deploy.md)
 - [Building map data](admin/tiles-builder.md)
+- [Offline regions](admin/offline-regions.md)
 - [How map layers reach the browser](admin/map-layers.md)
 - [How the tiles builder generates map data](admin/map-generation.md)
 - [How the weather forecast reaches the pilot](admin/weather-data.md)
@@ -28,6 +29,8 @@ This folder is the project's documentation. It is reviewed in pull requests like
   to write a migration.
 - [Fuzz testing](dev/fuzzing.md): how the C++ input parsers are fuzzed.
 - [SonarQube Cloud](dev/sonarcloud.md): what the static analysis covers and how it is set up.
+- [Performance and load tests](../tools/perf/README.md): the perf toolchain for the C++ code and
+  the fixed terrain dataset for load tests.
 - [Contributing](../CONTRIBUTING.md)
 - [Repository settings](maintainers/repository-settings.md): the GitHub settings the CI and the review rules rely on.
 

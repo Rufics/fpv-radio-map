@@ -11,6 +11,7 @@
 - [Production server, step by step](admin/production-setup.md)
 - [Deployment](admin/deploy.md)
 - [Building map data](admin/tiles-builder.md)
+- [Offline regions](admin/offline-regions.md)
 - [How map layers reach the browser](admin/map-layers.md)
 - [How the tiles builder generates map data](admin/map-generation.md)
 - [How the weather forecast reaches the pilot](admin/weather-data.md)
@@ -18,7 +19,9 @@
 **Extending it**
 
 - [Writing a module](modules/developer-guide.md)
+- [HTTP API (OpenAPI)](api/openapi.yaml)
 - [Database migrations](dev/migrations.md)
 - [Fuzz testing](dev/fuzzing.md)
+- [SonarQube Cloud](dev/sonarcloud.md)
 - [Contributing](../CONTRIBUTING.md)
 - [Repository settings](maintainers/repository-settings.md)
