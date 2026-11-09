@@ -34,14 +34,14 @@
     "tslib": "^2.3.0"
   },
   "devDependencies": {
-    "@angular/build": "^22.2.5",
-    "@angular/cli": "^22.2.5",
+    "@angular/build": "^22.2.6",
+    "@angular/cli": "^22.2.6",
     "@angular/compiler-cli": "^22.2.4",
     "@types/d3-contour": "^3.0.6",
     "@types/geojson": "^7946.0.16",
     "@vitest/coverage-v8": "^5.0.5",
     "jsdom": "^30.0.0",
-    "ng-packagr": "^22.2.5",
+    "ng-packagr": "^22.2.6",
     "playwright-core": "^1.64.1",
     "prettier": "^3.8.1",
     "typescript": "~6.0.2",
