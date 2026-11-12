@@ -16,7 +16,7 @@ COPY schemas/ /src/schemas/
 COPY web/ ./
 RUN npm run build
 
-FROM nginx:1.28-alpine
+FROM nginx:1.30-alpine
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /src/web/dist/fpv-app/browser/ /usr/share/nginx/html/
 # nginx runs as its own unprivileged user, not root: it listens on 8080 and keeps its pid file in
